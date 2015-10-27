@@ -21,6 +21,9 @@ lazy val root = (project in file(".")).
     libraryDependencies += "com.amazonaws" % "aws-lambda-java-events" % "1.0.0"
   )
 
+assemblyJarName in assembly := "telemetry-parquet-converter.jar"
+test in assembly := {}
+
 mergeStrategy in assembly := {
   case PathList("META-INF", xs @ _*) => MergeStrategy.discard
   case x => MergeStrategy.first

@@ -11,14 +11,19 @@ import java.rmi.dgc.VMID
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.io.{DecoderFactory, JsonDecoder}
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.log4j.{Level, Logger}
 import parquet.avro.{AvroParquetReader, AvroParquetWriter}
+import parquet.hadoop.ParquetWriter
 import parquet.hadoop.metadata.CompressionCodecName
 import scala.collection.JavaConverters._
 
 object ParquetConverter {
   val conf = ConfigFactory.load()
   implicit val s3 = S3()
+
+  Logger.getRootLogger().setLevel(Level.OFF)
 
   def readData(jsonBlobs: Seq[String], schema: Schema) : Seq[GenericRecord] = {
     val reader = new GenericDatumReader[GenericRecord](schema)
@@ -37,8 +42,14 @@ object ParquetConverter {
   def writeParquetFile(data: Seq[GenericRecord], schema: Schema): String = {
     val tmp = temporaryFileName
     val parquetFile = new Path(tmp)
-    val parquetWriter = new AvroParquetWriter[GenericRecord](parquetFile, schema, CompressionCodecName.SNAPPY, conf.getInt("app.blocksize"), conf.getInt("app.pagesize"))
 
+    val blockSize = ParquetWriter.DEFAULT_BLOCK_SIZE
+    val pageSize = ParquetWriter.DEFAULT_PAGE_SIZE
+    val enableDict = ParquetWriter.DEFAULT_IS_DICTIONARY_ENABLED
+    val conf = new Configuration()
+    conf.set("fs.file.impl", classOf[org.apache.hadoop.fs.LocalFileSystem].getName)
+
+    val parquetWriter = new AvroParquetWriter[GenericRecord](parquetFile, schema, CompressionCodecName.SNAPPY, blockSize, pageSize, enableDict, conf)
     for (d <- data) parquetWriter.write(d)
     parquetWriter.close
     tmp
@@ -75,6 +86,8 @@ object ParquetConverter {
       val bucket = s3.bucket(r.getS3.getBucket.getName())
 
       // Fetch schema
+      println("Accessing bucket " + r.getS3.getBucket.getName())
+      println("Fetching schema " + s"$prefix/schema.json")
       val schema = bucket
         .flatMap((b) => b.get(s"$prefix/schema.json"))
         .map((o) => scala.io.Source.fromInputStream(o.getObjectContent()).mkString)
@@ -82,6 +95,7 @@ object ParquetConverter {
         .getOrElse(throw new Exception("Error: schema is missing"))
 
       // Read Heka file from S3
+      println("Fetching Heka file " + key)
       val data = bucket
         .flatMap((b) => b.get(key))
         .map((k) => HekaFrame.parse(k.getObjectContent()))
@@ -92,10 +106,13 @@ object ParquetConverter {
       // Write Parquet file to S3
       val localFile = writeParquetFile(data, schema)
       val parquetPrefix = conf.getString("app.parquetPrefix")
+      println("Writing Parquet file " + s"$parquetPrefix/$prefix/$rest")
       uploadLocalFileToS3(localFile, s"$parquetPrefix/$prefix/$rest")
 
       // Delete Heka file
-      bucket.get.delete(key)
+      // bucket.get.delete(key)
+
+      key
     }
   }
 }
