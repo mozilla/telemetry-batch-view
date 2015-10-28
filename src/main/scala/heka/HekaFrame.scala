@@ -1,6 +1,7 @@
 package telemetry.heka
 
 import java.io.InputStream
+import org.xerial.snappy.Snappy
 
 object HekaFrame{
   def jsonBlobs(l: List[Message]): List[String] = l.map(_.payload).flatten
