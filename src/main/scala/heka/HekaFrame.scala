@@ -18,7 +18,7 @@ object HekaFrame{
         val header = Header.parseFrom(data, i + 2, headerLength)
         if (data(i + 2 + headerLength) != 0x1F) throw new Exception("Missing unit separator")
 
-        // Parse compressed message which is almost always compressed with Snappy
+        // Parse message which is almost always compressed with Snappy
         val messageOffset = i + 3 + headerLength
         val message = try {
           val uncompressedLenght = Snappy.uncompressedLength(data, messageOffset, header.messageLength)
