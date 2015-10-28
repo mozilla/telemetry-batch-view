@@ -4,7 +4,24 @@ import java.io.InputStream
 import org.xerial.snappy.Snappy
 
 object HekaFrame{
+  //TODO: rename to payloads
   def jsonBlobs(l: List[Message]): List[String] = l.map(_.payload).flatten
+
+  def field(f: Field): Any = {
+    // I am assuming there is only one value
+    f.valueType match {
+      case Some(Field.ValueType.STRING) => f.valueString(0)
+      case Some(Field.ValueType.BOOL) => f.valueBool(0)
+      case Some(Field.ValueType.DOUBLE) => f.valueDouble(0)
+      case Some(Field.ValueType.INTEGER) => f.valueInteger(0)
+      case _ => ""
+    }
+  }
+
+  def fields(m: Message): Map[String, Any] = {
+    val fields = m.fields
+    Map(fields.map(_.name).zip(fields.map(field)): _*)
+  }
 
   // See https://hekad.readthedocs.org/en/latest/message/index.html
   def parse(is: InputStream): List[Message] = {
@@ -18,7 +35,7 @@ object HekaFrame{
         val header = Header.parseFrom(data, i + 2, headerLength)
         if (data(i + 2 + headerLength) != 0x1F) throw new Exception("Missing unit separator")
 
-        // Parse compressed message which is almost always compressed with Snappy
+        // Parse message which is almost always compressed with Snappy
         val messageOffset = i + 3 + headerLength
         val message = try {
           val uncompressedLenght = Snappy.uncompressedLength(data, messageOffset, header.messageLength)

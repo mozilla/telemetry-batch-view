@@ -19,7 +19,8 @@ lazy val root = (project in file(".")).
     libraryDependencies += "org.scalatest" % "scalatest_2.11" % "2.2.4" % "test",
     libraryDependencies += "com.amazonaws" % "aws-lambda-java-core" % "1.0.0",
     libraryDependencies += "com.amazonaws" % "aws-lambda-java-events" % "1.0.0",
-    libraryDependencies += "org.xerial.snappy" % "snappy-java" % "1.1.2"
+    libraryDependencies += "org.xerial.snappy" % "snappy-java" % "1.1.2",
+    libraryDependencies += "org.json4s" %% "json4s-native" % "3.3.0"
   )
 
 assemblyJarName in assembly := "telemetry-parquet-converter.jar"
