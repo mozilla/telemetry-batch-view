@@ -1,0 +1,3 @@
+region: us-west-2
+account: arn:aws:iam::927034868273
+function_bucket: telemetry-lambda-functions
