@@ -5,10 +5,7 @@ import java.io.InputStream
 import org.xerial.snappy.Snappy
 
 object HekaFrame{
-  //TODO: rename to payloads
-  def jsonBlobs(l: List[Message]): List[String] = l.map(_.payload).flatten
-
-  def field(f: Field): Any = {
+  private def field(f: Field): Any = {
     // I am assuming there is only one value
     f.valueType match {
       case Some(Field.ValueType.STRING) => f.valueString(0)
@@ -24,15 +21,17 @@ object HekaFrame{
     Map(fields.map(_.name).zip(fields.map(field)): _*)
   }
 
+  def payloads(l: List[Message]): List[String] = l.map(_.payload).flatten
+
   // See https://hekad.readthedocs.org/en/latest/message/index.html
-  def parse(i: InputStream): List[Message] = {
+  def parse(i: InputStream): Iterator[Message] = {
     val is = new DataInputStream(i)
 
-    def loop(acc: List[Message]): List[Message] = {
+    def next: Option[Message] = {
       val cursor = is.read()
 
       if (cursor == -1)
-        return acc
+        return None
 
       // Parse record separator
       if (cursor != 0x1E)
@@ -61,10 +60,16 @@ object HekaFrame{
         case _: Throwable => Message.parseFrom(messageBuffer)
       }
 
-      loop(message :: acc)
+      Some(message)
     }
 
-    loop(List[Message]())
+    Iterator
+      .continually(next)
+      .takeWhile((x) => x match {
+                   case Some(x) => true
+                   case None => false
+                 })
+      .map(_.get)
   }
 }
 

@@ -25,7 +25,7 @@ object ParquetFile {
     tmp.getPath()
   }
 
-  def serialize(data: Seq[GenericRecord], schema: Schema): String = {
+  def serialize(data: Iterator[GenericRecord], schema: Schema): String = {
     val tmp = temporaryFileName
     val parquetFile = new Path(tmp)
 
