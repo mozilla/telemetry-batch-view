@@ -5,7 +5,7 @@ import com.amazonaws.services.s3.AmazonS3Client
 import com.amazonaws.services.s3.event.S3EventNotification
 import com.typesafe.config._
 import org.scalatest.{FlatSpec, Matchers}
-import telemetry.DerivedStream
+import telemetry.streams.ExampleStream
 
 class DerivedStreamSpec extends FlatSpec with Matchers{
   val conf = ConfigFactory.load()
@@ -20,7 +20,7 @@ class DerivedStreamSpec extends FlatSpec with Matchers{
     val event = S3EventNotification.parseJson(jsonEvent)
 
     // Convert Heka file to derived Parquet file
-    DerivedStream.transform(new S3Event(event.getRecords()))
+    ExampleStream.transform(new S3Event(event.getRecords()))
 
     // Check that Parquet file was uploaded
     s3Client.getObject(parquetBucket, key)
