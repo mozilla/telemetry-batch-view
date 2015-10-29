@@ -1,19 +1,14 @@
 package telemetry.test
 
-import awscala._
-import awscala.s3._
-import com.amazonaws.services.lambda.runtime.events.S3Event
-import com.amazonaws.services.s3.event.S3EventNotification
-import com.amazonaws.services.s3.model.ObjectMetadata
 import com.google.protobuf._
 import com.typesafe.config._
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.lang.System
-import org.apache.avro.SchemaBuilder
-import org.apache.avro.generic.{GenericDatumWriter, GenericRecord, GenericRecordBuilder}
-import org.apache.avro.io.EncoderFactory
+import org.apache.avro.{Schema, SchemaBuilder}
+import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, GenericRecord, GenericRecordBuilder}
+import org.apache.avro.io.{DecoderFactory, EncoderFactory, JsonDecoder}
 import org.scalatest.{FlatSpec, Matchers}
-import telemetry.ParquetConverter
+import telemetry.ParquetFile
 import telemetry.heka.{Header, HekaFrame, Message}
 
 object Resources {
@@ -68,10 +63,15 @@ object Resources {
   }
 }
 
-class UnitSpec extends FlatSpec with Matchers{
+class ParquetSpec extends FlatSpec with Matchers{
   val nMessages = 42
   val conf = ConfigFactory.load()
-  implicit val s3 = S3()
+
+  private def readData(jsonBlobs: Seq[String], schema: Schema) : Seq[GenericRecord] = {
+    val reader = new GenericDatumReader[GenericRecord](schema)
+    val factory = DecoderFactory.get()
+    jsonBlobs.map(j => reader.read(null, factory.jsonDecoder(schema, j)))
+  }
 
   "A Heka file" can "be parsed" in {
     val messages = HekaFrame.parse(new ByteArrayInputStream(Resources.hekaFile(nMessages)))
@@ -85,32 +85,8 @@ class UnitSpec extends FlatSpec with Matchers{
   "A list of Avro records" can "be serialized to a Parquet file" in {
     val messages = HekaFrame.parse(new ByteArrayInputStream(Resources.hekaFile(nMessages)))
     val jsonBlobs = HekaFrame.jsonBlobs(messages)
-    val data = ParquetConverter.readData(jsonBlobs, Resources.schema)
-    val filename = ParquetConverter.writeParquetFile(data, Resources.schema)
-    val readData = ParquetConverter.readParquetFile(filename)
-    data should be (readData)
-  }
-
-  "A S3 event" should "be correctly handled" in {
-    val hekaFile = Resources.hekaFile(nMessages)
-    val bucketName = conf.getString("app.bucket")
-    val bucket = s3.bucket(bucketName).getOrElse(throw new Exception("Error: bucket doesn't exist"))
-
-    // Create a derived stream with a single Heka file and a schema
-    s3.put(bucket, "test_stream/data/sample.heka", hekaFile, new ObjectMetadata())
-    s3.put(bucket, "test_stream/schema.json", Resources.schema.toString().getBytes(), new ObjectMetadata())
-
-    // Convert Heka file to Parquet file
-    val jsonEvent = """ {"Records": [{"s3": {"object": {"key": "test_stream/data/sample.heka"}, "bucket": {"name": "telemetry-test-bucket"}}}]} """
-    val event = S3EventNotification.parseJson(jsonEvent)
-    ParquetConverter.transform(new S3Event(event.getRecords()))
-
-    // Check that Parquet file exists
-    val parquetPrefix = conf.getString("app.parquetPrefix")
-    bucket.get(s"$parquetPrefix/test_stream/data/sample.parquet")
-      .getOrElse(throw new Exception("Missing output file"))
-
-    // Check that Heka file was deleted
-    // bucket.get("test_stream/data/sample.heka") should be (None)
+    val data = readData(jsonBlobs, Resources.schema)
+    val filename = ParquetFile.serialize(data, Resources.schema)
+    data should be (ParquetFile.deserialize(filename))
   }
 }
