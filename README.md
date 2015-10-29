@@ -6,8 +6,10 @@ This is a Scala framework to build derived data streams of Telemetry data throug
 Reading the raw data in through e.g. Spark can be quite slow as for a given analysis only few subset of fields are typically used; not to mention the cost of parsing the JSON blob. Defining a derived Parquet stream that contains only a subset of fields can help with that.
 
 In its current incarnation, a derived stream can be defined by subclassing the *DerivedStream* trait and implementing:
-- *buildSchema*, a method that retuns the Avro schema of the derived stream
-- *buildRecord*, a method that given a [Heka message](https://hekad.readthedocs.org/en/latest/message/index.html#message-variables) returns a derived Avro record
+- `buildSchema`, a method that retuns the Avro schema of the derived stream
+- `buildRecord`, a method that given a [Heka message](https://hekad.readthedocs.org/en/latest/message/index.html#message-variables) returns a derived Avro record
+
+See [`ExampleStream.scala`](https://github.com/vitillo/aws-lambda-parquet/blob/master/src/main/scala/streams/ExampleStream.scala) for a simple stream.
 
 Upon receiving a notification that a new raw data file has been uploaded to S3, the lambda function will fetch the raw data file, convert it to a derived Parquet file and finally upload it to a configurable bucket.
 
