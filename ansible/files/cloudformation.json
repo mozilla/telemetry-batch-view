@@ -52,7 +52,7 @@
     "ParquetConverter": {
       "Type": "AWS::Lambda::Function",
       "Properties": {
-        "Handler": "telemetry.ExampleStream::transform",
+        "Handler": "telemetry.streams.ExampleStream::transform",
         "Role": {"Fn::Join": [":role/", [{"Ref": "Account"}, {"Ref": "TelemetryLambdaParquetConverterRole"}]]},
         "Code": {
           "S3Bucket": {"Ref": "FunctionBucket"},

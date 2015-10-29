@@ -168,4 +168,8 @@ object ExampleStream extends DerivedStream{
 
     Some(root)
   }
+
+  def main(args: Array[String]) = {
+    simulateEvent("net-mozaws-prod-us-west-2-pipeline-data", "telemetry-2/20151001/telemetry/4/main/Firefox/nightly/44.0a1/20150924030231/20151002225145.480_ip-172-31-32-149")
+  }
 }
