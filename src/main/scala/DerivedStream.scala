@@ -11,6 +11,7 @@ import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
 import org.json4s._
 import org.json4s.native.JsonMethods._
 import scala.collection.JavaConverters._
+import telemetry.parquet.ParquetFile
 
 object DerivedStream {
   private val conf = ConfigFactory.load()

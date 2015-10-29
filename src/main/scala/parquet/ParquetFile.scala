@@ -1,4 +1,4 @@
-package telemetry
+package telemetry.parquet
 
 import com.typesafe.config._
 import java.io.File
