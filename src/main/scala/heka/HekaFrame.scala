@@ -1,5 +1,6 @@
 package telemetry.heka
 
+import java.io.DataInputStream
 import java.io.InputStream
 import org.xerial.snappy.Snappy
 
@@ -24,33 +25,46 @@ object HekaFrame{
   }
 
   // See https://hekad.readthedocs.org/en/latest/message/index.html
-  def parse(is: InputStream): List[Message] = {
-    val data = Iterator.continually(is.read).takeWhile(-1 !=).map(_.toByte).toArray
+  def parse(i: InputStream): List[Message] = {
+    val is = new DataInputStream(i)
 
-    def loop(i: Int, acc: List[Message]): List[Message] = {
-      if (i >= data.length) acc
-      else if (data(i) == 0x1E) {
-        // Parse header
-        val headerLength = data(i + 1)
-        val header = Header.parseFrom(data, i + 2, headerLength)
-        if (data(i + 2 + headerLength) != 0x1F) throw new Exception("Missing unit separator")
+    def loop(acc: List[Message]): List[Message] = {
+      val cursor = is.read()
 
-        // Parse message which is almost always compressed with Snappy
-        val messageOffset = i + 3 + headerLength
-        val message = try {
-          val uncompressedLenght = Snappy.uncompressedLength(data, messageOffset, header.messageLength)
-          val uncompressedMessage = new Array[Byte](uncompressedLenght)
-          Snappy.uncompress(data, messageOffset, header.messageLength, uncompressedMessage, 0)
-          Message.parseFrom(uncompressedMessage, 0, uncompressedLenght)
-        } catch {
-          case _: Throwable => Message.parseFrom(data, messageOffset, header.messageLength)
-        }
+      if (cursor == -1)
+        return acc
 
-        loop(messageOffset + header.messageLength, message :: acc)
-      } else throw new Exception("Invalid data format")
+      // Parse record separator
+      if (cursor != 0x1E)
+        throw new Exception("Invalid Heka Frame: missing record separator")
+
+      // Parse header
+      val headerLength = is.read()
+      val headerBuffer = new Array[Byte](headerLength)
+      is.readFully(headerBuffer, 0, headerLength)
+      val header = Header.parseFrom(headerBuffer)
+
+      // Parse unit separator
+      if (is.read() != 0x1F)
+        throw new Exception("Invalid Heka Frame: missing unit separator")
+
+      // Parse message which should be compressed with Snappy
+      val messageBuffer = new Array[Byte](header.messageLength)
+      is.readFully(messageBuffer, 0, header.messageLength)
+
+      val message = try {
+        val uncompressedLenght = Snappy.uncompressedLength(messageBuffer)
+        val uncompressedMessage = new Array[Byte](uncompressedLenght)
+        Snappy.uncompress(messageBuffer, 0, header.messageLength, uncompressedMessage, 0)
+        Message.parseFrom(uncompressedMessage, 0, uncompressedLenght)
+      } catch {
+        case _: Throwable => Message.parseFrom(messageBuffer)
+      }
+
+      loop(message :: acc)
     }
 
-    loop(0, List[Message]())
+    loop(List[Message]())
   }
 }
 
