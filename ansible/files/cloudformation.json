@@ -1,0 +1,67 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Cloudformation template for telemetry parquet converter",
+
+  "Parameters": {
+    "Account": {
+      "Type": "String"
+    },
+    "FunctionBucket": {
+      "Type": "String"
+    },
+    "ScalaJar": {
+      "Type": "String"
+    }
+  },
+
+  "Resources": {
+    "TelemetryLambdaParquetConverterRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument":{
+          "Statement":[
+            {
+              "Effect":"Allow",
+              "Principal":{ "Service":[ "lambda.amazonaws.com" ] },
+              "Action":[ "sts:AssumeRole" ]
+            }
+          ]
+        },
+        "Policies": [{
+          "PolicyName": "lambda",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": ["logs:*"],
+                "Resource": "arn:aws:logs:*:*:*"
+              },
+              {
+                "Resource": "arn:aws:s3:::*",
+                "Effect": "Allow",
+                "Action": ["s3:*"]
+              }
+            ]
+          }
+        }]
+      }
+    },
+
+    "ParquetConverter": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Handler": "telemetry.DerivedStream::transform",
+        "Role": {"Fn::Join": [":role/", [{"Ref": "Account"}, {"Ref": "TelemetryLambdaParquetConverterRole"}]]},
+        "Code": {
+          "S3Bucket": {"Ref": "FunctionBucket"},
+          "S3Key": {"Ref": "ScalaJar"}
+        },
+        "Runtime": "java8",
+        "Timeout": "300",
+        "MemorySize": 1024
+      }
+    }
+  }
+}
