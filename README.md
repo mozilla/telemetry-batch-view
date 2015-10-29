@@ -2,7 +2,7 @@
 
 This is a Scala framework to build derived data streams of Telemetry data through a fleet of AWS lambda functions. 
 
-Raw JSON [pings](https://ci.mozilla.org/job/mozilla-central-docs/Tree_Documentation/toolkit/components/telemetry/telemetry/pings.html) are stored on S3 within [framed Heka records](https://hekad.readthedocs.org/en/latest/message/index.html#stream-framing). Reading the raw data in through e.g. Spark can be quite slow as for a given analysis only few subset of fields are typically used; not to mention the cost of parsing the JSON blob. Defining a derived Parquet stream that contains only a subset of fields can help with that.
+Raw JSON [pings](https://ci.mozilla.org/job/mozilla-central-docs/Tree_Documentation/toolkit/components/telemetry/telemetry/pings.html) are stored on S3 within [framed Heka records](https://hekad.readthedocs.org/en/latest/message/index.html#stream-framing). Reading the raw data in through e.g. Spark can be quite slow as for a given analysis only a few fields are typically used; not to mention the cost of parsing the JSON blob. Defining a derived Parquet stream that contains only a subset of fields can help with that.
 
 In its current incarnation, a derived stream can be defined by subclassing the *DerivedStream* trait and implementing:
 - `buildSchema`, a method that retuns the Avro schema of the derived stream
