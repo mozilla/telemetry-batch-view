@@ -16,7 +16,6 @@ trait DerivedStream {
   private val conf = ConfigFactory.load()
   private val s3Client = new AmazonS3Client
   private val parquetBucket = conf.getString("app.parquetBucket")
-  private var debug = false
 
   private def uploadLocalFileToS3(fileName: String, key: String) {
     val file = new File(fileName)
@@ -29,10 +28,7 @@ trait DerivedStream {
   def simulateEvent(bucket: String, key: String) = {
     val jsonEvent = """ {"Records": [{"s3": {"object": {"key": "%s"}, "bucket": {"name": "%s"}}}]} """.format(key, bucket)
     val event = S3EventNotification.parseJson(jsonEvent)
-
-    debug = true  // Can't pass this to transform as AWS needs a specific signature
     transform(new S3Event(event.getRecords()))
-    debug = false
   }
 
   def transform(event: S3Event) = {
@@ -51,8 +47,6 @@ trait DerivedStream {
       val schema = buildSchema
       println("Creating derived Avro records")
       val records = messages.map((m) => buildRecord(m, schema)).flatten
-
-      if (debug) for (r <- records) println(r)
 
       // Write Parquet file to S3
       val clsName = this.getClass.getSimpleName.replace("$", "")  // Use classname as stream prefix on S3
