@@ -8,7 +8,7 @@ object S3EventGenerator {
   def main(args: Array[String]) {
     // TODO: dirty hack, needs to be generalized
     val inputBucket = "net-mozaws-prod-us-west-2-pipeline-data"
-    val prefix = "telemetry-2"
+    val prefix = "telemetry-executive-summary-3"
     val date = "20151029"
 
     val bucket = Bucket(inputBucket)
