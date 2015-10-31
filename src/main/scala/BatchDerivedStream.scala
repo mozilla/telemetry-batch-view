@@ -50,6 +50,7 @@ trait BatchDerivedStream {
 
       val localFile = ParquetFile.serialize(records, schema, chunked=true)
       uploadLocalFileToS3(localFile, destKey)
+      new File(localFile).delete()
       filesWritten += 1
     }
   }
