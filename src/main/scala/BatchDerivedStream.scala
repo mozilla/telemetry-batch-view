@@ -116,9 +116,7 @@ object BatchConverter {
       .par
       .foreach((date) => {
                  println(s"Fetching data for $date")
-                 val keys = s3.objectSummaries(bucket, s"$prefix/$date").take(2)
-
-                 keys
+                 s3.objectSummaries(bucket, s"$prefix/$date")
                    .groupBy((summary) => {
                               val Some(m) = "(.+)/.+".r.findFirstMatchIn(summary.getKey())
                               m.group(1)
