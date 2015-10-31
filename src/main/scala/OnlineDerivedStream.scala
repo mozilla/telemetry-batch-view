@@ -12,7 +12,7 @@ import org.json4s.native.JsonMethods._
 import scala.collection.JavaConverters._
 import telemetry.parquet.ParquetFile
 
-trait DerivedStream {
+trait OnlineDerivedStream {
   private val conf = ConfigFactory.load()
   private val s3Client = new AmazonS3Client
   private val parquetBucket = conf.getString("app.parquetBucket")

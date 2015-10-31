@@ -1,14 +1,15 @@
 package telemetry.streams
 
+import awscala._
+import awscala.s3._
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
-import org.json4s._
 import org.json4s.native.JsonMethods._
 import scala.collection.JavaConverters._
-import telemetry.DerivedStream
+import telemetry.BatchDerivedStream
 import telemetry.heka.{HekaFrame, Message}
 
-object ExecutiveStream extends DerivedStream{
+object ExecutiveStream extends BatchDerivedStream{
   def buildSchema: Schema = {
     SchemaBuilder
       .record("System").fields
@@ -35,6 +36,8 @@ object ExecutiveStream extends DerivedStream{
       .name("pluginHangs").`type`().intType().noDefault()
       .endRecord
   }
+
+  def streamName: String = "telemetry-executive-summary"
 
   def buildRecord(message: Message, schema: Schema): Option[GenericRecord] ={
     val fields = HekaFrame.fields(message)
@@ -130,6 +133,11 @@ object ExecutiveStream extends DerivedStream{
   }
 
   def main(args: Array[String]) = {
-    simulateEvent("net-mozaws-prod-us-west-2-pipeline-data", "telemetry-executive-summary-3/20151027/release/20151027235811.436_ip-172-31-15-134")
+    // Used only for testing & debugging purposes
+    implicit val s3 = S3()
+    val bucket = Bucket("net-mozaws-prod-us-west-2-pipeline-data")
+    val prefix = "telemetry-executive-summary-3/20151027/nightly"
+    val keys = s3.objectSummaries(bucket, prefix).take(2).toIterator
+    ExecutiveStream.transform(bucket, keys, prefix)
   }
 }

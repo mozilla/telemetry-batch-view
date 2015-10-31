@@ -5,10 +5,10 @@ import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
 import org.json4s._
 import org.json4s.native.JsonMethods._
 import scala.collection.JavaConverters._
-import telemetry.DerivedStream
+import telemetry.OnlineDerivedStream
 import telemetry.heka.{HekaFrame, Message}
 
-object ExampleStream extends DerivedStream{
+object ExampleStream extends OnlineDerivedStream{
   private val SEC_IN_HOUR = 60 * 60
   private val SEC_IN_DAY = SEC_IN_HOUR * 24
 
