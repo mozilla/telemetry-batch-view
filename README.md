@@ -1,4 +1,4 @@
-# aws-lambda-parquet
+# telemetry-parquet
 
 This is a Scala framework to build derived datasets of [Telemetry](https://wiki.mozilla.org/Telemetry) data through either a set of scheduled batch jobs or a fleet of AWS lambda functions. 
 
