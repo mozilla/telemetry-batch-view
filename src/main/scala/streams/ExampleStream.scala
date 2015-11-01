@@ -39,6 +39,7 @@ object ExampleStream extends OnlineDerivedStream{
       .name("google").`type`().intType().noDefault()
       .name("yahoo").`type`().intType().noDefault()
       .name("bing").`type`().intType().noDefault()
+      .name("other").`type`().intType().noDefault()
       .endRecord
   }
 
@@ -82,13 +83,12 @@ object ExampleStream extends OnlineDerivedStream{
         case r"[gG]oogle.*" => "google"
         case r"[bB]ing.*" => "bing"
         case r"[yY]ahoo.*" => "yahoo"
-        case _ => ""
+        case _ => "other"
       }
       count = value \\ "sum" match {
         case JInt(x) => x
         case _ => 0: BigInt
       }
-      if engine != ""
     } yield (engine, count)
 
     val totalSearches = searches
@@ -164,6 +164,7 @@ object ExampleStream extends OnlineDerivedStream{
       .set("google", totalSearches.getOrElse("google", 0))
       .set("yahoo", totalSearches.getOrElse("yahoo", 0))
       .set("bing", totalSearches.getOrElse("bing", 0))
+      .set("other", totalSearches.getOrElse("other", 0))
       .build
 
     Some(root)
