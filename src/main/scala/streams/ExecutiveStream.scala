@@ -110,7 +110,7 @@ object ExecutiveStream extends BatchDerivedStream{
            })
       .set("hours", fields.getOrElse("hours", None) match {
              case x: Double => x
-             case _ => return None
+             case _ => 0
            })
       .set("google", fields.getOrElse("google", None) match {
              case x: Long => x
