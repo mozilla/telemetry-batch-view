@@ -3,6 +3,7 @@ package telemetry.heka
 import java.io.DataInputStream
 import java.io.InputStream
 import org.xerial.snappy.Snappy
+import scala.util.{Try, Success, Failure}
 
 object HekaFrame{
   private def field(f: Field): Any = {
@@ -24,7 +25,7 @@ object HekaFrame{
   def payloads(l: List[Message]): List[String] = l.map(_.payload).flatten
 
   // See https://hekad.readthedocs.org/en/latest/message/index.html
-  def parse(i: InputStream): Iterator[Message] = {
+  def parse(i: InputStream, origin: String = ""): Iterator[Message] = {
     val is = new DataInputStream(i)
 
     def next: Option[Message] = {
@@ -64,12 +65,13 @@ object HekaFrame{
     }
 
     Iterator
-      .continually(next)
-      .takeWhile((x) => x match {
-                   case Some(x) => true
-                   case None => false
-                 })
-      .map(_.get)
+      .continually(Try(next))
+      .takeWhile{ case Success(Some(x)) => true
+                  case Failure(x) => 
+                    println(s"Failure to read remainder of file $origin")
+                    println(x.getMessage())
+                    false
+                  case _ => false }
+      .map(_.get.get)
   }
 }
-

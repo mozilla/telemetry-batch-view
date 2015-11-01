@@ -36,8 +36,7 @@ trait BatchDerivedStream {
       hekaFile = bucket
       .getObject(key.getKey())
       .getOrElse(throw new Exception("File missing on S3"))
-      .getObjectContent()
-      message <- HekaFrame.parse(hekaFile)
+      message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey())
       record <- buildRecord(message, schema)
     } yield record
 

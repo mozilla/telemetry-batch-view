@@ -1,7 +1,7 @@
 package telemetry
 
+import awscala.s3._
 import com.amazonaws.services.lambda.runtime.events.S3Event
-import com.amazonaws.services.s3.AmazonS3Client
 import com.amazonaws.services.s3.event.S3EventNotification
 import com.typesafe.config._
 import heka.{HekaFrame, Message}
@@ -14,12 +14,12 @@ import telemetry.parquet.ParquetFile
 
 trait OnlineDerivedStream {
   private val conf = ConfigFactory.load()
-  private val s3Client = new AmazonS3Client
   private val parquetBucket = conf.getString("app.parquetBucket")
+  private implicit val s3 = S3()
 
   private def uploadLocalFileToS3(fileName: String, key: String) {
     val file = new File(fileName)
-    s3Client.putObject(parquetBucket, key, file)
+    s3.putObject(parquetBucket, key, file)
   }
 
   def buildSchema: Schema
@@ -40,8 +40,8 @@ trait OnlineDerivedStream {
 
       // Read Heka file from S3
       println("Fetching Heka file " + key)
-      val hekaFile = s3Client.getObject(bucket, key).getObjectContent()
-      val messages = HekaFrame.parse(hekaFile)
+      val hekaFile = Bucket(bucket).getObject(key).getOrElse(throw new Exception(s"$key missing on S3"))
+      val messages = HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey())
 
       // Create derived stream
       val schema = buildSchema

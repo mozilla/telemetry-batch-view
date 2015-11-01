@@ -8,8 +8,8 @@ import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, GenericRecord, GenericRecordBuilder}
 import org.apache.avro.io.{DecoderFactory, EncoderFactory, JsonDecoder}
 import org.scalatest.{FlatSpec, Matchers}
-import telemetry.heka.{Header, HekaFrame, Message}
 import telemetry.parquet.ParquetFile
+import telemetry.heka.{Header, HekaFrame, Message}
 
 object Resources {
   val schema = SchemaBuilder
