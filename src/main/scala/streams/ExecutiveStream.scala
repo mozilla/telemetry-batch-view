@@ -112,19 +112,19 @@ object ExecutiveStream extends BatchDerivedStream{
              case _ => return None
            })
       .set("google", fields.getOrElse("google", None) match {
-             case x: Int => x
+             case x: Long => x
              case _ => 0
            })
       .set("yahoo", fields.getOrElse("yahoo", None) match {
-             case x: Int => x
+             case x: Long => x
              case _ => 0
            })
       .set("bing", fields.getOrElse("bing", None) match {
-             case x: Int => x
+             case x: Long => x
              case _ => 0
            })
       .set("pluginHangs", fields.getOrElse("pluginHangs", None) match {
-             case x: Int => x
+             case x: Long => x
              case _ => 0
            })
       .build
