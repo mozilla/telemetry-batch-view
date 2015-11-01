@@ -13,6 +13,8 @@ A derived dataset can be build offline by subclassing the [`BatchDerivedStream`]
 - `buildRecord`, which given a [Heka message](https://hekad.readthedocs.org/en/latest/message/index.html#message-variables) returns a derived Avro record
 - `streamName`, which returns the dataset name used as input, as defined in *sources.json* in the metadata bucket, e.g. "telemetry-executive-summary"
 
+See [`ExecutiveStream.scala`](https://github.com/vitillo/telemetry-parquet/blob/master/src/main/scala/streams/ExecutiveStream.scala) for a simple stream.
+
 #### Execution
 Given a subtype of `BatchDerivedStream` of type `MyStream`, a dataset for the 28th of October can be generated with:
 ```
