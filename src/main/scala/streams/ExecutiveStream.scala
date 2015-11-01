@@ -33,6 +33,7 @@ object ExecutiveStream extends BatchDerivedStream{
       .name("google").`type`().intType().noDefault()
       .name("yahoo").`type`().intType().noDefault()
       .name("bing").`type`().intType().noDefault()
+      .name("other").`type`().intType().noDefault()
       .name("pluginHangs").`type`().intType().noDefault()
       .endRecord
   }
@@ -120,6 +121,10 @@ object ExecutiveStream extends BatchDerivedStream{
              case _ => 0
            })
       .set("bing", fields.getOrElse("bing", None) match {
+             case x: Long => x
+             case _ => 0
+           })
+      .set("other", fields.getOrElse("other", None) match {
              case x: Long => x
              case _ => 0
            })
