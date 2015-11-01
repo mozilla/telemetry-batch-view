@@ -37,8 +37,8 @@ trait BatchDerivedStream {
       .getObject(key.getKey())
       .getOrElse(throw new Exception("File missing on S3"))
       .getObjectContent()
-      messages = HekaFrame.parse(hekaFile)
-      record <-  messages.map((m) => buildRecord(m, schema)).flatten
+      message <- HekaFrame.parse(hekaFile)
+      record <- buildRecord(message, schema)
     } yield record
 
     val clsName = this.getClass.getSimpleName.replace("$", "")  // Use classname as stream prefix on S3

@@ -15,14 +15,16 @@ class DerivedStreamSpec extends FlatSpec with Matchers{
     val key = conf.getString("app.testInputKey")
     val bucket = conf.getString("app.testInputBucket")
     val parquetBucket = conf.getString("app.parquetBucket")
+    val clsName = ExampleStream.getClass.getSimpleName().replace("$", "")
 
     val jsonEvent = """ {"Records": [{"s3": {"object": {"key": "%s"}, "bucket": {"name": "%s"}}}]} """.format(key, bucket)
     val event = S3EventNotification.parseJson(jsonEvent)
 
     // Convert Heka file to derived Parquet file
+    s3Client.deleteObject(parquetBucket, s"$clsName/$key")
     ExampleStream.transform(new S3Event(event.getRecords()))
 
     // Check that Parquet file was uploaded
-    s3Client.getObject(parquetBucket, key)
+    s3Client.getObject(parquetBucket, s"$clsName/$key")
   }
 }
