@@ -136,13 +136,4 @@ object ExecutiveStream extends BatchDerivedStream{
 
     Some(root)
   }
-
-  def main(args: Array[String]) = {
-    // Used only for testing & debugging purposes
-    implicit val s3 = S3()
-    val bucket = Bucket("net-mozaws-prod-us-west-2-pipeline-data")
-    val prefix = "telemetry-executive-summary-3/20151027/nightly"
-    val keys = s3.objectSummaries(bucket, prefix).take(2).toIterator
-    ExecutiveStream.transform(bucket, keys, prefix)
-  }
 }
