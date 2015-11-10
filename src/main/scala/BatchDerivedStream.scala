@@ -13,20 +13,39 @@ import org.json4s.native.JsonMethods._
 import scala.collection.JavaConverters._
 import telemetry.parquet.ParquetFile
 import telemetry.streams.ExecutiveStream
+import java.util.UUID
 
 trait BatchDerivedStream {
   private val conf = ConfigFactory.load()
   private val parquetBucket = conf.getString("app.parquetBucket")
   private implicit val s3 = S3()
 
-  private def uploadLocalFileToS3(fileName: String, key: String) {
+  private def uploadLocalFileToS3(fileName: String, prefix: String) {
+    val uuid = UUID.randomUUID.toString
+    val key = s"$prefix/$uuid"
     val file = new File(fileName)
+    println(s"Uploading Parquet file to $key")
     s3.putObject(parquetBucket, key, file)
   }
 
   def buildSchema: Schema
   def buildRecord(message: Message, schema: Schema): Option[GenericRecord]
   def streamName: String
+
+  def groupBySize(keys: Iterator[S3ObjectSummary]): List[List[S3ObjectSummary]] = {
+    keys.foldRight((0L, List[List[S3ObjectSummary]]()))(
+      (x, acc) => {
+        val threshold = 2 << 29
+        acc match {
+          case (size, head :: tail) if size + x.getSize() < threshold =>
+            (size + x.getSize(), (x :: head) :: tail)
+          case (size, res) if size + x.getSize() < threshold =>
+            (size + x.getSize(), List(x) :: res)
+          case (_, res) =>
+            (x.getSize(), List(x) :: res)
+        }
+      })._2
+  }
 
   def transform(bucket: Bucket, keys: Iterator[S3ObjectSummary], prefix: String) = {
     val schema = buildSchema
@@ -41,16 +60,11 @@ trait BatchDerivedStream {
     } yield record
 
     val clsName = this.getClass.getSimpleName.replace("$", "")  // Use classname as stream prefix on S3
-    var filesWritten = 0
 
     while(!records.isEmpty) {
-      val destKey = s"$clsName/$prefix/$filesWritten"
-      println("Uploading Parquet file to " + s"$parquetBucket/$destKey")
-
       val localFile = ParquetFile.serialize(records, schema, chunked=true)
-      uploadLocalFileToS3(localFile, destKey)
+      uploadLocalFileToS3(localFile, s"$clsName/$prefix")
       new File(localFile).delete()
-      filesWritten += 1
     }
   }
 }
@@ -121,11 +135,9 @@ object BatchConverter {
                               val Some(m) = "(.+)/.+".r.findFirstMatchIn(summary.getKey())
                               m.group(1)
                             })
+                   .flatMap(x => converter.groupBySize(x._2.toIterator).toIterator.zip(Iterator.continually{x._1}))
                    .par
-                   .foreach((group) => {
-                              converter.transform(bucket, group._2.toIterator, group._1)
-                            })
-
+                   .foreach(x => converter.transform(bucket, x._1.toIterator, x._2))
                });
   }
 }
