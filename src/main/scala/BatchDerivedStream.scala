@@ -62,7 +62,7 @@ trait BatchDerivedStream {
     val uuid = UUID.randomUUID.toString
     val key = s"$prefix/$uuid"
     val file = new File(fileName)
-    println(s"Uploading Parquet file to $key")
+    println(s"Uploading Parquet file to $parquetBucket/$key")
     s3.putObject(parquetBucket, key, file)
   }
 
@@ -71,9 +71,9 @@ trait BatchDerivedStream {
   def streamName: String
 
   def groupBySize(keys: Iterator[S3ObjectSummary]): List[List[S3ObjectSummary]] = {
+    val threshold = 1L << 31
     keys.foldRight((0L, List[List[S3ObjectSummary]]()))(
       (x, acc) => {
-        val threshold = 2 << 29
         acc match {
           case (size, head :: tail) if size + x.getSize() < threshold =>
             (size + x.getSize(), (x :: head) :: tail)
