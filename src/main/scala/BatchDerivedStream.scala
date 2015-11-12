@@ -66,6 +66,14 @@ trait BatchDerivedStream {
     s3.putObject(parquetBucket, key, file)
   }
 
+  private def camelToDash(name: String) = {
+    val regexp = "(?<=([a-z]))([A-Z])|^([A-Z])".r
+    regexp.replaceAllIn(name, _ match {
+                          case regexp(_, _, x) if Option(x).getOrElse("") != "" => x.toLowerCase()
+                          case regexp(_, x, _) if Option(x).getOrElse("") != "" => "-" + x.toLowerCase()
+                        })
+  }
+
   def buildSchema: Schema
   def buildRecord(message: Message, schema: Schema): Option[GenericRecord]
   def streamName: String
@@ -97,7 +105,7 @@ trait BatchDerivedStream {
       record <- buildRecord(message, schema)
     } yield record
 
-    val clsName = this.getClass.getSimpleName.replace("$", "")  // Use classname as stream prefix on S3
+    val clsName = camelToDash(this.getClass.getSimpleName.replace("$", ""))  // Use classname as stream prefix on S3
     val partitionedPrefix = partitioning.partitionPrefix(prefix)
 
     while(!records.isEmpty) {
