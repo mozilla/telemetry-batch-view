@@ -23,7 +23,7 @@ case class Partitioning(dimensions: List[Dimension]) {
 
     path(0) + "/" + dimensions
       .zip(path.drop(1))
-      .map(x => x._1.fieldName + "=" + x._2)
+      .map(x => x._1.fieldName + "S3=" + x._2)
       .mkString("/")
   }
 }
