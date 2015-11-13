@@ -58,6 +58,8 @@ trait BatchDerivedStream {
     Partitioning(schema)
   }
 
+  private val clsName = camelToDash(this.getClass.getSimpleName.replace("$", ""))  // Use classname as stream prefix on S3
+
   private def uploadLocalFileToS3(fileName: String, prefix: String) {
     val uuid = UUID.randomUUID.toString
     val key = s"$prefix/$uuid"
@@ -78,24 +80,17 @@ trait BatchDerivedStream {
   def buildRecord(message: Message, schema: Schema): Option[GenericRecord]
   def streamName: String
 
-  def groupBySize(keys: Iterator[S3ObjectSummary]): List[List[S3ObjectSummary]] = {
-    val threshold = 1L << 31
-    keys.foldRight((0L, List[List[S3ObjectSummary]]()))(
-      (x, acc) => {
-        acc match {
-          case (size, head :: tail) if size + x.getSize() < threshold =>
-            (size + x.getSize(), (x :: head) :: tail)
-          case (size, res) if size + x.getSize() < threshold =>
-            (size + x.getSize(), List(x) :: res)
-          case (_, res) =>
-            (x.getSize(), List(x) :: res)
-        }
-      })._2
+  def hasNotBeenProcessed(prefix: String): Boolean = {
+    val bucket = Bucket(parquetBucket)
+    val partitionedPrefix = partitioning.partitionPrefix(prefix)
+    if (!s3.objectSummaries(bucket, s"$clsName/$partitionedPrefix").isEmpty) {
+      println(s"Warning: can't process $prefix as data already exists!")
+      false
+    } else true
   }
 
-  def transform(bucket: Bucket, keys: Iterator[S3ObjectSummary], prefix: String) = {
+  def transform(bucket: Bucket, keys: Iterator[S3ObjectSummary], prefix: String) {
     val schema = buildSchema
-
     val records = for {
       key <- keys
       hekaFile = bucket
@@ -105,9 +100,7 @@ trait BatchDerivedStream {
       record <- buildRecord(message, schema)
     } yield record
 
-    val clsName = camelToDash(this.getClass.getSimpleName.replace("$", ""))  // Use classname as stream prefix on S3
     val partitionedPrefix = partitioning.partitionPrefix(prefix)
-
     while(!records.isEmpty) {
       val localFile = ParquetFile.serialize(records, schema, chunked=true)
       uploadLocalFileToS3(localFile, s"$clsName/$partitionedPrefix")
@@ -148,6 +141,21 @@ object BatchConverter {
     prefix
   }
 
+  private def groupBySize(keys: Iterator[S3ObjectSummary]): List[List[S3ObjectSummary]] = {
+    val threshold = 1L << 31
+    keys.foldRight((0L, List[List[S3ObjectSummary]]()))(
+      (x, acc) => {
+        acc match {
+          case (size, head :: tail) if size + x.getSize() < threshold =>
+            (size + x.getSize(), (x :: head) :: tail)
+          case (size, res) if size + x.getSize() < threshold =>
+            (size + x.getSize(), List(x) :: res)
+          case (_, res) =>
+            (x.getSize(), List(x) :: res)
+        }
+      })._2
+  }
+
   def main(args: Array[String]) {
     val usage = "converter --from-date YYYYMMDD --to-date YYYYMMDD stream_name"
     val options = parseOptions(args)
@@ -176,14 +184,15 @@ object BatchConverter {
     (0 until daysCount + 1)
       .map(fromDate.plusDays(_).toString("yyyyMMdd"))
       .par
-      .foreach((date) => {
+      .foreach(date => {
                  println(s"Fetching data for $date")
                  s3.objectSummaries(bucket, s"$prefix/$date")
                    .groupBy((summary) => {
                               val Some(m) = "(.+)/.+".r.findFirstMatchIn(summary.getKey())
                               m.group(1)
                             })
-                   .flatMap(x => converter.groupBySize(x._2.toIterator).toIterator.zip(Iterator.continually{x._1}))
+                   .flatMap(x => groupBySize(x._2.toIterator).toIterator.zip(Iterator.continually{x._1}))
+                   .filter(x => converter.hasNotBeenProcessed(x._2))
                    .par
                    .foreach(x => converter.transform(bucket, x._1.toIterator, x._2))
                });
