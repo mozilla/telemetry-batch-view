@@ -16,7 +16,7 @@ import scala.collection.JavaConverters._
 
 object ParquetFile {
   private val conf = ConfigFactory.load()
-  private val limit = 256 * 1024 * 1024
+  private val limit = 1L << 31
   private val parquetLogger = Logger.getLogger("org.apache.parquet")
   private val hadoopConf = new Configuration()
 
