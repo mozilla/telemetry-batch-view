@@ -16,34 +16,12 @@ import scala.io.Source
 import telemetry.parquet.ParquetFile
 import telemetry.streams.ExecutiveStream
 
-case class Partitioning(dimensions: List[Dimension]) {
-  def partitionPrefix(prefix: String): String = {
-    val path = prefix.split("/")
-    assert(path.length - 1 == dimensions.length, "Invalid partitioning")
-
-    path(0) + "/" + dimensions
-      .zip(path.drop(1))
-      .map(x => x._1.fieldName + "S3=" + x._2)
-      .mkString("/")
-  }
-}
-case class Dimension(fieldName: String, allowedValues: String)
-
-object Partitioning{
-  private implicit val formats = DefaultFormats
-
-  def apply(rawSchema: String): Partitioning = {
-    val schema = parse(rawSchema)
-    schema.camelizeKeys.extract[Partitioning]
-  }
-}
-
-trait BatchDerivedStream {
+abstract class BatchDerivedStream {
   private implicit val s3 = S3()
   private val conf = ConfigFactory.load()
-
   private val parquetBucket = conf.getString("app.parquetBucket")
   private val metadataBucket = Bucket("net-mozaws-prod-us-west-2-pipeline-metadata")
+  private val clsName = camelToDash(this.getClass.getSimpleName.replace("$", ""))  // Use classname as stream prefix on S3
 
   private val metaPrefix = {
     val Some(sourcesObj) = metadataBucket.get(s"sources.json")
@@ -57,8 +35,6 @@ trait BatchDerivedStream {
     val schema = Source.fromInputStream(schemaObj.getObjectContent()).getLines().mkString("\n")
     Partitioning(schema)
   }
-
-  private val clsName = camelToDash(this.getClass.getSimpleName.replace("$", ""))  // Use classname as stream prefix on S3
 
   private def uploadLocalFileToS3(fileName: String, prefix: String) {
     val uuid = UUID.randomUUID.toString
@@ -109,7 +85,7 @@ trait BatchDerivedStream {
   }
 }
 
-object BatchConverter {
+object BatchDerivedStream {
   type OptionMap = Map[Symbol, String]
 
   private val metadataBucket = Bucket("net-mozaws-prod-us-west-2-pipeline-metadata")
@@ -156,31 +132,19 @@ object BatchConverter {
       })._2
   }
 
-  def main(args: Array[String]) {
-    val usage = "converter --from-date YYYYMMDD --to-date YYYYMMDD stream_name"
-    val options = parseOptions(args)
-
-    if (!List('fromDate, 'toDate, 'stream).forall(options.contains)) {
-      println(usage)
-      return
-    }
-
-    val converter = options('stream) match {
+  def convert(stream: String, from: String, to: String) {
+    val converter = stream match {
       case "ExecutiveStream" => ExecutiveStream
-      case _ => {
-        println(usage)
-        return
-      }
+      case _ => throw new Exception("Stream does not exist!")
     }
 
-    val bucket = Bucket("net-mozaws-prod-us-west-2-pipeline-data")
     val formatter = DateTimeFormat.forPattern("yyyyMMdd")
-    val fromDate = DateTime.parse(options('fromDate), formatter)
-    val toDate = DateTime.parse(options('toDate), formatter)
+    val fromDate = DateTime.parse(from, formatter)
+    val toDate = DateTime.parse(to, formatter)
     val daysCount = Days.daysBetween(fromDate, toDate).getDays()
+    val bucket = Bucket("net-mozaws-prod-us-west-2-pipeline-data")
     val prefix = S3Prefix(converter.streamName)
 
-    // FIXME: Parallel collections cause an exception after the first run...
     (0 until daysCount + 1)
       .map(fromDate.plusDays(_).toString("yyyyMMdd"))
       .par
@@ -196,5 +160,17 @@ object BatchConverter {
                    .par
                    .foreach(x => converter.transform(bucket, x._1.toIterator, x._2))
                });
+  }
+
+  def main(args: Array[String]) {
+    val usage = "converter --from-date YYYYMMDD --to-date YYYYMMDD stream_name"
+    val options = parseOptions(args)
+
+    if (!List('fromDate, 'toDate, 'stream).forall(options.contains)) {
+      println(usage)
+      return
+    }
+
+    convert(options('stream), options('fromDate), options('toDate))
   }
 }

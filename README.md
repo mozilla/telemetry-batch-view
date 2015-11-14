@@ -18,7 +18,7 @@ See [`ExecutiveStream.scala`](https://github.com/vitillo/telemetry-parquet/blob/
 #### Execution
 Given a subtype of `BatchDerivedStream` of type `MyStream`, a dataset for the 28th of October can be generated with:
 ```
-sbt "run-main telemetry.BatchConverter --from-date 20151028 --to-date 20151028 MyStream"
+sbt "run-main telemetry.BatchDerivedStream --from-date 20151028 --to-date 20151028 MyStream"
 ```
 
 ### Online
