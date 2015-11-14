@@ -52,11 +52,11 @@ abstract class BatchDerivedStream {
                         })
   }
 
-  def buildSchema: Schema
-  def buildRecord(message: Message, schema: Schema): Option[GenericRecord]
-  def streamName: String
+  protected def buildSchema: Schema
+  protected def buildRecord(message: Message, schema: Schema): Option[GenericRecord]
+  protected def streamName: String
 
-  def hasNotBeenProcessed(prefix: String): Boolean = {
+  protected def hasNotBeenProcessed(prefix: String): Boolean = {
     val bucket = Bucket(parquetBucket)
     val partitionedPrefix = partitioning.partitionPrefix(prefix)
     if (!s3.objectSummaries(bucket, s"$clsName/$partitionedPrefix").isEmpty) {
@@ -65,7 +65,7 @@ abstract class BatchDerivedStream {
     } else true
   }
 
-  def transform(bucket: Bucket, keys: Iterator[S3ObjectSummary], prefix: String) {
+  protected def transform(bucket: Bucket, keys: Iterator[S3ObjectSummary], prefix: String) {
     val schema = buildSchema
     val records = for {
       key <- keys
