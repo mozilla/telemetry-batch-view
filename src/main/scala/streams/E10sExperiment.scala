@@ -51,16 +51,16 @@ case class E10sExperiment(experimentId: String, prefix: String) extends BatchDer
                }
              case _ => return None
            })
-      .set("clientId", fields.get("clientId"))
-      .set("creationTimestamp", fields.get("creationTimestamp"))
-      .set("submissionDate", fields.get("submissionDate"))
-      .set("documentId", fields.get("documentId"))
-      .set("sampleId", fields.get("sampleId"))
-      .set("simpleMeasurements", fields.get("payload.simpleMeasurements"))
-      .set("settings", fields.get("environment.settings"))
-      .set("threadHangStats", fields.get("payload.threadHangStats"))
-      .set("histograms", fields.get("payload.histograms"))
-      .set("keyedHistograms", fields.get("payload.keyedHistograms"))
+      .set("clientId", fields.getOrElse("clientId", ""))
+      .set("creationTimestamp", fields.getOrElse("creationTimestamp", ""))
+      .set("submissionDate", fields.getOrElse("submissionDate", ""))
+      .set("documentId", fields.getOrElse("documentId", ""))
+      .set("sampleId", fields.getOrElse("sampleId", ""))
+      .set("simpleMeasurements", fields.getOrElse("payload.simpleMeasurements", ""))
+      .set("settings", fields.getOrElse("environment.settings", ""))
+      .set("threadHangStats", fields.getOrElse("payload.threadHangStats", ""))
+      .set("histograms", fields.getOrElse("payload.histograms", ""))
+      .set("keyedHistograms", fields.getOrElse("payload.keyedHistograms", ""))
       .set("childPayloads", fields.getOrElse("payload.childPayloads", "{}"))
       .build
 
