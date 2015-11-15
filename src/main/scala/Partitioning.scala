@@ -17,7 +17,7 @@ case class Partitioning(dimensions: List[Dimension]) {
   }
 }
 
-case class Dimension(fieldName: String, allowedValues: String)
+case class Dimension(fieldName: String, allowedValues: Any)
 
 object Partitioning{
   private implicit val formats = DefaultFormats

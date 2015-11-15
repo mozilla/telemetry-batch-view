@@ -14,7 +14,7 @@ import org.json4s.native.JsonMethods._
 import scala.collection.JavaConverters._
 import scala.io.Source
 import telemetry.parquet.ParquetFile
-import telemetry.streams.ExecutiveStream
+import telemetry.streams.{ExecutiveStream, E10sExperiment}
 
 abstract class BatchDerivedStream {
   private implicit val s3 = S3()
@@ -55,6 +55,7 @@ abstract class BatchDerivedStream {
   protected def buildSchema: Schema
   protected def buildRecord(message: Message, schema: Schema): Option[GenericRecord]
   protected def streamName: String
+  protected def filterPrefix: String = ""
 
   protected def hasNotBeenProcessed(prefix: String): Boolean = {
     val bucket = Bucket(parquetBucket)
@@ -135,6 +136,8 @@ object BatchDerivedStream {
   def convert(stream: String, from: String, to: String) {
     val converter = stream match {
       case "ExecutiveStream" => ExecutiveStream
+      case "E10sExperiment" => E10sExperiment("e10s-enabled-aurora-20151020@experiments.mozilla.org",
+                                              "telemetry/4/saved_session/Firefox/aurora/43.0a2/")
       case _ => throw new Exception("Stream does not exist!")
     }
 
@@ -144,13 +147,14 @@ object BatchDerivedStream {
     val daysCount = Days.daysBetween(fromDate, toDate).getDays()
     val bucket = Bucket("net-mozaws-prod-us-west-2-pipeline-data")
     val prefix = S3Prefix(converter.streamName)
+    val filterPrefix = converter.filterPrefix
 
     (0 until daysCount + 1)
       .map(fromDate.plusDays(_).toString("yyyyMMdd"))
       .par
       .foreach(date => {
                  println(s"Fetching data for $date")
-                 s3.objectSummaries(bucket, s"$prefix/$date")
+                 s3.objectSummaries(bucket, s"$prefix/$date/$filterPrefix")
                    .groupBy((summary) => {
                               val Some(m) = "(.+)/.+".r.findFirstMatchIn(summary.getKey())
                               m.group(1)
