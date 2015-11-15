@@ -8,7 +8,6 @@ import scala.collection.JavaConverters._
 case class Partitioning(dimensions: List[Dimension]) {
   def partitionPrefix(prefix: String): String = {
     val path = prefix.split("/")
-    assert(path.length - 1 == dimensions.length, "Invalid partitioning")
 
     path(0) + "/" + dimensions
       .zip(path.drop(1))

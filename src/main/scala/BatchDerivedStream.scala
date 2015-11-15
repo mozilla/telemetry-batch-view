@@ -56,6 +56,10 @@ abstract class BatchDerivedStream {
   protected def buildRecord(message: Message, schema: Schema): Option[GenericRecord]
   protected def streamName: String
   protected def filterPrefix: String = ""
+  protected def prefixGroup(key: String): String = {
+    val Some(m) = "(.+)/.+".r.findFirstMatchIn(key)
+    m.group(1)
+  }
 
   protected def hasNotBeenProcessed(prefix: String): Boolean = {
     val bucket = Bucket(parquetBucket)
@@ -155,10 +159,7 @@ object BatchDerivedStream {
       .foreach(date => {
                  println(s"Fetching data for $date")
                  s3.objectSummaries(bucket, s"$prefix/$date/$filterPrefix")
-                   .groupBy((summary) => {
-                              val Some(m) = "(.+)/.+".r.findFirstMatchIn(summary.getKey())
-                              m.group(1)
-                            })
+                   .groupBy(summary => converter.prefixGroup(summary.getKey()))
                    .flatMap(x => groupBySize(x._2.toIterator).toIterator.zip(Iterator.continually{x._1}))
                    .filter(x => converter.hasNotBeenProcessed(x._2))
                    .par

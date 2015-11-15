@@ -33,6 +33,10 @@ case class E10sExperiment(experimentId: String, prefix: String) extends BatchDer
   def streamName: String = "telemetry"
   override def filterPrefix: String = prefix
 
+  override def prefixGroup(key: String): String = {
+    key.split("/").take(2).mkString("/")
+  }
+
   def buildRecord(message: Message, schema: Schema): Option[GenericRecord] ={
     val fields = HekaFrame.fields(message)
 
