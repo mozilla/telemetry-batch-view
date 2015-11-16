@@ -8,6 +8,9 @@ import java.io.File
 import java.util.UUID
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
+import org.apache.spark.SparkConf
 import org.joda.time.Days
 import org.json4s._
 import org.json4s.native.JsonMethods._
@@ -16,8 +19,10 @@ import scala.io.Source
 import telemetry.parquet.ParquetFile
 import telemetry.streams.{ExecutiveStream, E10sExperiment}
 
-abstract class BatchDerivedStream {
-  private implicit val s3 = S3()
+case class ObjectSummary(key: String, size: Long)
+
+abstract class BatchDerivedStream extends java.io.Serializable{
+  @transient private implicit val s3 = S3()
   private val conf = ConfigFactory.load()
   private val parquetBucket = conf.getString("app.parquetBucket")
   private val metadataBucket = Bucket("net-mozaws-prod-us-west-2-pipeline-metadata")
@@ -70,12 +75,12 @@ abstract class BatchDerivedStream {
     } else true
   }
 
-  protected def transform(bucket: Bucket, keys: Iterator[S3ObjectSummary], prefix: String) {
+  protected def transform(bucket: Bucket, keys: Iterator[ObjectSummary], prefix: String) {
     val schema = buildSchema
     val records = for {
       key <- keys
       hekaFile = bucket
-      .getObject(key.getKey())
+      .getObject(key.key)
       .getOrElse(throw new Exception("File missing on S3"))
       message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey())
       record <- buildRecord(message, schema)
@@ -122,17 +127,17 @@ object BatchDerivedStream {
     prefix
   }
 
-  private def groupBySize(keys: Iterator[S3ObjectSummary]): List[List[S3ObjectSummary]] = {
+  private def groupBySize(keys: Iterator[ObjectSummary]): List[List[ObjectSummary]] = {
     val threshold = 1L << 31
-    keys.foldRight((0L, List[List[S3ObjectSummary]]()))(
+    keys.foldRight((0L, List[List[ObjectSummary]]()))(
       (x, acc) => {
         acc match {
-          case (size, head :: tail) if size + x.getSize() < threshold =>
-            (size + x.getSize(), (x :: head) :: tail)
-          case (size, res) if size + x.getSize() < threshold =>
-            (size + x.getSize(), List(x) :: res)
+          case (size, head :: tail) if size + x.size < threshold =>
+            (size + x.size, (x :: head) :: tail)
+          case (size, res) if size + x.size < threshold =>
+            (size + x.size, List(x) :: res)
           case (_, res) =>
-            (x.getSize(), List(x) :: res)
+            (x.size, List(x) :: res)
         }
       })._2
   }
@@ -153,18 +158,18 @@ object BatchDerivedStream {
     val prefix = S3Prefix(converter.streamName)
     val filterPrefix = converter.filterPrefix
 
-    (0 until daysCount + 1)
+    val conf = new SparkConf().setAppName("Parquet Converter").setMaster("local")
+    val sc = new SparkContext(conf)
+
+    sc.parallelize(0 until daysCount + 1)
       .map(fromDate.plusDays(_).toString("yyyyMMdd"))
-      .par
-      .foreach(date => {
-                 println(s"Fetching data for $date")
+      .flatMap(date => {
                  s3.objectSummaries(bucket, s"$prefix/$date/$filterPrefix")
-                   .groupBy(summary => converter.prefixGroup(summary.getKey()))
-                   .flatMap(x => groupBySize(x._2.toIterator).toIterator.zip(Iterator.continually{x._1}))
-                   .filter(x => converter.hasNotBeenProcessed(x._2))
-                   .par
-                   .foreach(x => converter.transform(bucket, x._1.toIterator, x._2))
-               });
+                   .map(summary => ObjectSummary(summary.getKey(), summary.getSize()))})
+      .groupBy(summary => converter.prefixGroup(summary.key))
+      .flatMap(x => groupBySize(x._2.toIterator).toIterator.zip(Iterator.continually{x._1}))
+      .filter(x => converter.hasNotBeenProcessed(x._2))
+      .foreach(x => converter.transform(bucket, x._1.toIterator, x._2))
   }
 
   def main(args: Array[String]) {
