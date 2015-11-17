@@ -6,10 +6,10 @@ import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
 import org.json4s.native.JsonMethods._
 import scala.collection.JavaConverters._
-import telemetry.BatchDerivedStream
+import telemetry.SimpleDerivedStream
 import telemetry.heka.{HekaFrame, Message}
 
-object ExecutiveStream extends BatchDerivedStream{
+object ExecutiveStream extends SimpleDerivedStream{
   def buildSchema: Schema = {
     SchemaBuilder
       .record("System").fields
