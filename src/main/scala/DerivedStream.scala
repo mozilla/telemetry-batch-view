@@ -126,7 +126,7 @@ object DerivedStream {
       .map(fromDate.plusDays(_).toString("yyyyMMdd"))
       .flatMap(date => {
                  s3.objectSummaries(bucket, s"$prefix/$date/$filterPrefix")
-                   .map(summary => ObjectSummary(summary.getKey(), summary.getSize())).take(1)})
+                   .map(summary => ObjectSummary(summary.getKey(), summary.getSize()))})
 
     converter.transform(sc, bucket, summaries, from, to)
   }
