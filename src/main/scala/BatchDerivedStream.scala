@@ -26,7 +26,7 @@ abstract class BatchDerivedStream extends java.io.Serializable{
   private val conf = ConfigFactory.load()
   private val parquetBucket = conf.getString("app.parquetBucket")
   private val metadataBucket = Bucket("net-mozaws-prod-us-west-2-pipeline-metadata")
-  private val clsName = camelToDash(this.getClass.getSimpleName.replace("$", ""))  // Use classname as stream prefix on S3
+  private val clsName = uncamelize(this.getClass.getSimpleName.replace("$", ""))  // Use classname as stream prefix on S3
 
   private val metaPrefix = {
     val Some(sourcesObj) = metadataBucket.get(s"sources.json")
@@ -42,6 +42,7 @@ abstract class BatchDerivedStream extends java.io.Serializable{
   }
 
   private def uploadLocalFileToS3(fileName: String, prefix: String) {
+    implicit val s3 = S3()
     val uuid = UUID.randomUUID.toString
     val key = s"$prefix/$uuid"
     val file = new File(fileName)
@@ -49,12 +50,28 @@ abstract class BatchDerivedStream extends java.io.Serializable{
     s3.putObject(parquetBucket, key, file)
   }
 
-  private def camelToDash(name: String) = {
-    val regexp = "(?<=([a-z]))([A-Z])|^([A-Z])".r
-    regexp.replaceAllIn(name, _ match {
-                          case regexp(_, _, x) if Option(x).getOrElse("") != "" => x.toLowerCase()
-                          case regexp(_, x, _) if Option(x).getOrElse("") != "" => "-" + x.toLowerCase()
-                        })
+  private def uncamelize(name: String) = {
+    val pattern = java.util.regex.Pattern.compile("(^[^A-Z]+|[A-Z][^A-Z]+)")
+    val matcher = pattern.matcher(name);
+    val output = new StringBuilder
+
+    while (matcher.find()) {
+      if (output.length > 0)
+        output.append("-");
+      output.append(matcher.group().toLowerCase);
+    }
+
+    output.toString()
+  }
+
+  private def hasNotBeenProcessed(prefix: String): Boolean = {
+    implicit val s3 = S3()
+    val bucket = Bucket(parquetBucket)
+    val partitionedPrefix = partitioning.partitionPrefix(prefix)
+    if (!s3.objectSummaries(bucket, s"$clsName/$partitionedPrefix").isEmpty) {
+      println(s"Warning: can't process $prefix as data already exists!")
+      false
+    } else true
   }
 
   protected def buildSchema: Schema
@@ -66,16 +83,8 @@ abstract class BatchDerivedStream extends java.io.Serializable{
     m.group(1)
   }
 
-  protected def hasNotBeenProcessed(prefix: String): Boolean = {
-    val bucket = Bucket(parquetBucket)
-    val partitionedPrefix = partitioning.partitionPrefix(prefix)
-    if (!s3.objectSummaries(bucket, s"$clsName/$partitionedPrefix").isEmpty) {
-      println(s"Warning: can't process $prefix as data already exists!")
-      false
-    } else true
-  }
-
   protected def transform(bucket: Bucket, keys: Iterator[ObjectSummary], prefix: String) {
+    implicit val s3 = S3()
     val schema = buildSchema
     val records = for {
       key <- keys
@@ -158,10 +167,10 @@ object BatchDerivedStream {
     val prefix = S3Prefix(converter.streamName)
     val filterPrefix = converter.filterPrefix
 
-    val conf = new SparkConf().setAppName("Parquet Converter").setMaster("local")
+    val conf = new SparkConf().setAppName("Parquet Converter").setMaster("local[*]")
     val sc = new SparkContext(conf)
 
-    sc.parallelize(0 until daysCount + 1)
+    val tasks = sc.parallelize(0 until daysCount + 1)
       .map(fromDate.plusDays(_).toString("yyyyMMdd"))
       .flatMap(date => {
                  s3.objectSummaries(bucket, s"$prefix/$date/$filterPrefix")
@@ -169,6 +178,9 @@ object BatchDerivedStream {
       .groupBy(summary => converter.prefixGroup(summary.key))
       .flatMap(x => groupBySize(x._2.toIterator).toIterator.zip(Iterator.continually{x._1}))
       .filter(x => converter.hasNotBeenProcessed(x._2))
+
+    tasks
+      .repartition(tasks.count().toInt)
       .foreach(x => converter.transform(bucket, x._1.toIterator, x._2))
   }
 
