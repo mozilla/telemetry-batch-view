@@ -9,9 +9,10 @@ The converted datasets are stored in the bucket specified in [*application.conf*
 ### Adding a new derived dataset
 
 A derived dataset can be defined by subclassing the [`BatchDerivedStream`](https://github.com/vitillo/aws-lambda-parquet/blob/master/src/main/scala/BatchDerivedStream.scala) trait and implementing:
-- `buildSchema`, which retuns the Avro schema of the derived stream
-- `buildRecord`, which given a [Heka message](https://hekad.readthedocs.org/en/latest/message/index.html#message-variables) returns a derived Avro record
-- `streamName`, which returns the dataset name used as input, as defined in *sources.json* in the metadata bucket, e.g. "telemetry-executive-summary"
+- `streamName`, returns the dataset name used as input, as defined in *sources.json* in the metadata bucket, e.g. "telemetry-executive-summary"
+- `buildSchema`, returns the Avro schema of the derived dataset
+- `buildRecord`, given a [Heka message](https://hekad.readthedocs.org/en/latest/message/index.html#message-variables) returns a derived Avro record
+- `[prefixGroup]`, returns the group in which an input key is going to be processed in; each group is further split in chunks that are processed in parallel tasks
 
 See [`ExecutiveStream.scala`](https://github.com/vitillo/telemetry-parquet/blob/master/src/main/scala/streams/ExecutiveStream.scala) for a simple stream.
 
