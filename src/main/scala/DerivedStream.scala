@@ -119,7 +119,7 @@ object DerivedStream {
     val prefix = S3Prefix(converter.streamName)
     val filterPrefix = converter.filterPrefix
 
-    val conf = new SparkConf().setAppName("Parquet Converter").setMaster("local[1]")
+    val conf = new SparkConf().setAppName("Parquet Converter").setMaster("local[*]")
     val sc = new SparkContext(conf)
 
     val summaries = sc.parallelize(0 until daysCount + 1)
