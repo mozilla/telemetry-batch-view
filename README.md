@@ -16,7 +16,7 @@ A derived dataset can be defined by subclassing the [`BatchDerivedStream`](https
 
 See [`ExecutiveStream.scala`](https://github.com/vitillo/telemetry-parquet/blob/master/src/main/scala/streams/ExecutiveStream.scala) for a simple stream.
 
-#### Execution
+### Execution
 Given a subtype of `BatchDerivedStream` of type `MyStream`, a dataset for the 28th of October can be generated with:
 ```
 sbt "run-main telemetry.BatchDerivedStream --from-date 20151028 --to-date 20151028 MyStream"
