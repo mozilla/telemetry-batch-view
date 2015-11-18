@@ -1,5 +1,6 @@
 package telemetry
 
+import DerivedStream.s3
 import awscala.s3._
 import com.github.nscala_time.time.Imports._
 import com.typesafe.config._
@@ -19,7 +20,6 @@ import telemetry.streams.{E10sExperiment, ExecutiveStream}
 case class ObjectSummary(key: String, size: Long) // S3ObjectSummary can't be serialized
 
 abstract class DerivedStream extends java.io.Serializable{
-  @transient private implicit val s3 = S3()
   private val appConf = ConfigFactory.load()
   private val parquetBucket = Bucket(appConf.getString("app.parquetBucket"))
   private val metadataBucket = Bucket("net-mozaws-prod-us-west-2-pipeline-metadata")
@@ -38,12 +38,10 @@ abstract class DerivedStream extends java.io.Serializable{
   }
 
   protected def isS3PrefixEmpty(prefix: String): Boolean = {
-    implicit val s3 = S3()
     s3.objectSummaries(parquetBucket, s"$clsName/$prefix").isEmpty
   }
 
   protected def uploadLocalFileToS3(fileName: String, prefix: String) {
-    implicit val s3 = S3()
     val uuid = UUID.randomUUID.toString
     val key = s"$clsName/$prefix/$uuid"
     val file = new File(fileName)
@@ -60,8 +58,8 @@ abstract class DerivedStream extends java.io.Serializable{
 object DerivedStream {
   private type OptionMap = Map[Symbol, String]
 
+  implicit val s3: S3 = S3()
   private val metadataBucket = Bucket("net-mozaws-prod-us-west-2-pipeline-metadata")
-  private implicit val s3 = S3()
 
   private def uncamelize(name: String) = {
     val pattern = java.util.regex.Pattern.compile("(^[^A-Z]+|[A-Z][^A-Z]+)")
@@ -129,6 +127,21 @@ object DerivedStream {
                    .map(summary => ObjectSummary(summary.getKey(), summary.getSize()))})
 
     converter.transform(sc, bucket, summaries, from, to)
+  }
+
+  def groupBySize(keys: Iterator[ObjectSummary]): List[List[ObjectSummary]] = {
+    val threshold = 1L << 31
+    keys.foldRight((0L, List[List[ObjectSummary]]()))(
+      (x, acc) => {
+        acc match {
+          case (size, head :: tail) if size + x.size < threshold =>
+            (size + x.size, (x :: head) :: tail)
+          case (size, res) if size + x.size < threshold =>
+            (size + x.size, List(x) :: res)
+          case (_, res) =>
+            (x.size, List(x) :: res)
+        }
+      })._2
   }
 
   def main(args: Array[String]) {

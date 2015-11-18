@@ -11,7 +11,8 @@ import org.apache.spark.rdd.RDD
 import org.json4s._
 import org.json4s.native.JsonMethods._
 import scala.collection.JavaConverters._
-import telemetry.{DerivedStream, ObjectSummary, Partitioning}
+import telemetry.{DerivedStream, ObjectSummary}
+import telemetry.DerivedStream.s3
 import telemetry.heka.{HekaFrame, Message}
 import telemetry.parquet.ParquetFile
 
@@ -21,34 +22,50 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
   override def filterPrefix: String = prefix
 
   override def transform(sc: SparkContext, bucket: Bucket, summaries: RDD[ObjectSummary], from: String, to: String) {
-    val clientMessages = summaries
-      .repartition(summaries.count().toInt)
+    val prefix = s"generationDate=$to"
+
+    if (!isS3PrefixEmpty(prefix)) {
+      println(s"Warning: prefix $prefix already exists on S3!")
+      return
+    }
+
+    val groups = DerivedStream.groupBySize(summaries.collect().toIterator)
+    val clientMessages = sc.parallelize(groups, groups.size)
+      .flatMap(x => x)
       .flatMap{ case obj =>
-        implicit val s3 = S3()
         val hekaFile = bucket.getObject(obj.key).getOrElse(throw new Exception("File missing on S3"))
-        for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey()))  yield message
-      }.flatMap{ case message =>
+        for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey()))  yield message }
+      .flatMap{ case message =>
         val fields = HekaFrame.fields(message)
         val clientId = fields.get("clientId")
-        val creationTimestamp = fields.get("creationTimestamp")
 
-        (clientId, creationTimestamp) match {
-          case (Some(id: String), Some(time: Double)) => List((id, (time, fields)))
+        val addons = parse(fields.getOrElse("environment.addons", "{}").asInstanceOf[String])
+        val id = addons \ "activeExperiment" \ "id"
+        val branch = addons \ "activeExperiment" \ "branch"
+
+        // Ignore the first session of the experiment
+        val log = parse(fields.getOrElse("payload.log", "[]").asInstanceOf[String])
+        val status = for {
+          JArray(entries) <- log
+          JArray(entry) <- entries
+          JString(key) <- entry(0)
+          if key == "EXPERIMENT_ACTIVATION"
+          JString(status) <- entry(2)
+          if status == "ACTIVATED"
+          JString(exp) <- entry(3)
+          if exp == experimentId
+        } yield status
+
+        (clientId, id, branch) match {
+          case (Some(client: String), JString(id), JString(branch)) if id == experimentId && (branch == "control" || branch == "experiment") && status.isEmpty =>
+            List((client, fields))
           case _ => Nil
         }
       }
 
-    val firstSessionTimestampByClient = clientMessages
-      .mapValues(_._1)
-      .reduceByKey((x, y) => if (x < y) x else y)
-      .collectAsMap()
-
     val representativeSubmissions = clientMessages
-       // TODO: re-enable
-       // TODO: add check to see if derived stream has already been generated
-       //.filter{case (clientId, payload) => payload._1 != firstSessionTimestampByClient(clientId)}
       .reduceByKey{ case (x, y) => x }
-      .map{ case (clientId, payload) => payload._2 }
+      .map{ case (clientId, payload) => payload }
       .repartition(sc.defaultParallelism)
       .foreachPartition{ case fieldsIterator =>
         val schema = buildSchema
@@ -59,7 +76,7 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
 
         while(!records.isEmpty) {
           val localFile = ParquetFile.serialize(records, schema, chunked=true)
-          uploadLocalFileToS3(localFile, s"generationDate=$to")
+          uploadLocalFileToS3(localFile, prefix)
           new File(localFile).delete()
         }
       }
@@ -69,6 +86,7 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
     SchemaBuilder
       .record("Submission").fields
       .name("clientId").`type`().stringType().noDefault()
+      .name("experimentBranch").`type`().stringType().noDefault()
       .name("creationTimestamp").`type`().stringType().noDefault()
       .name("submissionDate").`type`().stringType().noDefault()
       .name("documentId").`type`().stringType().noDefault()
@@ -84,24 +102,18 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
   }
 
   private def buildRecord(fields: Map[String, Any], schema: Schema): Option[GenericRecord] ={
+    val addons = fields.getOrElse("environment.addons", "{}").asInstanceOf[String]
+
     val root = new GenericRecordBuilder(schema)
-      .set("addons", fields.getOrElse("environment.addons", None) match {
-             case addons: String =>
-               parse(addons) \ "activeExperiment" \ "id" match {
-                 case JString(id) if id == experimentId =>
-                   addons
-                 case _ =>
-                   return None
-               }
-             case _ => return None
-           })
       .set("clientId", fields.getOrElse("clientId", ""))
+      .set("experimentBranch", parse(addons) \ "activeExperiment" \ "branch")
       .set("creationTimestamp", fields.getOrElse("creationTimestamp", ""))
       .set("submissionDate", fields.getOrElse("submissionDate", ""))
       .set("documentId", fields.getOrElse("documentId", ""))
       .set("sampleId", fields.getOrElse("sampleId", ""))
       .set("simpleMeasurements", fields.getOrElse("payload.simpleMeasurements", ""))
       .set("settings", fields.getOrElse("environment.settings", ""))
+      .set("addons", addons)
       .set("threadHangStats", fields.getOrElse("payload.threadHangStats", ""))
       .set("histograms", fields.getOrElse("payload.histograms", ""))
       .set("keyedHistograms", fields.getOrElse("payload.keyedHistograms", ""))
