@@ -103,10 +103,11 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
 
   private def buildRecord(fields: Map[String, Any], schema: Schema): Option[GenericRecord] ={
     val addons = fields.getOrElse("environment.addons", "{}").asInstanceOf[String]
+    val JString(branch) = parse(addons) \ "activeExperiment" \ "branch"
 
     val root = new GenericRecordBuilder(schema)
       .set("clientId", fields.getOrElse("clientId", ""))
-      .set("experimentBranch", parse(addons) \ "activeExperiment" \ "branch")
+      .set("experimentBranch", branch)
       .set("creationTimestamp", fields.getOrElse("creationTimestamp", ""))
       .set("submissionDate", fields.getOrElse("submissionDate", ""))
       .set("documentId", fields.getOrElse("documentId", ""))
