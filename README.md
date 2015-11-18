@@ -1,4 +1,4 @@
-# telemetry-parquet
+# telemetry-batch-view
 
 This is a Scala "framework" to build derived datasets, aka batch views, of [Telemetry](https://wiki.mozilla.org/Telemetry) data.
 
