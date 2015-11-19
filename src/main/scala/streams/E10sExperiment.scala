@@ -6,7 +6,7 @@ import com.github.nscala_time.time.Imports._
 import java.io.File
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, Partitioner}
 import org.apache.spark.rdd.RDD
 import org.json4s._
 import org.json4s.native.JsonMethods._
@@ -15,6 +15,14 @@ import telemetry.{DerivedStream, ObjectSummary}
 import telemetry.DerivedStream.s3
 import telemetry.heka.{HekaFrame, Message}
 import telemetry.parquet.ParquetFile
+
+private class SampleIdPartitioner extends Partitioner{
+  def numPartitions: Int = 100
+  def getPartition(key: Any): Int = key match {
+    case (_, sampleId: Int) => sampleId
+    case _ => throw new Exception("Invalid key")
+  }
+}
 
 case class E10sExperiment(experimentId: String, prefix: String) extends DerivedStream {
   override def streamName: String = "telemetry"
@@ -38,6 +46,7 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
       .flatMap{ case message =>
         val fields = HekaFrame.fields(message)
         val clientId = fields.get("clientId")
+        val sampleId = fields.get("sampleId")
 
         val addons = parse(fields.getOrElse("environment.addons", "{}").asInstanceOf[String])
         val id = addons \ "activeExperiment" \ "id"
@@ -56,17 +65,17 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
           if exp == experimentId
         } yield status
 
-        (clientId, id, branch) match {
-          case (Some(client: String), JString(id), JString(branch)) if id == experimentId && (branch == "control" || branch == "experiment") && status.isEmpty =>
-            List((client, fields))
+        (clientId, sampleId, id, branch) match {
+          case (Some(client: String), Some(sample: Double), JString(id), JString(branch)) if id == experimentId && (branch == "control" || branch == "experiment") && status.isEmpty =>
+            List(((client, sample.toInt), fields))
           case _ => Nil
         }
       }
 
     val representativeSubmissions = clientMessages
       .reduceByKey{ case (x, y) => x }
-      .map{ case (clientId, payload) => payload }
-      .repartition(sc.defaultParallelism)
+      .partitionBy(new SampleIdPartitioner())
+      .values
       .foreachPartition{ case fieldsIterator =>
         val schema = buildSchema
         val records = for {
