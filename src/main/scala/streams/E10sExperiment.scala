@@ -11,6 +11,7 @@ import org.apache.spark.rdd.RDD
 import org.json4s._
 import org.json4s.native.JsonMethods._
 import scala.collection.JavaConverters._
+import scala.util.Random
 import telemetry.{DerivedStream, ObjectSummary}
 import telemetry.DerivedStream.s3
 import telemetry.heka.{HekaFrame, Message}
@@ -73,7 +74,14 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
       }
 
     val representativeSubmissions = clientMessages
-      .reduceByKey{ case (x, y) => x }
+      .mapValues{case x => (x, 1)}
+      .reduceByKey{ case ((p1, n1), (p2, n2)) =>
+        // Every submission should have the same probability of being chosen
+        val n = n1 + n2
+        val rnd = new Random().nextFloat()
+        if (n * rnd < n1) (p1, n) else (p2, n)
+      }
+      .mapValues{case x => x._1}
       .partitionBy(new SampleIdPartitioner())
       .values
       .foreachPartition{ case fieldsIterator =>
