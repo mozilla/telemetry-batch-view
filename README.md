@@ -17,3 +17,8 @@ Given a subtype of `DerivedStream` of type `MyStream`, a dataset for e.g. the 28
 ```
 sbt "run-main telemetry.DerivedStream --from-date 20151028 --to-date 20151028 MyStream"
 ```
+
+### Building an Uber JAR
+```
+sbt assembly
+```
