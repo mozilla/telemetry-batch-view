@@ -2,7 +2,6 @@ package telemetry.streams
 
 import awscala._
 import awscala.s3._
-import com.github.nscala_time.time.Imports._
 import java.io.File
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}

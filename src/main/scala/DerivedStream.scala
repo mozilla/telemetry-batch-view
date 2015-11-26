@@ -2,7 +2,6 @@ package telemetry
 
 import DerivedStream.s3
 import awscala.s3._
-import com.github.nscala_time.time.Imports._
 import com.typesafe.config._
 import java.io.File
 import java.util.UUID
@@ -10,7 +9,8 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.joda.time.Days
+import org.joda.time.{Days, DateTime}
+import org.joda.time.format.DateTimeFormat
 import org.json4s._
 import org.json4s.native.JsonMethods._
 import scala.collection.JavaConverters._
@@ -110,8 +110,8 @@ object DerivedStream {
     }
 
     val formatter = DateTimeFormat.forPattern("yyyyMMdd")
-    val fromDate = DateTime.parse(from, formatter)
-    val toDate = DateTime.parse(to, formatter)
+    val fromDate = formatter.parseDateTime(from)
+    val toDate = formatter.parseDateTime(to)
     val daysCount = Days.daysBetween(fromDate, toDate).getDays()
     val bucket = Bucket("net-mozaws-prod-us-west-2-pipeline-data")
     val prefix = S3Prefix(converter.streamName)
@@ -119,12 +119,13 @@ object DerivedStream {
 
     val conf = new SparkConf().setAppName("Parquet Converter").setMaster("local[*]")
     val sc = new SparkContext(conf)
+    println("Spark parallelism level: " + sc.defaultParallelism)
 
     val summaries = sc.parallelize(0 until daysCount + 1)
       .map(fromDate.plusDays(_).toString("yyyyMMdd"))
       .flatMap(date => {
                  s3.objectSummaries(bucket, s"$prefix/$date/$filterPrefix")
-                   .map(summary => ObjectSummary(summary.getKey(), summary.getSize()))})
+                   .map(summary => ObjectSummary(summary.getKey(), summary.getSize())).take(1)})
 
     converter.transform(sc, bucket, summaries, from, to)
   }

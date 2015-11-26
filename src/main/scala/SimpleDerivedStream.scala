@@ -1,7 +1,6 @@
 package telemetry
 
 import awscala.s3._
-import com.github.nscala_time.time.Imports._
 import heka.{HekaFrame, Message}
 import java.io.File
 import org.apache.avro.Schema
