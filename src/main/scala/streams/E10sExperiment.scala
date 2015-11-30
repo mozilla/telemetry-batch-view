@@ -91,7 +91,7 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
           } yield record
 
         while(!records.isEmpty) {
-          val localFile = ParquetFile.serialize(records, schema, chunked=true)
+          val localFile = ParquetFile.serialize(records, schema)
           uploadLocalFileToS3(localFile, prefix)
         }
       }
