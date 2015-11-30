@@ -54,7 +54,6 @@ abstract class SimpleDerivedStream extends DerivedStream {
     while(!records.isEmpty) {
       val localFile = ParquetFile.serialize(records, schema, chunked=true)
       uploadLocalFileToS3(localFile, s"$partitionedPrefix")
-      new File(localFile).delete()
     }
   }
 }

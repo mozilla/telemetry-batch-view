@@ -5,6 +5,7 @@ import awscala.s3._
 import com.typesafe.config._
 import java.io.File
 import java.util.UUID
+import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.SparkContext
@@ -41,13 +42,14 @@ abstract class DerivedStream extends java.io.Serializable{
     s3.objectSummaries(parquetBucket, s"$clsName/$prefix").isEmpty
   }
 
-  protected def uploadLocalFileToS3(fileName: String, prefix: String) {
+  protected def uploadLocalFileToS3(path: Path, prefix: String) {
     val uuid = UUID.randomUUID.toString
     val key = s"$clsName/$prefix/$uuid"
-    val file = new File(fileName)
+    val file = new File(path.toUri())
     val bucketName = parquetBucket.name
     println(s"Uploading Parquet file to $bucketName/$key")
     s3.putObject(bucketName, key, file)
+    file.delete()
   }
 
   protected def streamName: String

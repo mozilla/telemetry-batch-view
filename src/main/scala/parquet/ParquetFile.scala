@@ -1,7 +1,7 @@
 package telemetry.parquet
 
 import com.typesafe.config._
-import java.io.File
+import java.net.URI
 import java.rmi.dgc.VMID
 import java.util.logging.Logger
 import org.apache.avro
@@ -17,18 +17,15 @@ object ParquetFile {
   private val limit = 1L << 31
   private val parquetLogger = Logger.getLogger("org.apache.parquet")
 
-  private def temporaryFileName(): String = {
+  private def temporaryFileName(): Path = {
+    val tmpDir = System.getProperty("java.io.tmpdir")
     val vmid = new VMID().toString().replaceAll(":|-", "")
-    val tmp = File.createTempFile(vmid, ".tmp")
-    tmp.deleteOnExit
-    tmp.delete
-    tmp.getPath()
+    val uri = URI.create(s"file:///$tmpDir/$vmid.tmp")
+    return new Path(uri)
   }
 
-  def serialize(data: Iterator[GenericRecord], schema: Schema, chunked: Boolean = false): String = {
-    val tmp = temporaryFileName
-    val parquetFile = new Path(tmp)
-    val stat = new File(tmp)
+  def serialize(data: Iterator[GenericRecord], schema: Schema, chunked: Boolean = false): Path = {
+    val parquetFile = temporaryFileName()
     val parquetWriter = AvroParquetWriterLike(parquetFile, schema)
 
     // Disable Parquet logging
@@ -49,7 +46,7 @@ object ParquetFile {
       parquetWriter.close
     }
 
-    tmp
+    parquetFile
   }
 
   def deserialize(filename: String): Seq[GenericRecord] = {
