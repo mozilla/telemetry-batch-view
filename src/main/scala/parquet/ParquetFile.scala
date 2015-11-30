@@ -9,18 +9,13 @@ import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.parquet.avro.{AvroParquetReader, AvroParquetWriter}
-import org.apache.parquet.hadoop.ParquetWriter
-import org.apache.parquet.hadoop.metadata.CompressionCodecName
+import org.apache.parquet.avro.AvroParquetReader
 import scala.collection.JavaConverters._
 
 object ParquetFile {
   private val conf = ConfigFactory.load()
   private val limit = 1L << 31
   private val parquetLogger = Logger.getLogger("org.apache.parquet")
-  private val hadoopConf = new Configuration()
-
-  hadoopConf.set("fs.file.impl", classOf[org.apache.hadoop.fs.LocalFileSystem].getName)
 
   private def temporaryFileName(): String = {
     val vmid = new VMID().toString().replaceAll(":|-", "")
@@ -34,11 +29,7 @@ object ParquetFile {
     val tmp = temporaryFileName
     val parquetFile = new Path(tmp)
     val stat = new File(tmp)
-
-    val blockSize = ParquetWriter.DEFAULT_BLOCK_SIZE
-    val pageSize = ParquetWriter.DEFAULT_PAGE_SIZE
-    val enableDict = ParquetWriter.DEFAULT_IS_DICTIONARY_ENABLED
-    val parquetWriter = new AvroParquetWriter[GenericRecord](parquetFile, schema, CompressionCodecName.SNAPPY, blockSize, pageSize, enableDict, hadoopConf)
+    val parquetWriter = AvroParquetWriterLike(parquetFile, schema)
 
     // Disable Parquet logging
     parquetLogger.getHandlers.foreach(parquetLogger.removeHandler)
