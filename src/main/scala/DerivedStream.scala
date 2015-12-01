@@ -103,14 +103,7 @@ object DerivedStream {
     prefix
   }
 
-  private def convert(stream: String, from: String, to: String) {
-    val converter = stream match {
-      case "ExecutiveStream" => ExecutiveStream
-      case "E10sExperiment" => E10sExperiment("e10s-enabled-aurora-20151020@experiments.mozilla.org",
-                                              "telemetry/4/saved_session/Firefox/aurora/43.0a2/")
-      case _ => throw new Exception("Stream does not exist!")
-    }
-
+  private def convert(converter: DerivedStream, from: String, to: String) {
     val formatter = DateTimeFormat.forPattern("yyyyMMdd")
     val fromDate = formatter.parseDateTime(from)
     val toDate = formatter.parseDateTime(to)
@@ -153,11 +146,33 @@ object DerivedStream {
     val usage = "converter --from-date YYYYMMDD --to-date YYYYMMDD stream_name"
     val options = parseOptions(args)
 
-    if (!List('fromDate, 'toDate, 'stream).forall(options.contains)) {
-      println(usage)
-      return
-    }
+    val res = for {
+      stream <- options.get('stream)
 
-    convert(options('stream), options('fromDate), options('toDate))
+      to = options.get('toDate) match {
+        case Some(date) => date
+        case None =>
+          val formatter = DateTimeFormat.forPattern("yyyyMMdd")
+          formatter.print(DateTime.now())
+      }
+
+      (from, ds) <- stream match {
+        case "ExecutiveStream" =>
+          Some(options.getOrElse('fromDate, to), ExecutiveStream)
+
+        case "e10s-enabled-aurora" =>
+          val from = options.getOrElse('fromDate, "20151022")
+          val exp = E10sExperiment("e10s-enabled-aurora-20151020@experiments.mozilla.org", "telemetry/4/saved_session/Firefox/aurora/43.0a2/")
+          Some(from, exp)
+
+        case _ =>
+          None
+      }
+
+      res = convert(ds, from, to)
+    } yield res
+
+    if (res.isEmpty)
+      println(usage)
   }
 }
