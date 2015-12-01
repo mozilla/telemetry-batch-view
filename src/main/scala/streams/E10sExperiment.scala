@@ -8,7 +8,7 @@ import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
 import org.apache.spark.{SparkContext, Partitioner}
 import org.apache.spark.rdd.RDD
 import org.json4s._
-import org.json4s.native.JsonMethods._
+import org.json4s.jackson.JsonMethods._
 import scala.collection.JavaConverters._
 import scala.util.Random
 import telemetry.{DerivedStream, ObjectSummary}

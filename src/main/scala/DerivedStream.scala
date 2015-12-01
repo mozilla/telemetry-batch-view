@@ -13,7 +13,7 @@ import org.apache.spark.rdd.RDD
 import org.joda.time.{Days, DateTime}
 import org.joda.time.format.DateTimeFormat
 import org.json4s._
-import org.json4s.native.JsonMethods._
+import org.json4s.jackson.JsonMethods._
 import scala.collection.JavaConverters._
 import scala.io.Source
 import telemetry.streams.{E10sExperiment, ExecutiveStream}
@@ -119,7 +119,7 @@ object DerivedStream {
     val prefix = S3Prefix(converter.streamName)
     val filterPrefix = converter.filterPrefix
 
-    val conf = new SparkConf().setAppName("Parquet Converter").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("telemetry-batch-view")
     val sc = new SparkContext(conf)
     println("Spark parallelism level: " + sc.defaultParallelism)
 
@@ -127,7 +127,7 @@ object DerivedStream {
       .map(fromDate.plusDays(_).toString("yyyyMMdd"))
       .flatMap(date => {
                  s3.objectSummaries(bucket, s"$prefix/$date/$filterPrefix")
-                   .map(summary => ObjectSummary(summary.getKey(), summary.getSize())).take(1)})
+                   .map(summary => ObjectSummary(summary.getKey(), summary.getSize()))})
 
     converter.transform(sc, bucket, summaries, from, to)
   }

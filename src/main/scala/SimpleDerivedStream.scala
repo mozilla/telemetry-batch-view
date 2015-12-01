@@ -8,7 +8,7 @@ import org.apache.avro.generic.GenericRecord
 import org.apache.spark.SparkContext._
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.json4s.native.JsonMethods._
+import org.json4s.jackson.JsonMethods._
 import scala.collection.JavaConverters._
 import telemetry.DerivedStream.s3
 import telemetry.parquet.ParquetFile
