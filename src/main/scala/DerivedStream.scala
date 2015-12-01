@@ -120,6 +120,8 @@ object DerivedStream {
     val filterPrefix = converter.filterPrefix
 
     val conf = new SparkConf().setAppName("telemetry-batch-view")
+    conf.setMaster(conf.get("spark.master", "local[*]"))
+
     val sc = new SparkContext(conf)
     println("Spark parallelism level: " + sc.defaultParallelism)
 
