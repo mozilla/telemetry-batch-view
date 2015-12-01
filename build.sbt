@@ -2,7 +2,7 @@ javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint")
 
 lazy val root = (project in file(".")).
   settings(
-    name := "telemetry-parquet-converter",
+    name := "telemetry-batch-view",
     version := "1.0",
     scalaVersion := "2.10.4",
     retrieveManaged := true,
@@ -21,7 +21,7 @@ lazy val root = (project in file(".")).
   )
 
 run in Compile <<= Defaults.runTask(fullClasspath in Compile, mainClass in (Compile, run), runner in (Compile, run))
-assemblyJarName in assembly := "telemetry-parquet-converter.jar"
+assemblyJarName in assembly := "telemetry-batch-view.jar"
 test in assembly := {}
 
 mergeStrategy in assembly := {
