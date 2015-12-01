@@ -1,7 +1,7 @@
 package telemetry.parquet
 
 import com.typesafe.config._
-import java.io.File
+import java.net.URI
 import java.rmi.dgc.VMID
 import java.util.logging.Logger
 import org.apache.avro
@@ -22,43 +22,29 @@ object ParquetFile {
 
   hadoopConf.set("fs.file.impl", classOf[org.apache.hadoop.fs.LocalFileSystem].getName)
 
-  private def temporaryFileName(): String = {
+  private def temporaryFileName(): Path = {
+    val tmpDir = System.getProperty("java.io.tmpdir")
     val vmid = new VMID().toString().replaceAll(":|-", "")
-    val tmp = File.createTempFile(vmid, ".tmp")
-    tmp.deleteOnExit
-    tmp.delete
-    tmp.getPath()
+    val uri = URI.create(s"file:///$tmpDir/$vmid.tmp")
+    return new Path(uri)
   }
 
-  def serialize(data: Iterator[GenericRecord], schema: Schema, chunked: Boolean = false): String = {
-    val tmp = temporaryFileName
-    val parquetFile = new Path(tmp)
-    val stat = new File(tmp)
-
+  def serialize(data: Iterator[GenericRecord], schema: Schema): Path = {
     val blockSize = ParquetWriter.DEFAULT_BLOCK_SIZE
     val pageSize = ParquetWriter.DEFAULT_PAGE_SIZE
     val enableDict = ParquetWriter.DEFAULT_IS_DICTIONARY_ENABLED
+    val parquetFile = temporaryFileName()
     val parquetWriter = new AvroParquetWriter[GenericRecord](parquetFile, schema, CompressionCodecName.SNAPPY, blockSize, pageSize, enableDict, hadoopConf)
 
     // Disable Parquet logging
     parquetLogger.getHandlers.foreach(parquetLogger.removeHandler)
 
-    if (chunked) {
-      def loop: Unit = (parquetWriter.getDataSize(), data) match {
-        case (s, _) if s > limit => parquetWriter.close
-        case (_, d) if d.isEmpty => parquetWriter.close
-        case (s, d) => {
-          parquetWriter.write(d.next)
-          loop
-        }
-      }
-      loop
-    } else {
-      for (d <- data) parquetWriter.write(d)
-      parquetWriter.close
+    for (d <- data) {
+      parquetWriter.write(d)
     }
 
-    tmp
+    parquetWriter.close
+    parquetFile
   }
 
   def deserialize(filename: String): Seq[GenericRecord] = {

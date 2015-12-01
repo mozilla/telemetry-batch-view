@@ -1,7 +1,6 @@
 package telemetry
 
 import awscala.s3._
-import com.github.nscala_time.time.Imports._
 import heka.{HekaFrame, Message}
 import java.io.File
 import org.apache.avro.Schema
@@ -9,7 +8,7 @@ import org.apache.avro.generic.GenericRecord
 import org.apache.spark.SparkContext._
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.json4s.native.JsonMethods._
+import org.json4s.jackson.JsonMethods._
 import scala.collection.JavaConverters._
 import telemetry.DerivedStream.s3
 import telemetry.parquet.ParquetFile
@@ -53,9 +52,8 @@ abstract class SimpleDerivedStream extends DerivedStream {
 
     val partitionedPrefix = partitioning.partitionPrefix(prefix)
     while(!records.isEmpty) {
-      val localFile = ParquetFile.serialize(records, schema, chunked=true)
+      val localFile = ParquetFile.serialize(records, schema)
       uploadLocalFileToS3(localFile, s"$partitionedPrefix")
-      new File(localFile).delete()
     }
   }
 }

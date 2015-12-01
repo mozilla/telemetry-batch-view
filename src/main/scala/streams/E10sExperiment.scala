@@ -2,14 +2,13 @@ package telemetry.streams
 
 import awscala._
 import awscala.s3._
-import com.github.nscala_time.time.Imports._
 import java.io.File
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
 import org.apache.spark.{SparkContext, Partitioner}
 import org.apache.spark.rdd.RDD
 import org.json4s._
-import org.json4s.native.JsonMethods._
+import org.json4s.jackson.JsonMethods._
 import scala.collection.JavaConverters._
 import scala.util.Random
 import telemetry.{DerivedStream, ObjectSummary}
@@ -92,9 +91,8 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
           } yield record
 
         while(!records.isEmpty) {
-          val localFile = ParquetFile.serialize(records, schema, chunked=true)
+          val localFile = ParquetFile.serialize(records, schema)
           uploadLocalFileToS3(localFile, prefix)
-          new File(localFile).delete()
         }
       }
   }

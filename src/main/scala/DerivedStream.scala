@@ -2,17 +2,18 @@ package telemetry
 
 import DerivedStream.s3
 import awscala.s3._
-import com.github.nscala_time.time.Imports._
 import com.typesafe.config._
 import java.io.File
 import java.util.UUID
+import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.joda.time.Days
+import org.joda.time.{Days, DateTime}
+import org.joda.time.format.DateTimeFormat
 import org.json4s._
-import org.json4s.native.JsonMethods._
+import org.json4s.jackson.JsonMethods._
 import scala.collection.JavaConverters._
 import scala.io.Source
 import telemetry.streams.{E10sExperiment, ExecutiveStream}
@@ -41,13 +42,14 @@ abstract class DerivedStream extends java.io.Serializable{
     s3.objectSummaries(parquetBucket, s"$clsName/$prefix").isEmpty
   }
 
-  protected def uploadLocalFileToS3(fileName: String, prefix: String) {
+  protected def uploadLocalFileToS3(path: Path, prefix: String) {
     val uuid = UUID.randomUUID.toString
     val key = s"$clsName/$prefix/$uuid"
-    val file = new File(fileName)
+    val file = new File(path.toUri())
     val bucketName = parquetBucket.name
     println(s"Uploading Parquet file to $bucketName/$key")
     s3.putObject(bucketName, key, file)
+    file.delete()
   }
 
   protected def streamName: String
@@ -101,24 +103,20 @@ object DerivedStream {
     prefix
   }
 
-  private def convert(stream: String, from: String, to: String) {
-    val converter = stream match {
-      case "ExecutiveStream" => ExecutiveStream
-      case "E10sExperiment" => E10sExperiment("e10s-enabled-aurora-20151020@experiments.mozilla.org",
-                                              "telemetry/4/saved_session/Firefox/aurora/43.0a2/")
-      case _ => throw new Exception("Stream does not exist!")
-    }
-
+  private def convert(converter: DerivedStream, from: String, to: String) {
     val formatter = DateTimeFormat.forPattern("yyyyMMdd")
-    val fromDate = DateTime.parse(from, formatter)
-    val toDate = DateTime.parse(to, formatter)
+    val fromDate = formatter.parseDateTime(from)
+    val toDate = formatter.parseDateTime(to)
     val daysCount = Days.daysBetween(fromDate, toDate).getDays()
     val bucket = Bucket("net-mozaws-prod-us-west-2-pipeline-data")
     val prefix = S3Prefix(converter.streamName)
     val filterPrefix = converter.filterPrefix
 
-    val conf = new SparkConf().setAppName("Parquet Converter").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("telemetry-batch-view")
+    conf.setMaster(conf.get("spark.master", "local[*]"))
+
     val sc = new SparkContext(conf)
+    println("Spark parallelism level: " + sc.defaultParallelism)
 
     val summaries = sc.parallelize(0 until daysCount + 1)
       .map(fromDate.plusDays(_).toString("yyyyMMdd"))
@@ -148,11 +146,33 @@ object DerivedStream {
     val usage = "converter --from-date YYYYMMDD --to-date YYYYMMDD stream_name"
     val options = parseOptions(args)
 
-    if (!List('fromDate, 'toDate, 'stream).forall(options.contains)) {
-      println(usage)
-      return
-    }
+    val res = for {
+      stream <- options.get('stream)
 
-    convert(options('stream), options('fromDate), options('toDate))
+      to = options.get('toDate) match {
+        case Some(date) => date
+        case None =>
+          val formatter = DateTimeFormat.forPattern("yyyyMMdd")
+          formatter.print(DateTime.now())
+      }
+
+      (from, ds) <- stream match {
+        case "ExecutiveStream" =>
+          Some(options.getOrElse('fromDate, to), ExecutiveStream)
+
+        case "e10s-enabled-aurora" =>
+          val from = options.getOrElse('fromDate, "20151022")
+          val exp = E10sExperiment("e10s-enabled-aurora-20151020@experiments.mozilla.org", "telemetry/4/saved_session/Firefox/aurora/43.0a2/")
+          Some(from, exp)
+
+        case _ =>
+          None
+      }
+
+      res = convert(ds, from, to)
+    } yield res
+
+    if (res.isEmpty)
+      println(usage)
   }
 }

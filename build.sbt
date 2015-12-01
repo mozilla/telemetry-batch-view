@@ -1,7 +1,3 @@
-// name := "telemetry-parquet-converter"
-// version := "1.0"
-// scalaVersion := "2.11.6"
-
 javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint")
 
 lazy val root = (project in file(".")).
@@ -18,10 +14,10 @@ lazy val root = (project in file(".")).
     libraryDependencies += "com.typesafe" % "config" % "1.2.1",
     libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.4" % "test",
     libraryDependencies += "org.xerial.snappy" % "snappy-java" % "1.1.2",
-    libraryDependencies += "org.json4s" %% "json4s-native" % "3.3.0",
-    libraryDependencies += "com.github.nscala-time" %% "nscala-time" % "2.4.0",
+    libraryDependencies += "org.json4s" %% "json4s-jackson" % "3.2.10",
+    libraryDependencies += "joda-time" % "joda-time" % "2.9.1",
     libraryDependencies += "org.apache.hadoop" % "hadoop-client" % "2.6.0" excludeAll(ExclusionRule(organization = "javax.servlet")),
-    libraryDependencies += "org.apache.spark" %% "spark-core" % "1.5.0"
+    libraryDependencies += "org.apache.spark" %% "spark-yarn" % "1.5.0"
   )
 
 run in Compile <<= Defaults.runTask(fullClasspath in Compile, mainClass in (Compile, run), runner in (Compile, run))

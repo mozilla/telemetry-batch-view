@@ -4,7 +4,7 @@ import awscala._
 import awscala.s3._
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
-import org.json4s.native.JsonMethods._
+import org.json4s.jackson.JsonMethods._
 import scala.collection.JavaConverters._
 import telemetry.SimpleDerivedStream
 import telemetry.heka.{HekaFrame, Message}
