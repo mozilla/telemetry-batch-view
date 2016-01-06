@@ -30,7 +30,7 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
   override def filterPrefix: String = prefix
 
   override def transform(sc: SparkContext, bucket: Bucket, summaries: RDD[ObjectSummary], from: String, to: String) {
-    val prefix = s"generationDate=$to"
+    val prefix = s"$experimentId/generationDate=$to"
 
     if (!isS3PrefixEmpty(prefix)) {
       println(s"Warning: prefix $prefix already exists on S3!")
