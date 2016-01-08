@@ -50,6 +50,7 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
   }
   
   def enumHistogramToCount(h: JValue): Option[Long] = {
+    // FIXME
     Some(5)
   }
 
