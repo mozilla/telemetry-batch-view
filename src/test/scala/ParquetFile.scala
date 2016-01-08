@@ -87,6 +87,6 @@ class ParquetSpec extends FlatSpec with Matchers{
     val jsonBlobs = HekaFrame.payloads(messages.toList)
     val data = readData(jsonBlobs, Resources.schema)
     val filename = ParquetFile.serialize(data.toIterator, Resources.schema)
-    data should be (ParquetFile.deserialize(filename))
+    data should be (ParquetFile.deserialize(filename.getName()))
   }
 }
