@@ -161,8 +161,7 @@ object DerivedStream {
           Some(options.getOrElse('fromDate, to), ExecutiveStream)
 
         case "Churn" =>
-          // FIXME remove 'auorora...' from the prefix.
-          val churn = Churn("telemetry/4/main/Firefox/aurora/42.0a2/20150920004018")
+          val churn = Churn("telemetry/4/main/Firefox")
           Some(options.getOrElse('fromDate, to), churn)
 
         case "e10s-enabled-aurora" =>
