@@ -98,7 +98,7 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
       .set("clientId", fields.getOrElse("clientId", None) match {
              case x: String => x
              case _ => {
-               println("skip: no clientid")
+               // Skip: no client id
                return None
              }
            })
@@ -106,7 +106,7 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
              case x: Long => x
              case x: Double => x.toLong
              case _ => {
-               println("skip: no sampleid")
+               // Skip: no sample id
                return None
              }
            })
@@ -129,7 +129,7 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
       .set("submissionDate", fields.getOrElse("submissionDate", None) match {
              case x: String => x
              case _ => {
-               println("skip: no subdate")
+               // Skip: no submission date
                return None
              }
            })
@@ -137,22 +137,13 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
              case JNothing => null
              case x: JInt => x.num.toLong
              case _ => {
-               println("profile creation date was not an int")
+               // Profile creation date was not an int
                null
              }
       })
-      .set("syncConfigured", weaveConfigured match {
-             case Some(x) => x
-             case _ => null
-           })
-      .set("syncCountDesktop", weaveDesktop match {
-             case Some(x) => x
-             case _ => null
-           })
-      .set("syncCountMobile", weaveMobile match {
-             case Some(x) => x
-             case _ => null
-           })
+      .set("syncConfigured", weaveConfigured.getOrElse(null))
+      .set("syncCountDesktop", weaveDesktop.getOrElse(null))
+      .set("syncCountMobile", weaveMobile.getOrElse(null))
       .build
     Some(root)
   }
