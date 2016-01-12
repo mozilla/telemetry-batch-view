@@ -33,26 +33,22 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
       .endRecord
   }
 
+  // Check if a json value contains a number greater than zero.
+  def gtZero(v: JValue): Boolean = {
+    v match {
+      case x: JInt => x.num.toInt > 0
+      case _ => false
+    }
+  }
+
   // Given histogram h, return true if it has a value in the "true" bucket,
   // or false if it has a value in the "false" bucket, or None otherwise.
   def booleanHistogramToBoolean(h: JValue): Option[Boolean] = {
-    val one = (h \ "values" \ "1") match {
-      case x: JInt => x.num.toInt
-      case _ => -1
-    }
     var result: Option[Boolean] = None
-    if (one > 0) {
-      println("boolean true")
+    if (gtZero(h \ "values" \ "1")) {
       result = Some(true)
-    } else {
-      val zero = (h \ "values" \ "0") match {
-        case x: JInt => x.num.toInt
-        case _ => -1
-      }
-      if (zero > 0) {
-        println("boolean false")
-        result = Some(false)
-      }
+    } else if (gtZero(h \ "values" \ "0")) {
+      result = Some(false)
     }
     result
   }
@@ -67,20 +63,14 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
   
   // Find the largest numeric bucket that contains a value greater than zero.
   def enumHistogramToCount(h: JValue): Option[Long] = {
-    (h \ "values") match {
+    var result: Option[Long] = (h \ "values") match {
       case JNothing => None
       case JObject(x) => {
         var topBucket = -1
-        for ((k, v) <- x.asInstanceOf[Map[String,Any]]) {
+        for ((k, v) <- x) {
           val bucket = toInt(k).getOrElse(-1)
           if (bucket > topBucket) {
-            val count = v match {
-              case x: Int => x
-              case x: Long => x
-              case x: JInt => x.num.toInt
-              case _ => -1
-            }
-            if (count > 0) {
+            if (gtZero(v)) {
               topBucket = bucket
             }
           }
@@ -92,11 +82,11 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
         }
       }
       case _ => {
-        println("Unexpected format for enum histogram")
+//        println("Unexpected format for enum histogram")
         None
       }
     }
-    None
+    result
   }
 
   override def buildRecord(message: Message, schema: Schema): Option[GenericRecord] ={
