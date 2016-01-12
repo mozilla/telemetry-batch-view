@@ -61,18 +61,15 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
   
   // Find the largest numeric bucket that contains a value greater than zero.
   def enumHistogramToCount(h: JValue): Option[Long] = {
-    var result: Option[Long] = (h \ "values") match {
+    (h \ "values") match {
       case JNothing => None
       case JObject(x) => {
         var topBucket = -1
-        for ((k, v) <- x) {
-          val bucket = toInt(k).getOrElse(-1)
-          if (bucket > topBucket) {
-            if (gtZero(v)) {
-              topBucket = bucket
-            }
-          }
-        }
+        for {
+          (k, v) <- x
+          b <- toInt(k) if b > topBucket && gtZero(v)
+        } topBucket = b
+
         if (topBucket >= 0) {
           Some(topBucket)
         } else {
@@ -83,7 +80,6 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
         None
       }
     }
-    result
   }
 
   override def buildRecord(message: Message, schema: Schema): Option[GenericRecord] ={
