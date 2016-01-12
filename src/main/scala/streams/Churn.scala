@@ -36,21 +36,25 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
   // Given histogram h, return true if it has a value in the "true" bucket,
   // or false if it has a value in the "false" bucket, or None otherwise.
   def booleanHistogramToBoolean(h: JValue): Option[Boolean] = {
-    if (h == JNothing) {
-      None
+    val one = (h \ "values" \ "1") match {
+      case x: JInt => x.num.toInt
+      case _ => -1
+    }
+    var result: Option[Boolean] = None
+    if (one > 0) {
+      println("boolean true")
+      result = Some(true)
     } else {
-      var one = h \ "1"
-      if (one != JNothing && one.asInstanceOf[Int] > 0) {
-        Some(true)
-      } else {
-        var zero = h \ "0"
-        if (zero != JNothing && zero.asInstanceOf[Int] > 0) {
-          Some(false)
-        } else {
-          None
-        }
+      val zero = (h \ "values" \ "0") match {
+        case x: JInt => x.num.toInt
+        case _ => -1
+      }
+      if (zero > 0) {
+        println("boolean false")
+        result = Some(false)
       }
     }
+    result
   }
   
   def toInt(s: String): Option[Int] = {
@@ -63,7 +67,7 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
   
   // Find the largest numeric bucket that contains a value greater than zero.
   def enumHistogramToCount(h: JValue): Option[Long] = {
-    h match {
+    (h \ "values") match {
       case JNothing => None
       case JObject(x) => {
         var topBucket = -1
@@ -72,6 +76,7 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
           if (bucket > topBucket) {
             val count = v match {
               case x: Int => x
+              case x: Long => x
               case x: JInt => x.num.toInt
               case _ => -1
             }
