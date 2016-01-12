@@ -44,13 +44,11 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
   // Given histogram h, return true if it has a value in the "true" bucket,
   // or false if it has a value in the "false" bucket, or None otherwise.
   def booleanHistogramToBoolean(h: JValue): Option[Boolean] = {
-    var result: Option[Boolean] = None
-    if (gtZero(h \ "values" \ "1")) {
-      result = Some(true)
-    } else if (gtZero(h \ "values" \ "0")) {
-      result = Some(false)
+    (gtZero(h \ "values" \ "1"), gtZero(h \ "values" \ "0")) match {
+      case (true, _) => Some(true)
+      case (_, true) => Some(false)
+      case _ => None
     }
-    result
   }
   
   def toInt(s: String): Option[Int] = {
@@ -82,7 +80,6 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
         }
       }
       case _ => {
-//        println("Unexpected format for enum histogram")
         None
       }
     }
@@ -157,7 +154,6 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
              case _ => null
            })
       .build
-//    println("Matched one record")
     Some(root)
   }
 }

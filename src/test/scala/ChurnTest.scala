@@ -80,22 +80,9 @@ class ChurnTest extends FlatSpec with Matchers{
 }
 """
   "A boolean histogram" can "be converted to a boolean" in {
-    val churn = Churn("telemetry/4/main/Firefox")
+    val churn = Churn("")
     val json = parse(testHistogram)
     val histograms = json \ "payload" \ "histograms"
-    
-//    println("root:")
-//    println(compact(render(json)))
-//    println("---------")
-//    println("payload:")
-//    println(compact(render(json \ "payload")))
-//    println("---------")
-//    println("histograms:")
-//    println(compact(render(histograms)))
-//    println("---------")
-//    println("tb1:")
-//    println(compact(render(histograms \ "TEST_BOOLEAN_1")))
-//    println("---------")
     
     churn.booleanHistogramToBoolean(histograms \ "TEST_BOOLEAN_1").get should be (true)
     churn.booleanHistogramToBoolean(histograms \ "TEST_BOOLEAN_2").get should be (false)
@@ -104,7 +91,7 @@ class ChurnTest extends FlatSpec with Matchers{
   }
 
   "An enum histogram" can "be converted to a number" in {
-    val churn = Churn("telemetry/4/main/Firefox")
+    val churn = Churn("")
     val json = parse(testHistogram)
     val histograms = json \ "payload" \ "histograms"
     
