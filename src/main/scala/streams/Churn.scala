@@ -30,6 +30,7 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
       .name("syncCountMobile").`type`().nullable().intType().noDefault() // WEAVE_DEVICE_COUNT_MOBILE
       
       .name("version").`type`().stringType().noDefault() // appVersion
+      .name("timestamp").`type`().longType().noDefault()
       .endRecord
   }
 
@@ -140,6 +141,7 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
       .set("syncConfigured", weaveConfigured.getOrElse(null))
       .set("syncCountDesktop", weaveDesktop.getOrElse(null))
       .set("syncCountMobile", weaveMobile.getOrElse(null))
+      .set("timestamp", message.timestamp)
       .build
     Some(root)
   }
