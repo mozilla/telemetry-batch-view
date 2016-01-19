@@ -6,13 +6,26 @@ import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
 import org.json4s.jackson.JsonMethods._
 import scala.collection.JavaConverters._
-import telemetry.SimpleDerivedStream
+import telemetry.{SimpleDerivedStream,Partitioning}
 import telemetry.heka.{HekaFrame, Message}
 import org.json4s.JsonAST.{JValue, JNothing, JInt, JObject}
 
 case class Churn(prefix: String) extends SimpleDerivedStream{
   override def filterPrefix: String = prefix
   override def streamName: String = "telemetry"
+  override val partitioning: Partitioning = {
+    // Use a specific partitioning scheme for churn data. Data set is small, so we don't need many partitions.
+    val churnSchema = """{
+  "version": 2,
+  "dimensions": [
+    {
+      "field_name": "submissionDate",
+      "allowed_values": "*"
+    }
+  ]
+}"""
+    Partitioning(churnSchema)
+  }
   
   override def buildSchema: Schema = {
     SchemaBuilder
