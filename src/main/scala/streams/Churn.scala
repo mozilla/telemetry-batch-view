@@ -6,7 +6,7 @@ import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
 import org.json4s.jackson.JsonMethods._
 import scala.collection.JavaConverters._
-import telemetry.{SimpleDerivedStream,Partitioning}
+import telemetry.{SimpleDerivedStream, Partitioning}
 import telemetry.heka.{HekaFrame, Message}
 import org.json4s.JsonAST.{JValue, JNothing, JInt, JObject}
 
