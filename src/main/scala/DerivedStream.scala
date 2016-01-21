@@ -18,16 +18,19 @@ import scala.collection.JavaConverters._
 import scala.io.Source
 import telemetry.streams.{E10sExperiment, ExecutiveStream, Churn}
 
+// key is the S3 filename, size is the object size in bytes.
 case class ObjectSummary(key: String, size: Long) // S3ObjectSummary can't be serialized
 
 abstract class DerivedStream extends java.io.Serializable{
   private val appConf = ConfigFactory.load()
   private val parquetBucket = Bucket(appConf.getString("app.parquetBucket"))
   private val metadataBucket = Bucket("net-mozaws-prod-us-west-2-pipeline-metadata")
-  private val metaPrefix = {
+  protected val metadataSources = {
     val Some(sourcesObj) = metadataBucket.get(s"sources.json")
-    val sources = parse(Source.fromInputStream(sourcesObj.getObjectContent()).getLines().mkString("\n"))
-    val JString(metaPrefix) = sources \\ streamName \\ "metadata_prefix"
+    parse(Source.fromInputStream(sourcesObj.getObjectContent()).getLines().mkString("\n"))
+  }
+  private val metaPrefix = {
+    val JString(metaPrefix) = metadataSources \\ streamName \\ "metadata_prefix"
     metaPrefix
   }
 

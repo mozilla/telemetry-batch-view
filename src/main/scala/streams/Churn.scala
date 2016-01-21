@@ -2,32 +2,123 @@ package telemetry.streams
 
 import awscala._
 import awscala.s3._
+import org.joda.time.{Days, DateTime}
+import org.joda.time.format.DateTimeFormat
+import org.apache.spark.{SparkContext, Partitioner}
+import org.apache.spark.rdd.RDD
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
 import org.json4s.jackson.JsonMethods._
 import scala.collection.JavaConverters._
-import telemetry.{SimpleDerivedStream, Partitioning}
+import telemetry.{DerivedStream, ObjectSummary}
+import telemetry.DerivedStream.s3
 import telemetry.heka.{HekaFrame, Message}
-import org.json4s.JsonAST.{JValue, JNothing, JInt, JObject}
+import org.json4s.JsonAST.{JValue, JNothing, JInt, JObject, JString}
+import telemetry.parquet.ParquetFile
 
-case class Churn(prefix: String) extends SimpleDerivedStream{
+case class Churn(prefix: String) extends DerivedStream{
   override def filterPrefix: String = prefix
   override def streamName: String = "telemetry"
-  override val partitioning: Partitioning = {
-    // Use a specific partitioning scheme for churn data. Data set is small, so we don't need many partitions.
-    val churnSchema = """{
-  "version": 2,
-  "dimensions": [
-    {
-      "field_name": "submissionDate",
-      "allowed_values": "*"
-    }
-  ]
-}"""
-    Partitioning(churnSchema)
+  
+  // Convert the given Heka message to a map containing just the fields we're interested in.
+  def messageToMap(message: Message): Map[String,Any] = {
+    val fields = HekaFrame.fields(message)
+    val profile = parse(fields.getOrElse("environment.profile", "{}").asInstanceOf[String])
+    val histograms = parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
+    
+    val weaveConfigured = booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
+    val weaveDesktop = enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
+    val weaveMobile = enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
+    
+    val map = Map[String, Any](
+        "clientId" -> (fields.getOrElse("clientId", None) match {
+          case x: String => x
+          case _ => None
+        }),
+        "sampleId" -> (fields.getOrElse("sampleId", None) match {
+          case x: Long => x
+          case x: Double => x.toLong
+          case _ => None
+        }),
+        "channel" -> (fields.getOrElse("appUpdateChannel", None) match {
+          case x: String => x
+          case _ => ""
+        }),
+        "normalizedChannel" -> (fields.getOrElse("normalizedChannel", None) match {
+          case x: String => x
+          case _ => ""
+        }),
+        "country" -> (fields.getOrElse("geoCountry", None) match {
+          case x: String => x
+          case _ => ""
+        }),
+        "version" -> (fields.getOrElse("appVersion", None) match {
+          case x: String => x
+          case _ => ""
+        }),
+        "submissionDate" -> (fields.getOrElse("submissionDate", None) match {
+          case x: String => x
+          case _ => None
+        }),
+        "profileCreationDate" -> ((profile \ "creationDate") match {
+          case JNothing => null
+          case x: JInt => x.num.toLong
+          case _ => None
+        }),
+        "syncConfigured" -> weaveConfigured.getOrElse(null),
+        "syncCountDesktop" -> weaveDesktop.getOrElse(null),
+        "syncCountMobile" -> weaveMobile.getOrElse(null),
+        "timestamp" -> message.timestamp
+      )
+    map
   }
   
-  override def buildSchema: Schema = {
+  override def transform(sc: SparkContext, bucket: Bucket, s3objects: RDD[ObjectSummary], from: String, to: String) {
+    // Iterate by day, ignoring the passed-in s3objects
+    val formatter = DateTimeFormat.forPattern("yyyyMMdd")
+    val fromDate = formatter.parseDateTime(from)
+    val toDate = formatter.parseDateTime(to)
+    val daysCount = Days.daysBetween(fromDate, toDate).getDays()
+    val bucket = {
+      val JString(bucketName) = metadataSources \\ streamName \\ "bucket"
+      Bucket(bucketName)
+    }
+    val prefix = {
+      val JString(prefix) = metadataSources \\ streamName \\ "prefix"
+      prefix
+    }
+
+    // Process each day separately.
+    for (i <- 0 until daysCount + 1) {
+      val currentDay = fromDate.plusDays(i).toString("yyyyMMdd")
+      println("Processing day: " + currentDay)
+      val summaries = s3.objectSummaries(bucket, s"$prefix/$currentDay/$filterPrefix")
+                        .map(summary => ObjectSummary(summary.getKey(), summary.getSize()))
+      
+      val groups = DerivedStream.groupBySize(s3objects.collect().toIterator)
+      val churnMessages = sc.parallelize(groups, groups.size)
+        .flatMap(x => x)
+        .flatMap{ case obj =>
+          val hekaFile = bucket.getObject(obj.key).getOrElse(throw new Exception("File missing on S3"))
+          for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey()))  yield message }
+        .map{ case message => messageToMap(message) }
+        .repartition(100)
+        .foreachPartition{ case partitionIterator =>
+          val schema = buildSchema
+          val records = for {
+            record <- partitionIterator
+            saveable <- buildRecord(record, schema)
+          } yield saveable
+  
+          while(!records.isEmpty) {
+            val localFile = ParquetFile.serialize(records, schema)
+            uploadLocalFileToS3(localFile, s"$prefix/$currentDay")
+          }
+        }
+    }
+  }
+  
+  private def buildSchema: Schema = {
     SchemaBuilder
       .record("System").fields
       .name("clientId").`type`().stringType().noDefault()
@@ -43,7 +134,7 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
       .name("syncCountMobile").`type`().nullable().intType().noDefault() // WEAVE_DEVICE_COUNT_MOBILE
       
       .name("version").`type`().stringType().noDefault() // appVersion
-      .name("timestamp").`type`().longType().noDefault()
+      .name("timestamp").`type`().longType().noDefault() // server-assigned timestamp when record was received
       .endRecord
   }
 
@@ -95,67 +186,30 @@ case class Churn(prefix: String) extends SimpleDerivedStream{
       }
     }
   }
-
-  override def buildRecord(message: Message, schema: Schema): Option[GenericRecord] ={
-    val fields = HekaFrame.fields(message)
-    val profile = parse(fields.getOrElse("environment.profile", "{}").asInstanceOf[String])
-    val histograms = parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
-    
-    val weaveConfigured = booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
-    val weaveDesktop = enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
-    val weaveMobile = enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
+  
+  def buildRecord(fields: Map[String,Any], schema: Schema): Option[GenericRecord] ={
     val root = new GenericRecordBuilder(schema)
-      .set("clientId", fields.getOrElse("clientId", None) match {
-             case x: String => x
-             case _ => {
-               // Skip: no client id
-               return None
-             }
-           })
-      .set("sampleId", fields.getOrElse("sampleId", None) match {
-             case x: Long => x
-             case x: Double => x.toLong
-             case _ => {
-               // Skip: no sample id
-               return None
-             }
-           })
-      .set("channel", fields.getOrElse("appUpdateChannel", None) match {
-             case x: String => x
-             case _ => ""
-           })
-      .set("normalizedChannel", fields.getOrElse("normalizedChannel", None) match {
-             case x: String => x
-             case _ => ""
-           })
-      .set("country", fields.getOrElse("geoCountry", None) match {
-             case x: String => x
-             case _ => ""
-           })
-      .set("version", fields.getOrElse("appVersion", None) match {
-             case x: String => x
-             case _ => ""
-           })
-      .set("submissionDate", fields.getOrElse("submissionDate", None) match {
-             case x: String => x
-             case _ => {
-               // Skip: no submission date
-               return None
-             }
-           })
-      .set("profileCreationDate", (profile \ "creationDate") match {
-             case JNothing => null
-             case x: JInt => x.num.toLong
-             case _ => {
-               // Profile creation date was not an int
-               null
-             }
-      })
-      .set("syncConfigured", weaveConfigured.getOrElse(null))
-      .set("syncCountDesktop", weaveDesktop.getOrElse(null))
-      .set("syncCountMobile", weaveMobile.getOrElse(null))
-      .set("timestamp", message.timestamp)
-      .build
-    Some(root)
+    try {
+      // Required fields, raise an exception if they're not present.
+      for (field <- Array("clientId", "sampleId", "submissionDate", "timestamp")) {
+        root.set(field, (fields.get(field) match {
+          case Some(x) => x
+          case _ => null
+        }))
+      }
+      
+      // Everything else, use 'null' if they're not present.
+      for (field <- Array("channel", "normalizedChannel", "country", "version", "profileCreationDate",
+                          "syncConfigured", "syncCountDesktop", "syncCountMobile")) {
+        root.set(field, (fields.getOrElse(field, null) match {
+          case Some(x) => x
+          case _ => null
+        }))
+      }
+      Some(root.build)
+    }
+    catch {
+      case _: NoSuchElementException => None
+    }
   }
 }
