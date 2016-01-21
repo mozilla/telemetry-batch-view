@@ -88,8 +88,8 @@ case class Churn(prefix: String) extends DerivedStream{
       prefix
     }
 
-    // Process each day separately.
-    for (i <- 0 until daysCount + 1) {
+    // Process each day from fromDate to toDate (inclusive) separately.
+    for (i <- 0 to daysCount) {
       val currentDay = fromDate.plusDays(i).toString("yyyyMMdd")
       println("Processing day: " + currentDay)
       val summaries = s3.objectSummaries(bucket, s"$prefix/$currentDay/$filterPrefix")
@@ -102,7 +102,7 @@ case class Churn(prefix: String) extends DerivedStream{
           val hekaFile = bucket.getObject(obj.key).getOrElse(throw new Exception("File missing on S3"))
           for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey()))  yield message }
         .map{ case message => messageToMap(message) }
-        .repartition(100)
+        .repartition(100) // TODO: partition by sampleId
         .foreachPartition{ case partitionIterator =>
           val schema = buildSchema
           val records = for {
@@ -112,7 +112,7 @@ case class Churn(prefix: String) extends DerivedStream{
   
           while(!records.isEmpty) {
             val localFile = ParquetFile.serialize(records, schema)
-            uploadLocalFileToS3(localFile, s"$prefix/$currentDay")
+            uploadLocalFileToS3(localFile, s"$prefix/submissionDateS3=$currentDay")
           }
         }
     }
@@ -188,23 +188,25 @@ case class Churn(prefix: String) extends DerivedStream{
   }
   
   def buildRecord(fields: Map[String,Any], schema: Schema): Option[GenericRecord] ={
+//    println(fields)
     val root = new GenericRecordBuilder(schema)
     try {
       // Required fields, raise an exception if they're not present.
       for (field <- Array("clientId", "sampleId", "submissionDate", "timestamp")) {
+        root.set(field, fields(field))
+      }
+      
+      // String fields that are not nullable. Default to "".
+      for (field <- Array("channel", "normalizedChannel", "country", "version")) {
         root.set(field, (fields.get(field) match {
-          case Some(x) => x
-          case _ => null
+          case Some(x: String) => x
+          case _ => ""
         }))
       }
       
-      // Everything else, use 'null' if they're not present.
-      for (field <- Array("channel", "normalizedChannel", "country", "version", "profileCreationDate",
-                          "syncConfigured", "syncCountDesktop", "syncCountMobile")) {
-        root.set(field, (fields.getOrElse(field, null) match {
-          case Some(x) => x
-          case _ => null
-        }))
+      // Everything else is nullable, use 'null' if they're not present.
+      for (field <- Array("profileCreationDate", "syncConfigured", "syncCountDesktop", "syncCountMobile")) {
+        root.set(field, fields.getOrElse(field, null))
       }
       Some(root.build)
     }
