@@ -23,6 +23,7 @@ case class Churn(prefix: String) extends DerivedStream{
   // Convert the given Heka message to a map containing just the fields we're interested in.
   def messageToMap(message: Message): Map[String,Any] = {
     val fields = HekaFrame.fields(message)
+    // TODO: don't compute any of the expensive stuff if required fields are missing.
     val profile = parse(fields.getOrElse("environment.profile", "{}").asInstanceOf[String])
     val histograms = parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
     
@@ -63,7 +64,7 @@ case class Churn(prefix: String) extends DerivedStream{
         "profileCreationDate" -> ((profile \ "creationDate") match {
           case JNothing => null
           case x: JInt => x.num.toLong
-          case _ => None
+          case _ => null
         }),
         "syncConfigured" -> weaveConfigured.getOrElse(null),
         "syncCountDesktop" -> weaveDesktop.getOrElse(null),
@@ -193,7 +194,10 @@ case class Churn(prefix: String) extends DerivedStream{
     try {
       // Required fields, raise an exception if they're not present.
       for (field <- Array("clientId", "sampleId", "submissionDate", "timestamp")) {
-        root.set(field, fields(field))
+        root.set(field, (fields(field) match {
+          case None => throw new IllegalArgumentException()
+          case x => x
+        }))
       }
       
       // String fields that are not nullable. Default to "".
@@ -212,6 +216,7 @@ case class Churn(prefix: String) extends DerivedStream{
     }
     catch {
       case _: NoSuchElementException => None
+      case _: IllegalArgumentException => None
     }
   }
 }
