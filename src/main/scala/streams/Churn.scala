@@ -74,7 +74,7 @@ case class Churn(prefix: String) extends DerivedStream{
     map
   }
   
-  override def transform(sc: SparkContext, bucket: Bucket, s3objects: RDD[ObjectSummary], from: String, to: String) {
+  override def transform(sc: SparkContext, bucket: Bucket, ignoreMe: RDD[ObjectSummary], from: String, to: String) {
     // Iterate by day, ignoring the passed-in s3objects
     val formatter = DateTimeFormat.forPattern("yyyyMMdd")
     val fromDate = formatter.parseDateTime(from)
@@ -93,10 +93,10 @@ case class Churn(prefix: String) extends DerivedStream{
     for (i <- 0 to daysCount) {
       val currentDay = fromDate.plusDays(i).toString("yyyyMMdd")
       println("Processing day: " + currentDay)
-      val summaries = s3.objectSummaries(bucket, s"$prefix/$currentDay/$filterPrefix")
-                        .map(summary => ObjectSummary(summary.getKey(), summary.getSize()))
-      
-      val groups = DerivedStream.groupBySize(s3objects.collect().toIterator)
+      val summaries = sc.parallelize(s3.objectSummaries(bucket, s"$prefix/$currentDay/$filterPrefix")
+                        .map(summary => ObjectSummary(summary.getKey(), summary.getSize())))
+
+      val groups = DerivedStream.groupBySize(summaries.collect().toIterator)
       val churnMessages = sc.parallelize(groups, groups.size)
         .flatMap(x => x)
         .flatMap{ case obj =>
