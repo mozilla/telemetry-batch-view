@@ -100,7 +100,7 @@ case class Churn(prefix: String) extends DerivedStream{
       val churnMessages = sc.parallelize(groups, groups.size)
         .flatMap(x => x)
         .flatMap{ case obj =>
-          val hekaFile = bucket.getObject(obj.key).getOrElse(throw new Exception("File missing on S3"))
+          val hekaFile = bucket.getObject(obj.key).getOrElse(throw new Exception("File missing on S3: " + obj.key))
           for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey()))  yield message }
         .map{ case message => messageToMap(message) }
         .repartition(100) // TODO: partition by sampleId
