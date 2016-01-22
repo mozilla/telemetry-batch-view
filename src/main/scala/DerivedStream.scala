@@ -121,7 +121,7 @@ object DerivedStream {
     val sc = new SparkContext(conf)
     println("Spark parallelism level: " + sc.defaultParallelism)
 
-    val summaries = sc.parallelize(0 until daysCount + 1)
+    val summaries = sc.parallelize(0 to daysCount)
       .map(fromDate.plusDays(_).toString("yyyyMMdd"))
       .flatMap(date => {
                  s3.objectSummaries(bucket, s"$prefix/$date/$filterPrefix")
