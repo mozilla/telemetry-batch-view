@@ -1,19 +1,20 @@
 package telemetry.streams
 
-import awscala._
-import awscala.s3._
-import org.joda.time.{Days, DateTime}
-import org.joda.time.format.DateTimeFormat
-import org.apache.spark.{SparkContext, Partitioner}
-import org.apache.spark.rdd.RDD
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
-import org.json4s.jackson.JsonMethods._
-import scala.collection.JavaConverters._
+import org.apache.spark.SparkContext
+import org.apache.spark.rdd.RDD
+import org.joda.time.Days
+import org.joda.time.format.DateTimeFormat
+import org.json4s.JsonAST.{JInt, JNothing, JObject, JString, JValue}
+import org.json4s.jackson.JsonMethods.parse
+import org.json4s.jvalue2monadic
+import org.json4s.string2JsonInput
+
+import awscala.s3.Bucket
 import telemetry.{DerivedStream, ObjectSummary}
 import telemetry.DerivedStream.s3
 import telemetry.heka.{HekaFrame, Message}
-import org.json4s.JsonAST.{JValue, JNothing, JInt, JObject, JString}
 import telemetry.parquet.ParquetFile
 
 case class Churn(prefix: String) extends DerivedStream{
@@ -81,11 +82,11 @@ case class Churn(prefix: String) extends DerivedStream{
     val toDate = formatter.parseDateTime(to)
     val daysCount = Days.daysBetween(fromDate, toDate).getDays()
     val bucket = {
-      val JString(bucketName) = metadataSources \\ streamName \\ "bucket"
+      val JString(bucketName) = metaSources \\ streamName \\ "bucket"
       Bucket(bucketName)
     }
     val prefix = {
-      val JString(prefix) = metadataSources \\ streamName \\ "prefix"
+      val JString(prefix) = metaSources \\ streamName \\ "prefix"
       prefix
     }
 

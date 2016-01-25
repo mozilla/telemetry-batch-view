@@ -24,19 +24,19 @@ case class ObjectSummary(key: String, size: Long) // S3ObjectSummary can't be se
 abstract class DerivedStream extends java.io.Serializable{
   private val appConf = ConfigFactory.load()
   private val parquetBucket = Bucket(appConf.getString("app.parquetBucket"))
-  private val metadataBucket = Bucket("net-mozaws-prod-us-west-2-pipeline-metadata")
-  protected val metadataSources = {
-    val Some(sourcesObj) = metadataBucket.get(s"sources.json")
+  private val metaBucket = Bucket("net-mozaws-prod-us-west-2-pipeline-metadata")
+  protected val metaSources = {
+    val Some(sourcesObj) = metaBucket.get(s"sources.json")
     parse(Source.fromInputStream(sourcesObj.getObjectContent()).getLines().mkString("\n"))
   }
   private val metaPrefix = {
-    val JString(metaPrefix) = metadataSources \\ streamName \\ "metadata_prefix"
+    val JString(metaPrefix) = metaSources \\ streamName \\ "metadata_prefix"
     metaPrefix
   }
 
   protected val clsName = DerivedStream.uncamelize(this.getClass.getSimpleName.replace("$", ""))  // Use classname as stream prefix on S3
   protected val partitioning = {
-    val Some(schemaObj) = metadataBucket.get(s"$metaPrefix/schema.json")
+    val Some(schemaObj) = metaBucket.get(s"$metaPrefix/schema.json")
     val schema = Source.fromInputStream(schemaObj.getObjectContent()).getLines().mkString("\n")
     Partitioning(schema)
   }
