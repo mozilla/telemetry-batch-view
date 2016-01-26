@@ -1,5 +1,6 @@
 package telemetry.streams
 
+import awscala.s3.Bucket
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
 import org.apache.spark.SparkContext
@@ -8,10 +9,6 @@ import org.joda.time.Days
 import org.joda.time.format.DateTimeFormat
 import org.json4s.JsonAST.{JInt, JNothing, JObject, JString, JValue}
 import org.json4s.jackson.JsonMethods.parse
-import org.json4s.jvalue2monadic
-import org.json4s.string2JsonInput
-
-import awscala.s3.Bucket
 import telemetry.{DerivedStream, ObjectSummary}
 import telemetry.DerivedStream.s3
 import telemetry.heka.{HekaFrame, Message}
