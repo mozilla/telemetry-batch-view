@@ -22,7 +22,7 @@ case class Churn(prefix: String) extends DerivedStream{
   override def streamName: String = "telemetry"
   
   // Convert the given Heka message to a map containing just the fields we're interested in.
-  def messageToMap(message: Message): Map[String,Any] = {
+  def messageToMap(message: Message): Option[Map[String,Any]] = {
     val fields = HekaFrame.fields(message)
     // TODO: don't compute any of the expensive stuff if required fields are missing.
     val profile = parse(fields.getOrElse("environment.profile", "{}").asInstanceOf[String])
@@ -35,12 +35,22 @@ case class Churn(prefix: String) extends DerivedStream{
     val map = Map[String, Any](
         "clientId" -> (fields.getOrElse("clientId", None) match {
           case x: String => x
-          case _ => None
+          // clientId is required, and must be a string. If either
+          // condition is not satisfied, we skip this record.
+          case _ => return None
         }),
         "sampleId" -> (fields.getOrElse("sampleId", None) match {
           case x: Long => x
           case x: Double => x.toLong
-          case _ => None
+          case _ => return None // required
+        }),
+        "submissionDate" -> (fields.getOrElse("submissionDate", None) match {
+          case x: String => x
+          case _ => return None // required
+        }),
+        "timestamp" -> (message.timestamp match {
+          case x: Long => x
+          case _ => return None // required
         }),
         "channel" -> (fields.getOrElse("appUpdateChannel", None) match {
           case x: String => x
@@ -58,21 +68,15 @@ case class Churn(prefix: String) extends DerivedStream{
           case x: String => x
           case _ => ""
         }),
-        "submissionDate" -> (fields.getOrElse("submissionDate", None) match {
-          case x: String => x
-          case _ => None
-        }),
         "profileCreationDate" -> ((profile \ "creationDate") match {
-          case JNothing => null
           case x: JInt => x.num.toLong
           case _ => null
         }),
         "syncConfigured" -> weaveConfigured.getOrElse(null),
         "syncCountDesktop" -> weaveDesktop.getOrElse(null),
-        "syncCountMobile" -> weaveMobile.getOrElse(null),
-        "timestamp" -> message.timestamp
+        "syncCountMobile" -> weaveMobile.getOrElse(null)
       )
-    map
+    Some(map)
   }
   
   override def transform(sc: SparkContext, bucket: Bucket, ignoreMe: RDD[ObjectSummary], from: String, to: String) {
@@ -103,7 +107,7 @@ case class Churn(prefix: String) extends DerivedStream{
         .flatMap{ case obj =>
           val hekaFile = bucket.getObject(obj.key).getOrElse(throw new Exception("File missing on S3: " + obj.key))
           for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey()))  yield message }
-        .map{ case message => messageToMap(message) }
+        .flatMap{ case message => messageToMap(message) }
         .repartition(100) // TODO: partition by sampleId
         .foreachPartition{ case partitionIterator =>
           val schema = buildSchema
@@ -190,7 +194,6 @@ case class Churn(prefix: String) extends DerivedStream{
   }
   
   def buildRecord(fields: Map[String,Any], schema: Schema): Option[GenericRecord] ={
-//    println(fields)
     val root = new GenericRecordBuilder(schema)
     try {
       // Required fields, raise an exception if they're not present.
