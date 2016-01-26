@@ -18,22 +18,25 @@ import scala.collection.JavaConverters._
 import scala.io.Source
 import telemetry.streams.{E10sExperiment, ExecutiveStream, Churn}
 
+// key is the S3 filename, size is the object size in bytes.
 case class ObjectSummary(key: String, size: Long) // S3ObjectSummary can't be serialized
 
 abstract class DerivedStream extends java.io.Serializable{
   private val appConf = ConfigFactory.load()
   private val parquetBucket = Bucket(appConf.getString("app.parquetBucket"))
-  private val metadataBucket = Bucket("net-mozaws-prod-us-west-2-pipeline-metadata")
+  private val metaBucket = Bucket("net-mozaws-prod-us-west-2-pipeline-metadata")
+  protected val metaSources = {
+    val Some(sourcesObj) = metaBucket.get(s"sources.json")
+    parse(Source.fromInputStream(sourcesObj.getObjectContent()).getLines().mkString("\n"))
+  }
   private val metaPrefix = {
-    val Some(sourcesObj) = metadataBucket.get(s"sources.json")
-    val sources = parse(Source.fromInputStream(sourcesObj.getObjectContent()).getLines().mkString("\n"))
-    val JString(metaPrefix) = sources \\ streamName \\ "metadata_prefix"
+    val JString(metaPrefix) = metaSources \\ streamName \\ "metadata_prefix"
     metaPrefix
   }
 
   protected val clsName = DerivedStream.uncamelize(this.getClass.getSimpleName.replace("$", ""))  // Use classname as stream prefix on S3
   protected val partitioning = {
-    val Some(schemaObj) = metadataBucket.get(s"$metaPrefix/schema.json")
+    val Some(schemaObj) = metaBucket.get(s"$metaPrefix/schema.json")
     val schema = Source.fromInputStream(schemaObj.getObjectContent()).getLines().mkString("\n")
     Partitioning(schema)
   }
@@ -118,7 +121,7 @@ object DerivedStream {
     val sc = new SparkContext(conf)
     println("Spark parallelism level: " + sc.defaultParallelism)
 
-    val summaries = sc.parallelize(0 until daysCount + 1)
+    val summaries = sc.parallelize(0 to daysCount)
       .map(fromDate.plusDays(_).toString("yyyyMMdd"))
       .flatMap(date => {
                  s3.objectSummaries(bucket, s"$prefix/$date/$filterPrefix")
