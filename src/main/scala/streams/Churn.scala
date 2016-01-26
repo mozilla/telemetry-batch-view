@@ -48,10 +48,7 @@ case class Churn(prefix: String) extends DerivedStream{
           case x: String => x
           case _ => return None // required
         }),
-        "timestamp" -> (message.timestamp match {
-          case x: Long => x
-          case _ => return None // required
-        }),
+        "timestamp" -> message.timestamp, // required
         "channel" -> (fields.getOrElse("appUpdateChannel", None) match {
           case x: String => x
           case _ => ""
@@ -195,32 +192,7 @@ case class Churn(prefix: String) extends DerivedStream{
   
   def buildRecord(fields: Map[String,Any], schema: Schema): Option[GenericRecord] ={
     val root = new GenericRecordBuilder(schema)
-    try {
-      // Required fields, raise an exception if they're not present.
-      for (field <- Array("clientId", "sampleId", "submissionDate", "timestamp")) {
-        root.set(field, (fields(field) match {
-          case None => throw new IllegalArgumentException()
-          case x => x
-        }))
-      }
-      
-      // String fields that are not nullable. Default to "".
-      for (field <- Array("channel", "normalizedChannel", "country", "version")) {
-        root.set(field, (fields.get(field) match {
-          case Some(x: String) => x
-          case _ => ""
-        }))
-      }
-      
-      // Everything else is nullable, use 'null' if they're not present.
-      for (field <- Array("profileCreationDate", "syncConfigured", "syncCountDesktop", "syncCountMobile")) {
-        root.set(field, fields.getOrElse(field, null))
-      }
-      Some(root.build)
-    }
-    catch {
-      case _: NoSuchElementException => None
-      case _: IllegalArgumentException => None
-    }
+    for ((k, v) <- fields) root.set(k, v)
+    Some(root.build)
   }
 }
