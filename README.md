@@ -25,5 +25,5 @@ sbt assembly
 ```
 then, submit the job with:
 ```
-spark-submit --master yarn-client --class telemetry.DerivedStream target/scala-2.10/telemetry-batch-view.jar --from-date 20151028 --to-date 20151028 MyStream
+spark-submit --master yarn-client --class telemetry.DerivedStream target/scala-2.10/telemetry-batch-view-X.Y.jar --from-date 20151028 --to-date 20151028 MyStream
 ``` 

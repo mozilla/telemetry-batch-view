@@ -21,7 +21,7 @@ lazy val root = (project in file(".")).
   )
 
 run in Compile <<= Defaults.runTask(fullClasspath in Compile, mainClass in (Compile, run), runner in (Compile, run))
-assemblyJarName in assembly := "telemetry-batch-view.jar"
+assemblyJarName in assembly := s"telemetry-batch-view-${version.value}.jar"
 test in assembly := {}
 
 mergeStrategy in assembly := {
