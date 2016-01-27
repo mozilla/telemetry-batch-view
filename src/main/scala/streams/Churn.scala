@@ -21,13 +21,15 @@ case class Churn(prefix: String) extends DerivedStream{
   // Convert the given Heka message to a map containing just the fields we're interested in.
   def messageToMap(message: Message): Option[Map[String,Any]] = {
     val fields = HekaFrame.fields(message)
-    // TODO: don't compute any of the expensive stuff if required fields are missing.
-    val profile = parse(fields.getOrElse("environment.profile", "{}").asInstanceOf[String])
-    val histograms = parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
     
-    val weaveConfigured = booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
-    val weaveDesktop = enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
-    val weaveMobile = enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
+    // Don't compute the expensive stuff until we need it. We may skip a record
+    // due to missing simple fields.
+    lazy val profile = parse(fields.getOrElse("environment.profile", "{}").asInstanceOf[String])
+    lazy val histograms = parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
+
+    lazy val weaveConfigured = booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
+    lazy val weaveDesktop = enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
+    lazy val weaveMobile = enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
     
     val map = Map[String, Any](
         "clientId" -> (fields.getOrElse("clientId", None) match {
