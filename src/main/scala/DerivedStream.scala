@@ -156,7 +156,8 @@ object DerivedStream {
         case Some(date) => date
         case None =>
           val formatter = DateTimeFormat.forPattern("yyyyMMdd")
-          formatter.print(DateTime.now())
+          // Default to processing "yesterday" to ensure we process a complete day.
+          formatter.print(DateTime.now().minusDays(1))
       }
 
       (from, ds) <- stream match {
