@@ -168,14 +168,19 @@ object DerivedStream {
           val churn = Churn("telemetry/4/main/Firefox")
           Some(options.getOrElse('fromDate, to), churn)
 
-        case "e10s-enabled-aurora" =>
+        case "e10s-enabled-aurora-43" =>
           val from = options.getOrElse('fromDate, "20151022")
           val exp = E10sExperiment("e10s-enabled-aurora-20151020@experiments.mozilla.org", "telemetry/4/saved_session/Firefox/aurora/43.0a2/")
           Some(from, exp)
 
-        case "e10s-enabled-beta" =>
+        case "e10s-enabled-beta-44" =>
           val from = options.getOrElse('fromDate, "20151214")
           val exp = E10sExperiment("e10s-enabled-beta-20151214@experiments.mozilla.org", "telemetry/4/saved_session/Firefox/beta/44.0/")
+          Some(from, exp)
+
+        case "e10s-enabled-beta-45" =>
+          val from = options.getOrElse('fromDate, "20160129")
+          val exp = E10sExperiment("e10s-beta45-withaddons@experiments.mozilla.org", "telemetry/4/saved_session/Firefox/beta/45.0/")
           Some(from, exp)
 
         case _ =>
