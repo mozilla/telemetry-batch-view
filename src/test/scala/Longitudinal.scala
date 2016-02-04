@@ -17,69 +17,87 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
       // TODO: Use Scala Map and List directly?
       val histograms =
         ("TELEMETRY_TEST_FLAG" ->
-           ("values" -> ("0" -> 1) ~ ("1" -> 0)) ~
-           ("sum" -> 0)) ~
+           ("values" -> ("0" -> 1) ~ ("1" -> 0)) ~ ("sum" -> 0)) ~
         ("DEVTOOLS_TOOLBOX_OPENED_BOOLEAN" ->
-           ("values" -> ("0" -> 42)) ~
-           ("sum" -> 0)) ~
+           ("values" -> ("0" -> 42)) ~ ("sum" -> 0)) ~
         ("UPDATE_CHECK_NO_UPDATE_EXTERNAL" ->
-           ("values" -> ("0" -> 42)) ~
-           ("sum" -> 42)) ~
+           ("values" -> ("0" -> 42)) ~ ("sum" -> 42)) ~
         ("PLACES_BACKUPS_DAYSFROMLAST" ->
-           ("values" -> ("1" -> 42)) ~
-           ("sum" -> 42)) ~
+           ("values" -> ("1" -> 42)) ~ ("sum" -> 42)) ~
         ("GC_BUDGET_MS" ->
-           ("values" -> ("1" -> 42)) ~
-           ("sum" -> 42)) ~
+           ("values" -> ("1" -> 42)) ~ ("sum" -> 42)) ~
         ("GC_MS" ->
-           ("values" -> ("1" -> 42)) ~
-           ("sum" -> 42))
+           ("values" -> ("1" -> 42)) ~ ("sum" -> 42))
 
       val keyedHistograms =
         ("ADDON_SHIM_USAGE" ->
            ("foo" ->
-             ("values" -> ("1" -> 42)) ~
-             ("sum" -> 42))) ~
+             ("values" -> ("1" -> 42)) ~ ("sum" -> 42))) ~
         ("SEARCH_COUNTS" ->
            ("foo" ->
-              ("values" -> ("0" -> 42)) ~
-              ("sum" -> 42))) ~
+              ("values" -> ("0" -> 42)) ~ ("sum" -> 42))) ~
         ("DEVTOOLS_PERFTOOLS_SELECTED_VIEW_MS" ->
            ("foo" ->
-              ("values" -> ("1" -> 42)) ~
-              ("sum" -> 42)))
+              ("values" -> ("1" -> 42)) ~ ("sum" -> 42)))
+
+      val application =
+        ("architecture"    -> "x86-64") ~
+        ("buildId"         -> "20160101001100") ~
+        ("name"            -> "Firefox") ~
+        ("version"         -> "46.0a2") ~
+        ("vendor"          -> "Mozilla") ~
+        ("platformVersion" -> "46.0a2") ~
+        ("xpcomAbi"        -> "x86_64-gcc3") ~
+        ("channel"         -> "aurora")
+
+      val build =
+        ("applicationId"   -> "{ec8030f7-c20a-464f-9b0e-13a3a9e97384}") ~
+        ("applicationName" -> "Firefox") ~
+        ("architecture"    -> "x86-64") ~
+        ("buildId"         -> "20160101001100") ~
+        ("version"         -> "46.0a2") ~
+        ("vendor"          -> "Mozilla") ~
+        ("platformVersion" -> "46.0a2") ~
+        ("xpcomAbi"        -> "x86_64-gcc3")
+
+      val partner =
+        ("partnerNames" -> List("A", "B", "C"))
+
+      val profile =
+        ("creationDate" -> 1453615112) ~
+        ("resetDate"    -> 1454615112)
+
+      val settings =
+        ("e10sEnabled" -> true)
 
       val system =
           ("cpu" ->
              ("count" -> 4)) ~
           ("os" ->
-             ("name" -> "Windows_NT") ~
-             ("locale" -> "en_US") ~
+             ("name"    -> "Windows_NT") ~
+             ("locale"  -> "en_US") ~
              ("version" -> "6.1")) ~
           ("hdd" ->
              ("profile" ->
                 ("revision" -> "12345") ~
-                ("model" -> "SAMSUNG X"))) ~
+                ("model"    -> "SAMSUNG X"))) ~
           ("gfx" ->
              ("adapters" -> List(
-                ("RAM" -> 1024) ~ ("description" -> "FOO") ~ ("deviceID" -> "1") ~ ("vendorID" -> "Vendor") ~ ("GPUActive" -> true),
-                ("RAM" -> 1024) ~ ("description" -> "FOO") ~ ("deviceID" -> "1") ~ ("vendorID" -> "Vendor") ~ ("GPUActive" -> true)
+                ("RAM" -> 1024) ~ ("description" -> "FOO1") ~ ("deviceID" -> "1") ~ ("vendorID" -> "Vendor1") ~ ("GPUActive" -> true),
+                ("RAM" -> 1024) ~ ("description" -> "FOO2") ~ ("deviceID" -> "2") ~ ("vendorID" -> "Vendor2") ~ ("GPUActive" -> false)
               )))
 
-      val settings =
-        ("e10sEnabled" -> true)
-
-      val build =
-        ("buildId" -> "20160101001100")
-
       Map("clientId" -> "26c9d181-b95b-4af5-bb35-84ebf0da795d",
-          "creationTimestamp" -> creationTimestamp,
-          "os" -> "Windows_NT",
-          "payload.histograms" -> compact(render(histograms)),
+          "os"                      -> "Windows_NT",
+          "creationTimestamp"       -> creationTimestamp,
+          "payload.histograms"      -> compact(render(histograms)),
           "payload.keyedHistograms" -> compact(render(keyedHistograms)),
-          "environment.system" -> compact(render(system)),
-          "environment.settings" -> compact(render(settings)),
-          "environment.build" -> compact(render(build)))
+          "application"             -> compact(render(application)),
+          "environment.build"       -> compact(render(build)),
+          "environment.partner"     -> compact(render(partner)),
+          "environment.profile"     -> compact(render(profile)),
+          "environment.settings"    -> compact(render(settings)),
+          "environment.system"      -> compact(render(system)))
     }
 
     new {
@@ -99,6 +117,42 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     ParquetFile.serialize(List(fixture.record).toIterator, fixture.schema)
   }
 
+  "application" must "be converted correctly" in {
+    val records = fixture.record.get("application").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Record]
+      assert(record.get("channel") == "aurora")
+    }
+  }
+
+  "environment.build" must "be converted correctly" in {
+    val records = fixture.record.get("build").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Record]
+      assert(record.get("buildId") == "20160101001100")
+    }
+  }
+
+  "environment.profile" must "be converted correctly" in {
+    val records = fixture.record.get("profile").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Record]
+      assert(record.get("creationDate") == 1453615112)
+    }
+  }
+
+  "environment.partner" must "be converted correctly" in {
+    val records = fixture.record.get("partner").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Record]
+      assert(record.get("partnerNames").asInstanceOf[Array[Any]].toList == List("A", "B", "C"))
+    }
+  }
+
   "environment.system" must "be converted correctly" in {
     val records = fixture.record.get("system").asInstanceOf[Array[Any]].toList
     assert(records.length == fixture.payloads.length)
@@ -114,15 +168,6 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     records.foreach{ x =>
       val record = x.asInstanceOf[Record]
       assert(record.get("e10sEnabled") == true)
-    }
-  }
-
-  "environment.build" must "be converted correctly" in {
-    val records = fixture.record.get("build").asInstanceOf[Array[Any]].toList
-    assert(records.length == fixture.payloads.length)
-    records.foreach{ x =>
-      val record = x.asInstanceOf[Record]
-      assert(record.get("buildId") == "20160101001100")
     }
   }
 
