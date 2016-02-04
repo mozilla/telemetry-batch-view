@@ -33,6 +33,22 @@ object JSON2Avro{
       None
   }
 
+  def parseMap(schema : Schema, json: JValue): Option[java.util.Map[String, Any]] = json match {
+    case JObject(json) =>
+      val parsed = for { (k, v) <- json } yield {
+        val result = parse(schema.getValueType(), v)
+        result match {
+          case Some(value) =>
+            Some(k -> value)
+          case _ =>
+            None
+        }
+      }
+      Some(mapAsJavaMap(parsed.flatten.toMap))
+    case _ =>
+      None
+  }
+
   def parseString(schema: Schema, json: JValue): Option[String] = json match {
     case JString(value) =>
       Some(value)
@@ -43,6 +59,13 @@ object JSON2Avro{
   def parseInt(Schema: Schema, json: JValue): Option[Int] = json match {
     case JInt(value) =>
       Some(value.toInt)
+    case _ =>
+      None
+  }
+
+  def parseLong(Schema: Schema, json: JValue): Option[Long] = json match {
+    case JInt(value) =>
+      Some(value.toLong)
     case _ =>
       None
   }
@@ -61,6 +84,9 @@ object JSON2Avro{
     case Schema.Type.ARRAY =>
       parseArray(schema, json)
 
+    case Schema.Type.MAP =>
+      parseMap(schema, json)
+
     case Schema.Type.STRING =>
       parseString(schema, json)
 
@@ -69,6 +95,9 @@ object JSON2Avro{
 
     case Schema.Type.INT =>
       parseInt(schema, json)
+
+    case Schema.Type.LONG =>
+      parseLong(schema, json)
 
     case Schema.Type.BOOLEAN =>
       parseBoolean(schema, json)

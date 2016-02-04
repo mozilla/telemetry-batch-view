@@ -68,11 +68,11 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
         ("resetDate"    -> 1454615112)
 
       val settings =
-        ("e10sEnabled" -> true)
+        ("e10sEnabled" -> true) ~
+        ("userPrefs" -> Map("browser.download.lastDir" -> "/home/anthony/Desktop"))
 
       val system =
-          ("cpu" ->
-             ("count" -> 4)) ~
+          ("cpu" -> ("count" -> 4)) ~
           ("os" ->
              ("name"    -> "Windows_NT") ~
              ("locale"  -> "en_US") ~
@@ -87,6 +87,15 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
                 ("RAM" -> 1024) ~ ("description" -> "FOO2") ~ ("deviceID" -> "2") ~ ("vendorID" -> "Vendor2") ~ ("GPUActive" -> false)
               )))
 
+      val addons =
+          ("activeAddons" -> Map(
+            "jid0-edalmuivkozlouyij0lpdx548bc@jetpack" ->
+              ("name" -> "geckoprofiler") ~ ("version" -> "1.16.14")
+          )) ~
+          ("theme" ->
+             ("id"          -> "{972ce4c6-7e08-4474-a285-3208198ce6fd}") ~
+             ("description" -> "The default theme."))
+
       Map("clientId" -> "26c9d181-b95b-4af5-bb35-84ebf0da795d",
           "os"                      -> "Windows_NT",
           "creationTimestamp"       -> creationTimestamp,
@@ -97,7 +106,8 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
           "environment.partner"     -> compact(render(partner)),
           "environment.profile"     -> compact(render(profile)),
           "environment.settings"    -> compact(render(settings)),
-          "environment.system"      -> compact(render(system)))
+          "environment.system"      -> compact(render(system)),
+          "environment.addons"      -> compact(render(addons)))
     }
 
     new {
@@ -168,6 +178,16 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     records.foreach{ x =>
       val record = x.asInstanceOf[Record]
       assert(record.get("e10sEnabled") == true)
+    }
+  }
+
+  "environment.addons" must "be converted correctly" in {
+    val records = fixture.record.get("addons").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Record]
+      assert(record.get("activeAddons").asInstanceOf[java.util.Map[String, Any]]
+        .get("jid0-edalmuivkozlouyij0lpdx548bc@jetpack").asInstanceOf[Record].get("name") == "geckoprofiler")
     }
   }
 

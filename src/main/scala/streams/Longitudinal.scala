@@ -133,12 +133,12 @@ case class Longitudinal() extends DerivedStream {
           .name("enabled").`type`().optional().booleanType()
           .name("autoDownload").`type`().optional().booleanType()
         .endRecord()
-        //.name("userPrefs").`type`().optional().map().values().stringType()
+        .name("userPrefs").`type`().optional().map().values().stringType()
       .endRecord()
     val profileType = SchemaBuilder
       .record("profile").fields()
-        .name("creationDate").`type`().optional().intType()
-        .name("resetDate").`type`().optional().intType()
+        .name("creationDate").`type`().optional().longType()
+        .name("resetDate").`type`().optional().longType()
       .endRecord()
     val partnerType = SchemaBuilder
       .record("partner").fields()
@@ -215,8 +215,60 @@ case class Longitudinal() extends DerivedStream {
             .name("pseudoDisplay").`type`().optional().booleanType()
             .name("scale").`type`().optional().doubleType()
           .endRecord()
-          //wip: features
         .endRecord()
+      .endRecord()
+
+    val addonsType = SchemaBuilder
+      .record("addons").fields()
+        .name("activeAddons").`type`().optional().map().values().record("activeAddon").fields()
+          .name("blocklisted").`type`().optional().booleanType()
+          .name("description").`type`().optional().stringType()
+          .name("name").`type`().optional().stringType()
+          .name("userDisabled").`type`().optional().booleanType()
+          .name("appDisabled").`type`().optional().booleanType()
+          .name("version").`type`().optional().stringType()
+          .name("scope").`type`().optional().intType()
+          .name("type").`type`().optional().stringType()
+          .name("foreignInstall").`type`().optional().booleanType()
+          .name("hasBinaryComponents").`type`().optional().booleanType()
+          .name("installDay").`type`().optional().longType()
+          .name("updateDay").`type`().optional().longType()
+          .name("signedState").`type`().optional().intType()
+        .endRecord()
+        .name("theme").`type`().optional().record("theme").fields()
+          .name("id").`type`().optional().stringType()
+          .name("blocklisted").`type`().optional().booleanType()
+          .name("description").`type`().optional().stringType()
+          .name("name").`type`().optional().stringType()
+          .name("userDisabled").`type`().optional().booleanType()
+          .name("appDisabled").`type`().optional().booleanType()
+          .name("version").`type`().optional().stringType()
+          .name("scope").`type`().optional().intType()
+          .name("foreignInstall").`type`().optional().booleanType()
+          .name("hasBinaryComponents").`type`().optional().booleanType()
+          .name("installDay").`type`().optional().longType()
+          .name("updateDay").`type`().optional().longType()
+        .endRecord()
+        .name("activePlugins").`type`().optional().array().items().record("activePlugin").fields()
+          .name("name").`type`().optional().stringType()
+          .name("version").`type`().optional().stringType()
+          .name("description").`type`().optional().stringType()
+          .name("blocklisted").`type`().optional().booleanType()
+          .name("disabled").`type`().optional().booleanType()
+          .name("clicktoplay").`type`().optional().booleanType()
+          .name("mimeTypes").`type`().optional().array().items().stringType()
+          .name("updateDay").`type`().optional().longType()
+        .endRecord()
+        .name("activeGMPlugins").`type`().optional().map().values().record("activeGMPlugin").fields()
+          .name("version").`type`().optional().stringType()
+          .name("userDisabled").`type`().optional().booleanType()
+          .name("applyBackgroundUpdates").`type`().optional().booleanType()
+        .endRecord()
+        .name("activeExperiment").`type`().optional().record("activeExperiment").fields()
+          .name("id").`type`().optional().stringType()
+          .name("branch").`type`().optional().stringType()
+        .endRecord()
+        .name("persona").`type`().optional().stringType()
       .endRecord()
 
     val histogramType = SchemaBuilder
@@ -236,6 +288,7 @@ case class Longitudinal() extends DerivedStream {
         .name("profile").`type`().optional().array().items(profileType)
         .name("settings").`type`().optional().array().items(settingsType)
         .name("system").`type`().optional().array().items(systemType)
+        .name("addons").`type`().optional().array().items(addonsType)
     Histograms.definitions.foreach{ case (key, value) =>
       value match {
         case h: FlagHistogram if h.keyed == false =>
@@ -470,12 +523,12 @@ case class Longitudinal() extends DerivedStream {
       JSON2Avro("environment.profile", "profile", sorted, root, schema)
       JSON2Avro("environment.settings", "settings", sorted, root, schema)
       JSON2Avro("environment.system", "system", sorted, root, schema)
+      JSON2Avro("environment.addons", "addons", sorted, root, schema)
       keyedHistograms2Avro(sorted, root, schema)
       histograms2Avro(sorted, root, schema)
     } catch {
       //case _ : Throwable =>
       case e : Throwable =>
-        e.printStackTrace()
         // Ignore buggy clients
         return None
     }
