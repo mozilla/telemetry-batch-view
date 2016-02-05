@@ -17,28 +17,37 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
       // TODO: Use Scala Map and List directly?
       val histograms =
         ("TELEMETRY_TEST_FLAG" ->
-           ("values" -> ("0" -> 1) ~ ("1" -> 0)) ~ ("sum" -> 0)) ~
+           ("values" -> ("0" -> 1) ~ ("1" -> 0)) ~
+           ("sum"    -> 0)) ~
         ("DEVTOOLS_TOOLBOX_OPENED_BOOLEAN" ->
-           ("values" -> ("0" -> 42)) ~ ("sum" -> 0)) ~
+           ("values" -> ("0" -> 42)) ~
+           ("sum"    -> 0)) ~
         ("UPDATE_CHECK_NO_UPDATE_EXTERNAL" ->
-           ("values" -> ("0" -> 42)) ~ ("sum" -> 42)) ~
+           ("values" -> ("0" -> 42)) ~
+           ("sum"    -> 42)) ~
         ("PLACES_BACKUPS_DAYSFROMLAST" ->
-           ("values" -> ("1" -> 42)) ~ ("sum" -> 42)) ~
+           ("values" -> ("1" -> 42)) ~
+           ("sum"    -> 42)) ~
         ("GC_BUDGET_MS" ->
-           ("values" -> ("1" -> 42)) ~ ("sum" -> 42)) ~
+           ("values" -> ("1" -> 42)) ~
+           ("sum"    -> 42)) ~
         ("GC_MS" ->
-           ("values" -> ("1" -> 42)) ~ ("sum" -> 42))
+           ("values" -> ("1" -> 42)) ~
+           ("sum"    -> 42))
 
       val keyedHistograms =
         ("ADDON_SHIM_USAGE" ->
            ("foo" ->
-             ("values" -> ("1" -> 42)) ~ ("sum" -> 42))) ~
+             ("values" -> ("1" -> 42)) ~
+             ("sum"    -> 42))) ~
         ("SEARCH_COUNTS" ->
            ("foo" ->
-              ("values" -> ("0" -> 42)) ~ ("sum" -> 42))) ~
+              ("values" -> ("0" -> 42)) ~
+              ("sum"    -> 42))) ~
         ("DEVTOOLS_PERFTOOLS_SELECTED_VIEW_MS" ->
            ("foo" ->
-              ("values" -> ("1" -> 42)) ~ ("sum" -> 42)))
+              ("values" -> ("1" -> 42)) ~
+              ("sum"    -> 42)))
 
       val application =
         ("architecture"    -> "x86-64") ~
@@ -96,7 +105,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
              ("id"          -> "{972ce4c6-7e08-4474-a285-3208198ce6fd}") ~
              ("description" -> "The default theme."))
 
-      Map("clientId" -> "26c9d181-b95b-4af5-bb35-84ebf0da795d",
+      Map("clientId"                -> "26c9d181-b95b-4af5-bb35-84ebf0da795d",
           "os"                      -> "Windows_NT",
           "creationTimestamp"       -> creationTimestamp,
           "payload.histograms"      -> compact(render(histograms)),

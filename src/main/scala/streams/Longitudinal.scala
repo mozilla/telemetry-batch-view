@@ -83,34 +83,31 @@ case class Longitudinal() extends DerivedStream {
   }
 
   private def buildSchema: Schema = {
-    // The generate-ping-schema.py script can be used to generate these SchemaBuilder definitions, and the output of that script is combined with data
-    // from http://gecko.readthedocs.org/en/latest/toolkit/components/telemetry/telemetry/environment.html to get the results below
-
-    // See https://github.com/SamPenrose/data-pipeline/blob/v4-baseset-schema/schemas/test/application.schema.json commit 9993f0c0d3fc2e2dc16113070eb77554a72ce975
+    // The $PROJECT_ROOT/scripts/generate-ping-schema.py script can be used to generate these SchemaBuilder definitions, and the output of that script is combined with data
+    // from http://gecko.readthedocs.org/en/latest/toolkit/components/telemetry/telemetry to get the results below
+    // See the schemas at https://github.com/SamPenrose/data-pipeline/blob/v4-baseset-schema/schemas/test commit 9993f0c0d3fc2e2dc16113070eb77554a72ce975
     val applicationType = SchemaBuilder
       .record("application").fields()
-        .name("architecture").`type`().stringType().noDefault()
-        .name("buildId").`type`().stringType().noDefault()
-        .name("name").`type`().stringType().noDefault()
-        .name("version").`type`().stringType().noDefault()
-        .name("vendor").`type`().stringType().noDefault()
-        .name("platformVersion").`type`().stringType().noDefault()
-        .name("xpcomAbi").`type`().stringType().noDefault()
+        .name("architecture").`type`().optional().stringType()
+        .name("buildId").`type`().optional().stringType()
+        .name("name").`type`().optional().stringType()
+        .name("version").`type`().optional().stringType()
+        .name("vendor").`type`().optional().stringType()
+        .name("platformVersion").`type`().optional().stringType()
+        .name("xpcomAbi").`type`().optional().stringType()
         .name("channel").`type`().optional().stringType()
       .endRecord()
-
-    // See https://github.com/SamPenrose/data-pipeline/blob/v4-baseset-schema/schemas/test/environment.schema.json commit 9993f0c0d3fc2e2dc16113070eb77554a72ce975
     val buildType = SchemaBuilder
       .record("build").fields()
-        .name("applicationId").`type`().stringType().noDefault()
-        .name("applicationName").`type`().stringType().noDefault()
-        .name("architecture").`type`().stringType().noDefault()
+        .name("applicationId").`type`().optional().stringType()
+        .name("applicationName").`type`().optional().stringType()
+        .name("architecture").`type`().optional().stringType()
         .name("architecturesInBinary").`type`().optional().stringType()
-        .name("buildId").`type`().stringType().noDefault()
-        .name("version").`type`().stringType().noDefault()
-        .name("vendor").`type`().stringType().noDefault()
-        .name("platformVersion").`type`().stringType().noDefault()
-        .name("xpcomAbi").`type`().stringType().noDefault()
+        .name("buildId").`type`().optional().stringType()
+        .name("version").`type`().optional().stringType()
+        .name("vendor").`type`().optional().stringType()
+        .name("platformVersion").`type`().optional().stringType()
+        .name("xpcomAbi").`type`().optional().stringType()
         .name("hotfixVersion").`type`().optional().stringType()
       .endRecord()
     val settingsType = SchemaBuilder
@@ -206,7 +203,7 @@ case class Longitudinal() extends DerivedStream {
             .name("driver").`type`().optional().stringType()
             .name("driverVersion").`type`().optional().stringType()
             .name("driverDate").`type`().optional().stringType()
-            .name("GPUActive").`type`().booleanType().noDefault()
+            .name("GPUActive").`type`().optional().booleanType()
           .endRecord()
           .name("monitors").`type`().optional().array().items().record("monitor").fields()
             .name("screenWidth").`type`().optional().intType()

@@ -6,11 +6,11 @@ from urllib.request import urlopen
 
 def print_help():
     print("""\
-Generates Avro SchemaBuilder code in Scala automatically from JSON Avro Schema Declaration.
+Generates Avro SchemaBuilder code in Scala automatically from a JSON Schema.
 
 Usage:
 
-    python3 generate-ping-schema.py URL_TO_A_JSON_AVRO_SCHEMA
+    python3 generate-ping-schema.py URL_TO_JSON_SCHEMA
 
 Example:
 
@@ -103,7 +103,7 @@ def convert_entry(schema, type_name, level, is_optional):
                 for name, subschema in schema.get("properties", {}).items()
             )
         )
-    
+
     raise ValueError("Unknown schema type: {}".format(schema))
 
 def convert(schema, schema_name):
