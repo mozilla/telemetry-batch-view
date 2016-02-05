@@ -105,9 +105,16 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
              ("id"          -> "{972ce4c6-7e08-4474-a285-3208198ce6fd}") ~
              ("description" -> "The default theme."))
 
+      val info =
+        ("addons"          -> "%7B972ce4c6-7e08-4474-a285-3208198ce6fd%7D:46.0a2,jid0-edalmuivkozlouyij0lpdx548bc%40jetpack:1.16.14,%40statuser:0.1.4,loop%40mozilla.org:0.1,firefox%40getpocket.com:46.0a2") ~
+        ("asyncPluginInit" -> false) ~
+        ("flashVersion"    -> "11.2.202.559") ~
+        ("revision"        -> "https://hg.mozilla.org/releases/mozilla-aurora/rev/980fea2f7011")
+
       Map("clientId"                -> "26c9d181-b95b-4af5-bb35-84ebf0da795d",
           "os"                      -> "Windows_NT",
           "creationTimestamp"       -> creationTimestamp,
+          "payload.info"            -> compact(render(info)),
           "payload.histograms"      -> compact(render(histograms)),
           "payload.keyedHistograms" -> compact(render(keyedHistograms)),
           "application"             -> compact(render(application)),
@@ -142,6 +149,15 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     records.foreach{ x =>
       val record = x.asInstanceOf[Record]
       assert(record.get("channel") == "aurora")
+    }
+  }
+
+  "payload.info" must "be converted correctly" in {
+    val records = fixture.record.get("info").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Record]
+      assert(record.get("flashVersion") == "11.2.202.559")
     }
   }
 

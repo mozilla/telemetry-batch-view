@@ -97,6 +97,26 @@ case class Longitudinal() extends DerivedStream {
         .name("xpcomAbi").`type`().optional().stringType()
         .name("channel").`type`().optional().stringType()
       .endRecord()
+    val infoType = SchemaBuilder
+      .record("info").fields()
+        .name("addons").`type`().optional().stringType()
+        .name("asyncPluginInit").`type`().optional().booleanType()
+        .name("flashVersion").`type`().optional().stringType()
+        .name("previousBuildId").`type`().optional().stringType()
+        .name("previousSessionId").`type`().optional().stringType()
+        .name("previousSubsessionId").`type`().optional().stringType()
+        .name("profileSubsessionCounter").`type`().optional().intType()
+        .name("reason").`type`().optional().stringType()
+        .name("revision").`type`().optional().stringType()
+        .name("sessionId").`type`().optional().stringType()
+        .name("sessionLength").`type`().optional().longType()
+        .name("sessionStartDate").`type`().optional().stringType()
+        .name("subsessionCounter").`type`().optional().intType()
+        .name("subsessionId").`type`().optional().stringType()
+        .name("subsessionLength").`type`().optional().longType()
+        .name("subsessionStartDate").`type`().optional().stringType()
+        .name("timezoneOffset").`type`().optional().intType()
+      .endRecord()
     val buildType = SchemaBuilder
       .record("build").fields()
         .name("applicationId").`type`().optional().stringType()
@@ -286,6 +306,7 @@ case class Longitudinal() extends DerivedStream {
         .name("settings").`type`().optional().array().items(settingsType)
         .name("system").`type`().optional().array().items(systemType)
         .name("addons").`type`().optional().array().items(addonsType)
+        .name("info").`type`().optional().array().items(infoType)
     Histograms.definitions.foreach{ case (key, value) =>
       value match {
         case h: FlagHistogram if h.keyed == false =>
@@ -521,6 +542,7 @@ case class Longitudinal() extends DerivedStream {
       JSON2Avro("environment.settings", "settings", sorted, root, schema)
       JSON2Avro("environment.system", "system", sorted, root, schema)
       JSON2Avro("environment.addons", "addons", sorted, root, schema)
+      JSON2Avro("payload.info", "info", sorted, root, schema)
       keyedHistograms2Avro(sorted, root, schema)
       histograms2Avro(sorted, root, schema)
     } catch {
