@@ -29,7 +29,8 @@ object Histograms {
       val result = MMap[String, MMap[String, Option[Any]]]()
 
       /* Unfortunately the histogram definition file does not respect a proper schema and
-         as such it's rather unpleasant to parse it in a statically typed langauge... */
+         as such it's rather unpleasant to parse it in a statically typed langauge, see
+         https://bugzilla.mozilla.org/show_bug.cgi?id=1245514 */
 
       for {
         JObject(root) <- json

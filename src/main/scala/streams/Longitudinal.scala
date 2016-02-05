@@ -22,7 +22,7 @@ import telemetry.parquet.ParquetFile
 
 case class Longitudinal() extends DerivedStream {
   override def streamName: String = "telemetry-release"
-  override def filterPrefix: String = "telemetry/4/main/Firefox/release/*/*/*/42/"
+  override def filterPrefix: String = "telemetry/4/main/*/*/*/*/*/42/"
 
   override def transform(sc: SparkContext, bucket: Bucket, summaries: RDD[ObjectSummary], from: String, to: String) {
     val prefix = s"generationDate=$to"
@@ -36,7 +36,7 @@ case class Longitudinal() extends DerivedStream {
     val clientMessages = sc.parallelize(groups, groups.size)
       .flatMap(x => x)
       .flatMap{ case obj =>
-        val hekaFile = bucket.getObject(obj.key).getOrElse(throw new Exception("File missing on S3"))
+        val hekaFile = bucket.getObject(obj.key).getOrElse(throw new Exception("File missing on S3: %s".format(obj.key)))
         for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey()))  yield message }
       .flatMap{ case message =>
         val fields = HekaFrame.fields(message)
@@ -49,20 +49,37 @@ case class Longitudinal() extends DerivedStream {
       .groupByKey()
       .coalesce(max((0.5*sc.defaultParallelism).toInt, 1), true)  // see https://issues.apache.org/jira/browse/PARQUET-222
 
-    clientMessages
+    val partitionCounts = clientMessages
       .values
-      .foreachPartition{ case clientIterator =>
+      .mapPartitions{ case clientIterator =>
         val schema = buildSchema
-        val records = for {
+        val allRecords = for {
           client <- clientIterator
-          record <- buildRecord(client, schema)
+          record = buildRecord(client, schema)
         } yield record
+
+        var ignoredCount = 0
+        var processedCount = 0
+        val records = allRecords.map(r => r match {
+                                       case Some(record) =>
+                                         processedCount += 1
+                                         r
+                                       case None =>
+                                         ignoredCount += 1
+                                         r
+                                     }).flatten
 
         while(!records.isEmpty) {
           val localFile = ParquetFile.serialize(records, schema)
           uploadLocalFileToS3(localFile, prefix)
         }
+
+        List((processedCount + ignoredCount, ignoredCount)).toIterator
     }
+
+    val counts = partitionCounts.reduce( (x, y) => (x._1 + y._1, x._2 + y._2))
+    println("Clients seen: %d".format(counts._1))
+    println("Clients ignored: %d".format(counts._2))
   }
 
   private def buildSchema: Schema = {
@@ -194,16 +211,20 @@ case class Longitudinal() extends DerivedStream {
                                              histogramSchema: Schema): Array[Any] =
     definition match {
       case _: FlagHistogram =>
+        // A flag histograms is represented with a scalar.
         vectorizeHistogram_(name, payloads, h => h.values("0") > 0, false)
 
       case _: BooleanHistogram =>
+        // A boolean histograms is represented with an array of two integers.
         def flatten(h: RawHistogram): Array[Long] = Array(h.values.getOrElse("0", 0L), h.values.getOrElse("1", 0L))
         vectorizeHistogram_(name, payloads, flatten, Array(0L, 0L))
 
       case _: CountHistogram =>
+        // A count histograms is represented with a scalar.
         vectorizeHistogram_(name, payloads, h => h.values.getOrElse("0", 0L), 0L)
 
       case definition: EnumeratedHistogram =>
+        // An enumerated histograms is represented with an array of N integers.
         def flatten(h: RawHistogram): Array[Long] = {
           val values = Array.fill(definition.nValues + 1){0L}
           h.values.foreach{case (key, value) =>
@@ -215,6 +236,8 @@ case class Longitudinal() extends DerivedStream {
         vectorizeHistogram_(name, payloads, flatten, Array.fill(definition.nValues + 1){0L})
 
       case definition: LinearHistogram =>
+        // Exponential and linear histograms are represented with a struct containing
+        // an array of N integers (values field) and the sum of entries (sum field).
         val buckets = Histograms.linearBuckets(definition.low, definition.high, definition.nBuckets)
 
         def flatten(h: RawHistogram): GenericData.Record = {
