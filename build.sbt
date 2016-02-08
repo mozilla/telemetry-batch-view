@@ -3,7 +3,7 @@ javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint")
 lazy val root = (project in file(".")).
   settings(
     name := "telemetry-batch-view",
-    version := "1.0",
+    version := "1.1",
     scalaVersion := "2.10.4",
     retrieveManaged := true,
     ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) },
