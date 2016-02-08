@@ -146,7 +146,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
   "Boolean histograms" must "be converted correctly" in {
     val histograms = fixture.record.get("DEVTOOLS_TOOLBOX_OPENED_BOOLEAN").asInstanceOf[Array[Any]].toList
     assert(histograms.length == fixture.payloads.length)
-    histograms.foreach(h => assert(h.asInstanceOf[Array[Long]].toList == List(42L, 0L)))
+    histograms.foreach(h => assert(h.asInstanceOf[Array[Int]].toList == List(42L, 0)))
   }
 
   "Count histograms" must "be converted correctly" in {
@@ -159,7 +159,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     val histograms = fixture.record.get("PLACES_BACKUPS_DAYSFROMLAST").asInstanceOf[Array[Any]]
     assert(histograms.length == fixture.payloads.length)
     for(h <- histograms) {
-      val histogram = h.asInstanceOf[Array[Long]]
+      val histogram = h.asInstanceOf[Array[Int]]
       assert(histogram.length == 16)
 
       for((value, key) <- histogram.zipWithIndex) {
@@ -175,11 +175,11 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     val records = fixture.record.get("GC_BUDGET_MS").asInstanceOf[Array[Any]].toList
     assert(records.length == fixture.payloads.length)
 
-    val reference = Array(0L, 42L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L)
+    val reference = Array(0, 42, 0, 0, 0, 0, 0, 0, 0, 0)
     records.foreach{ x =>
       val tmp = x.asInstanceOf[Record]
       assert(tmp.get("sum") == 42L)
-      assert(tmp.get("values").asInstanceOf[Array[Long]].toList == reference.toList)
+      assert(tmp.get("values").asInstanceOf[Array[Int]].toList == reference.toList)
     }
   }
 
@@ -193,7 +193,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     records.foreach{ x =>
       val tmp = x.asInstanceOf[Record]
       assert(tmp.get("sum") == 42L)
-      assert(tmp.get("values").asInstanceOf[Array[Long]].toList == reference.toList)
+      assert(tmp.get("values").asInstanceOf[Array[Int]].toList == reference.toList)
     }
   }
 
@@ -203,7 +203,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     assert(records.size == 1)
 
     for(h <- records("foo")) {
-      val histogram = h.asInstanceOf[Array[Long]]
+      val histogram = h.asInstanceOf[Array[Int]]
       assert(histogram.length == 16)
 
       for((value, key) <- histogram.zipWithIndex) {
@@ -238,7 +238,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     histograms.foreach{ x =>
       val tmp = x.asInstanceOf[Record]
       assert(tmp.get("sum") == 42L)
-      assert(tmp.get("values").asInstanceOf[Array[Long]].toList == reference.toList)
+      assert(tmp.get("values").asInstanceOf[Array[Int]].toList == reference.toList)
     }
   }
 }
