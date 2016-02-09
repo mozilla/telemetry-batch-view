@@ -49,6 +49,9 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
               ("values" -> ("1" -> 42)) ~
               ("sum"    -> 42)))
 
+      val simpleMeasurements =
+        ("uptime" -> 18L)
+
       val threadHangStats =
         List(
           ("name" -> "Gecko") ~
@@ -118,19 +121,20 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
         ("flashVersion"    -> "11.2.202.559") ~
         ("revision"        -> "https://hg.mozilla.org/releases/mozilla-aurora/rev/980fea2f7011")
 
-      Map("clientId"                -> "26c9d181-b95b-4af5-bb35-84ebf0da795d",
-          "os"                      -> "Windows_NT",
-          "creationTimestamp"       -> creationTimestamp,
-          "payload.info"            -> compact(render(info)),
-          "payload.histograms"      -> compact(render(histograms)),
-          "payload.keyedHistograms" -> compact(render(keyedHistograms)),
-          "payload.threadHangStats" -> compact(render(threadHangStats)),
-          "environment.build"       -> compact(render(build)),
-          "environment.partner"     -> compact(render(partner)),
-          "environment.profile"     -> compact(render(profile)),
-          "environment.settings"    -> compact(render(settings)),
-          "environment.system"      -> compact(render(system)),
-          "environment.addons"      -> compact(render(addons)))
+      Map("clientId"                   -> "26c9d181-b95b-4af5-bb35-84ebf0da795d",
+          "os"                         -> "Windows_NT",
+          "creationTimestamp"          -> creationTimestamp,
+          "payload.info"               -> compact(render(info)),
+          "payload.simpleMeasurements" -> compact(render(simpleMeasurements)),
+          "payload.histograms"         -> compact(render(histograms)),
+          "payload.keyedHistograms"    -> compact(render(keyedHistograms)),
+          "payload.threadHangStats"    -> compact(render(threadHangStats)),
+          "environment.build"          -> compact(render(build)),
+          "environment.partner"        -> compact(render(partner)),
+          "environment.profile"        -> compact(render(profile)),
+          "environment.settings"       -> compact(render(settings)),
+          "environment.system"         -> compact(render(system)),
+          "environment.addons"         -> compact(render(addons)))
     }
 
     new {
@@ -238,6 +242,15 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     val creationTimestamps = fixture.record.get("creationTimestamp").asInstanceOf[Array[Double]].toList
     assert(creationTimestamps.length == fixture.payloads.length)
     creationTimestamps.zip(fixture.payloads.map(_("creationTimestamp"))).foreach{case (x, y) => assert(x == y)}
+  }
+
+  "payload.simpleMeasurements" must "be converted correctly" in {
+    val values = fixture.record.get("simpleMeasurements").asInstanceOf[Array[Any]].toList
+    assert(values.length == fixture.payloads.length)
+    values.foreach{ x =>
+      val entry = x.asInstanceOf[java.util.Map[String, Any]]
+      assert(entry.get("uptime").asInstanceOf[Long] == 18)
+    }
   }
 
   "Flag histograms" must "be converted correctly" in {

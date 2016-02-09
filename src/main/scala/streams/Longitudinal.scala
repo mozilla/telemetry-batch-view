@@ -314,6 +314,7 @@ case class Longitudinal() extends DerivedStream {
         .name("info").`type`().optional().array().items(infoType)
         .name("threadHangActivity").`type`().optional().array().items().map().values(histogramType)
         .name("threadHangStacks").`type`().optional().array().items().map().values().map().values(histogramType)
+        .name("simpleMeasurements").`type`().optional().array().items().map().values().longType()
     Histograms.definitions.foreach{ case (key, value) =>
       value match {
         case h: FlagHistogram if h.keyed == false =>
@@ -554,9 +555,17 @@ case class Longitudinal() extends DerivedStream {
     var ranges = Array[Long]()
     val threadHangStatsList = payloads.map{ case (payload) =>
       val json = payload.getOrElse("payload.threadHangStats", return).asInstanceOf[String]
-      val threadHangStats = parse(json).extract[Array[Map[String, JValue]]]
+      val body = parse(json)
+      body match {
+        // for some reason, when there are no thread hangs, it's an object rather than an array - we only want to accept the array
+        case _ : JArray => null
+        case _ => return
+      }
+      val threadHangStats = body.extract[Array[Map[String, JValue]]]
       for (thread <- threadHangStats) {
-        ranges = thread.getOrElse("activity", return).extract[Map[String, Any]].getOrElse("ranges", return).asInstanceOf[List[BigInt]].map(x => x.toLong).toArray
+        ranges = thread.getOrElse("activity", return).extract[Map[String, Any]]
+                       .getOrElse("ranges", return).asInstanceOf[List[BigInt]]
+                       .map(x => x.toLong).toArray
       }
       threadHangStats
     }
@@ -595,6 +604,25 @@ case class Longitudinal() extends DerivedStream {
     root.set("threadHangStacks", threadHangStackMapList)
   }
 
+  private def simpleMeasurements2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
+    implicit val formats = DefaultFormats
+
+    // we need to handle simple measures differently because there are simpleMesaurements that have sub-values,
+    // which we'll ignore since they're not used much - only integer simpleMeasurements are included
+    val simpleMeasurements = payloads.map{ case (x) =>
+      val json = x.getOrElse("payload.simpleMeasurements", return).asInstanceOf[String]
+      val measurementEntry = parse(json).extract[Map[String, JValue]]
+      val measurements = measurementEntry.flatMap{ case (key, entry) =>
+        entry match {
+          case value : JInt => Some(key -> value.num.toLong)
+          case _ => None
+        }
+      }.toMap
+      mapAsJavaMap(measurements)
+    }.toArray
+    root.set("simpleMeasurements", simpleMeasurements)
+  }
+
   private def buildRecord(history: Iterable[Map[String, Any]], schema: Schema): Option[GenericRecord] = {
     // Sort records by timestamp
     val sorted = history
@@ -631,6 +659,7 @@ case class Longitudinal() extends DerivedStream {
       keyedHistograms2Avro(sorted, root, schema)
       histograms2Avro(sorted, root, schema)
       threadHangStats2Avro(sorted, root, schema)
+      simpleMeasurements2Avro(sorted, root, schema)
     } catch {
       case _ : Throwable =>
         // Ignore buggy clients
