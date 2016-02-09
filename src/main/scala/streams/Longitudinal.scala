@@ -277,15 +277,6 @@ case class Longitudinal() extends DerivedStream {
         .name("id").`type`().optional().stringType()
         .name("branch").`type`().optional().stringType()
       .endRecord()
-    val addonsType = SchemaBuilder
-      .record("addons").fields()
-        .name("activeAddons").`type`().optional().`type`(activeAddonsType)
-        .name("theme").`type`().optional().`type`(themeType)
-        .name("activePlugins").`type`().optional().`type`(activePluginsType)
-        .name("activeGMPlugins").`type`().optional().`type`(activeGMPluginsType)
-        .name("activeExperiment").`type`().optional().`type`(activeExperimentType)
-        .name("persona").`type`().optional().stringType()
-      .endRecord()
 
     val histogramType = SchemaBuilder
       .record("Histogram").fields()
@@ -303,14 +294,12 @@ case class Longitudinal() extends DerivedStream {
         .name("profile").`type`().optional().array().items(profileType)
         .name("settings").`type`().optional().array().items(settingsType)
         .name("system").`type`().optional().array().items(systemType)
-        // TODO: make these all top-level fields after updating https://github.com/mozilla-services/data-pipeline/blob/master/heka/sandbox/decoders/extract_telemetry_dimensions.lua
-        //.name("activeAddons").`type`().optional().array().items(activeAddonsType)
-        //.name("theme").`type`().optional().array().items(themeType)
-        //.name("activePlugins").`type`().optional().array().items(activePluginsType)
-        //.name("activeGMPlugins").`type`().optional().array().items(activeGMPluginsType)
-        //.name("activeExperiment").`type`().optional().array().items(activeExperimentType)
-        //.name("persona").`type`().optional().stringType()
-        .name("addons").`type`().optional().array.items(addonsType)
+        .name("activeAddons").`type`().optional().array().items(activeAddonsType)
+        .name("theme").`type`().optional().array().items(themeType)
+        .name("activePlugins").`type`().optional().array().items(activePluginsType)
+        .name("activeGMPlugins").`type`().optional().array().items(activeGMPluginsType)
+        .name("activeExperiment").`type`().optional().array().items(activeExperimentType)
+        .name("persona").`type`().optional().stringType()
         .name("info").`type`().optional().array().items(infoType)
         .name("threadHangActivity").`type`().optional().array().items().map().values(histogramType)
         .name("threadHangStacks").`type`().optional().array().items().map().values().map().values(histogramType)
@@ -472,15 +461,19 @@ case class Longitudinal() extends DerivedStream {
         x.asInstanceOf[Array[Any]]
     }
 
-  private def JSON2Avro(jsonField: String,
-                        avroField: String,
+  private def JSON2Avro(jsonField: String, jsonPath: List[String], avroField: String,
                         payloads: List[Map[String, Any]],
                         root: GenericRecordBuilder,
                         schema: Schema) {
     implicit val formats = DefaultFormats
 
     val records = payloads.map{ case (x) =>
-      parse(x.getOrElse(jsonField, return).asInstanceOf[String])
+      var record = parse(x.getOrElse(jsonField, return).asInstanceOf[String])
+      for (key <- jsonPath) {
+        record = record \ key
+      }
+      if (record == JNothing) return
+      record
     }
 
     val fieldSchema = schema.getField(avroField).schema().getTypes()(1).getElementType()
@@ -642,26 +635,25 @@ case class Longitudinal() extends DerivedStream {
       .set("creationTimestamp", sorted.map(x => x("creationTimestamp").asInstanceOf[Double]).toArray)
 
     try {
-      JSON2Avro("environment.build", "build", sorted, root, schema)
-      JSON2Avro("environment.partner", "partner", sorted, root, schema)
-      JSON2Avro("environment.profile", "profile", sorted, root, schema)
-      JSON2Avro("environment.settings", "settings", sorted, root, schema)
-      JSON2Avro("environment.system", "system", sorted, root, schema)
-      // TODO: make these all top-level fields after updating https://github.com/mozilla-services/data-pipeline/blob/master/heka/sandbox/decoders/extract_telemetry_dimensions.lua
-      //JSON2Avro("environment.addons.activeAddons", "activeAddons", sorted, root, schema)
-      //JSON2Avro("environment.addons.theme", "theme", sorted, root, schema)
-      //JSON2Avro("environment.addons.activePlugins", "activePlugins", sorted, root, schema)
-      //JSON2Avro("environment.addons.activeGMPlugins", "activeGMPlugins", sorted, root, schema)
-      //JSON2Avro("environment.addons.activeExperiment", "activeExperiment", sorted, root, schema)
-      //JSON2Avro("environment.addons.persona", "persona", sorted, root, schema)
-      JSON2Avro("environment.addons", "addons", sorted, root, schema)
-      JSON2Avro("payload.info", "info", sorted, root, schema)
+      JSON2Avro("environment.build",    List[String](),           "build", sorted, root, schema)
+      JSON2Avro("environment.partner",  List[String](),           "partner", sorted, root, schema)
+      JSON2Avro("environment.profile",  List[String](),           "profile", sorted, root, schema)
+      JSON2Avro("environment.settings", List[String](),           "settings", sorted, root, schema)
+      JSON2Avro("environment.system",   List[String](),           "system", sorted, root, schema)
+      JSON2Avro("environment.addons",   List("activeAddons"),     "activeAddons", sorted, root, schema)
+      JSON2Avro("environment.addons",   List("theme"),            "theme", sorted, root, schema)
+      JSON2Avro("environment.addons",   List("activePlugins"),    "activePlugins", sorted, root, schema)
+      JSON2Avro("environment.addons",   List("activeGMPlugins"),  "activeGMPlugins", sorted, root, schema)
+      JSON2Avro("environment.addons",   List("activeExperiment"), "activeExperiment", sorted, root, schema)
+      JSON2Avro("environment.addons",   List("persona"),          "persona", sorted, root, schema)
+      JSON2Avro("payload.info",         List[String](),           "info", sorted, root, schema)
       keyedHistograms2Avro(sorted, root, schema)
       histograms2Avro(sorted, root, schema)
       threadHangStats2Avro(sorted, root, schema)
       simpleMeasurements2Avro(sorted, root, schema)
     } catch {
-      case _ : Throwable =>
+      case e : Throwable =>
+        e.printStackTrace()
         // Ignore buggy clients
         return None
     }

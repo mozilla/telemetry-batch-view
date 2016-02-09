@@ -112,8 +112,15 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
               ("name" -> "geckoprofiler") ~ ("version" -> "1.16.14")
           )) ~
           ("theme" ->
-             ("id"          -> "{972ce4c6-7e08-4474-a285-3208198ce6fd}") ~
-             ("description" -> "The default theme."))
+            ("id"          -> "{972ce4c6-7e08-4474-a285-3208198ce6fd}") ~
+            ("description" -> "The default theme.")) ~
+          ("activePlugins" ->
+            List(
+              ("blocklisted" -> false) ~
+              ("description" -> "Adobe PDF Plug-In For Firefox and Netscape 10.1.16") ~
+              ("clicktoplay" -> true)
+            )
+          )
 
       val info =
         ("addons"          -> "%7B972ce4c6-7e08-4474-a285-3208198ce6fd%7D:46.0a2,jid0-edalmuivkozlouyij0lpdx548bc%40jetpack:1.16.14,%40statuser:0.1.4,loop%40mozilla.org:0.1,firefox%40getpocket.com:46.0a2") ~
@@ -223,13 +230,21 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     }
   }
 
-  "environment.addons" must "be converted correctly" in {
-    val records = fixture.record.get("addons").asInstanceOf[Array[Any]].toList
+  "environment.addons.activeAddons" must "be converted correctly" in {
+    val records = fixture.record.get("activeAddons").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[java.util.Map[String, Any]]
+      assert(record.get("jid0-edalmuivkozlouyij0lpdx548bc@jetpack").asInstanceOf[Record].get("name") == "geckoprofiler")
+    }
+  }
+
+  "environment.addons.theme" must "be converted correctly" in {
+    val records = fixture.record.get("theme").asInstanceOf[Array[Any]].toList
     assert(records.length == fixture.payloads.length)
     records.foreach{ x =>
       val record = x.asInstanceOf[Record]
-      assert(record.get("activeAddons").asInstanceOf[java.util.Map[String, Any]]
-        .get("jid0-edalmuivkozlouyij0lpdx548bc@jetpack").asInstanceOf[Record].get("name") == "geckoprofiler")
+      assert(record.get("description") == "The default theme.")
     }
   }
 
