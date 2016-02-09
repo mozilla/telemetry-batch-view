@@ -14,6 +14,7 @@ case class CountHistogram(keyed: Boolean) extends HistogramDefinition
 case class EnumeratedHistogram(keyed: Boolean, nValues: Int) extends HistogramDefinition
 case class LinearHistogram(keyed: Boolean, low: Int, high: Int, nBuckets: Int) extends HistogramDefinition
 case class ExponentialHistogram(keyed: Boolean, low: Int, high: Int, nBuckets: Int) extends HistogramDefinition
+case class TimeHistogram(ranges: Array[Long]) extends HistogramDefinition
 
 object Histograms {
   val definitions = {

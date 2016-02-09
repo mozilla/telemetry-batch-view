@@ -49,15 +49,22 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
               ("values" -> ("1" -> 42)) ~
               ("sum"    -> 42)))
 
-      val application =
-        ("architecture"    -> "x86-64") ~
-        ("buildId"         -> "20160101001100") ~
-        ("name"            -> "Firefox") ~
-        ("version"         -> "46.0a2") ~
-        ("vendor"          -> "Mozilla") ~
-        ("platformVersion" -> "46.0a2") ~
-        ("xpcomAbi"        -> "x86_64-gcc3") ~
-        ("channel"         -> "aurora")
+      val threadHangStats =
+        List(
+          ("name" -> "Gecko") ~
+          ("activity" ->
+            ("ranges" -> List(0, 1, 3, 7, 15)) ~
+            ("values" -> ("0" -> 1) ~ ("1" -> 0)) ~
+            ("sum"    -> 0)) ~
+          ("hangs" ->
+            List(
+              ("histogram" ->
+                ("ranges" -> List(0, 1, 3, 7, 15)) ~
+                ("values" -> ("0" -> 1) ~ ("1" -> 0)) ~
+                ("sum"    -> 0)) ~
+              ("stack" -> List("A", "B", "C"))
+            ))
+        )
 
       val build =
         ("applicationId"   -> "{ec8030f7-c20a-464f-9b0e-13a3a9e97384}") ~
@@ -117,7 +124,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
           "payload.info"            -> compact(render(info)),
           "payload.histograms"      -> compact(render(histograms)),
           "payload.keyedHistograms" -> compact(render(keyedHistograms)),
-          "application"             -> compact(render(application)),
+          "payload.threadHangStats" -> compact(render(threadHangStats)),
           "environment.build"       -> compact(render(build)),
           "environment.partner"     -> compact(render(partner)),
           "environment.profile"     -> compact(render(profile)),
@@ -138,17 +145,23 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     }
   }
 
-
   "Records" can "be serialized" in {
     ParquetFile.serialize(List(fixture.record).toIterator, fixture.schema)
   }
 
-  "application" must "be converted correctly" in {
-    val records = fixture.record.get("application").asInstanceOf[Array[Any]].toList
-    assert(records.length == fixture.payloads.length)
-    records.foreach{ x =>
-      val record = x.asInstanceOf[Record]
-      assert(record.get("channel") == "aurora")
+  "payload.threadHangStats" must "be converted correctly" in {
+    val activity = fixture.record.get("threadHangActivity").asInstanceOf[Array[java.util.Map[String, GenericData.Record]]].toList
+    assert(activity.length == fixture.payloads.length)
+    activity.foreach{ x =>
+      val histogram = x.get("Gecko").get("values")
+      assert(histogram.asInstanceOf[Array[Long]].toList == List(1L, 0L, 0L, 0L, 0L))
+    }
+
+    val hangs = fixture.record.get("threadHangStacks").asInstanceOf[Array[java.util.Map[String, java.util.Map[String, GenericData.Record]]]].toList
+    assert(hangs.length == fixture.payloads.length)
+    hangs.foreach{ x =>
+      val histogram = x.get("Gecko").get("A\nB\nC").get("values")
+      assert(histogram.asInstanceOf[Array[Long]].toList == List(1L, 0L, 0L, 0L, 0L))
     }
   }
 

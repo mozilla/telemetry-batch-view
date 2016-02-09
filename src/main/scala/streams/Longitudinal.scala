@@ -86,17 +86,6 @@ case class Longitudinal() extends DerivedStream {
     // The $PROJECT_ROOT/scripts/generate-ping-schema.py script can be used to generate these SchemaBuilder definitions, and the output of that script is combined with data
     // from http://gecko.readthedocs.org/en/latest/toolkit/components/telemetry/telemetry to get the results below
     // See the schemas at https://github.com/SamPenrose/data-pipeline/blob/v4-baseset-schema/schemas/test commit 9993f0c0d3fc2e2dc16113070eb77554a72ce975
-    val applicationType = SchemaBuilder
-      .record("application").fields()
-        .name("architecture").`type`().optional().stringType()
-        .name("buildId").`type`().optional().stringType()
-        .name("name").`type`().optional().stringType()
-        .name("version").`type`().optional().stringType()
-        .name("vendor").`type`().optional().stringType()
-        .name("platformVersion").`type`().optional().stringType()
-        .name("xpcomAbi").`type`().optional().stringType()
-        .name("channel").`type`().optional().stringType()
-      .endRecord()
     val infoType = SchemaBuilder
       .record("info").fields()
         .name("addons").`type`().optional().stringType()
@@ -235,56 +224,66 @@ case class Longitudinal() extends DerivedStream {
         .endRecord()
       .endRecord()
 
+    val activeAddonsType = SchemaBuilder
+      .map().values().record("activeAddon").fields()
+        .name("blocklisted").`type`().optional().booleanType()
+        .name("description").`type`().optional().stringType()
+        .name("name").`type`().optional().stringType()
+        .name("userDisabled").`type`().optional().booleanType()
+        .name("appDisabled").`type`().optional().booleanType()
+        .name("version").`type`().optional().stringType()
+        .name("scope").`type`().optional().intType()
+        .name("type").`type`().optional().stringType()
+        .name("foreignInstall").`type`().optional().booleanType()
+        .name("hasBinaryComponents").`type`().optional().booleanType()
+        .name("installDay").`type`().optional().longType()
+        .name("updateDay").`type`().optional().longType()
+        .name("signedState").`type`().optional().intType()
+      .endRecord()
+    val themeType = SchemaBuilder
+      .record("theme").fields()
+        .name("id").`type`().optional().stringType()
+        .name("blocklisted").`type`().optional().booleanType()
+        .name("description").`type`().optional().stringType()
+        .name("name").`type`().optional().stringType()
+        .name("userDisabled").`type`().optional().booleanType()
+        .name("appDisabled").`type`().optional().booleanType()
+        .name("version").`type`().optional().stringType()
+        .name("scope").`type`().optional().intType()
+        .name("foreignInstall").`type`().optional().booleanType()
+        .name("hasBinaryComponents").`type`().optional().booleanType()
+        .name("installDay").`type`().optional().longType()
+        .name("updateDay").`type`().optional().longType()
+      .endRecord()
+    val activePluginsType = SchemaBuilder
+      .array().items().record("activePlugin").fields()
+        .name("name").`type`().optional().stringType()
+        .name("version").`type`().optional().stringType()
+        .name("description").`type`().optional().stringType()
+        .name("blocklisted").`type`().optional().booleanType()
+        .name("disabled").`type`().optional().booleanType()
+        .name("clicktoplay").`type`().optional().booleanType()
+        .name("mimeTypes").`type`().optional().array().items().stringType()
+        .name("updateDay").`type`().optional().longType()
+      .endRecord()
+    val activeGMPluginsType = SchemaBuilder
+      .map().values().record("activeGMPlugin").fields()
+        .name("version").`type`().optional().stringType()
+        .name("userDisabled").`type`().optional().booleanType()
+        .name("applyBackgroundUpdates").`type`().optional().booleanType()
+      .endRecord()
+    val activeExperimentType = SchemaBuilder
+      .record("activeExperiment").fields()
+        .name("id").`type`().optional().stringType()
+        .name("branch").`type`().optional().stringType()
+      .endRecord()
     val addonsType = SchemaBuilder
       .record("addons").fields()
-        .name("activeAddons").`type`().optional().map().values().record("activeAddon").fields()
-          .name("blocklisted").`type`().optional().booleanType()
-          .name("description").`type`().optional().stringType()
-          .name("name").`type`().optional().stringType()
-          .name("userDisabled").`type`().optional().booleanType()
-          .name("appDisabled").`type`().optional().booleanType()
-          .name("version").`type`().optional().stringType()
-          .name("scope").`type`().optional().intType()
-          .name("type").`type`().optional().stringType()
-          .name("foreignInstall").`type`().optional().booleanType()
-          .name("hasBinaryComponents").`type`().optional().booleanType()
-          .name("installDay").`type`().optional().longType()
-          .name("updateDay").`type`().optional().longType()
-          .name("signedState").`type`().optional().intType()
-        .endRecord()
-        .name("theme").`type`().optional().record("theme").fields()
-          .name("id").`type`().optional().stringType()
-          .name("blocklisted").`type`().optional().booleanType()
-          .name("description").`type`().optional().stringType()
-          .name("name").`type`().optional().stringType()
-          .name("userDisabled").`type`().optional().booleanType()
-          .name("appDisabled").`type`().optional().booleanType()
-          .name("version").`type`().optional().stringType()
-          .name("scope").`type`().optional().intType()
-          .name("foreignInstall").`type`().optional().booleanType()
-          .name("hasBinaryComponents").`type`().optional().booleanType()
-          .name("installDay").`type`().optional().longType()
-          .name("updateDay").`type`().optional().longType()
-        .endRecord()
-        .name("activePlugins").`type`().optional().array().items().record("activePlugin").fields()
-          .name("name").`type`().optional().stringType()
-          .name("version").`type`().optional().stringType()
-          .name("description").`type`().optional().stringType()
-          .name("blocklisted").`type`().optional().booleanType()
-          .name("disabled").`type`().optional().booleanType()
-          .name("clicktoplay").`type`().optional().booleanType()
-          .name("mimeTypes").`type`().optional().array().items().stringType()
-          .name("updateDay").`type`().optional().longType()
-        .endRecord()
-        .name("activeGMPlugins").`type`().optional().map().values().record("activeGMPlugin").fields()
-          .name("version").`type`().optional().stringType()
-          .name("userDisabled").`type`().optional().booleanType()
-          .name("applyBackgroundUpdates").`type`().optional().booleanType()
-        .endRecord()
-        .name("activeExperiment").`type`().optional().record("activeExperiment").fields()
-          .name("id").`type`().optional().stringType()
-          .name("branch").`type`().optional().stringType()
-        .endRecord()
+        .name("activeAddons").`type`().optional().`type`(activeAddonsType)
+        .name("theme").`type`().optional().`type`(themeType)
+        .name("activePlugins").`type`().optional().`type`(activePluginsType)
+        .name("activeGMPlugins").`type`().optional().`type`(activeGMPluginsType)
+        .name("activeExperiment").`type`().optional().`type`(activeExperimentType)
         .name("persona").`type`().optional().stringType()
       .endRecord()
 
@@ -299,14 +298,22 @@ case class Longitudinal() extends DerivedStream {
         .name("clientId").`type`().stringType().noDefault()
         .name("os").`type`().stringType().noDefault()
         .name("creationTimestamp").`type`().array().items().doubleType().noDefault()
-        .name("application").`type`().optional().array().items(applicationType)
         .name("build").`type`().optional().array().items(buildType)
         .name("partner").`type`().optional().array().items(partnerType)
         .name("profile").`type`().optional().array().items(profileType)
         .name("settings").`type`().optional().array().items(settingsType)
         .name("system").`type`().optional().array().items(systemType)
-        .name("addons").`type`().optional().array().items(addonsType)
+        // TODO: make these all top-level fields after updating https://github.com/mozilla-services/data-pipeline/blob/master/heka/sandbox/decoders/extract_telemetry_dimensions.lua
+        //.name("activeAddons").`type`().optional().array().items(activeAddonsType)
+        //.name("theme").`type`().optional().array().items(themeType)
+        //.name("activePlugins").`type`().optional().array().items(activePluginsType)
+        //.name("activeGMPlugins").`type`().optional().array().items(activeGMPluginsType)
+        //.name("activeExperiment").`type`().optional().array().items(activeExperimentType)
+        //.name("persona").`type`().optional().stringType()
+        .name("addons").`type`().optional().array.items(addonsType)
         .name("info").`type`().optional().array().items(infoType)
+        .name("threadHangActivity").`type`().optional().array().items().map().values(histogramType)
+        .name("threadHangStacks").`type`().optional().array().items().map().values().map().values(histogramType)
     Histograms.definitions.foreach{ case (key, value) =>
       value match {
         case h: FlagHistogram if h.keyed == false =>
@@ -375,6 +382,30 @@ case class Longitudinal() extends DerivedStream {
         // A count histograms is represented with a scalar.
         vectorizeHistogram_(name, payloads, h => h.values.getOrElse("0", 0L), 0L)
 
+      case definition: TimeHistogram =>
+        val buckets = definition.ranges
+        def flatten(h: RawHistogram): GenericData.Record = {
+          val values = Array.fill(buckets.length){0L}
+          h.values.foreach{ case (key, value) =>
+            val index = buckets.indexOf(key.toInt)
+            values(index) = value
+          }
+
+          val record = new GenericData.Record(histogramSchema)
+          record.put("values", values)
+          record.put("sum", h.sum)
+          record
+        }
+
+        val empty = {
+          val record = new GenericData.Record(histogramSchema)
+          record.put("values", Array.fill(buckets.length){0L})
+          record.put("sum", 0)
+          record
+        }
+
+        vectorizeHistogram_(name, payloads, flatten, empty)
+
       case definition: EnumeratedHistogram =>
         // An enumerated histograms is represented with an array of N integers.
         def flatten(h: RawHistogram): Array[Long] = {
@@ -436,7 +467,8 @@ case class Longitudinal() extends DerivedStream {
           record
         }
 
-        vectorizeHistogram_(name, payloads, flatten, empty)
+        val x: Array[GenericData.Record] = vectorizeHistogram_(name, payloads, flatten, empty)
+        x.asInstanceOf[Array[Any]]
     }
 
   private def JSON2Avro(jsonField: String,
@@ -475,7 +507,7 @@ case class Longitudinal() extends DerivedStream {
 
     val histogramSchema = schema.getField("GC_MS").schema().getTypes()(1).getElementType()
 
-    for ((key, value) <- validKeys) {
+    for ((key, definition) <- validKeys) {
       val keyedHistogramsList = histogramsList.map{x =>
         x.get(key) match {
           case Some(x) => x
@@ -484,10 +516,10 @@ case class Longitudinal() extends DerivedStream {
       }
 
       val uniqueLabels = keyedHistogramsList.flatMap(x => x.keys).distinct.toSet
-      val vector = vectorizeHistogram(key, value, keyedHistogramsList, histogramSchema)
+      val vector = vectorizeHistogram(key, definition, keyedHistogramsList, histogramSchema)
       val vectorized = for {
         label <- uniqueLabels
-        vector = vectorizeHistogram(label, value, keyedHistogramsList, histogramSchema)
+        vector = vectorizeHistogram(label, definition, keyedHistogramsList, histogramSchema)
       } yield (label, vector)
 
       root.set(key, vectorized.toMap.asJava)
@@ -511,9 +543,56 @@ case class Longitudinal() extends DerivedStream {
 
     val histogramSchema = schema.getField("GC_MS").schema().getTypes()(1).getElementType()
 
-    for ((key, value) <- validKeys) {
-      root.set(key, vectorizeHistogram(key, value, histogramsList, histogramSchema))
+    for ((key, definition) <- validKeys) {
+      root.set(key, vectorizeHistogram(key, definition, histogramsList, histogramSchema))
     }
+  }
+
+  private def threadHangStats2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
+    implicit val formats = DefaultFormats
+
+    var ranges = Array[Long]()
+    val threadHangStatsList = payloads.map{ case (payload) =>
+      val json = payload.getOrElse("payload.threadHangStats", return).asInstanceOf[String]
+      val threadHangStats = parse(json).extract[Array[Map[String, JValue]]]
+      for (thread <- threadHangStats) {
+        ranges = thread.getOrElse("activity", return).extract[Map[String, Any]].getOrElse("ranges", return).asInstanceOf[List[BigInt]].map(x => x.toLong).toArray
+      }
+      threadHangStats
+    }
+
+    val definition = TimeHistogram(ranges)
+    val histogramSchema = schema.getField("GC_MS").schema().getTypes()(1).getElementType()
+
+    val threadHangActivityList = threadHangStatsList.map{ case (threadHangStats) =>
+      val threadHangActivity = threadHangStats.map{ case thread =>
+        val name = thread.getOrElse("name", return).extract[String]
+        val activity = thread.getOrElse("activity", return).extract[RawHistogram]
+        val histograms = vectorizeHistogram("activity", definition, List(Map("activity" -> activity)), histogramSchema)
+        val histogram = histograms(0).asInstanceOf[GenericData.Record]
+        (name -> histogram)
+      }.toMap
+      mapAsJavaMap(threadHangActivity)
+    } toArray
+
+    val threadHangStackMapList = threadHangStatsList.map{ case (threadHangStats) =>
+      val threadHangStackMap = threadHangStats.map{ case thread =>
+        val name = thread.getOrElse("name", return).extract[String]
+        val hangs = thread.getOrElse("hangs", return).extract[Array[Map[String, JValue]]]
+        val stackMapping = hangs.map{ case (hang) =>
+          val stack = hang.getOrElse("stack", return).extract[Array[String]];
+          val histogramEntry = hang.getOrElse("histogram", return).extract[RawHistogram];
+          val histograms = vectorizeHistogram("hang", definition, List(Map("hang" -> histogramEntry)), histogramSchema)
+          val histogram = histograms(0).asInstanceOf[GenericData.Record]
+          (stack.mkString("\n") -> histogram)
+        }.toMap
+        (name -> mapAsJavaMap(stackMapping))
+      }.toMap
+      mapAsJavaMap(threadHangStackMap)
+    } toArray
+
+    root.set("threadHangActivity", threadHangActivityList)
+    root.set("threadHangStacks", threadHangStackMapList)
   }
 
   private def buildRecord(history: Iterable[Map[String, Any]], schema: Schema): Option[GenericRecord] = {
@@ -535,19 +614,25 @@ case class Longitudinal() extends DerivedStream {
       .set("creationTimestamp", sorted.map(x => x("creationTimestamp").asInstanceOf[Double]).toArray)
 
     try {
-      JSON2Avro("application", "application", sorted, root, schema)
       JSON2Avro("environment.build", "build", sorted, root, schema)
       JSON2Avro("environment.partner", "partner", sorted, root, schema)
       JSON2Avro("environment.profile", "profile", sorted, root, schema)
       JSON2Avro("environment.settings", "settings", sorted, root, schema)
       JSON2Avro("environment.system", "system", sorted, root, schema)
+      // TODO: make these all top-level fields after updating https://github.com/mozilla-services/data-pipeline/blob/master/heka/sandbox/decoders/extract_telemetry_dimensions.lua
+      //JSON2Avro("environment.addons.activeAddons", "activeAddons", sorted, root, schema)
+      //JSON2Avro("environment.addons.theme", "theme", sorted, root, schema)
+      //JSON2Avro("environment.addons.activePlugins", "activePlugins", sorted, root, schema)
+      //JSON2Avro("environment.addons.activeGMPlugins", "activeGMPlugins", sorted, root, schema)
+      //JSON2Avro("environment.addons.activeExperiment", "activeExperiment", sorted, root, schema)
+      //JSON2Avro("environment.addons.persona", "persona", sorted, root, schema)
       JSON2Avro("environment.addons", "addons", sorted, root, schema)
       JSON2Avro("payload.info", "info", sorted, root, schema)
       keyedHistograms2Avro(sorted, root, schema)
       histograms2Avro(sorted, root, schema)
+      threadHangStats2Avro(sorted, root, schema)
     } catch {
-      //case _ : Throwable =>
-      case e : Throwable =>
+      case _ : Throwable =>
         // Ignore buggy clients
         return None
     }

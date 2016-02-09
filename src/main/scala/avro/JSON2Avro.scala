@@ -70,6 +70,13 @@ object JSON2Avro{
       None
   }
 
+  def parseDouble(Schema: Schema, json: JValue): Option[Double] = json match {
+    case JDouble(value) =>
+      Some(value.toDouble)
+    case _ =>
+      None
+  }
+
   def parseBoolean(Schema: Schema, json: JValue): Option[Boolean] = json match {
     case JBool(value) =>
       Some(value)
@@ -98,6 +105,9 @@ object JSON2Avro{
 
     case Schema.Type.LONG =>
       parseLong(schema, json)
+
+    case Schema.Type.DOUBLE =>
+      parseDouble(schema, json)
 
     case Schema.Type.BOOLEAN =>
       parseBoolean(schema, json)
