@@ -143,7 +143,6 @@ case class Longitudinal() extends DerivedStream {
       .fields
       .name("clientId").`type`().stringType().noDefault()
       .name("os").`type`().stringType().noDefault()
-      .name("creationTimestamp").`type`().array().items().doubleType().noDefault()
       .name("system").`type`().optional().array().items(systemType)
       .name("build").`type`().optional().array().items(buildType)
       .name("settings").`type`().optional().array().items(settingsType)
@@ -365,30 +364,32 @@ case class Longitudinal() extends DerivedStream {
   }
 
   private def buildRecord(history: Iterable[Map[String, Any]], schema: Schema): Option[GenericRecord] = {
+    // De-dupe records
     val unique = history.foldLeft((List[Map[String, Any]](), Set[String]()))(
       { case ((submissions, seen), current) =>
-        val docId = current.getOrElse("documentId", throw new Exception("Missing documentId")).asInstanceOf[String]
+        // Ignore clients with records that have a missing documentId
+        val docId = current.getOrElse("documentId", return None).asInstanceOf[String]
         if (seen.contains(docId))
           (submissions, seen)
         else
           (current :: submissions, seen + docId)
       })._1
 
-    // Sort records by timestamp
-    val sorted = unique
-      .sortWith((x, y) => {
-                 (x("creationTimestamp"), y("creationTimestamp")) match {
-                   case (creationX: Double, creationY: Double) =>
-                     creationX < creationY
-                   case _ =>
-                     return None  // Ignore 'unsortable' client
-                 }
-               })
+    // Sort records by subsessionStartDate and profileSubsessionCounter
+    val sorted = unique.map{x =>
+      val info = parse(x.getOrElse("payload.info", return None).asInstanceOf[String])
+      (info \ "subsessionStartDate", info \ "profileSubsessionCounter") match {
+        case (JString(startDate), JInt(counter)) =>
+          (x, (startDate, counter.toInt))
+        case _ =>
+          return None // Ignore 'unsortable' clients
+      }
+    }.sortBy( x => (x._2._1, x._2._2))
+    .map(x => x._1)
 
     val root = new GenericRecordBuilder(schema)
       .set("clientId", sorted(0)("clientId").asInstanceOf[String])
       .set("os", sorted(0)("os").asInstanceOf[String])
-      .set("creationTimestamp", sorted.map(x => x("creationTimestamp").asInstanceOf[Double]).toArray)
 
     try {
       JSON2Avro("environment.system", "system", sorted, root, schema)

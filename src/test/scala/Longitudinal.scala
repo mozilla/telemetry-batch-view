@@ -13,7 +13,7 @@ import telemetry.parquet.ParquetFile
 
 class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
   def fixture = {
-    def createPayload(creationTimestamp: Double): Map[String, Any] = {
+    def createPayload(idx: Int): Map[String, Any] = {
       // TODO: Use Scala Map and List directly?
       val histograms =
         ("TELEMETRY_TEST_FLAG" ->
@@ -65,6 +65,9 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
                 ("RAM" -> 1024) ~ ("description" -> "FOO") ~ ("deviceID" -> "1") ~ ("vendorID" -> "Vendor") ~ ("GPUActive" -> true),
                 ("RAM" -> 1024) ~ ("description" -> "FOO") ~ ("deviceID" -> "1") ~ ("vendorID" -> "Vendor") ~ ("GPUActive" -> true)
               )))
+      val info =
+        ("subsessionStartDate" -> "2015-12-09T00:00:00.0-08:00") ~
+        ("profileSubsessionCounter" -> (1000 - idx))
 
       val settings =
         ("e10sEnabled" -> true)
@@ -73,13 +76,14 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
         ("buildId" -> "20160101001100")
 
       Map("clientId" -> "26c9d181-b95b-4af5-bb35-84ebf0da795d",
-          "creationTimestamp" -> creationTimestamp,
           "os" -> "Windows_NT",
+          "documentId" -> idx.toString,
           "payload.histograms" -> compact(render(histograms)),
           "payload.keyedHistograms" -> compact(render(keyedHistograms)),
           "environment.system" -> compact(render(system)),
           "environment.settings" -> compact(render(settings)),
-          "environment.build" -> compact(render(build)))
+          "environment.build" -> compact(render(build)),
+          "payload.info" -> compact(render(info)))
     }
 
     new {
@@ -89,8 +93,8 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
       private val buildRecord = PrivateMethod[Option[GenericRecord]]('buildRecord)
 
       val schema = view invokePrivate buildSchema()
-      val payloads = for (i <- 1 to 10) yield createPayload(i.toDouble) + ("documentId" -> i.toString)
-      val dupes = for (i <- 1 to 10) yield createPayload(i.toDouble) + ("documentId" -> "1")
+      val payloads = for (i <- 1 to 10) yield createPayload(i)
+      val dupes = for (i <- 1 to 10) yield createPayload(1)
       val record = (view invokePrivate buildRecord((payloads ++ dupes).toIterable, schema)).get
     }
   }
@@ -130,12 +134,6 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
    "Top-level measurements" must "be converted correctly" in {
     assert(fixture.record.get("clientId") == fixture.payloads(0)("clientId"))
     assert(fixture.record.get("os") == fixture.payloads(0)("os"))
-  }
-
-  "creationTimestamp" must "be converted correctly" in {
-    val creationTimestamps = fixture.record.get("creationTimestamp").asInstanceOf[Array[Double]].toList
-    assert(creationTimestamps.length == fixture.payloads.length)
-    creationTimestamps.zip(fixture.payloads.map(_("creationTimestamp"))).foreach{case (x, y) => assert(x == y)}
   }
 
   "Flag histograms" must "be converted correctly" in {
