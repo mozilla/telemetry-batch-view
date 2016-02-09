@@ -25,7 +25,7 @@ case class Longitudinal() extends DerivedStream {
   override def filterPrefix: String = "telemetry/4/main/*/*/*/*/*/42/"
 
   override def transform(sc: SparkContext, bucket: Bucket, summaries: RDD[ObjectSummary], from: String, to: String) {
-    val prefix = s"generationDate=$to"
+    val prefix = s"generation_date=$to"
 
     if (!isS3PrefixEmpty(prefix)) {
       println(s"Warning: prefix $prefix already exists on S3!")
@@ -365,9 +365,17 @@ case class Longitudinal() extends DerivedStream {
   }
 
   private def buildRecord(history: Iterable[Map[String, Any]], schema: Schema): Option[GenericRecord] = {
+    val unique = history.foldLeft((List[Map[String, Any]](), Set[String]()))(
+      { case ((submissions, seen), current) =>
+        val docId = current.getOrElse("documentId", throw new Exception("Missing documentId")).asInstanceOf[String]
+        if (seen.contains(docId))
+          (submissions, seen)
+        else
+          (current :: submissions, seen + docId)
+      })._1
+
     // Sort records by timestamp
-    val sorted = history
-      .toList
+    val sorted = unique
       .sortWith((x, y) => {
                  (x("creationTimestamp"), y("creationTimestamp")) match {
                    case (creationX: Double, creationY: Double) =>

@@ -89,8 +89,9 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
       private val buildRecord = PrivateMethod[Option[GenericRecord]]('buildRecord)
 
       val schema = view invokePrivate buildSchema()
-      val payloads = for (i <- 1 to 10) yield createPayload(i.toDouble)
-      val record = (view invokePrivate buildRecord(payloads.toIterable, schema)).get
+      val payloads = for (i <- 1 to 10) yield createPayload(i.toDouble) + ("documentId" -> i.toString)
+      val dupes = for (i <- 1 to 10) yield createPayload(i.toDouble) + ("documentId" -> "1")
+      val record = (view invokePrivate buildRecord((payloads ++ dupes).toIterable, schema)).get
     }
   }
 
