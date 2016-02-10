@@ -625,25 +625,6 @@ case class Longitudinal() extends DerivedStream {
     root.set("threadHangStacks", threadHangStackMapList)
   }
 
-  private def simpleMeasurements2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
-    implicit val formats = DefaultFormats
-
-    // we need to handle simple measures differently because there are simpleMesaurements that have sub-values,
-    // which we'll ignore since they're not used much - only integer simpleMeasurements are included
-    val simpleMeasurements = payloads.map{ case (x) =>
-      val json = x.getOrElse("payload.simpleMeasurements", return).asInstanceOf[String]
-      val measurementEntry = parse(json).extract[Map[String, JValue]]
-      val measurements = measurementEntry.flatMap{ case (key, entry) =>
-        entry match {
-          case value : JInt => Some(key -> value.num.toLong)
-          case _ => None
-        }
-      }.toMap
-      mapAsJavaMap(measurements)
-    }.toArray
-    root.set("simpleMeasurements", simpleMeasurements)
-  }
-
   private def buildRecord(history: Iterable[Map[String, Any]], schema: Schema): Option[GenericRecord] = {
     // De-dupe records
     val unique = history.foldLeft((List[Map[String, Any]](), Set[String]()))(
