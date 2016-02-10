@@ -10,9 +10,12 @@ case class Partitioning(dimensions: List[Dimension]) {
 
     path(0) + "/" + dimensions
       .zip(path.drop(1))
-      .map(x => x._1.fieldName + "S3=" + x._2)
+      .map(x => snakify(x._1.fieldName + "S3=") + x._2)
       .mkString("/")
   }
+
+  private def snakify(name : String) =
+    name.replaceAll("([A-Z]+)([A-Z][a-z])", "$1_$2").replaceAll("([a-z\\d])([A-Z])", "$1_$2").toLowerCase
 }
 
 case class Dimension(fieldName: String)

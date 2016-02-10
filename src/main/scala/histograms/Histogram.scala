@@ -5,7 +5,7 @@ import org.json4s.jackson.JsonMethods._
 import scala.collection.mutable.{Map => MMap}
 import scala.io.Source
 
-case class RawHistogram(values: Map[String, Long], sum: Long)
+case class RawHistogram(values: Map[String, Int], sum: Long)
 
 sealed abstract class HistogramDefinition
 case class FlagHistogram(keyed: Boolean) extends HistogramDefinition
@@ -14,6 +14,7 @@ case class CountHistogram(keyed: Boolean) extends HistogramDefinition
 case class EnumeratedHistogram(keyed: Boolean, nValues: Int) extends HistogramDefinition
 case class LinearHistogram(keyed: Boolean, low: Int, high: Int, nBuckets: Int) extends HistogramDefinition
 case class ExponentialHistogram(keyed: Boolean, low: Int, high: Int, nBuckets: Int) extends HistogramDefinition
+case class TimeHistogram(ranges: Array[Int]) extends HistogramDefinition
 
 object Histograms {
   val definitions = {
