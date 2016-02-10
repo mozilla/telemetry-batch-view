@@ -270,7 +270,7 @@ case class Longitudinal() extends DerivedStream {
       .map().values().record("activeGMPlugin").fields()
         .name("version").`type`().optional().stringType()
         .name("userDisabled").`type`().optional().booleanType()
-        .name("applyBackgroundUpdates").`type`().optional().booleanType()
+        .name("applyBackgroundUpdates").`type`().optional().intType()
       .endRecord()
     val activeExperimentType = SchemaBuilder
       .record("activeExperiment").fields()
@@ -653,7 +653,6 @@ case class Longitudinal() extends DerivedStream {
       simpleMeasurements2Avro(sorted, root, schema)
     } catch {
       case e : Throwable =>
-        e.printStackTrace()
         // Ignore buggy clients
         return None
     }

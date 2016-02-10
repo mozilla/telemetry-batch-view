@@ -114,13 +114,20 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
           ("theme" ->
             ("id"          -> "{972ce4c6-7e08-4474-a285-3208198ce6fd}") ~
             ("description" -> "The default theme.")) ~
-          ("activePlugins" ->
-            List(
-              ("blocklisted" -> false) ~
-              ("description" -> "Adobe PDF Plug-In For Firefox and Netscape 10.1.16") ~
-              ("clicktoplay" -> true)
-            )
-          )
+          ("activePlugins" -> List(
+            ("blocklisted" -> false) ~
+            ("description" -> "Adobe PDF Plug-In For Firefox and Netscape 10.1.16") ~
+            ("clicktoplay" -> true)
+          )) ~
+          ("activeGMPlugins" -> Map(
+            "gmp-eme-adobe" ->
+              ("applyBackgroundUpdates" -> 1) ~ ("userDisabled" -> false),
+            "gmp-gmpopenh264" ->
+              ("applyBackgroundUpdates" -> 1) ~ ("userDisabled" -> false)
+          )) ~
+          ("activeExperiment" ->
+            ("id" -> "A") ~
+            ("branch" -> "B"))
 
       val info =
         ("addons"          -> "%7B972ce4c6-7e08-4474-a285-3208198ce6fd%7D:46.0a2,jid0-edalmuivkozlouyij0lpdx548bc%40jetpack:1.16.14,%40statuser:0.1.4,loop%40mozilla.org:0.1,firefox%40getpocket.com:46.0a2") ~
@@ -245,6 +252,33 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     records.foreach{ x =>
       val record = x.asInstanceOf[Record]
       assert(record.get("description") == "The default theme.")
+    }
+  }
+
+  "environment.addons.activePlugins" must "be converted correctly" in {
+    val records = fixture.record.get("activePlugins").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Array[Any]](0).asInstanceOf[Record]
+      assert(record.get("blocklisted") == false)
+    }
+  }
+
+  "environment.addons.activeGMPlugins" must "be converted correctly" in {
+    val records = fixture.record.get("activeGMPlugins").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[java.util.Map[String, Any]]
+      assert(record.get("gmp-eme-adobe").asInstanceOf[Record].get("applyBackgroundUpdates") == 1)
+    }
+  }
+
+  "environment.addons.activeExperiment" must "be converted correctly" in {
+    val records = fixture.record.get("activeExperiment").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Record]
+      assert(record.get("id") == "A")
     }
   }
 
