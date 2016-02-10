@@ -13,7 +13,7 @@ import telemetry.parquet.ParquetFile
 
 class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
   def fixture = {
-    def createPayload(creationTimestamp: Double): Map[String, Any] = {
+    def createPayload(idx: Int): Map[String, Any] = {
       // TODO: Use Scala Map and List directly?
       val histograms =
         ("TELEMETRY_TEST_FLAG" ->
@@ -105,6 +105,9 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
                 ("RAM" -> 1024) ~ ("description" -> "FOO1") ~ ("deviceID" -> "1") ~ ("vendorID" -> "Vendor1") ~ ("GPUActive" -> true),
                 ("RAM" -> 1024) ~ ("description" -> "FOO2") ~ ("deviceID" -> "2") ~ ("vendorID" -> "Vendor2") ~ ("GPUActive" -> false)
               )))
+      val info =
+        ("subsessionStartDate" -> "2015-12-09T00:00:00.0-08:00") ~
+        ("profileSubsessionCounter" -> (1000 - idx))
 
       val addons =
           ("activeAddons" -> Map(
@@ -137,7 +140,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
 
       Map("clientId"                   -> "26c9d181-b95b-4af5-bb35-84ebf0da795d",
           "os"                         -> "Windows_NT",
-          "creationTimestamp"          -> creationTimestamp,
+          "documentId" -> idx.toString,
           "payload.info"               -> compact(render(info)),
           "payload.simpleMeasurements" -> compact(render(simpleMeasurements)),
           "payload.histograms"         -> compact(render(histograms)),
@@ -158,8 +161,9 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
       private val buildRecord = PrivateMethod[Option[GenericRecord]]('buildRecord)
 
       val schema = view invokePrivate buildSchema()
-      val payloads = for (i <- 1 to 10) yield createPayload(i.toDouble)
-      val record = (view invokePrivate buildRecord(payloads.toIterable, schema)).get
+      val payloads = for (i <- 1 to 10) yield createPayload(i)
+      val dupes = for (i <- 1 to 10) yield createPayload(1)
+      val record = (view invokePrivate buildRecord((payloads ++ dupes).toIterable, schema)).get
     }
   }
 
@@ -287,12 +291,6 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     assert(fixture.record.get("os") == fixture.payloads(0)("os"))
   }
 
-  "creationTimestamp" must "be converted correctly" in {
-    val creationTimestamps = fixture.record.get("creationTimestamp").asInstanceOf[Array[Double]].toList
-    assert(creationTimestamps.length == fixture.payloads.length)
-    creationTimestamps.zip(fixture.payloads.map(_("creationTimestamp"))).foreach{case (x, y) => assert(x == y)}
-  }
-
   "payload.simpleMeasurements" must "be converted correctly" in {
     val values = fixture.record.get("simpleMeasurements").asInstanceOf[Array[Any]].toList
     assert(values.length == fixture.payloads.length)
@@ -311,7 +309,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
   "Boolean histograms" must "be converted correctly" in {
     val histograms = fixture.record.get("DEVTOOLS_TOOLBOX_OPENED_BOOLEAN").asInstanceOf[Array[Any]].toList
     assert(histograms.length == fixture.payloads.length)
-    histograms.foreach(h => assert(h.asInstanceOf[Array[Long]].toList == List(42L, 0L)))
+    histograms.foreach(h => assert(h.asInstanceOf[Array[Int]].toList == List(42L, 0)))
   }
 
   "Count histograms" must "be converted correctly" in {
@@ -324,7 +322,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     val histograms = fixture.record.get("PLACES_BACKUPS_DAYSFROMLAST").asInstanceOf[Array[Any]]
     assert(histograms.length == fixture.payloads.length)
     for(h <- histograms) {
-      val histogram = h.asInstanceOf[Array[Long]]
+      val histogram = h.asInstanceOf[Array[Int]]
       assert(histogram.length == 16)
 
       for((value, key) <- histogram.zipWithIndex) {
@@ -340,11 +338,11 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     val records = fixture.record.get("GC_BUDGET_MS").asInstanceOf[Array[Any]].toList
     assert(records.length == fixture.payloads.length)
 
-    val reference = Array(0L, 42L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L)
+    val reference = Array(0, 42, 0, 0, 0, 0, 0, 0, 0, 0)
     records.foreach{ x =>
       val tmp = x.asInstanceOf[Record]
       assert(tmp.get("sum") == 42L)
-      assert(tmp.get("values").asInstanceOf[Array[Long]].toList == reference.toList)
+      assert(tmp.get("values").asInstanceOf[Array[Int]].toList == reference.toList)
     }
   }
 
@@ -358,7 +356,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     records.foreach{ x =>
       val tmp = x.asInstanceOf[Record]
       assert(tmp.get("sum") == 42L)
-      assert(tmp.get("values").asInstanceOf[Array[Long]].toList == reference.toList)
+      assert(tmp.get("values").asInstanceOf[Array[Int]].toList == reference.toList)
     }
   }
 
@@ -368,7 +366,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     assert(records.size == 1)
 
     for(h <- records("foo")) {
-      val histogram = h.asInstanceOf[Array[Long]]
+      val histogram = h.asInstanceOf[Array[Int]]
       assert(histogram.length == 16)
 
       for((value, key) <- histogram.zipWithIndex) {
@@ -403,7 +401,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     histograms.foreach{ x =>
       val tmp = x.asInstanceOf[Record]
       assert(tmp.get("sum") == 42L)
-      assert(tmp.get("values").asInstanceOf[Array[Long]].toList == reference.toList)
+      assert(tmp.get("values").asInstanceOf[Array[Int]].toList == reference.toList)
     }
   }
 }

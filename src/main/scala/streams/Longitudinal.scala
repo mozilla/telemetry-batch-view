@@ -25,7 +25,7 @@ case class Longitudinal() extends DerivedStream {
   override def filterPrefix: String = "telemetry/4/main/*/*/*/*/*/42/"
 
   override def transform(sc: SparkContext, bucket: Bucket, summaries: RDD[ObjectSummary], from: String, to: String) {
-    val prefix = s"generationDate=$to"
+    val prefix = s"generation_date=$to"
 
     if (!isS3PrefixEmpty(prefix)) {
       println(s"Warning: prefix $prefix already exists on S3!")
@@ -311,17 +311,17 @@ case class Longitudinal() extends DerivedStream {
         case h: FlagHistogram =>
           builder.name(key).`type`().optional().map().values().array().items().booleanType()
         case h: CountHistogram if h.keyed == false =>
-          builder.name(key).`type`().optional().array().items().longType()
+          builder.name(key).`type`().optional().array().items().intType()
         case h: CountHistogram =>
-          builder.name(key).`type`().optional().map().values().array().items().longType()
+          builder.name(key).`type`().optional().map().values().array().items().intType()
         case h: EnumeratedHistogram if h.keyed == false =>
-          builder.name(key).`type`().optional().array().items().array().items().longType()
+          builder.name(key).`type`().optional().array().items().array().items().intType()
         case h: EnumeratedHistogram =>
-          builder.name(key).`type`().optional().map().values().array().items().array().items().longType()
+          builder.name(key).`type`().optional().map().values().array().items().array().items().intType()
         case h: BooleanHistogram if h.keyed == false =>
-          builder.name(key).`type`().optional().array().items().array().items().longType()
+          builder.name(key).`type`().optional().array().items().array().items().intType()
         case h: BooleanHistogram =>
-          builder.name(key).`type`().optional().map().values().array().items().array().items().longType()
+          builder.name(key).`type`().optional().map().values().array().items().array().items().intType()
         case h: LinearHistogram if h.keyed == false =>
           builder.name(key).`type`().optional().array().items(histogramType)
         case h: LinearHistogram =>
@@ -365,12 +365,12 @@ case class Longitudinal() extends DerivedStream {
 
       case _: BooleanHistogram =>
         // A boolean histograms is represented with an array of two integers.
-        def flatten(h: RawHistogram): Array[Long] = Array(h.values.getOrElse("0", 0L), h.values.getOrElse("1", 0L))
-        vectorizeHistogram_(name, payloads, flatten, Array(0L, 0L))
+        def flatten(h: RawHistogram): Array[Int] = Array(h.values.getOrElse("0", 0), h.values.getOrElse("1", 0))
+        vectorizeHistogram_(name, payloads, flatten, Array(0, 0))
 
       case _: CountHistogram =>
         // A count histograms is represented with a scalar.
-        vectorizeHistogram_(name, payloads, h => h.values.getOrElse("0", 0L), 0L)
+        vectorizeHistogram_(name, payloads, h => h.values.getOrElse("0", 0), 0)
 
       case definition: TimeHistogram =>
         val buckets = definition.ranges
@@ -398,15 +398,15 @@ case class Longitudinal() extends DerivedStream {
 
       case definition: EnumeratedHistogram =>
         // An enumerated histograms is represented with an array of N integers.
-        def flatten(h: RawHistogram): Array[Long] = {
-          val values = Array.fill(definition.nValues + 1){0L}
+        def flatten(h: RawHistogram): Array[Int] = {
+          val values = Array.fill(definition.nValues + 1){0}
           h.values.foreach{case (key, value) =>
             values(key.toInt) = value
           }
           values
         }
 
-        vectorizeHistogram_(name, payloads, flatten, Array.fill(definition.nValues + 1){0L})
+        vectorizeHistogram_(name, payloads, flatten, Array.fill(definition.nValues + 1){0})
 
       case definition: LinearHistogram =>
         // Exponential and linear histograms are represented with a struct containing
@@ -414,7 +414,7 @@ case class Longitudinal() extends DerivedStream {
         val buckets = Histograms.linearBuckets(definition.low, definition.high, definition.nBuckets)
 
         def flatten(h: RawHistogram): GenericData.Record = {
-          val values = Array.fill(buckets.length){0L}
+          val values = Array.fill(buckets.length){0}
           h.values.foreach{ case (key, value) =>
             val index = buckets.indexOf(key.toInt)
             values(index) = value
@@ -428,7 +428,7 @@ case class Longitudinal() extends DerivedStream {
 
         val empty = {
           val record = new GenericData.Record(histogramSchema)
-          record.put("values", Array.fill(buckets.length){0L})
+          record.put("values", Array.fill(buckets.length){0})
           record.put("sum", 0)
           record
         }
@@ -438,7 +438,7 @@ case class Longitudinal() extends DerivedStream {
       case definition: ExponentialHistogram =>
         val buckets = Histograms.exponentialBuckets(definition.low, definition.high, definition.nBuckets)
         def flatten(h: RawHistogram): GenericData.Record = {
-          val values = Array.fill(buckets.length){0L}
+          val values = Array.fill(buckets.length){0}
           h.values.foreach{ case (key, value) =>
             val index = buckets.indexOf(key.toInt)
             values(index) = value
@@ -452,7 +452,7 @@ case class Longitudinal() extends DerivedStream {
 
         val empty = {
           val record = new GenericData.Record(histogramSchema)
-          record.put("values", Array.fill(buckets.length){0L})
+          record.put("values", Array.fill(buckets.length){0})
           record.put("sum", 0)
           record
         }
@@ -617,22 +617,32 @@ case class Longitudinal() extends DerivedStream {
   }
 
   private def buildRecord(history: Iterable[Map[String, Any]], schema: Schema): Option[GenericRecord] = {
-    // Sort records by timestamp
-    val sorted = history
-      .toList
-      .sortWith((x, y) => {
-                 (x("creationTimestamp"), y("creationTimestamp")) match {
-                   case (creationX: Double, creationY: Double) =>
-                     creationX < creationY
-                   case _ =>
-                     return None  // Ignore 'unsortable' client
-                 }
-               })
+    // De-dupe records
+    val unique = history.foldLeft((List[Map[String, Any]](), Set[String]()))(
+      { case ((submissions, seen), current) =>
+        // Ignore clients with records that have a missing documentId
+        val docId = current.getOrElse("documentId", return None).asInstanceOf[String]
+        if (seen.contains(docId))
+          (submissions, seen)
+        else
+          (current :: submissions, seen + docId)
+      })._1
+
+    // Sort records by subsessionStartDate and profileSubsessionCounter
+    val sorted = unique.map{x =>
+      val info = parse(x.getOrElse("payload.info", return None).asInstanceOf[String])
+      (info \ "subsessionStartDate", info \ "profileSubsessionCounter") match {
+        case (JString(startDate), JInt(counter)) =>
+          (x, (startDate, counter.toInt))
+        case _ =>
+          return None // Ignore 'unsortable' clients
+      }
+    }.sortBy( x => (x._2._1, x._2._2))
+    .map(x => x._1)
 
     val root = new GenericRecordBuilder(schema)
       .set("clientId", sorted(0)("clientId").asInstanceOf[String])
       .set("os", sorted(0)("os").asInstanceOf[String])
-      .set("creationTimestamp", sorted.map(x => x("creationTimestamp").asInstanceOf[Double]).toArray)
 
     try {
       JSON2Avro("environment.build",    List[String](),           "build", sorted, root, schema)
