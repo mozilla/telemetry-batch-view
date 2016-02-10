@@ -135,6 +135,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
 
       Map("clientId"                   -> "26c9d181-b95b-4af5-bb35-84ebf0da795d",
           "os"                         -> "Windows_NT",
+          "normalizedChannel"          -> "aurora",
           "documentId"                 -> idx.toString,
           "payload.info"               -> compact(render(info)),
           "payload.simpleMeasurements" -> compact(render(simpleMeasurements)),
@@ -275,14 +276,15 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
    "Top-level measurements" must "be converted correctly" in {
     assert(fixture.record.get("clientId") == fixture.payloads(0)("clientId"))
     assert(fixture.record.get("os") == fixture.payloads(0)("os"))
+    assert(fixture.record.get("normalizedChannel") == fixture.payloads(0)("normalizedChannel"))
   }
 
   "payload.simpleMeasurements" must "be converted correctly" in {
-    val values = fixture.record.get("simpleMeasurements").asInstanceOf[Array[Any]].toList
-    assert(values.length == fixture.payloads.length)
-    values.foreach{ x =>
-      val entry = x.asInstanceOf[java.util.Map[String, Any]]
-      assert(entry.get("uptime").asInstanceOf[Long] == 18)
+    val records = fixture.record.get("simpleMeasurements").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Record]
+      assert(record.get("uptime").asInstanceOf[Long] == 18)
     }
   }
 

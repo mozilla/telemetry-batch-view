@@ -278,6 +278,35 @@ case class Longitudinal() extends DerivedStream {
         .name("branch").`type`().optional().stringType()
       .endRecord()
 
+    val simpleMeasurementsType = SchemaBuilder
+      .record("simpleMeasurements").fields()
+        .name("activeTicks").`type`().optional().longType()
+        .name("profileBeforeChange").`type`().optional().longType()
+        .name("selectProfile").`type`().optional().longType()
+        .name("sessionRestoreInit").`type`().optional().longType()
+        .name("firstLoadURI").`type`().optional().longType()
+        .name("uptime").`type`().optional().longType()
+        .name("totalTime").`type`().optional().longType()
+        .name("savedPings").`type`().optional().longType()
+        .name("start").`type`().optional().longType()
+        .name("startupSessionRestoreReadBytes").`type`().optional().longType()
+        .name("pingsOverdue").`type`().optional().longType()
+        .name("firstPaint").`type`().optional().longType()
+        .name("sessionRestored").`type`().optional().longType()
+        .name("startupWindowVisibleWriteBytes").`type`().optional().longType()
+        .name("startupCrashDetectionEnd").`type`().optional().longType()
+        .name("startupSessionRestoreWriteBytes").`type`().optional().longType()
+        .name("startupCrashDetectionBegin").`type`().optional().longType()
+        .name("startupInterrupted").`type`().optional().longType()
+        .name("afterProfileLocked").`type`().optional().longType()
+        .name("delayedStartupStarted").`type`().optional().longType()
+        .name("main").`type`().optional().longType()
+        .name("createTopLevelWindow").`type`().optional().longType()
+        .name("sessionRestoreInitialized").`type`().optional().longType()
+        .name("maximalNumberOfConcurrentThreads").`type`().optional().longType()
+        .name("startupWindowVisibleReadBytes").`type`().optional().longType()
+      .endRecord()
+
     val histogramType = SchemaBuilder
       .record("Histogram").fields()
         .name("values").`type`().array().items().intType().noDefault()
@@ -288,6 +317,7 @@ case class Longitudinal() extends DerivedStream {
       .record("Submission").fields()
         .name("clientId").`type`().stringType().noDefault()
         .name("os").`type`().stringType().noDefault()
+        .name("normalizedChannel").`type`().stringType().noDefault()
         .name("build").`type`().optional().array().items(buildType)
         .name("partner").`type`().optional().array().items(partnerType)
         .name("profile").`type`().optional().array().items(profileType)
@@ -298,10 +328,10 @@ case class Longitudinal() extends DerivedStream {
         .name("activePlugins").`type`().optional().array().items(activePluginsType)
         .name("activeGMPlugins").`type`().optional().array().items(activeGMPluginsType)
         .name("activeExperiment").`type`().optional().array().items(activeExperimentType)
-        .name("persona").`type`().optional().stringType()
+        .name("persona").`type`().optional().array().items().stringType()
         .name("threadHangActivity").`type`().optional().array().items().map().values(histogramType)
         .name("threadHangStacks").`type`().optional().array().items().map().values().map().values(histogramType)
-        .name("simpleMeasurements").`type`().optional().array().items().map().values().longType()
+        .name("simpleMeasurements").`type`().optional().array().items(simpleMeasurementsType)
     Histograms.definitions.foreach{ case (key, value) =>
       value match {
         case h: FlagHistogram if h.keyed == false =>
@@ -618,45 +648,54 @@ case class Longitudinal() extends DerivedStream {
     // De-dupe records
     val unique = history.foldLeft((List[Map[String, Any]](), Set[String]()))(
       { case ((submissions, seen), current) =>
-        // Ignore clients with records that have a missing documentId
-        val docId = current.getOrElse("documentId", return None).asInstanceOf[String]
-        if (seen.contains(docId))
-          (submissions, seen)
-        else
-          (current :: submissions, seen + docId)
+        current.get("documentId") match {
+          case Some(docId) =>
+            if (seen.contains(docId.asInstanceOf[String]))
+              (submissions, seen) // Duplicate documentId, ignore it
+            else
+              (current :: submissions, seen + docId.asInstanceOf[String]) // new documentId, add it to the list
+          case None =>
+            (submissions, seen) // Ignore clients with records that have a missing documentId
+        }
       })._1
 
     // Sort records by subsessionStartDate and profileSubsessionCounter
     val sorted = unique.flatMap{x =>
-      val info = parse(x.getOrElse("payload.info", return None).asInstanceOf[String])
-      (info \ "subsessionStartDate", info \ "profileSubsessionCounter") match {
-        case (JString(startDate), JInt(counter)) =>
-          Some(x, (startDate, counter.toInt))
-        case _ =>
-          None // Ignore 'unsortable' clients
+      x.get("payload.info") match {
+        case Some(body) =>
+          val info = parse(body.asInstanceOf[String])
+          (info \ "subsessionStartDate", info \ "profileSubsessionCounter") match {
+            case (JString(startDate), JInt(counter)) =>
+              Some(x, (startDate, counter.toInt))
+            case _ =>
+              None // Ignore 'unsortable' clients
+          }
+        case None =>
+          None // Ignore clients with missing info object in payload
       }
     }.sortBy( x => (x._2._1, x._2._2)).map(x => x._1)
 
     val root = new GenericRecordBuilder(schema)
       .set("clientId", sorted(0)("clientId").asInstanceOf[String])
       .set("os", sorted(0)("os").asInstanceOf[String])
+      .set("normalizedChannel", sorted(0)("normalizedChannel").asInstanceOf[String])
 
     try {
-      JSON2Avro("environment.build",    List[String](),           "build", sorted, root, schema)
-      JSON2Avro("environment.partner",  List[String](),           "partner", sorted, root, schema)
-      JSON2Avro("environment.profile",  List[String](),           "profile", sorted, root, schema)
-      JSON2Avro("environment.settings", List[String](),           "settings", sorted, root, schema)
-      JSON2Avro("environment.system",   List[String](),           "system", sorted, root, schema)
-      JSON2Avro("environment.addons",   List("activeAddons"),     "activeAddons", sorted, root, schema)
-      JSON2Avro("environment.addons",   List("theme"),            "theme", sorted, root, schema)
-      JSON2Avro("environment.addons",   List("activePlugins"),    "activePlugins", sorted, root, schema)
-      JSON2Avro("environment.addons",   List("activeGMPlugins"),  "activeGMPlugins", sorted, root, schema)
-      JSON2Avro("environment.addons",   List("activeExperiment"), "activeExperiment", sorted, root, schema)
-      JSON2Avro("environment.addons",   List("persona"),          "persona", sorted, root, schema)
+      JSON2Avro("environment.build",          List[String](),           "build", sorted, root, schema)
+      JSON2Avro("environment.partner",        List[String](),           "partner", sorted, root, schema)
+      JSON2Avro("environment.profile",        List[String](),           "profile", sorted, root, schema)
+      JSON2Avro("environment.settings",       List[String](),           "settings", sorted, root, schema)
+      JSON2Avro("environment.system",         List[String](),           "system", sorted, root, schema)
+      JSON2Avro("environment.addons",         List("activeAddons"),     "activeAddons", sorted, root, schema)
+      JSON2Avro("environment.addons",         List("theme"),            "theme", sorted, root, schema)
+      JSON2Avro("environment.addons",         List("activePlugins"),    "activePlugins", sorted, root, schema)
+      JSON2Avro("environment.addons",         List("activeGMPlugins"),  "activeGMPlugins", sorted, root, schema)
+      JSON2Avro("environment.addons",         List("activeExperiment"), "activeExperiment", sorted, root, schema)
+      JSON2Avro("environment.addons",         List("persona"),          "persona", sorted, root, schema)
+      JSON2Avro("payload.simpleMeasurements", List[String](),           "simpleMeasurements", sorted, root, schema)
       keyedHistograms2Avro(sorted, root, schema)
       histograms2Avro(sorted, root, schema)
       threadHangStats2Avro(sorted, root, schema)
-      simpleMeasurements2Avro(sorted, root, schema)
     } catch {
       case e : Throwable =>
         // Ignore buggy clients
