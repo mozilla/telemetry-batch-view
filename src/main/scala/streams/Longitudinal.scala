@@ -280,7 +280,7 @@ case class Longitudinal() extends DerivedStream {
 
     val histogramType = SchemaBuilder
       .record("Histogram").fields()
-        .name("values").`type`().array().items().longType().noDefault()
+        .name("values").`type`().array().items().intType().noDefault()
         .name("sum").`type`().longType().noDefault()
       .endRecord()
 
@@ -288,7 +288,6 @@ case class Longitudinal() extends DerivedStream {
       .record("Submission").fields()
         .name("clientId").`type`().stringType().noDefault()
         .name("os").`type`().stringType().noDefault()
-        .name("creationTimestamp").`type`().array().items().doubleType().noDefault()
         .name("build").`type`().optional().array().items(buildType)
         .name("partner").`type`().optional().array().items(partnerType)
         .name("profile").`type`().optional().array().items(profileType)
@@ -300,7 +299,6 @@ case class Longitudinal() extends DerivedStream {
         .name("activeGMPlugins").`type`().optional().array().items(activeGMPluginsType)
         .name("activeExperiment").`type`().optional().array().items(activeExperimentType)
         .name("persona").`type`().optional().stringType()
-        .name("info").`type`().optional().array().items(infoType)
         .name("threadHangActivity").`type`().optional().array().items().map().values(histogramType)
         .name("threadHangStacks").`type`().optional().array().items().map().values().map().values(histogramType)
         .name("simpleMeasurements").`type`().optional().array().items().map().values().longType()
@@ -375,7 +373,7 @@ case class Longitudinal() extends DerivedStream {
       case definition: TimeHistogram =>
         val buckets = definition.ranges
         def flatten(h: RawHistogram): GenericData.Record = {
-          val values = Array.fill(buckets.length){0L}
+          val values = Array.fill(buckets.length){0}
           h.values.foreach{ case (key, value) =>
             val index = buckets.indexOf(key.toInt)
             values(index) = value
@@ -389,7 +387,7 @@ case class Longitudinal() extends DerivedStream {
 
         val empty = {
           val record = new GenericData.Record(histogramSchema)
-          record.put("values", Array.fill(buckets.length){0L})
+          record.put("values", Array.fill(buckets.length){0})
           record.put("sum", 0)
           record
         }
@@ -545,7 +543,7 @@ case class Longitudinal() extends DerivedStream {
   private def threadHangStats2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
     implicit val formats = DefaultFormats
 
-    var ranges = Array[Long]()
+    var ranges = Array[Int]()
     val threadHangStatsList = payloads.map{ case (payload) =>
       val json = payload.getOrElse("payload.threadHangStats", return).asInstanceOf[String]
       val body = parse(json)
@@ -558,7 +556,7 @@ case class Longitudinal() extends DerivedStream {
       for (thread <- threadHangStats) {
         ranges = thread.getOrElse("activity", return).extract[Map[String, Any]]
                        .getOrElse("ranges", return).asInstanceOf[List[BigInt]]
-                       .map(x => x.toLong).toArray
+                       .map(x => x.toInt).toArray
       }
       threadHangStats
     }
@@ -629,16 +627,15 @@ case class Longitudinal() extends DerivedStream {
       })._1
 
     // Sort records by subsessionStartDate and profileSubsessionCounter
-    val sorted = unique.map{x =>
+    val sorted = unique.flatMap{x =>
       val info = parse(x.getOrElse("payload.info", return None).asInstanceOf[String])
       (info \ "subsessionStartDate", info \ "profileSubsessionCounter") match {
         case (JString(startDate), JInt(counter)) =>
-          (x, (startDate, counter.toInt))
+          Some(x, (startDate, counter.toInt))
         case _ =>
-          return None // Ignore 'unsortable' clients
+          None // Ignore 'unsortable' clients
       }
-    }.sortBy( x => (x._2._1, x._2._2))
-    .map(x => x._1)
+    }.sortBy( x => (x._2._1, x._2._2)).map(x => x._1)
 
     val root = new GenericRecordBuilder(schema)
       .set("clientId", sorted(0)("clientId").asInstanceOf[String])
@@ -656,7 +653,6 @@ case class Longitudinal() extends DerivedStream {
       JSON2Avro("environment.addons",   List("activeGMPlugins"),  "activeGMPlugins", sorted, root, schema)
       JSON2Avro("environment.addons",   List("activeExperiment"), "activeExperiment", sorted, root, schema)
       JSON2Avro("environment.addons",   List("persona"),          "persona", sorted, root, schema)
-      JSON2Avro("payload.info",         List[String](),           "info", sorted, root, schema)
       keyedHistograms2Avro(sorted, root, schema)
       histograms2Avro(sorted, root, schema)
       threadHangStats2Avro(sorted, root, schema)
