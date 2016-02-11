@@ -18,72 +18,136 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
       val histograms =
         ("TELEMETRY_TEST_FLAG" ->
            ("values" -> ("0" -> 1) ~ ("1" -> 0)) ~
-           ("sum" -> 0)) ~
+           ("sum"    -> 0)) ~
         ("DEVTOOLS_TOOLBOX_OPENED_BOOLEAN" ->
            ("values" -> ("0" -> 42)) ~
-           ("sum" -> 0)) ~
+           ("sum"    -> 0)) ~
         ("UPDATE_CHECK_NO_UPDATE_EXTERNAL" ->
            ("values" -> ("0" -> 42)) ~
-           ("sum" -> 42)) ~
+           ("sum"    -> 42)) ~
         ("PLACES_BACKUPS_DAYSFROMLAST" ->
            ("values" -> ("1" -> 42)) ~
-           ("sum" -> 42)) ~
+           ("sum"    -> 42)) ~
         ("GC_BUDGET_MS" ->
            ("values" -> ("1" -> 42)) ~
-           ("sum" -> 42)) ~
+           ("sum"    -> 42)) ~
         ("GC_MS" ->
            ("values" -> ("1" -> 42)) ~
-           ("sum" -> 42))
+           ("sum"    -> 42))
 
       val keyedHistograms =
         ("ADDON_SHIM_USAGE" ->
            ("foo" ->
              ("values" -> ("1" -> 42)) ~
-             ("sum" -> 42))) ~
+             ("sum"    -> 42))) ~
         ("SEARCH_COUNTS" ->
            ("foo" ->
               ("values" -> ("0" -> 42)) ~
-              ("sum" -> 42))) ~
+              ("sum"    -> 42))) ~
         ("DEVTOOLS_PERFTOOLS_SELECTED_VIEW_MS" ->
            ("foo" ->
               ("values" -> ("1" -> 42)) ~
-              ("sum" -> 42)))
+              ("sum"    -> 42)))
+
+      val simpleMeasurements =
+        ("uptime" -> 18L)
+
+      val threadHangStats =
+        List(
+          ("name" -> "Gecko") ~
+          ("activity" ->
+            ("ranges" -> List(0, 1, 3, 7, 15)) ~
+            ("values" -> ("0" -> 1) ~ ("1" -> 0)) ~
+            ("sum"    -> 0)) ~
+          ("hangs" ->
+            List(
+              ("histogram" ->
+                ("ranges" -> List(0, 1, 3, 7, 15)) ~
+                ("values" -> ("0" -> 1) ~ ("1" -> 0)) ~
+                ("sum"    -> 0)) ~
+              ("stack" -> List("A", "B", "C"))
+            ))
+        )
+
+      val build =
+        ("applicationId"   -> "{ec8030f7-c20a-464f-9b0e-13a3a9e97384}") ~
+        ("applicationName" -> "Firefox") ~
+        ("architecture"    -> "x86-64") ~
+        ("buildId"         -> "20160101001100") ~
+        ("version"         -> "46.0a2") ~
+        ("vendor"          -> "Mozilla") ~
+        ("platformVersion" -> "46.0a2") ~
+        ("xpcomAbi"        -> "x86_64-gcc3")
+
+      val partner =
+        ("partnerNames" -> List("A", "B", "C"))
+
+      val profile =
+        ("creationDate" -> 1453615112) ~
+        ("resetDate"    -> 1454615112)
+
+      val settings =
+        ("e10sEnabled" -> true) ~
+        ("userPrefs" -> Map("browser.download.lastDir" -> "/home/anthony/Desktop"))
 
       val system =
-          ("cpu" ->
-             ("count" -> 4)) ~
+          ("cpu" -> ("count" -> 4)) ~
           ("os" ->
-             ("name" -> "Windows_NT") ~
-             ("locale" -> "en_US") ~
+             ("name"    -> "Windows_NT") ~
+             ("locale"  -> "en_US") ~
              ("version" -> "6.1")) ~
           ("hdd" ->
              ("profile" ->
                 ("revision" -> "12345") ~
-                ("model" -> "SAMSUNG X"))) ~
+                ("model"    -> "SAMSUNG X"))) ~
           ("gfx" ->
              ("adapters" -> List(
-                ("RAM" -> 1024) ~ ("description" -> "FOO") ~ ("deviceID" -> "1") ~ ("vendorID" -> "Vendor") ~ ("GPUActive" -> true),
-                ("RAM" -> 1024) ~ ("description" -> "FOO") ~ ("deviceID" -> "1") ~ ("vendorID" -> "Vendor") ~ ("GPUActive" -> true)
+                ("RAM" -> 1024) ~ ("description" -> "FOO1") ~ ("deviceID" -> "1") ~ ("vendorID" -> "Vendor1") ~ ("GPUActive" -> true),
+                ("RAM" -> 1024) ~ ("description" -> "FOO2") ~ ("deviceID" -> "2") ~ ("vendorID" -> "Vendor2") ~ ("GPUActive" -> false)
               )))
+
+      val addons =
+          ("activeAddons" -> Map(
+            "jid0-edalmuivkozlouyij0lpdx548bc@jetpack" ->
+              ("name" -> "geckoprofiler") ~ ("version" -> "1.16.14")
+          )) ~
+          ("theme" ->
+            ("id"          -> "{972ce4c6-7e08-4474-a285-3208198ce6fd}") ~
+            ("description" -> "The default theme.")) ~
+          ("activePlugins" -> List(
+            ("blocklisted" -> false) ~
+            ("description" -> "Adobe PDF Plug-In For Firefox and Netscape 10.1.16") ~
+            ("clicktoplay" -> true)
+          )) ~
+          ("activeGMPlugins" -> Map(
+            "gmp-eme-adobe" ->
+              ("applyBackgroundUpdates" -> 1) ~ ("userDisabled" -> false),
+            "gmp-gmpopenh264" ->
+              ("applyBackgroundUpdates" -> 1) ~ ("userDisabled" -> false)
+          )) ~
+          ("activeExperiment" ->
+            ("id" -> "A") ~
+            ("branch" -> "B"))
+
       val info =
         ("subsessionStartDate" -> "2015-12-09T00:00:00.0-08:00") ~
         ("profileSubsessionCounter" -> (1000 - idx))
 
-      val settings =
-        ("e10sEnabled" -> true)
-
-      val build =
-        ("buildId" -> "20160101001100")
-
-      Map("clientId" -> "26c9d181-b95b-4af5-bb35-84ebf0da795d",
-          "os" -> "Windows_NT",
-          "documentId" -> idx.toString,
-          "payload.histograms" -> compact(render(histograms)),
-          "payload.keyedHistograms" -> compact(render(keyedHistograms)),
-          "environment.system" -> compact(render(system)),
-          "environment.settings" -> compact(render(settings)),
-          "environment.build" -> compact(render(build)),
-          "payload.info" -> compact(render(info)))
+      Map("clientId"                   -> "26c9d181-b95b-4af5-bb35-84ebf0da795d",
+          "os"                         -> "Windows_NT",
+          "normalizedChannel"          -> "aurora",
+          "documentId"                 -> idx.toString,
+          "payload.info"               -> compact(render(info)),
+          "payload.simpleMeasurements" -> compact(render(simpleMeasurements)),
+          "payload.histograms"         -> compact(render(histograms)),
+          "payload.keyedHistograms"    -> compact(render(keyedHistograms)),
+          "payload.threadHangStats"    -> compact(render(threadHangStats)),
+          "environment.build"          -> compact(render(build)),
+          "environment.partner"        -> compact(render(partner)),
+          "environment.profile"        -> compact(render(profile)),
+          "environment.settings"       -> compact(render(settings)),
+          "environment.system"         -> compact(render(system)),
+          "environment.addons"         -> compact(render(addons)))
     }
 
     new {
@@ -99,9 +163,51 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     }
   }
 
-
   "Records" can "be serialized" in {
     ParquetFile.serialize(List(fixture.record).toIterator, fixture.schema)
+  }
+
+  "payload.threadHangStats" must "be converted correctly" in {
+    val activity = fixture.record.get("threadHangActivity").asInstanceOf[Array[java.util.Map[String, GenericData.Record]]].toList
+    assert(activity.length == fixture.payloads.length)
+    activity.foreach{ x =>
+      val histogram = x.get("Gecko").get("values")
+      assert(histogram.asInstanceOf[Array[Int]].toList == List(1, 0, 0, 0, 0))
+    }
+
+    val hangs = fixture.record.get("threadHangStacks").asInstanceOf[Array[java.util.Map[String, java.util.Map[String, GenericData.Record]]]].toList
+    assert(hangs.length == fixture.payloads.length)
+    hangs.foreach{ x =>
+      val histogram = x.get("Gecko").get("A\nB\nC").get("values")
+      assert(histogram.asInstanceOf[Array[Int]].toList == List(1, 0, 0, 0, 0))
+    }
+  }
+
+  "environment.build" must "be converted correctly" in {
+    val records = fixture.record.get("build").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Record]
+      assert(record.get("buildId") == "20160101001100")
+    }
+  }
+
+  "environment.profile" must "be converted correctly" in {
+    val records = fixture.record.get("profile").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Record]
+      assert(record.get("creationDate") == 1453615112)
+    }
+  }
+
+  "environment.partner" must "be converted correctly" in {
+    val records = fixture.record.get("partner").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Record]
+      assert(record.get("partnerNames").asInstanceOf[Array[Any]].toList == List("A", "B", "C"))
+    }
   }
 
   "environment.system" must "be converted correctly" in {
@@ -122,18 +228,64 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     }
   }
 
-  "environment.build" must "be converted correctly" in {
-    val records = fixture.record.get("build").asInstanceOf[Array[Any]].toList
+  "environment.addons.activeAddons" must "be converted correctly" in {
+    val records = fixture.record.get("activeAddons").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[java.util.Map[String, Any]]
+      assert(record.get("jid0-edalmuivkozlouyij0lpdx548bc@jetpack").asInstanceOf[Record].get("name") == "geckoprofiler")
+    }
+  }
+
+  "environment.addons.theme" must "be converted correctly" in {
+    val records = fixture.record.get("theme").asInstanceOf[Array[Any]].toList
     assert(records.length == fixture.payloads.length)
     records.foreach{ x =>
       val record = x.asInstanceOf[Record]
-      assert(record.get("buildId") == "20160101001100")
+      assert(record.get("description") == "The default theme.")
+    }
+  }
+
+  "environment.addons.activePlugins" must "be converted correctly" in {
+    val records = fixture.record.get("activePlugins").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Array[Any]](0).asInstanceOf[Record]
+      assert(record.get("blocklisted") == false)
+    }
+  }
+
+  "environment.addons.activeGMPlugins" must "be converted correctly" in {
+    val records = fixture.record.get("activeGMPlugins").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[java.util.Map[String, Any]]
+      assert(record.get("gmp-eme-adobe").asInstanceOf[Record].get("applyBackgroundUpdates") == 1)
+    }
+  }
+
+  "environment.addons.activeExperiment" must "be converted correctly" in {
+    val records = fixture.record.get("activeExperiment").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Record]
+      assert(record.get("id") == "A")
     }
   }
 
    "Top-level measurements" must "be converted correctly" in {
     assert(fixture.record.get("clientId") == fixture.payloads(0)("clientId"))
     assert(fixture.record.get("os") == fixture.payloads(0)("os"))
+    assert(fixture.record.get("normalizedChannel") == fixture.payloads(0)("normalizedChannel"))
+  }
+
+  "payload.simpleMeasurements" must "be converted correctly" in {
+    val records = fixture.record.get("simpleMeasurements").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Record]
+      assert(record.get("uptime").asInstanceOf[Long] == 18)
+    }
   }
 
   "Flag histograms" must "be converted correctly" in {
@@ -145,7 +297,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
   "Boolean histograms" must "be converted correctly" in {
     val histograms = fixture.record.get("DEVTOOLS_TOOLBOX_OPENED_BOOLEAN").asInstanceOf[Array[Any]].toList
     assert(histograms.length == fixture.payloads.length)
-    histograms.foreach(h => assert(h.asInstanceOf[Array[Int]].toList == List(42L, 0)))
+    histograms.foreach(h => assert(h.asInstanceOf[Array[Int]].toList == List(42, 0)))
   }
 
   "Count histograms" must "be converted correctly" in {
