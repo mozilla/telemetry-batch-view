@@ -25,6 +25,8 @@ case class Churn(prefix: String) extends DerivedStream{
     // Don't compute the expensive stuff until we need it. We may skip a record
     // due to missing simple fields.
     lazy val profile = parse(fields.getOrElse("environment.profile", "{}").asInstanceOf[String])
+    lazy val partner = parse(fields.getOrElse("environment.partner", "{}").asInstanceOf[String])
+    lazy val info = parse(fields.getOrElse("payload.info", "{}").asInstanceOf[String])
     lazy val histograms = parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
 
     lazy val weaveConfigured = booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
@@ -70,7 +72,19 @@ case class Churn(prefix: String) extends DerivedStream{
         }),
         "syncConfigured" -> weaveConfigured.getOrElse(null),
         "syncCountDesktop" -> weaveDesktop.getOrElse(null),
-        "syncCountMobile" -> weaveMobile.getOrElse(null)
+        "syncCountMobile" -> weaveMobile.getOrElse(null),
+        "subsessionStartDate" -> ((info \ "subsessionStartDate") match {
+          case JString(x) => x
+          case _ => null
+        }),
+        "subsessionLength" -> ((info \ "subsessionLength") match {
+          case x: JInt => x.num.toLong
+          case _ => null
+        }),
+        "distributionId" -> ((partner \ "distributionId") match {
+          case JString(x) => x
+          case _ => null
+        })
       )
     Some(map)
   }
@@ -128,7 +142,11 @@ case class Churn(prefix: String) extends DerivedStream{
       .name("channel").`type`().stringType().noDefault() // appUpdateChannel
       .name("normalizedChannel").`type`().stringType().noDefault() // normalizedChannel
       .name("country").`type`().stringType().noDefault() // geoCountry
+      // TODO: use proper 'date' type for date columns.
       .name("profileCreationDate").`type`().nullable().intType().noDefault() // environment/profile/creationDate
+      .name("subsessionStartDate").`type`().nullable().stringType().noDefault() // info/subsessionStartDate
+      .name("subsessionLength").`type`().nullable().intType().noDefault() // info/subsessionLength
+      .name("distributionId").`type`().nullable().stringType().noDefault() // environment/partner/distributionId
       .name("submissionDate").`type`().stringType().noDefault()
       // See bug 1232050
       .name("syncConfigured").`type`().nullable().booleanType().noDefault() // WEAVE_CONFIGURED
