@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/mozilla/telemetry-batch-view.svg?branch=master)](https://travis-ci.org/mozilla/telemetry-batch-view)
+
 # telemetry-batch-view
 
 This is a Scala "framework" to build derived datasets, aka batch views, of [Telemetry](https://wiki.mozilla.org/Telemetry) data.
