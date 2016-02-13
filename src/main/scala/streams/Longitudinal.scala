@@ -4,14 +4,14 @@ import awscala._
 import awscala.s3._
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericData, GenericRecord, GenericRecordBuilder}
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, Partitioner}
 import org.apache.spark.rdd.RDD
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
-import scala.math.max
+import scala.math.{max, abs}
 import scala.reflect.ClassTag
 import telemetry.{DerivedStream, ObjectSummary}
 import telemetry.DerivedStream.s3
@@ -19,6 +19,64 @@ import telemetry.avro
 import telemetry.heka.{HekaFrame, Message}
 import telemetry.histograms._
 import telemetry.parquet.ParquetFile
+
+private class ClientIdPartitioner(size: Int) extends Partitioner{
+  def numPartitions: Int = size
+  def getPartition(key: Any): Int = key match {
+    case (clientId: String, startDate: String, counter: Int) => abs(clientId.hashCode) % size
+    case _ => throw new Exception("Invalid key")
+  }
+}
+
+class ClientIterator(it: Iterator[Tuple2[String, Map[String, Any]]], maxHistorySize: Int = 1000) extends Iterator[List[Map[String, Any]]]{
+  // Less than 1% of clients in a sampled dataset over a 3 months period has more than 1000 fragments.
+  var buffer = ListBuffer[Map[String, Any]]()
+  var currentKey =
+    if (it.hasNext) {
+      val (key, value) = it.next()
+      buffer += value
+      key
+    } else {
+      null
+    }
+
+  override def hasNext() = !buffer.isEmpty
+
+  override def next(): List[Map[String, Any]] = {
+    while (it.hasNext) {
+      val (key, value) = it.next()
+
+      if (key == currentKey && buffer.size == maxHistorySize) {
+        // Trim long histories
+        val result = buffer.toList
+        buffer.clear
+
+        // Fast forward to next client
+        while (it.hasNext) {
+          val (k, _) = it.next()
+          if (k != currentKey) {
+            buffer += value
+            return result
+          }
+        }
+
+        return result
+      } else if (key == currentKey){
+        buffer += value
+      } else {
+        val result = buffer.toList
+        buffer.clear
+        buffer += value
+        currentKey = key
+        return result
+      }
+    }
+
+    val result = buffer.toList
+    buffer.clear
+    result
+  }
+}
 
 case class Longitudinal() extends DerivedStream {
   override def streamName: String = "telemetry-release"
@@ -32,6 +90,8 @@ case class Longitudinal() extends DerivedStream {
       return
     }
 
+    // Sort submissions in descending order
+    implicit val ordering = Ordering[Tuple3[String, String, Int]].reverse
     val groups = DerivedStream.groupBySize(summaries.collect().toIterator)
     val clientMessages = sc.parallelize(groups, groups.size)
       .flatMap(x => x)
@@ -40,19 +100,25 @@ case class Longitudinal() extends DerivedStream {
         for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey()))  yield message }
       .flatMap{ case message =>
         val fields = HekaFrame.fields(message)
-        val clientId = fields.get("clientId")
-
-        clientId match {
-          case Some(client: String) => List((client, fields))
-          case _ => Nil
-        }}
-      .groupByKey()
-      .coalesce(max((0.5*sc.defaultParallelism).toInt, 1), true)  // see https://issues.apache.org/jira/browse/PARQUET-222
+        for {
+          clientId <- fields.get("clientId").asInstanceOf[Option[String]]
+          json <- fields.get("payload.info").asInstanceOf[Option[String]]
+          info = parse(json)
+          tmp = for {
+            JString(startDate) <- info \ "subsessionStartDate"
+            JInt(counter) <- info \ "profileSubsessionCounter"
+          } yield (startDate, counter)
+          (startDate, counter) <- tmp.headOption
+        } yield ((clientId, startDate, counter.toInt), fields)
+      }
+      .repartitionAndSortWithinPartitions(new ClientIdPartitioner(320))
+      .map{case (key, value) => (key._1, value)}
 
     val partitionCounts = clientMessages
-      .values
-      .mapPartitions{ case clientIterator =>
+      .mapPartitions{ case it =>
+        val clientIterator = new ClientIterator(it)
         val schema = buildSchema
+
         val allRecords = for {
           client <- clientIterator
           record = buildRecord(client, schema)
@@ -70,7 +136,9 @@ case class Longitudinal() extends DerivedStream {
                                      }).flatten
 
         while(!records.isEmpty) {
-          val localFile = ParquetFile.serialize(records, schema)
+          // Block size has to be increased to pack more than a couple hundred profiles
+          // within the same row group.
+          val localFile = ParquetFile.serialize(records, schema, 8)
           uploadLocalFileToS3(localFile, prefix)
         }
 
@@ -628,7 +696,7 @@ case class Longitudinal() extends DerivedStream {
 
   private def buildRecord(history: Iterable[Map[String, Any]], schema: Schema): Option[GenericRecord] = {
     // De-dupe records
-    val unique = history.foldLeft((List[Map[String, Any]](), Set[String]()))(
+    val sorted = history.foldLeft((List[Map[String, Any]](), Set[String]()))(
       { case ((submissions, seen), current) =>
         current.get("documentId") match {
           case Some(docId) =>
@@ -639,23 +707,7 @@ case class Longitudinal() extends DerivedStream {
           case None =>
             (submissions, seen) // Ignore clients with records that have a missing documentId
         }
-      })._1
-
-    // Sort records by subsessionStartDate and profileSubsessionCounter
-    val sorted = unique.flatMap{x =>
-      x.get("payload.info") match {
-        case Some(body) =>
-          val info = parse(body.asInstanceOf[String])
-          (info \ "subsessionStartDate", info \ "profileSubsessionCounter") match {
-            case (JString(startDate), JInt(counter)) =>
-              Some(x, (startDate, counter.toInt))
-            case _ =>
-              None // Ignore 'unsortable' clients
-          }
-        case None =>
-          None // Ignore clients with missing info object in payload
-      }
-    }.sortBy( x => (x._2._1, x._2._2)).map(x => x._1)
+      })._1.reverse  // preserve ordering
 
     val root = new GenericRecordBuilder(schema)
       .set("clientId", sorted(0)("clientId").asInstanceOf[String])
