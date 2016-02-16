@@ -318,6 +318,8 @@ case class Longitudinal() extends DerivedStream {
         .name("clientId").`type`().stringType().noDefault()
         .name("os").`type`().stringType().noDefault()
         .name("normalizedChannel").`type`().stringType().noDefault()
+        .name("geoCountry").`type`().optional().array().items().stringType()
+        .name("geoCity").`type`().optional().array().items().stringType()
         .name("info").`type`().optional().array().items(infoType)
         .name("build").`type`().optional().array().items(buildType)
         .name("partner").`type`().optional().array().items(partnerType)
@@ -626,6 +628,18 @@ case class Longitudinal() extends DerivedStream {
     root.set("threadHangStacks", threadHangStackMapList)
   }
 
+  private def geo2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
+    val countries = payloads.map{ case (x) =>
+      x.getOrElse("geoCountry", return).asInstanceOf[String]
+    }
+    val cities = payloads.map{ case (x) =>
+      x.getOrElse("geoCity", return).asInstanceOf[String]
+    }
+
+    root.set("geoCountry", countries.toArray)
+    root.set("geoCity", cities.toArray)
+  }
+
   private def buildRecord(history: Iterable[Map[String, Any]], schema: Schema): Option[GenericRecord] = {
     // De-dupe records
     val unique = history.foldLeft((List[Map[String, Any]](), Set[String]()))(
@@ -679,6 +693,7 @@ case class Longitudinal() extends DerivedStream {
       keyedHistograms2Avro(sorted, root, schema)
       histograms2Avro(sorted, root, schema)
       threadHangStats2Avro(sorted, root, schema)
+      geo2Avro(sorted, root, schema)
     } catch {
       case e : Throwable =>
         // Ignore buggy clients
