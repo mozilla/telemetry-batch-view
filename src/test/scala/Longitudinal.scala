@@ -137,6 +137,8 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
           "os"                         -> "Windows_NT",
           "normalizedChannel"          -> "aurora",
           "documentId"                 -> idx.toString,
+          "geoCountry"                 -> "US",
+          "geoCity"                    -> "New York",
           "payload.info"               -> compact(render(info)),
           "payload.simpleMeasurements" -> compact(render(simpleMeasurements)),
           "payload.histograms"         -> compact(render(histograms)),
@@ -180,6 +182,24 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     hangs.foreach{ x =>
       val histogram = x.get("Gecko").get("A\nB\nC").get("values")
       assert(histogram.asInstanceOf[Array[Int]].toList == List(1, 0, 0, 0, 0))
+    }
+  }
+
+  "geoCountry" must "be converted correctly" in {
+    val records = fixture.record.get("geoCountry").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[String]
+      assert(record == "US")
+    }
+  }
+
+  "geoCity" must "be converted correctly" in {
+    val records = fixture.record.get("geoCity").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[String]
+      assert(record == "New York")
     }
   }
 
