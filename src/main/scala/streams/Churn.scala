@@ -128,7 +128,7 @@ case class Churn(prefix: String) extends DerivedStream{
   
           while(!records.isEmpty) {
             val localFile = ParquetFile.serialize(records, schema)
-            uploadLocalFileToS3(localFile, s"$prefix/submissionDateS3=$currentDay")
+            uploadLocalFileToS3(localFile, s"$prefix/submission_date_s3=$currentDay")
           }
         }
     }
