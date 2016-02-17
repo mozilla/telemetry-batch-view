@@ -5,10 +5,10 @@ import org.json4s.jackson.JsonMethods._
 import scala.collection.JavaConverters._
 
 case class Partitioning(dimensions: List[Dimension]) {
-  def partitionPrefix(prefix: String): String = {
+  def partitionPrefix(prefix: String, version: String): String = {
     val path = prefix.split("/")
 
-    path(0) + "/" + dimensions
+    version + "/" + dimensions
       .zip(path.drop(1))
       .map(x => snakify(x._1.fieldName + "S3=") + x._2)
       .mkString("/")

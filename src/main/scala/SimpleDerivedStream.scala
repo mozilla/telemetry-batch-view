@@ -14,6 +14,8 @@ import telemetry.DerivedStream.s3
 import telemetry.parquet.ParquetFile
 
 abstract class SimpleDerivedStream extends DerivedStream {
+  protected val version = "v1"
+
   protected def buildSchema: Schema
 
   protected def buildRecord(message: Message, schema: Schema): Option[GenericRecord]
@@ -23,7 +25,7 @@ abstract class SimpleDerivedStream extends DerivedStream {
       .groupBy(summary => prefixGroup(summary.key))
       .flatMap(x => DerivedStream.groupBySize(x._2.toIterator).toIterator.zip(Iterator.continually{x._1}))
       .filter{ case (_, prefix) =>
-        val partitionedPrefix = partitioning.partitionPrefix(prefix)
+        val partitionedPrefix = partitioning.partitionPrefix(prefix, version)
         if (!isS3PrefixEmpty(partitionedPrefix)) {
           println(s"Warning: can't process $prefix as data already exists!")
           false
@@ -50,7 +52,7 @@ abstract class SimpleDerivedStream extends DerivedStream {
       record <- buildRecord(message, schema)
     } yield record
 
-    val partitionedPrefix = partitioning.partitionPrefix(prefix)
+    val partitionedPrefix = partitioning.partitionPrefix(prefix, version)
     while(!records.isEmpty) {
       val localFile = ParquetFile.serialize(records, schema)
       uploadLocalFileToS3(localFile, s"$partitionedPrefix")

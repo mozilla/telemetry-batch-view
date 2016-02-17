@@ -73,7 +73,7 @@ object DerivedStream {
 
     while (matcher.find()) {
       if (output.length > 0)
-        output.append("-");
+        output.append("_");
       output.append(matcher.group().toLowerCase);
     }
 
