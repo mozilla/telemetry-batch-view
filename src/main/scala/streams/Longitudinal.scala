@@ -114,6 +114,11 @@ case class Longitudinal() extends DerivedStream {
       .repartitionAndSortWithinPartitions(new ClientIdPartitioner(320))
       .map{case (key, value) => (key._1, value)}
 
+    /* One file per partition is generated at the end of the job. We want to have
+       few big files but at the same time we need a high enough degree of parallelism
+       to keep all workers busy. Since the cluster typically used for this job has
+       8 workers and 20 executors, 320 partitions provide a good compromise. */
+
     val partitionCounts = clientMessages
       .mapPartitions{ case it =>
         val clientIterator = new ClientIterator(it)
