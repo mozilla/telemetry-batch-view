@@ -29,3 +29,14 @@ then, submit the job with:
 ```
 spark-submit --master yarn-client --class telemetry.DerivedStream target/scala-2.10/telemetry-batch-view-X.Y.jar --from-date 20151028 --to-date 20151028 MyStream
 ``` 
+
+### Running the test suite
+```
+sbt test
+```
+
+### Caveats
+If you run into memory issues during compilation time issue the following command before running sbt:
+```
+export JAVA_OPTIONS="-Xss128M -Xmx2048M" 
+```
