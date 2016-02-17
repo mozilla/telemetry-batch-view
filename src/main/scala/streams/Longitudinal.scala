@@ -83,7 +83,7 @@ case class Longitudinal() extends DerivedStream {
   override def filterPrefix: String = "telemetry/4/main/*/*/*/*/*/42/"
 
   override def transform(sc: SparkContext, bucket: Bucket, summaries: RDD[ObjectSummary], from: String, to: String) {
-    val prefix = s"generation_date=$to"
+    val prefix = s"v$to"
 
     if (!isS3PrefixEmpty(prefix)) {
       println(s"Warning: prefix $prefix already exists on S3!")
