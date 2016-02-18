@@ -630,10 +630,10 @@ case class Longitudinal() extends DerivedStream {
 
   private def geo2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
     val countries = payloads.map{ case (x) =>
-      x.getOrElse("geoCountry", return).asInstanceOf[String]
+      x.getOrElse("geoCountry", "").asInstanceOf[String]
     }
     val cities = payloads.map{ case (x) =>
-      x.getOrElse("geoCity", return).asInstanceOf[String]
+      x.getOrElse("geoCity", "").asInstanceOf[String]
     }
 
     root.set("geoCountry", countries.toArray)
