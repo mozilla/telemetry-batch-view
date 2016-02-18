@@ -636,8 +636,11 @@ case class Longitudinal() extends DerivedStream {
       x.getOrElse("geoCity", "").asInstanceOf[String]
     }
 
-    root.set("geoCountry", countries.toArray)
-    root.set("geoCity", cities.toArray)
+    // only set the keys if there are valid country entries
+    if (countries.exists( country => country != "" )) {
+      root.set("geoCountry", countries.toArray)
+      root.set("geoCity", cities.toArray)
+    }
   }
 
   private def buildRecord(history: Iterable[Map[String, Any]], schema: Schema): Option[GenericRecord] = {
