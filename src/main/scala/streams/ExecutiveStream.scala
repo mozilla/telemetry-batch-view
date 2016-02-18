@@ -10,6 +10,8 @@ import telemetry.SimpleDerivedStream
 import telemetry.heka.{HekaFrame, Message}
 
 object ExecutiveStream extends SimpleDerivedStream{
+  override val version = "v3"
+
   def buildSchema: Schema = {
     SchemaBuilder
       .record("System").fields
