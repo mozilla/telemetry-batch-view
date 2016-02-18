@@ -66,7 +66,7 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
         } yield status
 
         (clientId, sampleId, id, branch) match {
-          case (Some(client: String), Some(sample: Double), JString(id), JString(branch)) if id == experimentId && (branch == "control" || branch == "experiment") && status.isEmpty =>
+          case (Some(client: String), Some(sample: Double), JString(id), JString(branch)) if id == experimentId && status.isEmpty =>
             List(((client, sample.toInt), fields))
           case _ => Nil
         }
