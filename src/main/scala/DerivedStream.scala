@@ -209,9 +209,14 @@ object DerivedStream {
           val exp = E10sExperiment("e10s-enabled-beta-20151214@experiments.mozilla.org", "telemetry/4/saved_session/Firefox/beta/44.0/")
           Some(from, exp)
 
-        case "e10s-enabled-beta-45" =>
+        case "e10s-enabled-beta-45-withaddons" =>
           val from = options.getOrElse('fromDate, "20160129")
           val exp = E10sExperiment("e10s-beta45-withaddons@experiments.mozilla.org", "telemetry/4/saved_session/Firefox/beta/45.0/")
+          Some(from, exp)
+
+        case "e10s-enabled-beta-45-withoutaddons" =>
+          val from = options.getOrElse('fromDate, "20160211")
+          val exp = E10sExperiment("e10s-beta45-withoutaddons@experiments.mozilla.org", "telemetry/4/saved_session/Firefox/beta/45.0/")
           Some(from, exp)
 
         case _ =>
