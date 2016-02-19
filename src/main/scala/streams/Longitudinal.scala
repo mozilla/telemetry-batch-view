@@ -636,9 +636,11 @@ case class Longitudinal() extends DerivedStream {
       x.getOrElse("geoCity", "").asInstanceOf[String]
     }
 
-    // only set the keys if there are valid country entries
+    // only set the keys if there are valid entries
     if (countries.exists( country => country != "" )) {
       root.set("geoCountry", countries.toArray)
+    }
+    if (cities.exists( city => city != "" )) {
       root.set("geoCity", cities.toArray)
     }
   }
