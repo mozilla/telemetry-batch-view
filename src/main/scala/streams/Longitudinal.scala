@@ -703,14 +703,19 @@ case class Longitudinal() extends DerivedStream {
 
   private def geo2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
     val countries = payloads.map{ case (x) =>
-      x.getOrElse("geoCountry", return).asInstanceOf[String]
+      x.getOrElse("geoCountry", "").asInstanceOf[String]
     }
     val cities = payloads.map{ case (x) =>
-      x.getOrElse("geoCity", return).asInstanceOf[String]
+      x.getOrElse("geoCity", "").asInstanceOf[String]
     }
 
-    root.set("geoCountry", countries.toArray)
-    root.set("geoCity", cities.toArray)
+    // only set the keys if there are valid entries
+    if (countries.exists( country => country != "" )) {
+      root.set("geoCountry", countries.toArray)
+    }
+    if (cities.exists( city => city != "" )) {
+      root.set("geoCity", cities.toArray)
+    }
   }
 
   private def buildRecord(history: Iterable[Map[String, Any]], schema: Schema): Option[GenericRecord] = {
