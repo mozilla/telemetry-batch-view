@@ -130,8 +130,10 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
             ("branch" -> "B"))
 
       val info =
-        ("subsessionStartDate" -> "2015-12-09T00:00:00.0-08:00") ~
-        ("profileSubsessionCounter" -> (1000 - idx))
+        ("subsessionStartDate"      -> "2015-12-09T00:00:00.0-08:00") ~
+        ("profileSubsessionCounter" -> (1000 - idx)) ~
+        ("flashVersion"             -> "19.0.0.226") ~
+        ("reason"                   -> "shutdown")
 
       Map("clientId"                   -> "26c9d181-b95b-4af5-bb35-84ebf0da795d",
           "os"                         -> "Windows_NT",
@@ -200,6 +202,22 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     records.foreach{ x =>
       val record = x.asInstanceOf[String]
       assert(record == "New York")
+    }
+  }
+
+  "payload.info" must "be converted correctly" in {
+    val flashRecords = fixture.record.get("flashVersion").asInstanceOf[Array[Any]].toList
+    assert(flashRecords.length == fixture.payloads.length)
+    flashRecords.foreach{ x =>
+      val record = x.asInstanceOf[String]
+      assert(record == "19.0.0.226")
+    }
+
+    val reasonRecords = fixture.record.get("reason").asInstanceOf[Array[Any]].toList
+    assert(reasonRecords.length == fixture.payloads.length)
+    reasonRecords.foreach{ x =>
+      val record = x.asInstanceOf[String]
+      assert(record == "shutdown")
     }
   }
 
