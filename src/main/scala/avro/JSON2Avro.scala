@@ -6,13 +6,14 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
+import telemetry.utils.Utils
 
 object JSON2Avro{
   def parseRecord(schema: Schema, json: JValue): Option[GenericData.Record] = {
     val record = new GenericData.Record(schema)
 
     for (field <- schema.getFields) {
-      val parsed = parse(field.schema, json \ field.name)
+      val parsed = parse(field.schema, json \ Utils.camelize(field.name))
       parsed match {
         case Some(value) =>
           record.put(field.name, value)
