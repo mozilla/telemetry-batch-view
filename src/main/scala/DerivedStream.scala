@@ -17,6 +17,7 @@ import org.json4s.jackson.JsonMethods._
 import scala.collection.JavaConverters._
 import scala.io.Source
 import telemetry.streams.{E10sExperiment, ExecutiveStream, Churn, Longitudinal}
+import telemetry.utils.Utils
 
 // key is the S3 filename, size is the object size in bytes.
 case class ObjectSummary(key: String, size: Long) // S3ObjectSummary can't be serialized
@@ -33,8 +34,8 @@ abstract class DerivedStream extends java.io.Serializable{
     val JString(metaPrefix) = metaSources \\ streamName \\ "metadata_prefix"
     metaPrefix
   }
-
-  protected val clsName = DerivedStream.uncamelize(this.getClass.getSimpleName.replace("$", ""))  // Use classname as stream prefix on S3
+  
+  protected val clsName = Utils.uncamelize(this.getClass.getSimpleName.replace("$", ""))  // Use classname as stream prefix on S3
   protected lazy val partitioning = {
     val Some(schemaObj) = metaBucket.get(s"$metaPrefix/schema.json")
     val schema = Source.fromInputStream(schemaObj.getObjectContent()).getLines().mkString("\n")
@@ -65,20 +66,6 @@ object DerivedStream {
 
   implicit lazy val s3: S3 = S3()
   private lazy val metadataBucket = Bucket("net-mozaws-prod-us-west-2-pipeline-metadata")
-
-  private def uncamelize(name: String) = {
-    val pattern = java.util.regex.Pattern.compile("(^[^A-Z]+|[A-Z][^A-Z]+)")
-    val matcher = pattern.matcher(name);
-    val output = new StringBuilder
-
-    while (matcher.find()) {
-      if (output.length > 0)
-        output.append("_");
-      output.append(matcher.group().toLowerCase);
-    }
-
-    output.toString()
-  }
 
   private def parseOptions(args: Array[String]): OptionMap = {
     def nextOption(map : OptionMap, list: List[String]) : OptionMap = {
