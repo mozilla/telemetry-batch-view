@@ -140,6 +140,10 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
           "os"                         -> "Windows_NT",
           "normalizedChannel"          -> "aurora",
           "documentId"                 -> idx.toString,
+          "submissionDate"             -> "20160128",
+          "sampleId"                   -> 42.0,
+          "Size"                       -> 93691.0,
+          "creationTimestamp"          -> 1.45393974518300006E18,
           "geoCountry"                 -> "US",
           "geoCity"                    -> "New York",
           "payload.info"               -> compact(render(info)),
@@ -188,21 +192,26 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     }
   }
 
-  "geoCountry" must "be converted correctly" in {
-    val records = fixture.record.get("geo_country").asInstanceOf[Array[Any]].toList
-    assert(records.length == fixture.payloads.length)
-    records.foreach{ x =>
-      val record = x.asInstanceOf[String]
-      assert(record == "US")
-    }
-  }
-
-  "geoCity" must "be converted correctly" in {
-    val records = fixture.record.get("geo_city").asInstanceOf[Array[Any]].toList
-    assert(records.length == fixture.payloads.length)
-    records.foreach{ x =>
-      val record = x.asInstanceOf[String]
-      assert(record == "New York")
+  "top level fields" must "be converted correctly" in {
+    val fieldValues = Array(
+      "submission_date"    -> "20160128",
+      "sample_id"          -> 42.0,
+      "size"               -> 93691.0,
+      "creation_timestamp" -> 1.45393974518300006E18,
+      "geo_country"        -> "US",
+      "geo_city"           -> "New York"
+    )
+    for ((key, value) <- fieldValues) {
+      val records = value match {
+        case expected : Double =>
+          fixture.record.get(key).asInstanceOf[Array[Double]].toList
+        case expected : String =>
+          fixture.record.get(key).asInstanceOf[Array[String]].toList
+      }
+      assert(records.length == fixture.payloads.length)
+      records.foreach{ x =>
+        assert(x == value)
+      }
     }
   }
 
