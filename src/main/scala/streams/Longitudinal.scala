@@ -8,6 +8,7 @@ import org.apache.spark.{SparkContext, Partitioner}
 import org.apache.spark.rdd.RDD
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
+import org.joda.time
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
@@ -707,6 +708,27 @@ case class Longitudinal() extends DerivedStream {
     root.set("thread_hang_stacks", threadHangStackMapList)
   }
 
+  private def subsessionStartDate2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
+    implicit val formats = DefaultFormats
+
+    val fieldValues = payloads.map{ case (x) =>
+      var record = parse(x.getOrElse("payload.info", return).asInstanceOf[String]) \ "subsessionStartDate"
+      record match {
+        case JString(value) =>
+          // certain steps later in the pipeline have a hard time with certain date edge cases,
+          // especially time zone offsets that are not between -12 and 14 hours inclusive (see bug 1250894)
+          // we're going to use the relatively lenient joda-time parser and output it in a very standard format
+          // note that in the process the timestamp will be converted into a local time, though it will still represent the same instant in time
+          val date = new DateTime(value);
+          date.toString(org.joda.time.format.ISODateTimeFormat.dateTime());
+        case _ =>
+          return
+      }
+    }
+
+    root.set("subsession_start_date", fieldValues.toArray)
+  }
+
   private def value2Avro[T:ClassTag](field: String, avroField: String, default: T,
                           payloads: List[Map[String, Any]],
                           root: GenericRecordBuilder,
@@ -776,11 +798,11 @@ case class Longitudinal() extends DerivedStream {
       JSON2Avro("payload.info",               List("subsessionCounter"),        "subsession_counter", sorted, root, schema)
       JSON2Avro("payload.info",               List("subsessionId"),             "subsession_id", sorted, root, schema)
       JSON2Avro("payload.info",               List("subsessionLength"),         "subsession_length", sorted, root, schema)
-      JSON2Avro("payload.info",               List("subsessionStartDate"),      "subsession_start_date", sorted, root, schema)
       JSON2Avro("payload.info",               List("timezoneOffset"),           "timezone_offset", sorted, root, schema)
       keyedHistograms2Avro(sorted, root, schema)
       histograms2Avro(sorted, root, schema)
       threadHangStats2Avro(sorted, root, schema)
+      subsessionStartDate2Avro(sorted, root, schema)
     } catch {
       case e : Throwable =>
         // Ignore buggy clients
