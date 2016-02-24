@@ -234,7 +234,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     assert(subsessionStartDates.length == fixture.payloads.length)
     subsessionStartDates.foreach{ x =>
       val record = x.asInstanceOf[String]
-      assert(record == "2015-12-09T08:00:00.000-05:00")
+      assert(record == "2015-12-09T13:00:00.000Z")
     }
   }
 
