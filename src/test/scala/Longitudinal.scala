@@ -194,7 +194,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
 
   "top level fields" must "be converted correctly" in {
     val fieldValues = Array(
-      "submission_date"    -> "2016-01-28T05:00:00.000Z",
+      "submission_date"    -> "2016-01-28T00:00:00.000Z",
       "sample_id"          -> 42.0,
       "size"               -> 93691.0,
       "creation_date"      -> "2016-01-28T00:09:05.183Z",

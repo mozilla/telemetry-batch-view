@@ -822,7 +822,7 @@ case class Longitudinal() extends DerivedStream {
       val formatISO = org.joda.time.format.ISODateTimeFormat.dateTime()
       val formatYYYYMMDD = org.joda.time.format.DateTimeFormat.forPattern("yyyyMMdd")
       val reformatYYYYMMDD = (value: Any) =>
-        formatISO.withZone(org.joda.time.DateTimeZone.UTC).print(formatYYYYMMDD.parseDateTime(value.asInstanceOf[String]))
+        formatISO.withZone(org.joda.time.DateTimeZone.UTC).print(formatYYYYMMDD.withZone(org.joda.time.DateTimeZone.UTC).parseDateTime(value.asInstanceOf[String]))
       val reformatTimestamp = (value: Any) =>
         formatISO.withZone(org.joda.time.DateTimeZone.UTC).print(new DateTime((value.asInstanceOf[Double] / 1e6).toLong))
       subsessionStartDate2Avro(sorted, root, schema)
