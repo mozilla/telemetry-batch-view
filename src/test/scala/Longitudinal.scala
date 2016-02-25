@@ -194,20 +194,15 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
 
   "top level fields" must "be converted correctly" in {
     val fieldValues = Array(
-      "submission_date"    -> "20160128",
+      "submission_date"    -> "2016-01-28T05:00:00.000Z",
       "sample_id"          -> 42.0,
       "size"               -> 93691.0,
-      "creation_timestamp" -> 1.45393974518300006E18,
+      "creation_date"      -> "2016-01-28T00:09:05.183Z",
       "geo_country"        -> "US",
       "geo_city"           -> "New York"
     )
     for ((key, value) <- fieldValues) {
-      val records = value match {
-        case expected : Double =>
-          fixture.record.get(key).asInstanceOf[Array[Double]].toList
-        case expected : String =>
-          fixture.record.get(key).asInstanceOf[Array[String]].toList
-      }
+      val records = fixture.record.get(key).asInstanceOf[Array[Any]].toList
       assert(records.length == fixture.payloads.length)
       records.foreach{ x =>
         assert(x == value)

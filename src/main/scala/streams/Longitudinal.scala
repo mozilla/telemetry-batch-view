@@ -379,7 +379,7 @@ case class Longitudinal() extends DerivedStream {
         .name("submission_date").`type`().optional().array().items().stringType()
         .name("sample_id").`type`().optional().array().items().doubleType()
         .name("size").`type`().optional().array().items().doubleType()
-        .name("creation_timestamp").`type`().optional().array().items().doubleType()
+        .name("creation_date").`type`().optional().array().items().stringType()
         .name("geo_country").`type`().optional().array().items().stringType()
         .name("geo_city").`type`().optional().array().items().stringType()
         .name("addons").`type`().optional().array().items().stringType()
@@ -731,6 +731,24 @@ case class Longitudinal() extends DerivedStream {
   }
 
   private def value2Avro[T:ClassTag](field: String, avroField: String, default: T,
+                                     mapFunction: Any => Any,
+                                     payloads: List[Map[String, Any]],
+                                     root: GenericRecordBuilder,
+                                     schema: Schema) {
+    implicit val formats = DefaultFormats
+
+    val values = payloads.map{ case (x) =>
+      val value = x.getOrElse(field, default).asInstanceOf[T]
+      mapFunction(value)
+    }
+
+    // only set the keys if there are valid entries
+    if (values.exists( value => value != default )) {
+      root.set(avroField, values.toArray)
+    }
+  }
+
+  private def value2Avro[T:ClassTag](field: String, avroField: String, default: T,
                                      payloads: List[Map[String, Any]],
                                      root: GenericRecordBuilder,
                                      schema: Schema) {
@@ -765,12 +783,10 @@ case class Longitudinal() extends DerivedStream {
       .set("normalized_channel", sorted(0)("normalizedChannel").asInstanceOf[String])
 
     try {
-      value2Avro("submissionDate",    "submission_date", "", sorted, root, schema)
-      value2Avro("sampleId",          "sample_id", 0.0, sorted, root, schema)
-      value2Avro("Size",              "size", 0.0, sorted, root, schema)
-      value2Avro("creationTimestamp", "creation_timestamp", 0.0, sorted, root, schema)
-      value2Avro("geoCountry",        "geo_country", "", sorted, root, schema)
-      value2Avro("geoCity",           "geo_city", "", sorted, root, schema)
+      value2Avro("sampleId",          "sample_id",   0.0, x => x, sorted, root, schema)
+      value2Avro("Size",              "size",        0.0, x => x, sorted, root, schema)
+      value2Avro("geoCountry",        "geo_country", "",  x => x, sorted, root, schema)
+      value2Avro("geoCity",           "geo_city",    "",  x => x, sorted, root, schema)
 
       JSON2Avro("environment.build",          List[String](),                   "build", sorted, root, schema)
       JSON2Avro("environment.partner",        List[String](),                   "partner", sorted, root, schema)
@@ -795,7 +811,6 @@ case class Longitudinal() extends DerivedStream {
       JSON2Avro("payload.info",               List("revision"),                 "revision", sorted, root, schema)
       JSON2Avro("payload.info",               List("sessionId"),                "session_id", sorted, root, schema)
       JSON2Avro("payload.info",               List("sessionLength"),            "session_length", sorted, root, schema)
-      JSON2Avro("payload.info",               List("sessionStartDate"),         "session_start_date", sorted, root, schema)
       JSON2Avro("payload.info",               List("subsessionCounter"),        "subsession_counter", sorted, root, schema)
       JSON2Avro("payload.info",               List("subsessionId"),             "subsession_id", sorted, root, schema)
       JSON2Avro("payload.info",               List("subsessionLength"),         "subsession_length", sorted, root, schema)
@@ -803,7 +818,16 @@ case class Longitudinal() extends DerivedStream {
       keyedHistograms2Avro(sorted, root, schema)
       histograms2Avro(sorted, root, schema)
       threadHangStats2Avro(sorted, root, schema)
+
+      val formatISO = org.joda.time.format.ISODateTimeFormat.dateTime()
+      val formatYYYYMMDD = org.joda.time.format.DateTimeFormat.forPattern("yyyyMMdd")
+      val reformatYYYYMMDD = (value: Any) =>
+        formatISO.withZone(org.joda.time.DateTimeZone.UTC).print(formatYYYYMMDD.parseDateTime(value.asInstanceOf[String]))
+      val reformatTimestamp = (value: Any) =>
+        formatISO.withZone(org.joda.time.DateTimeZone.UTC).print(new DateTime((value.asInstanceOf[Double] / 1e6).toLong))
       subsessionStartDate2Avro(sorted, root, schema)
+      value2Avro("submissionDate", "submission_date", "", reformatYYYYMMDD, sorted, root, schema)
+      value2Avro("creationTimestamp", "creation_date", "", reformatTimestamp, sorted, root, schema)
     } catch {
       case e : Throwable =>
         // Ignore buggy clients
