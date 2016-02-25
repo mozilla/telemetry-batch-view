@@ -711,6 +711,7 @@ case class Longitudinal() extends DerivedStream {
   private def subsessionStartDate2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
     implicit val formats = DefaultFormats
 
+    val dateFormatter = org.joda.time.format.ISODateTimeFormat.dateTime()
     val fieldValues = payloads.map{ case (x) =>
       var record = parse(x.getOrElse("payload.info", return).asInstanceOf[String]) \ "subsessionStartDate"
       record match {
@@ -719,7 +720,6 @@ case class Longitudinal() extends DerivedStream {
           // especially time zone offsets that are not between -12 and 14 hours inclusive (see bug 1250894)
           // we're going to use the relatively lenient joda-time parser and output it in a very standard format
           // note that in the process the timestamp will be converted into UTC, though it will still represent the same instant in time
-          val dateFormatter = org.joda.time.format.ISODateTimeFormat.dateTime()
           val date = new DateTime(value);
           dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(date)
         case _ =>
@@ -731,9 +731,9 @@ case class Longitudinal() extends DerivedStream {
   }
 
   private def value2Avro[T:ClassTag](field: String, avroField: String, default: T,
-                          payloads: List[Map[String, Any]],
-                          root: GenericRecordBuilder,
-                          schema: Schema) {
+                                     payloads: List[Map[String, Any]],
+                                     root: GenericRecordBuilder,
+                                     schema: Schema) {
     val values = payloads.map{ case (x) =>
       x.getOrElse(field, default).asInstanceOf[T]
     }
