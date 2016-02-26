@@ -708,9 +708,9 @@ case class Longitudinal() extends DerivedStream {
   }
 
   private def value2Avro[T:ClassTag](field: String, avroField: String, default: T,
-                          payloads: List[Map[String, Any]],
-                          root: GenericRecordBuilder,
-                          schema: Schema) {
+                                     payloads: List[Map[String, Any]],
+                                     root: GenericRecordBuilder,
+                                     schema: Schema) {
     val values = payloads.map{ case (x) =>
       x.getOrElse(field, default).asInstanceOf[T]
     }
