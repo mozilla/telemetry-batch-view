@@ -381,6 +381,7 @@ case class Longitudinal() extends DerivedStream {
         .name("creation_timestamp").`type`().optional().array().items().doubleType()
         .name("geo_country").`type`().optional().array().items().stringType()
         .name("geo_city").`type`().optional().array().items().stringType()
+        .name("dnt_header").`type`().optional().array().items().stringType()
         .name("addons").`type`().optional().array().items().stringType()
         .name("async_plugin_init").`type`().optional().array().items().booleanType()
         .name("flash_version").`type`().optional().array().items().stringType()
@@ -748,6 +749,7 @@ case class Longitudinal() extends DerivedStream {
       value2Avro("creationTimestamp", "creation_timestamp", 0.0, sorted, root, schema)
       value2Avro("geoCountry",        "geo_country", "", sorted, root, schema)
       value2Avro("geoCity",           "geo_city", "", sorted, root, schema)
+      value2Avro("DNT",               "dnt_header", "", sorted, root, schema)
 
       JSON2Avro("environment.build",          List[String](),                   "build", sorted, root, schema)
       JSON2Avro("environment.partner",        List[String](),                   "partner", sorted, root, schema)

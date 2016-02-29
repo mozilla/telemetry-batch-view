@@ -146,6 +146,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
           "creationTimestamp"          -> 1.45393974518300006E18,
           "geoCountry"                 -> "US",
           "geoCity"                    -> "New York",
+          "DNT"                        -> "1",
           "payload.info"               -> compact(render(info)),
           "payload.simpleMeasurements" -> compact(render(simpleMeasurements)),
           "payload.histograms"         -> compact(render(histograms)),
@@ -199,14 +200,15 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
       "size"               -> 93691.0,
       "creation_timestamp" -> 1.45393974518300006E18,
       "geo_country"        -> "US",
-      "geo_city"           -> "New York"
+      "geo_city"           -> "New York",
+      "dnt_header"         -> "1"
     )
     for ((key, value) <- fieldValues) {
       val records = value match {
         case expected : Double =>
           fixture.record.get(key).asInstanceOf[Array[Double]].toList
         case expected : String =>
-          fixture.record.get(key).asInstanceOf[Array[String]].toList
+          fixture.record.get(key).asInstanceOf[Array[Any]].toList
       }
       assert(records.length == fixture.payloads.length)
       records.foreach{ x =>
