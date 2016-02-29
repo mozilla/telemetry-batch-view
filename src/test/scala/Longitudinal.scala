@@ -131,7 +131,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
             ("branch" -> "B"))
 
       val info =
-        ("subsessionStartDate"      -> "2015-12-09T00:00:00.0-13:00") ~
+        ("subsessionStartDate"      -> "2015-12-09T00:00:00.0-08:00") ~
         ("profileSubsessionCounter" -> (1000 - idx)) ~
         ("flashVersion"             -> "19.0.0.226") ~
         ("reason"                   -> "shutdown")
@@ -194,12 +194,11 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
 
   "top level fields" must "be converted correctly" in {
     val fieldValues = Array(
-      "submission_date"    -> "2016-01-28T00:00:00.000Z",
-      "sample_id"          -> 42.0,
-      "size"               -> 93691.0,
-      "creation_date"      -> "2016-01-28T00:09:05.183Z",
-      "geo_country"        -> "US",
-      "geo_city"           -> "New York"
+      "submission_date"       -> "2016-01-28T00:00:00.000Z",
+      "sample_id"             -> 42.0,
+      "size"                  -> 93691.0,
+      "geo_country"           -> "US",
+      "geo_city"              -> "New York"
     )
     for ((key, value) <- fieldValues) {
       val records = fixture.record.get(key).asInstanceOf[Array[Any]].toList
@@ -224,13 +223,6 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
       val record = x.asInstanceOf[String]
       assert(record == "shutdown")
     }
-
-    val subsessionStartDates = fixture.record.get("subsession_start_date").asInstanceOf[Array[Any]].toList
-    assert(subsessionStartDates.length == fixture.payloads.length)
-    subsessionStartDates.foreach{ x =>
-      val record = x.asInstanceOf[String]
-      assert(record == "2015-12-09T13:00:00.000Z")
-    }
   }
 
   "environment.build" must "be converted correctly" in {
@@ -243,11 +235,17 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
   }
 
   "environment.profile" must "be converted correctly" in {
-    val records = fixture.record.get("profile").asInstanceOf[Array[Any]].toList
-    assert(records.length == fixture.payloads.length)
-    records.foreach{ x =>
-      val record = x.asInstanceOf[Record]
-      assert(record.get("creation_date") == 1453615112)
+    val creationDates = fixture.record.get("profile_creation_date").asInstanceOf[Array[Any]].toList
+    assert(creationDates.length == fixture.payloads.length)
+    creationDates.foreach{ x =>
+      val creationDate = x.asInstanceOf[String]
+      assert(creationDate == "2016-01-24T05:58:32.000Z")
+    }
+    val resetDates = fixture.record.get("profile_reset_date").asInstanceOf[Array[Any]].toList
+    assert(resetDates.length == fixture.payloads.length)
+    resetDates.foreach{ x =>
+      val resetDate = x.asInstanceOf[String]
+      assert(resetDate == "2016-02-04T19:45:12.000Z")
     }
   }
 

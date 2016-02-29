@@ -199,11 +199,6 @@ case class Longitudinal() extends DerivedStream {
         .endRecord()
         .name("user_prefs").`type`().optional().map().values().stringType()
       .endRecord()
-    val profileType = SchemaBuilder
-      .record("profile").fields()
-        .name("creation_date").`type`().optional().longType()
-        .name("reset_date").`type`().optional().longType()
-      .endRecord()
     val partnerType = SchemaBuilder
       .record("partner").fields()
         .name("distribution_id").`type`().optional().stringType()
@@ -379,7 +374,6 @@ case class Longitudinal() extends DerivedStream {
         .name("submission_date").`type`().optional().array().items().stringType()
         .name("sample_id").`type`().optional().array().items().doubleType()
         .name("size").`type`().optional().array().items().doubleType()
-        .name("creation_date").`type`().optional().array().items().stringType()
         .name("geo_country").`type`().optional().array().items().stringType()
         .name("geo_city").`type`().optional().array().items().stringType()
         .name("addons").`type`().optional().array().items().stringType()
@@ -389,6 +383,8 @@ case class Longitudinal() extends DerivedStream {
         .name("previous_session_id").`type`().optional().array().items().stringType()
         .name("previous_subsession_id").`type`().optional().array().items().stringType()
         .name("profile_subsession_counter").`type`().optional().array().items().intType()
+        .name("profile_creation_date").`type`().optional().stringType()
+        .name("profile_reset_date").`type`().optional().stringType()
         .name("reason").`type`().optional().array().items().stringType()
         .name("revision").`type`().optional().array().items().stringType()
         .name("session_id").`type`().optional().array().items().stringType()
@@ -401,7 +397,6 @@ case class Longitudinal() extends DerivedStream {
         .name("timezone_offset").`type`().optional().array().items().intType()
         .name("build").`type`().optional().array().items(buildType)
         .name("partner").`type`().optional().array().items(partnerType)
-        .name("profile").`type`().optional().array().items(profileType)
         .name("settings").`type`().optional().array().items(settingsType)
         .name("system").`type`().optional().array().items(systemType)
         .name("active_addons").`type`().optional().array().items(activeAddonsType)
@@ -693,8 +688,8 @@ case class Longitudinal() extends DerivedStream {
         val name = thread.getOrElse("name", return).extract[String]
         val hangs = thread.getOrElse("hangs", return).extract[Array[Map[String, JValue]]]
         val stackMapping = hangs.map{ case (hang) =>
-          val stack = hang.getOrElse("stack", return).extract[Array[String]];
-          val histogramEntry = hang.getOrElse("histogram", return).extract[RawHistogram];
+          val stack = hang.getOrElse("stack", return).extract[Array[String]]
+          val histogramEntry = hang.getOrElse("histogram", return).extract[RawHistogram]
           val histograms = vectorizeHistogram("hang", definition, List(Map("hang" -> histogramEntry)), histogramSchema)
           val histogram = histograms(0).asInstanceOf[GenericData.Record]
           (stack.mkString("\n") -> histogram)
@@ -720,7 +715,7 @@ case class Longitudinal() extends DerivedStream {
           // especially time zone offsets that are not between -12 and 14 hours inclusive (see bug 1250894)
           // we're going to use the relatively lenient joda-time parser and output it in a very standard format
           // note that in the process the timestamp will be converted into UTC, though it will still represent the same instant in time
-          val date = new DateTime(value);
+          val date = new DateTime(value)
           dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(date)
         case _ =>
           return
@@ -728,6 +723,30 @@ case class Longitudinal() extends DerivedStream {
     }
 
     root.set("subsession_start_date", fieldValues.toArray)
+  }
+
+  private def profileDates2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
+    implicit val formats = DefaultFormats
+
+    val dateFormatter = org.joda.time.format.ISODateTimeFormat.dateTime()
+
+    val creationValues = payloads.map{ case (x) =>
+      var record = parse(x.getOrElse("environment.profile", return).asInstanceOf[String]) \ "creationDate"
+      record match {
+        case JInt(value) => dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(new DateTime(value.toLong * 1000))
+        case _ => ""
+      }
+    }
+    root.set("profile_creation_date", creationValues.toArray)
+
+    val resetValues = payloads.map{ case (x) =>
+      var record = parse(x.getOrElse("environment.profile", return).asInstanceOf[String]) \ "resetDate"
+      record match {
+        case JInt(value) => dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(new DateTime(value.toLong * 1000))
+        case _ => ""
+      }
+    }
+    root.set("profile_reset_date", resetValues.toArray)
   }
 
   private def value2Avro[T:ClassTag](field: String, avroField: String, default: T,
@@ -740,20 +759,6 @@ case class Longitudinal() extends DerivedStream {
     val values = payloads.map{ case (x) =>
       val value = x.getOrElse(field, default).asInstanceOf[T]
       mapFunction(value)
-    }
-
-    // only set the keys if there are valid entries
-    if (values.exists( value => value != default )) {
-      root.set(avroField, values.toArray)
-    }
-  }
-
-  private def value2Avro[T:ClassTag](field: String, avroField: String, default: T,
-                                     payloads: List[Map[String, Any]],
-                                     root: GenericRecordBuilder,
-                                     schema: Schema) {
-    val values = payloads.map{ case (x) =>
-      x.getOrElse(field, default).asInstanceOf[T]
     }
 
     // only set the keys if there are valid entries
@@ -790,7 +795,6 @@ case class Longitudinal() extends DerivedStream {
 
       JSON2Avro("environment.build",          List[String](),                   "build", sorted, root, schema)
       JSON2Avro("environment.partner",        List[String](),                   "partner", sorted, root, schema)
-      JSON2Avro("environment.profile",        List[String](),                   "profile", sorted, root, schema)
       JSON2Avro("environment.settings",       List[String](),                   "settings", sorted, root, schema)
       JSON2Avro("environment.system",         List[String](),                   "system", sorted, root, schema)
       JSON2Avro("environment.addons",         List("activeAddons"),             "active_addons", sorted, root, schema)
@@ -820,14 +824,15 @@ case class Longitudinal() extends DerivedStream {
       threadHangStats2Avro(sorted, root, schema)
 
       val formatISO = org.joda.time.format.ISODateTimeFormat.dateTime()
-      val formatYYYYMMDD = org.joda.time.format.DateTimeFormat.forPattern("yyyyMMdd")
       val reformatYYYYMMDD = (value: Any) =>
-        formatISO.withZone(org.joda.time.DateTimeZone.UTC).print(formatYYYYMMDD.withZone(org.joda.time.DateTimeZone.UTC).parseDateTime(value.asInstanceOf[String]))
-      val reformatTimestamp = (value: Any) =>
-        formatISO.withZone(org.joda.time.DateTimeZone.UTC).print(new DateTime((value.asInstanceOf[Double] / 1e6).toLong))
+        formatISO.withZone(org.joda.time.DateTimeZone.UTC).print(
+          time.format.DateTimeFormat.forPattern("yyyyMMdd")
+                                    .withZone(org.joda.time.DateTimeZone.UTC)
+                                    .parseDateTime(value.asInstanceOf[String])
+        )
       subsessionStartDate2Avro(sorted, root, schema)
       value2Avro("submissionDate", "submission_date", "", reformatYYYYMMDD, sorted, root, schema)
-      value2Avro("creationTimestamp", "creation_date", "", reformatTimestamp, sorted, root, schema)
+      profileDates2Avro(sorted, root, schema)
     } catch {
       case e : Throwable =>
         // Ignore buggy clients
