@@ -79,8 +79,8 @@ class ClientIterator(it: Iterator[Tuple2[String, Map[String, Any]]], maxHistoryS
 }
 
 case class Longitudinal() extends DerivedStream {
-  override def streamName: String = "telemetry-release"
-  override def filterPrefix: String = "telemetry/4/main/*/*/*/*/*/42/"
+  override def streamName: String = "telemetry-sample"
+  override def filterPrefix: String = "telemetry/4/main/*/*/*/42/"
 
   override def transform(sc: SparkContext, bucket: Bucket, summaries: RDD[ObjectSummary], from: String, to: String) {
     val prefix = s"v$to"
