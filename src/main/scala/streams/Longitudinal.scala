@@ -730,11 +730,12 @@ case class Longitudinal() extends DerivedStream {
     implicit val formats = DefaultFormats
 
     val dateFormatter = org.joda.time.format.ISODateTimeFormat.dateTime()
+    val millisecondsPerDay = 1000 * 60 * 60 * 24
 
     val creationValues = payloads.map{ case (x) =>
       var record = parse(x.getOrElse("environment.profile", return).asInstanceOf[String]) \ "creationDate"
       record match {
-        case JInt(value) => dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(new DateTime(value.toLong * 1000))
+        case JInt(value) => dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(new DateTime(value.toLong * millisecondsPerDay))
         case _ => ""
       }
     }
@@ -743,7 +744,7 @@ case class Longitudinal() extends DerivedStream {
     val resetValues = payloads.map{ case (x) =>
       var record = parse(x.getOrElse("environment.profile", return).asInstanceOf[String]) \ "resetDate"
       record match {
-        case JInt(value) => dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(new DateTime(value.toLong * 1000))
+        case JInt(value) => dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(new DateTime(value.toLong * millisecondsPerDay))
         case _ => ""
       }
     }
@@ -793,7 +794,7 @@ case class Longitudinal() extends DerivedStream {
       value2Avro("Size",              "size",        0.0, x => x, sorted, root, schema)
       value2Avro("geoCountry",        "geo_country", "",  x => x, sorted, root, schema)
       value2Avro("geoCity",           "geo_city",    "",  x => x, sorted, root, schema)
-      value2Avro("DNT",               "dnt_header", "", sorted, root, schema)
+      value2Avro("DNT",               "dnt_header",  "",  x => x, sorted, root, schema)
 
       JSON2Avro("environment.build",          List[String](),                   "build", sorted, root, schema)
       JSON2Avro("environment.partner",        List[String](),                   "partner", sorted, root, schema)
