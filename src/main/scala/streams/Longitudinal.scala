@@ -824,7 +824,7 @@ case class Longitudinal() extends DerivedStream {
       histograms2Avro(sorted, root, schema)
       threadHangStats2Avro(sorted, root, schema)
 
-      // Presto fails to parse subsessionStartDate fields with an offset outside the [-12, 14] range.
+      // Presto fails to parse date fields with an offset outside the [-12, 14] range.
       val formatISO = org.joda.time.format.ISODateTimeFormat.dateTime()
       val reformatYYYYMMDD = (value: Any) =>
         formatISO.withZone(org.joda.time.DateTimeZone.UTC).print(
