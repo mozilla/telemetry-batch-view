@@ -375,8 +375,13 @@ case class Longitudinal() extends DerivedStream {
         .name("client_id").`type`().stringType().noDefault()
         .name("os").`type`().stringType().noDefault()
         .name("normalized_channel").`type`().stringType().noDefault()
+        .name("submission_date").`type`().optional().array().items().stringType()
+        .name("sample_id").`type`().optional().array().items().doubleType()
+        .name("size").`type`().optional().array().items().doubleType()
+        .name("creation_timestamp").`type`().optional().array().items().doubleType()
         .name("geo_country").`type`().optional().array().items().stringType()
         .name("geo_city").`type`().optional().array().items().stringType()
+        .name("dnt_header").`type`().optional().array().items().stringType()
         .name("addons").`type`().optional().array().items().stringType()
         .name("async_plugin_init").`type`().optional().array().items().booleanType()
         .name("flash_version").`type`().optional().array().items().stringType()
@@ -408,6 +413,7 @@ case class Longitudinal() extends DerivedStream {
         .name("thread_hang_activity").`type`().optional().array().items().map().values(histogramType)
         .name("thread_hang_stacks").`type`().optional().array().items().map().values().map().values(histogramType)
         .name("simple_measurements").`type`().optional().array().items(simpleMeasurementsType)
+
     Histograms.definitions.foreach{ case (k, value) =>
       val key = k.toLowerCase
       value match {
@@ -702,20 +708,17 @@ case class Longitudinal() extends DerivedStream {
     root.set("thread_hang_stacks", threadHangStackMapList)
   }
 
-  private def geo2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
-    val countries = payloads.map{ case (x) =>
-      x.getOrElse("geoCountry", "").asInstanceOf[String]
-    }
-    val cities = payloads.map{ case (x) =>
-      x.getOrElse("geoCity", "").asInstanceOf[String]
+  private def value2Avro[T:ClassTag](field: String, avroField: String, default: T,
+                                     payloads: List[Map[String, Any]],
+                                     root: GenericRecordBuilder,
+                                     schema: Schema) {
+    val values = payloads.map{ case (x) =>
+      x.getOrElse(field, default).asInstanceOf[T]
     }
 
     // only set the keys if there are valid entries
-    if (countries.exists( country => country != "" )) {
-      root.set("geo_country", countries.toArray)
-    }
-    if (cities.exists( city => city != "" )) {
-      root.set("geo_city", cities.toArray)
+    if (values.exists( value => value != default )) {
+      root.set(avroField, values.toArray)
     }
   }
 
@@ -740,6 +743,14 @@ case class Longitudinal() extends DerivedStream {
       .set("normalized_channel", sorted(0)("normalizedChannel").asInstanceOf[String])
 
     try {
+      value2Avro("submissionDate",    "submission_date", "", sorted, root, schema)
+      value2Avro("sampleId",          "sample_id", 0.0, sorted, root, schema)
+      value2Avro("Size",              "size", 0.0, sorted, root, schema)
+      value2Avro("creationTimestamp", "creation_timestamp", 0.0, sorted, root, schema)
+      value2Avro("geoCountry",        "geo_country", "", sorted, root, schema)
+      value2Avro("geoCity",           "geo_city", "", sorted, root, schema)
+      value2Avro("DNT",               "dnt_header", "", sorted, root, schema)
+
       JSON2Avro("environment.build",          List[String](),                   "build", sorted, root, schema)
       JSON2Avro("environment.partner",        List[String](),                   "partner", sorted, root, schema)
       JSON2Avro("environment.profile",        List[String](),                   "profile", sorted, root, schema)
@@ -772,7 +783,6 @@ case class Longitudinal() extends DerivedStream {
       keyedHistograms2Avro(sorted, root, schema)
       histograms2Avro(sorted, root, schema)
       threadHangStats2Avro(sorted, root, schema)
-      geo2Avro(sorted, root, schema)
     } catch {
       case e : Throwable =>
         // Ignore buggy clients
