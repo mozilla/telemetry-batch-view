@@ -667,8 +667,8 @@ case class Longitudinal() extends DerivedStream {
       }
       val threadHangStats = body.extract[Array[Map[String, JValue]]]
       for (thread <- threadHangStats) {
-        ranges = thread.getOrElse("activity", return).extract[Map[String, Any]]
-                       .getOrElse("ranges", return).asInstanceOf[List[BigInt]]
+        ranges = thread.getOrElse("activity", return).extract[Map[String, JValue]]
+                       .getOrElse("ranges", return).extract[List[BigInt]]
                        .map(x => x.toInt).toArray
       }
       threadHangStats
