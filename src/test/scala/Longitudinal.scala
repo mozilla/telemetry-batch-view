@@ -83,8 +83,8 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
         ("partnerNames" -> List("A", "B", "C"))
 
       val profile =
-        ("creationDate" -> 1453615112) ~
-        ("resetDate"    -> 1454615112)
+        ("creationDate" -> 16122) ~
+        ("resetDate"    -> 16132)
 
       val settings =
         ("e10sEnabled" -> true) ~
@@ -131,7 +131,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
             ("branch" -> "B"))
 
       val info =
-        ("subsessionStartDate"      -> "2015-12-09T00:00:00.0-08:00") ~
+        ("subsessionStartDate"      -> "2015-12-09T00:00:00.0-14:00") ~
         ("profileSubsessionCounter" -> (1000 - idx)) ~
         ("flashVersion"             -> "19.0.0.226") ~
         ("reason"                   -> "shutdown")
@@ -195,21 +195,18 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
 
   "top level fields" must "be converted correctly" in {
     val fieldValues = Array(
-      "submission_date"    -> "20160128",
-      "sample_id"          -> 42.0,
-      "size"               -> 93691.0,
-      "creation_timestamp" -> 1.45393974518300006E18,
-      "geo_country"        -> "US",
-      "geo_city"           -> "New York",
-      "dnt_header"         -> "1"
+      "submission_date"       -> "2016-01-28T00:00:00.000Z",
+      "sample_id"             -> 42.0,
+      "size"                  -> 93691.0,
+      "geo_country"           -> "US",
+      "geo_city"              -> "New York",
+      "dnt_header"            -> "1",
+      "subsession_start_date" -> "2015-12-09T14:00:00.000Z",
+      "profile_creation_date" -> "2014-02-21T00:00:00.000Z",
+      "profile_reset_date"    -> "2014-03-03T00:00:00.000Z"
     )
     for ((key, value) <- fieldValues) {
-      val records = value match {
-        case expected : Double =>
-          fixture.record.get(key).asInstanceOf[Array[Double]].toList
-        case expected : String =>
-          fixture.record.get(key).asInstanceOf[Array[Any]].toList
-      }
+      val records = fixture.record.get(key).asInstanceOf[Array[Any]].toList
       assert(records.length == fixture.payloads.length)
       records.foreach{ x =>
         assert(x == value)
@@ -239,15 +236,6 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     records.foreach{ x =>
       val record = x.asInstanceOf[Record]
       assert(record.get("build_id") == "20160101001100")
-    }
-  }
-
-  "environment.profile" must "be converted correctly" in {
-    val records = fixture.record.get("profile").asInstanceOf[Array[Any]].toList
-    assert(records.length == fixture.payloads.length)
-    records.foreach{ x =>
-      val record = x.asInstanceOf[Record]
-      assert(record.get("creation_date") == 1453615112)
     }
   }
 
