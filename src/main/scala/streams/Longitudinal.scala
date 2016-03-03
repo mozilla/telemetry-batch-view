@@ -714,10 +714,22 @@ case class Longitudinal() extends DerivedStream {
         case JString(value) =>
           // certain steps later in the pipeline have a hard time with certain date edge cases,
           // especially time zone offsets that are not between -12 and 14 hours inclusive (see bug 1250894)
-          // we're going to use the relatively lenient joda-time parser and output it in a very standard format
-          // note that in the process the timestamp will be converted into UTC, though it will still represent the same instant in time
-          val date = new DateTime(value)
-          dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(date)
+          // for these time zones, we're going to use some hacky arithmetic to bring them into range;
+          // they will still represent the same moment in time, but with a 12 hour offset
+          // we're going to use the relatively lenient joda-time parser and output it in standard ISO format
+          val date = dateFormatter.withOffsetParsed().parseDateTime(value)
+          val timezoneOffsetMillis = date.getZone().getOffset(date)
+          val millisPerHour = 60 * 60 * 1000;
+          val timezone = if (timezoneOffsetMillis < -12 * millisPerHour) {
+            org.joda.time.DateTimeZone.forOffsetMillis(timezoneOffsetMillis + 12 * millisPerHour)
+          } else if (timezoneOffsetMillis > 14 * millisPerHour) (
+            org.joda.time.DateTimeZone.forOffsetMillis(timezoneOffsetMillis - 12 * millisPerHour)
+          ) else {
+            date.getZone()
+          }
+          if (timezone.getOffset(date) < -12 * millisPerHour || timezone.getOffset(date) > 14 * millisPerHour)
+            return // timezone is invalid rather than just weird
+          dateFormatter.withZone(timezone).print(date)
         case _ =>
           return
       }
