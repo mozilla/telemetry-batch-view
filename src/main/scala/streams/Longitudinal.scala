@@ -8,7 +8,6 @@ import org.apache.spark.{SparkContext, Partitioner}
 import org.apache.spark.rdd.RDD
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
-import org.joda.time
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
@@ -20,6 +19,7 @@ import telemetry.avro
 import telemetry.heka.{HekaFrame, Message}
 import telemetry.histograms._
 import telemetry.parquet.ParquetFile
+import telemetry.utils.Utils
 
 private class ClientIdPartitioner(size: Int) extends Partitioner{
   def numPartitions: Int = size
@@ -707,29 +707,11 @@ case class Longitudinal() extends DerivedStream {
   private def subsessionStartDate2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
     implicit val formats = DefaultFormats
 
-    val dateFormatter = org.joda.time.format.ISODateTimeFormat.dateTime()
     val fieldValues = payloads.map{ case (x) =>
       var record = parse(x.getOrElse("payload.info", return).asInstanceOf[String]) \ "subsessionStartDate"
       record match {
         case JString(value) =>
-          // certain steps later in the pipeline have a hard time with certain date edge cases,
-          // especially time zone offsets that are not between -12 and 14 hours inclusive (see bug 1250894)
-          // for these time zones, we're going to use some hacky arithmetic to bring them into range;
-          // they will still represent the same moment in time, but with a 12 hour offset
-          // we're going to use the relatively lenient joda-time parser and output it in standard ISO format
-          val date = dateFormatter.withOffsetParsed().parseDateTime(value)
-          val timezoneOffsetMillis = date.getZone().getOffset(date)
-          val millisPerHour = 60 * 60 * 1000;
-          val timezone = if (timezoneOffsetMillis < -12 * millisPerHour) {
-            org.joda.time.DateTimeZone.forOffsetMillis(timezoneOffsetMillis + 12 * millisPerHour)
-          } else if (timezoneOffsetMillis > 14 * millisPerHour) (
-            org.joda.time.DateTimeZone.forOffsetMillis(timezoneOffsetMillis - 12 * millisPerHour)
-          ) else {
-            date.getZone()
-          }
-          if (timezone.getOffset(date) < -12 * millisPerHour || timezone.getOffset(date) > 14 * millisPerHour)
-            return // timezone is invalid rather than just weird
-          dateFormatter.withZone(timezone).print(date)
+          Utils.normalizeISOTimestamp(value)
         case _ =>
           return
       }
@@ -741,13 +723,10 @@ case class Longitudinal() extends DerivedStream {
   private def profileDates2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
     implicit val formats = DefaultFormats
 
-    val dateFormatter = org.joda.time.format.ISODateTimeFormat.dateTime()
-    val millisecondsPerDay = 1000 * 60 * 60 * 24
-
     val creationValues = payloads.map{ case (x) =>
       var record = parse(x.getOrElse("environment.profile", return).asInstanceOf[String]) \ "creationDate"
       record match {
-        case JInt(value) => dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(new DateTime(value.toLong * millisecondsPerDay))
+        case JInt(value) => Utils.normalizeEpochTimestamp(value)
         case _ => ""
       }
     }
@@ -756,7 +735,7 @@ case class Longitudinal() extends DerivedStream {
     val resetValues = payloads.map{ case (x) =>
       var record = parse(x.getOrElse("environment.profile", return).asInstanceOf[String]) \ "resetDate"
       record match {
-        case JInt(value) => dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(new DateTime(value.toLong * millisecondsPerDay))
+        case JInt(value) => Utils.normalizeEpochTimestamp(value)
         case _ => ""
       }
     }
@@ -838,15 +817,8 @@ case class Longitudinal() extends DerivedStream {
       histograms2Avro(sorted, root, schema)
       threadHangStats2Avro(sorted, root, schema)
 
-      val formatISO = org.joda.time.format.ISODateTimeFormat.dateTime()
-      val reformatYYYYMMDD = (value: Any) =>
-        formatISO.withZone(org.joda.time.DateTimeZone.UTC).print(
-          time.format.DateTimeFormat.forPattern("yyyyMMdd")
-                                    .withZone(org.joda.time.DateTimeZone.UTC)
-                                    .parseDateTime(value.asInstanceOf[String])
-        )
       subsessionStartDate2Avro(sorted, root, schema)
-      value2Avro("submissionDate", "submission_date", "", reformatYYYYMMDD, sorted, root, schema)
+      value2Avro("submissionDate", "submission_date", "", x => Utils.normalizeYYYYMMDDTimestamp(x.asInstanceOf[String]), sorted, root, schema)
       profileDates2Avro(sorted, root, schema)
     } catch {
       case e : Throwable =>

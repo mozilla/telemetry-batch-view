@@ -1,5 +1,7 @@
 package telemetry.utils
 
+import org.joda.time._
+
 object Utils{
   val dict = Map("submission_url" -> "submissionURL",
                  "memory_mb" -> "memoryMB",
@@ -38,5 +40,40 @@ object Utils{
     }
 
     output.toString()
+  }
+
+  def normalizeISOTimestamp(timestamp: String) = {
+    // certain date parsers, notably Presto's, have a hard time with certain date edge cases,
+    // especially time zone offsets that are not between -12 and 14 hours inclusive (see bug 1250894)
+    // for these time zones, we're going to use some hacky arithmetic to bring them into range;
+    // they will still represent the same moment in time, just with a correct time zone
+    // we're going to use the relatively lenient joda-time parser and output it in standard ISO format
+    val dateFormatter = org.joda.time.format.ISODateTimeFormat.dateTime()
+    val date = dateFormatter.withOffsetParsed().parseDateTime(timestamp)
+    val millisPerHour = 60 * 60 * 1000;
+    val timezoneOffsetHours = date.getZone().getOffset(date) / millisPerHour
+    val timezone = if (timezoneOffsetHours < -12) {
+      org.joda.time.DateTimeZone.forOffsetMillis((timezoneOffsetHours + 12 * Math.floor(timezoneOffsetHours / -12).toInt) * millisPerHour)
+    } else if (timezoneOffsetHours > 14) (
+      org.joda.time.DateTimeZone.forOffsetMillis((timezoneOffsetHours - 12 * Math.floor(timezoneOffsetHours / 12).toInt) * millisPerHour)
+    ) else {
+      date.getZone()
+    }
+    dateFormatter.withZone(timezone).print(date)
+  }
+
+  def normalizeYYYYMMDDTimestamp(YYYYMMDD: String) = {
+    val formatISO = org.joda.time.format.ISODateTimeFormat.dateTime()
+    formatISO.withZone(org.joda.time.DateTimeZone.UTC).print(
+      format.DateTimeFormat.forPattern("yyyyMMdd")
+                                .withZone(org.joda.time.DateTimeZone.UTC)
+                                .parseDateTime(YYYYMMDD.asInstanceOf[String])
+    )
+  }
+
+  def normalizeEpochTimestamp(timestamp: BigInt) = {
+    val dateFormatter = org.joda.time.format.ISODateTimeFormat.dateTime()
+    val millisecondsPerDay = 1000 * 60 * 60 * 24
+    dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(new DateTime(timestamp.toLong * millisecondsPerDay))
   }
 }
