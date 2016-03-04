@@ -166,8 +166,8 @@ case class Churn(prefix: String) extends DerivedStream{
       .name("timestamp").`type`().longType().noDefault() // server-assigned timestamp when record was received
 
       // See bug 1251259
-      .name("e10sEnabled").`type`().nullable.booleanType().noDefault()
-      .name("e10sCohort").`type`().nullable.stringType().noDefault()
+      .name("e10sEnabled").`type`().nullable.booleanType().noDefault() // environment/settings/e10sEnabled
+      .name("e10sCohort").`type`().nullable.stringType().noDefault() // environment/settings/e10sCohort
 
       .endRecord
   }
