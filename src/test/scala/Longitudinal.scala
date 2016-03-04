@@ -201,7 +201,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
       "geo_country"           -> "US",
       "geo_city"              -> "New York",
       "dnt_header"            -> "1",
-      "subsession_start_date" -> "2015-12-09T14:00:00.000Z",
+      "subsession_start_date" -> "2015-12-09T12:00:00.000-02:00",
       "profile_creation_date" -> "2014-02-21T00:00:00.000Z",
       "profile_reset_date"    -> "2014-03-03T00:00:00.000Z"
     )
