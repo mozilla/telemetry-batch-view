@@ -7,7 +7,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.joda.time.Days
 import org.joda.time.format.DateTimeFormat
-import org.json4s.JsonAST.{JInt, JNothing, JObject, JString, JValue}
+import org.json4s.JsonAST.{JInt, JNothing, JObject, JString, JValue, JBool}
 import org.json4s.jackson.JsonMethods.parse
 import telemetry.{DerivedStream, ObjectSummary}
 import telemetry.DerivedStream.s3
@@ -26,6 +26,7 @@ case class Churn(prefix: String) extends DerivedStream{
     // due to missing simple fields.
     lazy val profile = parse(fields.getOrElse("environment.profile", "{}").asInstanceOf[String])
     lazy val partner = parse(fields.getOrElse("environment.partner", "{}").asInstanceOf[String])
+    lazy val settings = parse(fields.getOrElse("environment.settings", "{}").asInstanceOf[String])
     lazy val info = parse(fields.getOrElse("payload.info", "{}").asInstanceOf[String])
     lazy val histograms = parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
 
@@ -82,6 +83,14 @@ case class Churn(prefix: String) extends DerivedStream{
           case _ => null
         }),
         "distributionId" -> ((partner \ "distributionId") match {
+          case JString(x) => x
+          case _ => null
+        }),
+        "e10sEnabled" -> ((settings \ "e10sEnabled") match {
+          case JBool(x) => x
+          case _ => null
+        }),
+        "e10sCohort" -> ((settings \ "e10sCohort") match {
           case JString(x) => x
           case _ => null
         })
@@ -155,6 +164,11 @@ case class Churn(prefix: String) extends DerivedStream{
 
       .name("version").`type`().stringType().noDefault() // appVersion
       .name("timestamp").`type`().longType().noDefault() // server-assigned timestamp when record was received
+
+      // See bug 1251259
+      .name("e10sEnabled").`type`().nullable.booleanType().noDefault()
+      .name("e10sCohort").`type`().nullable.stringType().noDefault()
+
       .endRecord
   }
 
