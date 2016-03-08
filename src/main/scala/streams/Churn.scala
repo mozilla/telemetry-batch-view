@@ -17,6 +17,7 @@ import telemetry.parquet.ParquetFile
 case class Churn(prefix: String) extends DerivedStream{
   override def filterPrefix: String = prefix
   override def streamName: String = "telemetry"
+  def streamVersion: String = "v1"
 
   // Convert the given Heka message to a map containing just the fields we're interested in.
   def messageToMap(message: Message): Option[Map[String,Any]] = {
@@ -137,7 +138,7 @@ case class Churn(prefix: String) extends DerivedStream{
 
           while(!records.isEmpty) {
             val localFile = ParquetFile.serialize(records, schema)
-            uploadLocalFileToS3(localFile, s"$prefix/submission_date_s3=$currentDay")
+            uploadLocalFileToS3(localFile, s"$streamVersion/submission_date_s3=$currentDay")
           }
         }
     }
