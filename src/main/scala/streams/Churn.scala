@@ -17,6 +17,7 @@ import telemetry.parquet.ParquetFile
 case class Churn(prefix: String) extends DerivedStream{
   override def filterPrefix: String = prefix
   override def streamName: String = "telemetry"
+  def streamVersion: String = "v1"
 
   // Convert the given Heka message to a map containing just the fields we're interested in.
   def messageToMap(message: Message): Option[Map[String,Any]] = {
@@ -108,7 +109,7 @@ case class Churn(prefix: String) extends DerivedStream{
       val JString(bucketName) = metaSources \\ streamName \\ "bucket"
       Bucket(bucketName)
     }
-    val prefix = {
+    val dataPrefix = {
       val JString(prefix) = metaSources \\ streamName \\ "prefix"
       prefix
     }
@@ -117,7 +118,7 @@ case class Churn(prefix: String) extends DerivedStream{
     for (i <- 0 to daysCount) {
       val currentDay = fromDate.plusDays(i).toString("yyyyMMdd")
       println("Processing day: " + currentDay)
-      val summaries = sc.parallelize(s3.objectSummaries(bucket, s"$prefix/$currentDay/$filterPrefix")
+      val summaries = sc.parallelize(s3.objectSummaries(bucket, s"$dataPrefix/$currentDay/$filterPrefix")
                         .map(summary => ObjectSummary(summary.getKey(), summary.getSize())))
 
       val groups = DerivedStream.groupBySize(summaries.collect().toIterator)
@@ -137,7 +138,7 @@ case class Churn(prefix: String) extends DerivedStream{
 
           while(!records.isEmpty) {
             val localFile = ParquetFile.serialize(records, schema)
-            uploadLocalFileToS3(localFile, s"$prefix/submission_date_s3=$currentDay")
+            uploadLocalFileToS3(localFile, s"$streamVersion/submission_date_s3=$currentDay")
           }
         }
     }
