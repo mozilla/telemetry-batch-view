@@ -109,7 +109,7 @@ case class Churn(prefix: String) extends DerivedStream{
       val JString(bucketName) = metaSources \\ streamName \\ "bucket"
       Bucket(bucketName)
     }
-    val prefix = {
+    val dataPrefix = {
       val JString(prefix) = metaSources \\ streamName \\ "prefix"
       prefix
     }
@@ -118,7 +118,7 @@ case class Churn(prefix: String) extends DerivedStream{
     for (i <- 0 to daysCount) {
       val currentDay = fromDate.plusDays(i).toString("yyyyMMdd")
       println("Processing day: " + currentDay)
-      val summaries = sc.parallelize(s3.objectSummaries(bucket, s"$prefix/$currentDay/$filterPrefix")
+      val summaries = sc.parallelize(s3.objectSummaries(bucket, s"$dataPrefix/$currentDay/$filterPrefix")
                         .map(summary => ObjectSummary(summary.getKey(), summary.getSize())))
 
       val groups = DerivedStream.groupBySize(summaries.collect().toIterator)
