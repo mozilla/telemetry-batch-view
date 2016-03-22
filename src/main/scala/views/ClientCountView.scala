@@ -59,6 +59,6 @@ object ClientCountView {
 
     val appConf = ConfigFactory.load()
     val parquetBucket = appConf.getString("app.parquetBucket")
-    aggregates.write.parquet(s"s3://$parquetBucket/KPI/v$from$to")
+    aggregates.write.parquet(s"s3://$parquetBucket/ClientCounts/v$from$to")
   }
 }
