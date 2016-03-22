@@ -44,7 +44,7 @@ object ClientCountView {
       case _ => fmt.print(DateTime.now.minusDays(180))
     }
 
-    val sparkConf = new SparkConf().setAppName("KPI")
+    val sparkConf = new SparkConf().setAppName("ClientCountView")
     sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
     val sc = new SparkContext(sparkConf)
     val sqlContext = new HiveContext(sc)
@@ -55,10 +55,10 @@ object ClientCountView {
 
     val df = sqlContext.read.load("s3://telemetry-parquet/churn/v1")
     val subset = df.where(s"submission_date_s3 >= $from and submission_date_s3 <= $to")
-    val aggregates = aggregate(subset)
+    val aggregates = aggregate(subset).coalesce(32)
 
     val appConf = ConfigFactory.load()
     val parquetBucket = appConf.getString("app.parquetBucket")
-    aggregates.write.parquet(s"s3://$parquetBucket/ClientCounts/v$from$to")
+    aggregates.write.parquet(s"s3://$parquetBucket/client_count/v$from$to")
   }
 }
