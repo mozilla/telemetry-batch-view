@@ -52,11 +52,11 @@ object Utils{
     val dateFormatter = org.joda.time.format.ISODateTimeFormat.dateTime()
     val date = dateFormatter.withOffsetParsed().parseDateTime(timestamp)
     val millisPerHour = 60 * 60 * 1000;
-    val timezoneOffsetHours = date.getZone().getOffset(date) / millisPerHour
-    val timezone = if (timezoneOffsetHours < -12) {
-      org.joda.time.DateTimeZone.forOffsetMillis((timezoneOffsetHours + 12 * Math.floor(timezoneOffsetHours / -12).toInt) * millisPerHour)
-    } else if (timezoneOffsetHours > 14) (
-      org.joda.time.DateTimeZone.forOffsetMillis((timezoneOffsetHours - 12 * Math.floor(timezoneOffsetHours / 12).toInt) * millisPerHour)
+    val timezoneOffsetHours = date.getZone().getOffset(date).toDouble / millisPerHour
+    val timezone = if (timezoneOffsetHours < -12.0) {
+      org.joda.time.DateTimeZone.forOffsetMillis(((timezoneOffsetHours + 12 * Math.floor(timezoneOffsetHours / -12).toInt) * millisPerHour).toInt)
+    } else if (timezoneOffsetHours > 14.0) (
+      org.joda.time.DateTimeZone.forOffsetMillis(((timezoneOffsetHours - 12 * Math.floor(timezoneOffsetHours / 12).toInt) * millisPerHour).toInt)
     ) else {
       date.getZone()
     }
