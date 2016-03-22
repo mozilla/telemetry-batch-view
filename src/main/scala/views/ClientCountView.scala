@@ -8,6 +8,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveContext
 import org.rogach.scallop._
 import telemetry.spark.sql.aggregates._
+import telemetry.spark.sql.functions._
 
 class Conf(args: Array[String]) extends ScallopConf(args) {
   val from = opt[String]("from", descr = "From submission date", required = false)
@@ -15,18 +16,18 @@ class Conf(args: Array[String]) extends ScallopConf(args) {
   verify()
 }
 
-object KPIView {
-  private val hll = new HyperLogLog(10)
+object ClientCountView {
+  private val hllMerge = new HyperLogLogMerge
   private val base = List("normalizedChannel", "country", "version", "e10sEnabled", "e10sCohort")
-  private val selection = "clientId" :: "substr(subsessionStartDate, 0, 10) as activityDate" :: base
+  private val selection = "hll_create(clientId) as clientId" :: "substr(subsessionStartDate, 0, 10) as activityDate" :: base
 
   val dimensions = "activityDate" :: base
 
   def aggregate(frame: DataFrame): DataFrame = {
     frame
       .selectExpr(selection:_*)
-      .groupBy(col1=dimensions.head, cols=dimensions.tail:_*)
-      .agg(hll(col("clientId")).as("hll"))
+      .groupBy(dimensions.head, dimensions.tail:_*)
+      .agg(hllMerge(col("clientId")).as("hll"))
   }
 
   def main(args: Array[String]) {
@@ -50,6 +51,7 @@ object KPIView {
 
     val hadoopConf = sc.hadoopConfiguration
     hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
+    sqlContext.udf.register("hll_create", hllCreate _)
 
     val df = sqlContext.read.load("s3://telemetry-parquet/churn/v1")
     val subset = df.where(s"submission_date_s3 >= $from and submission_date_s3 <= $to")

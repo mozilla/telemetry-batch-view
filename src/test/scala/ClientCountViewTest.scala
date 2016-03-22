@@ -5,8 +5,9 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveContext
 import org.scalatest.{FlatSpec, Matchers}
-import telemetry.views.KPIView
+import telemetry.views.ClientCountView
 import telemetry.spark.sql.functions._
+import telemetry.spark.sql.aggregates._
 
 case class Submission(clientId: String,
                       normalizedChannel: String,
@@ -50,21 +51,33 @@ object Submission{
   }
 }
 
-class KPITest extends FlatSpec with Matchers{
+class ClientCountViewTest extends FlatSpec with Matchers{
   "Dataset" can "be aggregated" in {
     val sparkConf = new SparkConf().setAppName("KPI")
     sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
     val sc = new SparkContext(sparkConf)
     val sqlContext = new HiveContext(sc)
+    sqlContext.udf.register("hll_create", hllCreate _)
     import sqlContext.implicits._
 
     val dataset = sc.parallelize(Submission.randomList).toDF()
-    val aggregates = KPIView.aggregate(dataset)
+    val aggregates = ClientCountView.aggregate(dataset)
 
-    val dimensions = Set(KPIView.dimensions:_*) -- Set("clientId", "hll")
-    (Set(aggregates.columns:_*) -- Set("clientId", "hll")) should be (dimensions)
+    val dimensions = Set(ClientCountView.dimensions:_*) -- Set("clientId")
+    (Set(aggregates.columns:_*) -- Set("clientId", "hll", "sum")) should be (dimensions)
 
-    val estimates = aggregates.select(hll_cardinality(col("hll"))).collect()
-    estimates.foreach(x => x(0) should be (Submission.dimensions("clientId").size))
+    var estimates = aggregates.select(hllCardinalityUDF(col("hll"))).collect()
+    estimates.foreach{ x =>
+      x(0) should be (Submission.dimensions("clientId").size)
+    }
+
+    val hllMerge = new HyperLogLogMerge
+    val count = aggregates
+      .select(col("hll"))
+      .agg(hllMerge(col("hll")).as("hll"))
+      .select(hllCardinalityUDF(col("hll"))).collect()
+
+    count.size should be (1)
+    count(0)(0) should be (Submission.dimensions("clientId").size)
   }
 }
