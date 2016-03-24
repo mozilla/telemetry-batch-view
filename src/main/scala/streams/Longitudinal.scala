@@ -349,6 +349,7 @@ case class Longitudinal() extends DerivedStream {
         .name("startup_session_restore_read_bytes").`type`().optional().longType()
         .name("pings_overdue").`type`().optional().longType()
         .name("first_paint").`type`().optional().longType()
+        .name("shutdown_duration").`type`().optional().longType()
         .name("session_restored").`type`().optional().longType()
         .name("startup_window_visible_write_bytes").`type`().optional().longType()
         .name("startup_crash_detection_end").`type`().optional().longType()
