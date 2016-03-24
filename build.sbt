@@ -25,7 +25,6 @@ lazy val root = (project in file(".")).
     libraryDependencies += "com.github.nscala-time" %% "nscala-time" % "2.10.0",
     libraryDependencies += "org.rogach" %% "scallop" % "1.0.0",
     libraryDependencies += "com.twitter" %% "algebird-core" % "0.12.0"
-
   )
 
 run in Compile <<= Defaults.runTask(fullClasspath in Compile, mainClass in (Compile, run), runner in (Compile, run))
