@@ -7,7 +7,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.joda.time.Days
 import org.joda.time.format.DateTimeFormat
-import org.json4s.JsonAST.{JInt, JNothing, JObject, JString, JValue}
+import org.json4s.JsonAST.{JInt, JNothing, JObject, JString, JValue, JBool}
 import org.json4s.jackson.JsonMethods.parse
 import telemetry.{DerivedStream, ObjectSummary}
 import telemetry.DerivedStream.s3
@@ -17,22 +17,24 @@ import telemetry.parquet.ParquetFile
 case class Churn(prefix: String) extends DerivedStream{
   override def filterPrefix: String = prefix
   override def streamName: String = "telemetry"
-  
+  def streamVersion: String = "v1"
+
   // Convert the given Heka message to a map containing just the fields we're interested in.
   def messageToMap(message: Message): Option[Map[String,Any]] = {
     val fields = HekaFrame.fields(message)
-    
+
     // Don't compute the expensive stuff until we need it. We may skip a record
     // due to missing simple fields.
     lazy val profile = parse(fields.getOrElse("environment.profile", "{}").asInstanceOf[String])
     lazy val partner = parse(fields.getOrElse("environment.partner", "{}").asInstanceOf[String])
+    lazy val settings = parse(fields.getOrElse("environment.settings", "{}").asInstanceOf[String])
     lazy val info = parse(fields.getOrElse("payload.info", "{}").asInstanceOf[String])
     lazy val histograms = parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
 
     lazy val weaveConfigured = booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
     lazy val weaveDesktop = enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
     lazy val weaveMobile = enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
-    
+
     val map = Map[String, Any](
         "clientId" -> (fields.getOrElse("clientId", None) match {
           case x: String => x
@@ -84,11 +86,19 @@ case class Churn(prefix: String) extends DerivedStream{
         "distributionId" -> ((partner \ "distributionId") match {
           case JString(x) => x
           case _ => null
+        }),
+        "e10sEnabled" -> ((settings \ "e10sEnabled") match {
+          case JBool(x) => x
+          case _ => null
+        }),
+        "e10sCohort" -> ((settings \ "e10sCohort") match {
+          case JString(x) => x
+          case _ => null
         })
       )
     Some(map)
   }
-  
+
   override def transform(sc: SparkContext, bucket: Bucket, ignoreMe: RDD[ObjectSummary], from: String, to: String) {
     // Iterate by day, ignoring the passed-in s3objects
     val formatter = DateTimeFormat.forPattern("yyyyMMdd")
@@ -99,7 +109,7 @@ case class Churn(prefix: String) extends DerivedStream{
       val JString(bucketName) = metaSources \\ streamName \\ "bucket"
       Bucket(bucketName)
     }
-    val prefix = {
+    val dataPrefix = {
       val JString(prefix) = metaSources \\ streamName \\ "prefix"
       prefix
     }
@@ -108,7 +118,7 @@ case class Churn(prefix: String) extends DerivedStream{
     for (i <- 0 to daysCount) {
       val currentDay = fromDate.plusDays(i).toString("yyyyMMdd")
       println("Processing day: " + currentDay)
-      val summaries = sc.parallelize(s3.objectSummaries(bucket, s"$prefix/$currentDay/$filterPrefix")
+      val summaries = sc.parallelize(s3.objectSummaries(bucket, s"$dataPrefix/$currentDay/$filterPrefix")
                         .map(summary => ObjectSummary(summary.getKey(), summary.getSize())))
 
       val groups = DerivedStream.groupBySize(summaries.collect().toIterator)
@@ -125,15 +135,15 @@ case class Churn(prefix: String) extends DerivedStream{
             record <- partitionIterator
             saveable <- buildRecord(record, schema)
           } yield saveable
-  
+
           while(!records.isEmpty) {
             val localFile = ParquetFile.serialize(records, schema)
-            uploadLocalFileToS3(localFile, s"$prefix/submission_date_s3=$currentDay")
+            uploadLocalFileToS3(localFile, s"$streamVersion/submission_date_s3=$currentDay")
           }
         }
     }
   }
-  
+
   private def buildSchema: Schema = {
     SchemaBuilder
       .record("System").fields
@@ -152,9 +162,14 @@ case class Churn(prefix: String) extends DerivedStream{
       .name("syncConfigured").`type`().nullable().booleanType().noDefault() // WEAVE_CONFIGURED
       .name("syncCountDesktop").`type`().nullable().intType().noDefault() // WEAVE_DEVICE_COUNT_DESKTOP
       .name("syncCountMobile").`type`().nullable().intType().noDefault() // WEAVE_DEVICE_COUNT_MOBILE
-      
+
       .name("version").`type`().stringType().noDefault() // appVersion
       .name("timestamp").`type`().longType().noDefault() // server-assigned timestamp when record was received
+
+      // See bug 1251259
+      .name("e10sEnabled").`type`().nullable.booleanType().noDefault() // environment/settings/e10sEnabled
+      .name("e10sCohort").`type`().nullable.stringType().noDefault() // environment/settings/e10sCohort
+
       .endRecord
   }
 
@@ -175,7 +190,7 @@ case class Churn(prefix: String) extends DerivedStream{
       case _ => None
     }
   }
-  
+
   def toInt(s: String): Option[Int] = {
     try {
       Some(s.toInt)
@@ -183,7 +198,7 @@ case class Churn(prefix: String) extends DerivedStream{
       case e: Exception => None
     }
   }
-  
+
   // Find the largest numeric bucket that contains a value greater than zero.
   def enumHistogramToCount(h: JValue): Option[Long] = {
     (h \ "values") match {
@@ -206,7 +221,7 @@ case class Churn(prefix: String) extends DerivedStream{
       }
     }
   }
-  
+
   def buildRecord(fields: Map[String,Any], schema: Schema): Option[GenericRecord] ={
     val root = new GenericRecordBuilder(schema)
     for ((k, v) <- fields) root.set(k, v)
