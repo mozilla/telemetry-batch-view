@@ -12,7 +12,9 @@ The converted datasets are stored in the bucket specified in [*application.conf*
 
 ### Adding a new derived dataset
 
-See the [streams](https://github.com/vitillo/telemetry-parquet/blob/master/src/main/scala/streams) folder for the currently defined datasets.
+See the [streams](https://github.com/mozilla/telemetry-batch-view/tree/master/src/main/scala/streams) folder for the currently defined datasets.
+
+See the [docs](https://github.com/mozilla/telemetry-batch-view/tree/master/docs) folder for more information about the derived datasets.
 
 ### Local execution
 Given a subtype of `DerivedStream` of type `MyStream`, a dataset for e.g. the 28th of October can be generated with:
