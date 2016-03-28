@@ -26,6 +26,7 @@ case class MainSummary(prefix: String) extends DerivedStream{
 
     // Don't compute the expensive stuff until we need it. We may skip a record
     // due to missing simple fields.
+    lazy val addons = parse(fields.getOrElse("environment.addons", "{}").asInstanceOf[String])
     lazy val application = parse(fields.getOrElse("application", "{}").asInstanceOf[String])
     lazy val build = parse(fields.getOrElse("environment.build", "{}").asInstanceOf[String])
     lazy val profile = parse(fields.getOrElse("environment.profile", "{}").asInstanceOf[String])
@@ -40,114 +41,143 @@ case class MainSummary(prefix: String) extends DerivedStream{
     lazy val weaveMobile = enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
 
     val map = Map[String, Any](
-        "documentId" -> (fields.getOrElse("documentId", None) match {
-          case x: String => x
-          // documentId is required, and must be a string. If either
-          // condition is not satisfied, we skip this record.
-          case _ => return None
-        }),
-        "clientId" -> (fields.getOrElse("clientId", None) match {
-          case x: String => x
-          case _ => return None // required
-        }),
-        "sampleId" -> (fields.getOrElse("sampleId", None) match {
-          case x: Long => x
-          case x: Double => x.toLong
-          case _ => return None // required
-        }),
-        "submissionDate" -> (fields.getOrElse("submissionDate", None) match {
-          case x: String => x
-          case _ => return None // required
-        }),
-        "timestamp" -> message.timestamp, // required
-        "channel" -> (fields.getOrElse("appUpdateChannel", None) match {
-          case x: String => x
-          case _ => ""
-        }),
-        "normalizedChannel" -> (fields.getOrElse("normalizedChannel", None) match {
-          case x: String => x
-          case _ => ""
-        }),
-        "country" -> (fields.getOrElse("geoCountry", None) match {
-          case x: String => x
-          case _ => ""
-        }),
-        "version" -> (fields.getOrElse("appVersion", None) match {
-          case x: String => x
-          case _ => ""
-        }),
-        "profileCreationDate" -> ((profile \ "creationDate") match {
-          case x: JInt => x.num.toLong
-          case _ => null
-        }),
-        "syncConfigured" -> weaveConfigured.getOrElse(null),
-        "syncCountDesktop" -> weaveDesktop.getOrElse(null),
-        "syncCountMobile" -> weaveMobile.getOrElse(null),
-        "subsessionStartDate" -> ((info \ "subsessionStartDate") match {
-          case JString(x) => x
-          case _ => null
-        }),
-        "subsessionLength" -> ((info \ "subsessionLength") match {
-          case x: JInt => x.num.toLong
-          case _ => null
-        }),
-        "distributionId" -> ((partner \ "distributionId") match {
-          case JString(x) => x
-          case _ => null
-        }),
-        "e10sEnabled" -> ((settings \ "e10sEnabled") match {
-          case JBool(x) => x
-          case _ => null
-        }),
-        "e10sCohort" -> ((settings \ "e10sCohort") match {
-          case JString(x) => x
-          case _ => null
-        }),
-        "os" -> ((system \ "os" \ "name") match {
-          case JString(x) => x
-          case _ => null
-        }),
-        "osVersion" -> ((system \ "os" \ "version") match {
-          case JString(x) => x
-          case _ => null
-        }),
-        "osServicepackMajor" -> ((system \ "os" \ "servicePackMajor") match {
-          case JString(x) => x
-          case _ => null
-        }),
-        "osServicepackMinor" -> ((system \ "os" \ "servicePackMinor") match {
-          case JString(x) => x
-          case _ => null
-        }),
-        "appBuildId" -> ((application \ "buildId") match {
-          case JString(x) => x
-          case _ => null
-        }),
-        "appDisplayVersion" -> ((application \ "displayVersion") match {
-          case JString(x) => x
-          case _ => null
-        }),
-        "appName" -> ((application \ "name") match {
-          case JString(x) => x
-          case _ => null
-        }),
-        "appVersion" -> ((application \ "version") match {
-          case JString(x) => x
-          case _ => null
-        }),
-        "envBuildId" -> ((build \ "buildId") match {
-          case JString(x) => x
-          case _ => null
-        }),
-        "envBuildVersion" -> ((build \ "version") match {
-          case JString(x) => x
-          case _ => null
-        }),
-        "envBuildArch" -> ((build \ "architecture") match {
-          case JString(x) => x
-          case _ => null
-        })
-      )
+      "documentId" -> (fields.getOrElse("documentId", None) match {
+        case x: String => x
+        // documentId is required, and must be a string. If either
+        // condition is not satisfied, we skip this record.
+        case _ => return None
+      }),
+      "clientId" -> (fields.getOrElse("clientId", None) match {
+        case x: String => x
+        case _ => return None // required
+      }),
+      "sampleId" -> (fields.getOrElse("sampleId", None) match {
+        case x: Long => x
+        case x: Double => x.toLong
+        case _ => return None // required
+      }),
+      "submissionDate" -> (fields.getOrElse("submissionDate", None) match {
+        case x: String => x
+        case _ => return None // required
+      }),
+      "timestamp" -> message.timestamp, // required
+      "channel" -> (fields.getOrElse("appUpdateChannel", None) match {
+        case x: String => x
+        case _ => ""
+      }),
+      "normalizedChannel" -> (fields.getOrElse("normalizedChannel", None) match {
+        case x: String => x
+        case _ => ""
+      }),
+      "country" -> (fields.getOrElse("geoCountry", None) match {
+        case x: String => x
+        case _ => ""
+      }),
+      "version" -> (fields.getOrElse("appVersion", None) match {
+        case x: String => x
+        case _ => ""
+      }),
+      "profileCreationDate" -> ((profile \ "creationDate") match {
+        case x: JInt => x.num.toLong
+        case _ => null
+      }),
+      "syncConfigured" -> weaveConfigured.getOrElse(null),
+      "syncCountDesktop" -> weaveDesktop.getOrElse(null),
+      "syncCountMobile" -> weaveMobile.getOrElse(null),
+      "subsessionStartDate" -> ((info \ "subsessionStartDate") match {
+        case JString(x) => x
+        case _ => null
+      }),
+      "subsessionLength" -> ((info \ "subsessionLength") match {
+        case x: JInt => x.num.toLong
+        case _ => null
+      }),
+      "distributionId" -> ((partner \ "distributionId") match {
+        case JString(x) => x
+        case _ => null
+      }),
+      "e10sEnabled" -> ((settings \ "e10sEnabled") match {
+        case JBool(x) => x
+        case _ => null
+      }),
+      "e10sCohort" -> ((settings \ "e10sCohort") match {
+        case JString(x) => x
+        case _ => null
+      }),
+      "os" -> ((system \ "os" \ "name") match {
+        case JString(x) => x
+        case _ => null
+      }),
+      "osVersion" -> ((system \ "os" \ "version") match {
+        case JString(x) => x
+        case _ => null
+      }),
+      "osServicepackMajor" -> ((system \ "os" \ "servicePackMajor") match {
+        case JString(x) => x
+        case _ => null
+      }),
+      "osServicepackMinor" -> ((system \ "os" \ "servicePackMinor") match {
+        case JString(x) => x
+        case _ => null
+      }),
+      "appBuildId" -> ((application \ "buildId") match {
+        case JString(x) => x
+        case _ => null
+      }),
+      "appDisplayVersion" -> ((application \ "displayVersion") match {
+        case JString(x) => x
+        case _ => null
+      }),
+      "appName" -> ((application \ "name") match {
+        case JString(x) => x
+        case _ => null
+      }),
+      "appVersion" -> ((application \ "version") match {
+        case JString(x) => x
+        case _ => null
+      }),
+      "envBuildId" -> ((build \ "buildId") match {
+        case JString(x) => x
+        case _ => null
+      }),
+      "envBuildVersion" -> ((build \ "version") match {
+        case JString(x) => x
+        case _ => null
+      }),
+      "envBuildArch" -> ((build \ "architecture") match {
+        case JString(x) => x
+        case _ => null
+      }),
+      "locale" -> ((settings \ "locale") match {
+        case JString(x) => x
+        case _ => null
+      }),
+      "activeExperimentId" -> ((addons \ "activeExperiment" \ "id") match {
+        case JString(x) => x
+        case _ => null
+      }),
+      "activeExperimentBranch" -> ((addons \ "activeExperiment" \ "branch") match {
+        case JString(x) => x
+        case _ => null
+      }),
+      "reason" -> ((info \ "reason") match {
+        case JString(x) => x
+        case _ => null
+      }),
+      "vendor" -> ((info \ "vendor") match {
+        case JString(x) => x
+        case _ => null
+      }),
+      "timezoneOffset" -> ((info \ "timezoneOffset") match {
+        case x: JInt => x.num.toLong
+        case _ => null
+      }),
+      // TODO crash stuff
+      "activeAddonsCount" -> (countKeys(addons \ "activeAddons") match {
+        case Some(x) => x
+        case _ => null
+      })
+    )
     Some(map)
   }
 
@@ -264,8 +294,7 @@ case class MainSummary(prefix: String) extends DerivedStream{
       .name("crashSubmitSuccessContent").`type`().nullable().intType().noDefault() // PROCESS_CRASH_SUBMIT_SUCCESS / content-crash
       .name("crashSubmitSuccessPlugin").`type`().nullable().intType().noDefault() // PROCESS_CRASH_SUBMIT_SUCCESS / plugin-crash
 
-
-      .name("activeAddons").`type`().nullable().intType().noDefault() // number of keys in environment/addons/activeAddons
+      .name("activeAddonsCount").`type`().nullable().intType().noDefault() // number of keys in environment/addons/activeAddons
 
       // See https://github.com/mozilla-services/data-pipeline/blob/master/hindsight/modules/fx/ping.lua#L82
       .name("flashVersion").`type`().nullable().stringType().noDefault() // latest installable version of flash plugin.
@@ -278,49 +307,10 @@ case class MainSummary(prefix: String) extends DerivedStream{
       .endRecord
   }
 
-  // Check if a json value contains a number greater than zero.
-  def gtZero(v: JValue): Boolean = {
-    v match {
-      case x: JInt => x.num.toInt > 0
-      case _ => false
-    }
-  }
-
-  // Given histogram h, return true if it has a value in the "true" bucket,
-  // or false if it has a value in the "false" bucket, or None otherwise.
-  def booleanHistogramToBoolean(h: JValue): Option[Boolean] = {
-    (gtZero(h \ "values" \ "1"), gtZero(h \ "values" \ "0")) match {
-      case (true, _) => Some(true)
-      case (_, true) => Some(false)
-      case _ => None
-    }
-  }
-
-  def toInt(s: String): Option[Int] = {
-    try {
-      Some(s.toInt)
-    } catch {
-      case e: Exception => None
-    }
-  }
-
-  // Find the largest numeric bucket that contains a value greater than zero.
-  def enumHistogramToCount(h: JValue): Option[Long] = {
-    (h \ "values") match {
-      case JNothing => None
-      case JObject(x) => {
-        var topBucket = -1
-        for {
-          (k, v) <- x
-          b <- toInt(k) if b > topBucket && gtZero(v)
-        } topBucket = b
-
-        if (topBucket >= 0) {
-          Some(topBucket)
-        } else {
-          None
-        }
-      }
+  // Count the number of keys inside a JSON Object
+  def countKeys(o: JValue): Option[Long] = {
+    o match {
+      case JObject(x) => Some(x.length)
       case _ => {
         None
       }
