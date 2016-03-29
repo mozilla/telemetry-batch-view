@@ -7,13 +7,15 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.joda.time.Days
 import org.joda.time.format.DateTimeFormat
-import org.json4s.JsonAST.{JInt, JString, JBool}
+import org.json4s.JsonAST.{JBool, JInt, JObject, JString, JValue}
 import org.json4s.jackson.JsonMethods.parse
 import telemetry.{DerivedStream, ObjectSummary}
 import telemetry.DerivedStream.s3
 import telemetry.heka.{HekaFrame, Message}
 import telemetry.parquet.ParquetFile
 import utils.TelemetryUtils
+
+import scala.collection.mutable.ArrayBuffer
 
 case class MainSummary(prefix: String) extends DerivedStream{
   override def filterPrefix: String = prefix
@@ -26,7 +28,7 @@ case class MainSummary(prefix: String) extends DerivedStream{
     val fields = HekaFrame.fields(message)
 
     // Don't compute the expensive stuff until we need it. We may skip a record
-    // due to missing simple fields.
+    // due to missing required fields.
     lazy val addons = parse(fields.getOrElse("environment.addons", "{}").asInstanceOf[String])
     lazy val application = parse(fields.getOrElse("application", "{}").asInstanceOf[String])
     lazy val build = parse(fields.getOrElse("environment.build", "{}").asInstanceOf[String])
@@ -36,10 +38,15 @@ case class MainSummary(prefix: String) extends DerivedStream{
     lazy val system = parse(fields.getOrElse("environment.system", "{}").asInstanceOf[String])
     lazy val info = parse(fields.getOrElse("payload.info", "{}").asInstanceOf[String])
     lazy val histograms = parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
+    lazy val keyedHistograms = parse(fields.getOrElse("payload.keyedHistograms", "{}").asInstanceOf[String])
 
     lazy val weaveConfigured = TelemetryUtils.booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
     lazy val weaveDesktop = TelemetryUtils.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
     lazy val weaveMobile = TelemetryUtils.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
+
+    // TODO: confirm that it is safe to consider a wonky histogram as zero.
+    //       wonky meaning that "sum" is not a valid number.
+    val hsum = TelemetryUtils.getHistogramSum(_, 0)
 
     val map = Map[String, Any](
       "documentId" -> (fields.getOrElse("documentId", None) match {
@@ -173,7 +180,9 @@ case class MainSummary(prefix: String) extends DerivedStream{
         case x: JInt => x.num.toLong
         case _ => null
       }),
-      // TODO crash stuff
+      // Crash count fields
+
+      // End crash count fields
       "activeAddonsCount" -> (TelemetryUtils.countKeys(addons \ "activeAddons") match {
         case Some(x) => x
         case _ => null
@@ -189,7 +198,8 @@ case class MainSummary(prefix: String) extends DerivedStream{
       "defaultSearchEngineDataName" -> ((settings \ "defaultSearchEngineData" \ "name") match {
         case JString(x) => x
         case _ => null
-      })
+      }),
+      "searchCounts" -> TelemetryUtils.getSearchCounts(keyedHistograms \ "SEARCH_COUNTS")
     )
     Some(map)
   }
@@ -322,7 +332,28 @@ case class MainSummary(prefix: String) extends DerivedStream{
 
   def buildRecord(fields: Map[String,Any], schema: Schema): Option[GenericRecord] ={
     val root = new GenericRecordBuilder(schema)
-    for ((k, v) <- fields) root.set(k, v)
+    for ((k, v) <- fields) {
+      v match {
+        case x: List => {
+          // Handle "list" type fields (namely search counts)
+          val items = scala.collection.mutable.ArrayBuffer.empty[GenericRecord]
+          val fieldSchema = schema.getField(k).schema()
+          for (r <- x) {
+            r match {
+              case m: Map[String,Any] => {
+                val built = buildRecord(m, fieldSchema)
+                for (b <- built)
+                  items.append(b)
+              }
+            }
+          }
+          if (items.nonEmpty) {
+            root.set(k, items.toArray)
+          }
+        }
+        case _ => root.set(k, v) // Simple case: scalar fields.
+      }
+    }
     Some(root.build)
   }
 }

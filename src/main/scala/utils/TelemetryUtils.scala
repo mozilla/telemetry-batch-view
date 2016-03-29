@@ -36,6 +36,13 @@ object TelemetryUtils{
     }
   }
 
+  def getHistogramSum(h: JValue, default: Int): Int = {
+    (h \ "sum") match {
+      case x: JInt => x.num.toInt
+      case _ => default
+    }
+  }
+
   // Count the number of keys inside a JSON Object
   def countKeys(o: JValue): Option[Long] = {
     o match {
@@ -152,5 +159,41 @@ object TelemetryUtils{
       Some(flashVersions.reduceLeft(maxFlashVersion(_, _)))
     else
       None
+  }
+
+  val searchKeyPattern = "^(.+)\\.(.+)$".r
+  def searchHistogramToMap(name: String, hist: JValue): Option[Map[String, Any]] = {
+    // Split name into engine and source, then insert count from histogram.
+    try {
+      val searchKeyPattern(engine, source) = name
+      val count = (hist \ "sum") match {
+        case x: JInt => x.num.toInt
+        case _ => -1
+      }
+      Some(Map(
+        "engine" -> engine,
+        "source" -> source,
+        "count" -> count
+      ))
+    } catch {
+      case e: scala.MatchError => None
+    }
+  }
+
+  def getSearchCounts(searchCounts: JValue): Option[List[Map[String,Any]]] = {
+    searchCounts match {
+      case JObject(x) => {
+        val buf = scala.collection.mutable.ListBuffer.empty[Map[String,Any]]
+        for ((k, v) <- x) {
+          println(s"Found search $k")
+          for (c <- searchHistogramToMap(k, v)) {
+            buf.append(c)
+          }
+        }
+        if (buf.isEmpty) None
+        else Some(buf.toList)
+      }
+      case _ => None
+    }
   }
 }

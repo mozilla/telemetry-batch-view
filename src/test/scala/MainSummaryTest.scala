@@ -100,7 +100,29 @@ class MainSummaryTest extends FlatSpec with Matchers{
   }
  },
  "payload": {
-  "emptyKey": {}
+  "emptyKey": {},
+  "keyedHistograms": {
+   "SEARCH_COUNTS": {
+    "test.urlbar": {
+     "range": [1, 2],
+     "bucket_count": 3,
+     "histogram_type": 4,
+     "values": {"0": 78, "1": 0},
+     "sum": 78,
+     "sum_squares_lo": 78,
+     "sum_squares_hi": 0
+    },
+    "test.abouthome": {
+     "range": [1, 2],
+     "bucket_count": 3,
+     "histogram_type": 4,
+     "values": {"0": 10, "1": 0},
+     "sum": 10,
+     "sum_squares_lo": 10,
+     "sum_squares_hi": 0
+    }
+   }
+  }
  }
 }
 """
@@ -110,7 +132,7 @@ class MainSummaryTest extends FlatSpec with Matchers{
 
     TelemetryUtils.countKeys(json \ "environment" \ "addons" \ "activeAddons").get should be (3)
     TelemetryUtils.countKeys(json).get should be (2)
-    TelemetryUtils.countKeys(json \ "payload").get should be (1)
+    TelemetryUtils.countKeys(json \ "payload").get should be (2)
     TelemetryUtils.countKeys(json \ "payload" \ "emptyKey").get should be (0)
     TelemetryUtils.countKeys(json \ "dummy") should be (None)
   }
@@ -214,5 +236,71 @@ class MainSummaryTest extends FlatSpec with Matchers{
     // Something > Nothing
     TelemetryUtils.compareFlashVersions(Some("1.2.3.5"), None).get should be (1)
     TelemetryUtils.compareFlashVersions(None, Some("1.2.3.5")).get should be (-1)
+  }
+
+  "Search counts" can "be converted" in {
+    val exampleSearches = parse(
+      """
+        |{
+        |  "google.abouthome": {
+        |    "range": [1, 2],
+        |    "bucket_count": 3,
+        |    "histogram_type": 4,
+        |    "values": {"0": 1, "1": 0},
+        |    "sum": 1,
+        |    "sum_squares_lo": 1,
+        |    "sum_squares_hi": 0
+        |  },
+        |  "google.urlbar": {
+        |    "range": [1, 2],
+        |    "bucket_count": 3,
+        |    "histogram_type": 4,
+        |    "values": {"0": 67, "1": 0},
+        |    "sum": 67,
+        |    "sum_squares_lo": 67,
+        |    "sum_squares_hi": 0
+        |  },
+        |  "yahoo.urlbar": {
+        |    "range": [1, 2],
+        |    "bucket_count": 3,
+        |    "histogram_type": 4,
+        |    "values": {"0": 78, "1": 0},
+        |    "sum": 78,
+        |    "sum_squares_lo": 78,
+        |    "sum_squares_hi": 0
+        |  }
+        |}
+      """.stripMargin)
+
+    var expected = 0
+    for ((k, e, s, c) <- List(
+      ("google.abouthome", "google", "abouthome", 1),
+      ("google.urlbar",    "google", "urlbar",    67),
+      ("yahoo.urlbar",     "yahoo",  "urlbar",    78))) {
+      val m = TelemetryUtils.searchHistogramToMap(k, exampleSearches \ k).get
+      m("engine") shouldBe e
+      m("source") shouldBe s
+      m("count") shouldBe c
+      expected = expected + c
+    }
+
+    var actual = 0
+    for (search <- TelemetryUtils.getSearchCounts(exampleSearches).get) {
+      actual = actual + (search("count") match {
+        case x: Int => x
+        case _ => -1000
+      })
+    }
+    actual should be (expected)
+
+    val json = parse(testPayload)
+    var payloadCount = 0
+    for (search <- TelemetryUtils.getSearchCounts(json \ "payload" \ "keyedHistograms" \ "SEARCH_COUNTS").get) {
+      payloadCount = payloadCount + (search("count") match {
+        case x: Int => x
+        case _ => -1000
+      })
+    }
+    payloadCount should be (88)
   }
 }
