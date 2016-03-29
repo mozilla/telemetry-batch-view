@@ -268,6 +268,15 @@ class MainSummaryTest extends FlatSpec with Matchers{
         |    "sum": 78,
         |    "sum_squares_lo": 78,
         |    "sum_squares_hi": 0
+        |  },
+        |  "toast": {
+        |    "range": [1, 2],
+        |    "bucket_count": 3,
+        |    "histogram_type": 4,
+        |    "values": {"0": 100, "1": 0},
+        |    "sum": "toast",
+        |    "sum_squares_lo": 100,
+        |    "sum_squares_hi": 0
         |  }
         |}
       """.stripMargin)
@@ -283,6 +292,8 @@ class MainSummaryTest extends FlatSpec with Matchers{
       m("count") shouldBe c
       expected = expected + c
     }
+
+    TelemetryUtils.searchHistogramToMap("toast", exampleSearches \ "toast") should be (None)
 
     var actual = 0
     for (search <- TelemetryUtils.getSearchCounts(exampleSearches).get) {
