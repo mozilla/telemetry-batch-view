@@ -46,7 +46,7 @@ case class MainSummary(prefix: String) extends DerivedStream{
 
     // TODO: confirm that it is safe to consider a wonky histogram as zero.
     //       wonky meaning that "sum" is not a valid number.
-    val hsum = TelemetryUtils.getHistogramSum(_, 0)
+    val hsum = TelemetryUtils.getHistogramSum(_: JValue, 0)
 
     val map = Map[String, Any](
       "documentId" -> (fields.getOrElse("documentId", None) match {
@@ -181,59 +181,19 @@ case class MainSummary(prefix: String) extends DerivedStream{
         case _ => null
       }),
       // Crash count fields
-      "pluginHangs" -> ((keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "pluginhang" \ "sum") match {
-        case x: JInt => x.num.toInt
-        case _ => null
-      }),
-
-      "abortsPlugin" -> ((keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "plugin" \ "sum") match {
-        case x: JInt => x.num.toInt
-        case _ => null
-      }),
-      "abortsContent" -> ((keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "content" \ "sum") match {
-        case x: JInt => x.num.toInt
-        case _ => null
-      }),
-      "abortsGmplugin" -> ((keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "gmplugin" \ "sum") match {
-        case x: JInt => x.num.toInt
-        case _ => null
-      }),
-      "crashesdetectedPlugin" -> ((keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "plugin" \ "sum") match {
-        case x: JInt => x.num.toInt
-        case _ => null
-      }),
-      "crashesdetectedContent" -> ((keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "content" \ "sum") match {
-        case x: JInt => x.num.toInt
-        case _ => null
-      }),
-      "crashesdetectedGmplugin" -> ((keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "gmplugin" \ "sum") match {
-        case x: JInt => x.num.toInt
-        case _ => null
-      }),
-      "crashSubmitAttemptMain" -> ((keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "main-crash" \ "sum") match {
-        case x: JInt => x.num.toInt
-        case _ => null
-      }),
-      "crashSubmitAttemptContent" -> ((keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "content-crash" \ "sum") match {
-        case x: JInt => x.num.toInt
-        case _ => null
-      }),
-      "crashSubmitAttemptPlugin" -> ((keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "plugin-crash" \ "sum") match {
-        case x: JInt => x.num.toInt
-        case _ => null
-      }),
-      "crashSubmitSuccessMain" -> ((keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "main-crash" \ "sum") match {
-        case x: JInt => x.num.toInt
-        case _ => null
-      }),
-      "crashSubmitSuccessContent" -> ((keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash" \ "sum") match {
-        case x: JInt => x.num.toInt
-        case _ => null
-      }),
-      "crashSubmitSuccessPlugin" -> ((keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash" \ "sum") match {
-        case x: JInt => x.num.toInt
-        case _ => null
-      }),
+      "pluginHangs" -> hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "pluginhang"),
+      "abortsPlugin" -> hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "plugin"),
+      "abortsContent" -> hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "content"),
+      "abortsGmplugin" -> hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "gmplugin"),
+      "crashesdetectedPlugin" -> hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "plugin"),
+      "crashesdetectedContent" -> hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "content"),
+      "crashesdetectedGmplugin" -> hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "gmplugin"),
+      "crashSubmitAttemptMain" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "main-crash"),
+      "crashSubmitAttemptContent" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "content-crash"),
+      "crashSubmitAttemptPlugin" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "plugin-crash"),
+      "crashSubmitSuccessMain" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "main-crash"),
+      "crashSubmitSuccessContent" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash"),
+      "crashSubmitSuccessPlugin" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash"),
       // End crash count fields
       "activeAddonsCount" -> (TelemetryUtils.countKeys(addons \ "activeAddons") match {
         case Some(x) => x
@@ -386,7 +346,7 @@ case class MainSummary(prefix: String) extends DerivedStream{
     val root = new GenericRecordBuilder(schema)
     for ((k, v) <- fields) {
       v match {
-        case x: List => {
+        case x: List[Map[String,Any]] => {
           // Handle "list" type fields (namely search counts)
           val items = scala.collection.mutable.ArrayBuffer.empty[GenericRecord]
           val fieldSchema = schema.getField(k).schema()
