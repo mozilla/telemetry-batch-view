@@ -13,6 +13,7 @@ import telemetry.{DerivedStream, ObjectSummary}
 import telemetry.DerivedStream.s3
 import telemetry.heka.{HekaFrame, Message}
 import telemetry.parquet.ParquetFile
+import utils.TelemetryUtils
 
 case class MainSummary(prefix: String) extends DerivedStream{
   override def filterPrefix: String = prefix
@@ -36,9 +37,9 @@ case class MainSummary(prefix: String) extends DerivedStream{
     lazy val info = parse(fields.getOrElse("payload.info", "{}").asInstanceOf[String])
     lazy val histograms = parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
 
-    lazy val weaveConfigured = booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
-    lazy val weaveDesktop = enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
-    lazy val weaveMobile = enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
+    lazy val weaveConfigured = TelemetryUtils.booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
+    lazy val weaveDesktop = TelemetryUtils.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
+    lazy val weaveMobile = TelemetryUtils.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
 
     val map = Map[String, Any](
       "documentId" -> (fields.getOrElse("documentId", None) match {
@@ -173,7 +174,11 @@ case class MainSummary(prefix: String) extends DerivedStream{
         case _ => null
       }),
       // TODO crash stuff
-      "activeAddonsCount" -> (countKeys(addons \ "activeAddons") match {
+      "activeAddonsCount" -> (TelemetryUtils.countKeys(addons \ "activeAddons") match {
+        case Some(x) => x
+        case _ => null
+      }),
+      "flashVersion" -> (TelemetryUtils.getFlashVersion(addons) match {
         case Some(x) => x
         case _ => null
       })
@@ -305,16 +310,6 @@ case class MainSummary(prefix: String) extends DerivedStream{
       // Search counts
       .name("searchCounts").`type`().optional().array().items(searchCountsType) // split up and organize the SEARCH_COUNTS keyed histogram
       .endRecord
-  }
-
-  // Count the number of keys inside a JSON Object
-  def countKeys(o: JValue): Option[Long] = {
-    o match {
-      case JObject(x) => Some(x.length)
-      case _ => {
-        None
-      }
-    }
   }
 
   def buildRecord(fields: Map[String,Any], schema: Schema): Option[GenericRecord] ={
