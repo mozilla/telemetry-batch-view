@@ -7,7 +7,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.joda.time.Days
 import org.joda.time.format.DateTimeFormat
-import org.json4s.JsonAST.{JInt, JNothing, JObject, JString, JValue, JBool}
+import org.json4s.JsonAST.{JInt, JString, JBool}
 import org.json4s.jackson.JsonMethods.parse
 import telemetry.{DerivedStream, ObjectSummary}
 import telemetry.DerivedStream.s3
@@ -180,6 +180,14 @@ case class MainSummary(prefix: String) extends DerivedStream{
       }),
       "flashVersion" -> (TelemetryUtils.getFlashVersion(addons) match {
         case Some(x) => x
+        case _ => null
+      }),
+      "isDefaultBrowser" -> ((settings \ "isDefaultBrowser") match {
+        case JBool(x) => x
+        case _ => null
+      }),
+      "defaultSearchEngineDataName" -> ((settings \ "defaultSearchEngineData" \ "name") match {
+        case JString(x) => x
         case _ => null
       })
     )
