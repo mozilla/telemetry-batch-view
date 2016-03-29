@@ -120,6 +120,8 @@ object TelemetryUtils{
       a
   }
 
+  // See also:
+  //  https://github.com/mozilla-services/data-pipeline/blob/master/hindsight/modules/fx/ping.lua#L82
   def getFlashVersion(addons: JValue): Option[String] = {
     val flashVersions = ((addons \ "activePlugins") match {
       case JArray(x) => x
