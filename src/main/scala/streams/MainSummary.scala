@@ -181,7 +181,59 @@ case class MainSummary(prefix: String) extends DerivedStream{
         case _ => null
       }),
       // Crash count fields
+      "pluginHangs" -> ((keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "pluginhang" \ "sum") match {
+        case x: JInt => x.num.toInt
+        case _ => null
+      }),
 
+      "abortsPlugin" -> ((keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "plugin" \ "sum") match {
+        case x: JInt => x.num.toInt
+        case _ => null
+      }),
+      "abortsContent" -> ((keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "content" \ "sum") match {
+        case x: JInt => x.num.toInt
+        case _ => null
+      }),
+      "abortsGmplugin" -> ((keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "gmplugin" \ "sum") match {
+        case x: JInt => x.num.toInt
+        case _ => null
+      }),
+      "crashesdetectedPlugin" -> ((keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "plugin" \ "sum") match {
+        case x: JInt => x.num.toInt
+        case _ => null
+      }),
+      "crashesdetectedContent" -> ((keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "content" \ "sum") match {
+        case x: JInt => x.num.toInt
+        case _ => null
+      }),
+      "crashesdetectedGmplugin" -> ((keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "gmplugin" \ "sum") match {
+        case x: JInt => x.num.toInt
+        case _ => null
+      }),
+      "crashSubmitAttemptMain" -> ((keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "main-crash" \ "sum") match {
+        case x: JInt => x.num.toInt
+        case _ => null
+      }),
+      "crashSubmitAttemptContent" -> ((keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "content-crash" \ "sum") match {
+        case x: JInt => x.num.toInt
+        case _ => null
+      }),
+      "crashSubmitAttemptPlugin" -> ((keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "plugin-crash" \ "sum") match {
+        case x: JInt => x.num.toInt
+        case _ => null
+      }),
+      "crashSubmitSuccessMain" -> ((keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "main-crash" \ "sum") match {
+        case x: JInt => x.num.toInt
+        case _ => null
+      }),
+      "crashSubmitSuccessContent" -> ((keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash" \ "sum") match {
+        case x: JInt => x.num.toInt
+        case _ => null
+      }),
+      "crashSubmitSuccessPlugin" -> ((keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash" \ "sum") match {
+        case x: JInt => x.num.toInt
+        case _ => null
+      }),
       // End crash count fields
       "activeAddonsCount" -> (TelemetryUtils.countKeys(addons \ "activeAddons") match {
         case Some(x) => x
