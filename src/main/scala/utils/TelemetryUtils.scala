@@ -1,6 +1,6 @@
 package utils
 
-import org.json4s.JsonAST.{JInt, JNothing, JObject, JValue, JString}
+import org.json4s.JsonAST.{JArray, JInt, JNothing, JObject, JValue, JString}
 
 object TelemetryUtils{
   // Find the largest numeric bucket that contains a value greater than zero.
@@ -97,8 +97,8 @@ object TelemetryUtils{
         if (abad && bbad) return None
 
         // Good > Bad
-        if (abad) return Some(1)
-        if (bbad) return Some(0)
+        if (abad) return Some(-1)
+        if (bbad) return Some(1)
 
         for (versionPiece <- aci.zipAll(bci, 0, 0)) {
           if (versionPiece._1 < versionPiece._2) return Some(-1)
@@ -112,45 +112,21 @@ object TelemetryUtils{
     }
   }
 
-  def maxFlashVersion1(a: Option[String], b: Option[String]): String = {
-    val c = compareFlashVersions(a, b).getOrElse(1)
-    if (c < 0)
-      b.getOrElse("")
-    else
-      a.getOrElse(b.getOrElse(""))
-  }
-
-  def maxFlashVersion2(a: String, b: String): String = {
+  def maxFlashVersion(a: String, b: String): String = {
     val c = compareFlashVersions(Some(a), Some(b)).getOrElse(1)
     if (c < 0)
       b
     else
       a
-  }
-
-  def maxFlashVersion3(a: Option[String], b: Option[String]): Option[String] = {
-    val c = compareFlashVersions(a, b).getOrElse(1)
-    if (c < 0)
-      b
-    else
-      a
-  }
-
-  def maxFlashVersion4(a: String, b: String): Option[String] = {
-    val c = compareFlashVersions(Some(a), Some(b)).getOrElse(1)
-    if (c < 0)
-      Some(b)
-    else
-      Some(a)
   }
 
   def getFlashVersion(addons: JValue): Option[String] = {
-    val v = ((addons \ "activePlugins") match {
-      case JObject(x) => x
+    val flashVersions = ((addons \ "activePlugins") match {
+      case JArray(x) => x
       case _ => return None
     }).filter((p) => {
       p match {
-        case (name: String, attrs: JValue) => {
+        case (attrs: JValue) => {
           (attrs \ "name") match {
             case JString(a) => (a == "Shockwave Flash")
             case _ => false
@@ -160,7 +136,7 @@ object TelemetryUtils{
       }
     }).flatMap((p) => {
       p match {
-        case (name: String, attrs: JValue) => {
+        case (attrs: JValue) => {
           (attrs \ "version") match {
             case JString(x) => Some(x)
             case _ => None
@@ -168,9 +144,11 @@ object TelemetryUtils{
         }
         case _ => None
       }
-    }).reduceLeft(maxFlashVersion2(_, _))
+    })
 
-    Some(v)
-//    Some("Hey")
+    if (flashVersions.nonEmpty)
+      Some(flashVersions.reduceLeft(maxFlashVersion(_, _)))
+    else
+      None
   }
 }

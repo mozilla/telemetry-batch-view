@@ -3,6 +3,7 @@ package telemetry.test
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{FlatSpec, Matchers}
 import utils.TelemetryUtils
+import org.json4s.JsonDSL._
 
 class MainSummaryTest extends FlatSpec with Matchers{
   val testPayload = """
@@ -103,6 +104,7 @@ class MainSummaryTest extends FlatSpec with Matchers{
  }
 }
 """
+
   "A json object's keys" can "be counted" in {
     val json = parse(testPayload)
 
@@ -114,20 +116,98 @@ class MainSummaryTest extends FlatSpec with Matchers{
   }
 
   "Latest flash version" can "be extracted" in {
+    // Valid data
     val json = parse(testPayload)
-
     TelemetryUtils.getFlashVersion(json \ "environment" \ "addons").get should be ("19.0.0.226")
     TelemetryUtils.getFlashVersion(json \ "environment") should be (None)
+    TelemetryUtils.getFlashVersion(json \ "foo") should be (None)
+
+    // Contains plugins, but not Flash:
+    val json2 = parse(
+      """
+        |{
+        | "environment": {
+        |  "addons": {
+        |   "activePlugins": [
+        |    {
+        |     "name": "Default Browser Helper",
+        |     "version": "601",
+        |     "description": "Provides information about the default web browser"
+        |    },
+        |    {
+        |     "name": "Java Applet Plug-in",
+        |     "version": "Java 8 Update 73 build 02",
+        |     "description": "Displays Java applet content"
+        |    }
+        |   ]
+        |  }
+        | }
+        |}
+      """.stripMargin)
+    TelemetryUtils.getFlashVersion(json2 \ "environment" \ "addons") should be (None)
+
+    // Doesn't contain any plugins:
+    val json3 = parse(
+      """
+        |{
+        | "environment": {
+        |  "addons": {
+        |   "activePlugins": []
+        |  }
+        | }
+        |}
+      """.stripMargin)
+    TelemetryUtils.getFlashVersion(json3 \ "environment" \ "addons") should be (None)
+
+    // Contains many plugins, some with invalid versions
+    val json4 = parse(
+      """
+        |{
+        | "environment": {
+        |  "addons": {
+        |   "activePlugins": [
+        |    {
+        |     "name": "Shockwave Flash",
+        |     "description": "Example Flash 1",
+        |     "version": "19.0.0.g226"
+        |    },
+        |    {
+        |     "name": "Shockwave Flash",
+        |     "description": "Example Flash 2",
+        |     "version": "19.0.0.225"
+        |    },
+        |    {
+        |     "name": "Shockwave Flash",
+        |     "description": "Example Flash 3",
+        |     "version": "9.9.9.227"
+        |    },
+        |    {
+        |     "name": "Shockwave Flash",
+        |     "description": "Example Flash 4",
+        |     "version": "999.x.y.227"
+        |    }
+        |   ]
+        |  }
+        | },
+        | "payload": {
+        |  "emptyKey": {}
+        | }
+        |}
+      """.stripMargin)
+    TelemetryUtils.getFlashVersion(json4 \ "environment" \ "addons").get should be ("19.0.0.225")
   }
 
   "Flash versions" can "be compared" in {
     TelemetryUtils.compareFlashVersions(Some("1.2.3.4"), Some("1.2.3.4")).get should be (0)
     TelemetryUtils.compareFlashVersions(Some("1.2.3.5"), Some("1.2.3.4")).get should be (1)
     TelemetryUtils.compareFlashVersions(Some("1.2.3.4"), Some("1.2.3.5")).get should be (-1)
+
+    // Lexically less, but numerically greater:
     TelemetryUtils.compareFlashVersions(Some("10.2.3.5"), Some("9.3.4.8")).get should be (1)
-    TelemetryUtils.compareFlashVersions(Some("foo"), Some("1.2.3.4")).get should be (1)
-    TelemetryUtils.compareFlashVersions(Some("1.2.3.4"), Some("foo")).get should be (-1)
+    TelemetryUtils.compareFlashVersions(Some("foo"), Some("1.2.3.4")).get should be (-1)
+    TelemetryUtils.compareFlashVersions(Some("1.2.3.4"), Some("foo")).get should be (1)
     TelemetryUtils.compareFlashVersions(Some("foo"), Some("bar")) should be (None)
+
     // Equal but bogus values are equal (for efficiency).
     TelemetryUtils.compareFlashVersions(Some("foo"), Some("foo")).get should be (0)
 
