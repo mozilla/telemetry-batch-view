@@ -1,9 +1,11 @@
 package telemetry.test
 
+import org.apache.avro.generic.GenericRecordBuilder
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{FlatSpec, Matchers}
 import utils.TelemetryUtils
 import org.json4s.JsonDSL._
+import telemetry.streams.MainSummary
 
 class MainSummaryTest extends FlatSpec with Matchers{
   val testPayload = """
@@ -237,50 +239,48 @@ class MainSummaryTest extends FlatSpec with Matchers{
     TelemetryUtils.compareFlashVersions(Some("1.2.3.5"), None).get should be (1)
     TelemetryUtils.compareFlashVersions(None, Some("1.2.3.5")).get should be (-1)
   }
+  val exampleSearches = parse("""
+      |{
+      |  "google.abouthome": {
+      |    "range": [1, 2],
+      |    "bucket_count": 3,
+      |    "histogram_type": 4,
+      |    "values": {"0": 1, "1": 0},
+      |    "sum": 1,
+      |    "sum_squares_lo": 1,
+      |    "sum_squares_hi": 0
+      |  },
+      |  "google.urlbar": {
+      |    "range": [1, 2],
+      |    "bucket_count": 3,
+      |    "histogram_type": 4,
+      |    "values": {"0": 67, "1": 0},
+      |    "sum": 67,
+      |    "sum_squares_lo": 67,
+      |    "sum_squares_hi": 0
+      |  },
+      |  "yahoo.urlbar": {
+      |    "range": [1, 2],
+      |    "bucket_count": 3,
+      |    "histogram_type": 4,
+      |    "values": {"0": 78, "1": 0},
+      |    "sum": 78,
+      |    "sum_squares_lo": 78,
+      |    "sum_squares_hi": 0
+      |  },
+      |  "toast": {
+      |    "range": [1, 2],
+      |    "bucket_count": 3,
+      |    "histogram_type": 4,
+      |    "values": {"0": 100, "1": 0},
+      |    "sum": "toast",
+      |    "sum_squares_lo": 100,
+      |    "sum_squares_hi": 0
+      |  }
+      |}
+    """.stripMargin)
 
   "Search counts" can "be converted" in {
-    val exampleSearches = parse(
-      """
-        |{
-        |  "google.abouthome": {
-        |    "range": [1, 2],
-        |    "bucket_count": 3,
-        |    "histogram_type": 4,
-        |    "values": {"0": 1, "1": 0},
-        |    "sum": 1,
-        |    "sum_squares_lo": 1,
-        |    "sum_squares_hi": 0
-        |  },
-        |  "google.urlbar": {
-        |    "range": [1, 2],
-        |    "bucket_count": 3,
-        |    "histogram_type": 4,
-        |    "values": {"0": 67, "1": 0},
-        |    "sum": 67,
-        |    "sum_squares_lo": 67,
-        |    "sum_squares_hi": 0
-        |  },
-        |  "yahoo.urlbar": {
-        |    "range": [1, 2],
-        |    "bucket_count": 3,
-        |    "histogram_type": 4,
-        |    "values": {"0": 78, "1": 0},
-        |    "sum": 78,
-        |    "sum_squares_lo": 78,
-        |    "sum_squares_hi": 0
-        |  },
-        |  "toast": {
-        |    "range": [1, 2],
-        |    "bucket_count": 3,
-        |    "histogram_type": 4,
-        |    "values": {"0": 100, "1": 0},
-        |    "sum": "toast",
-        |    "sum_squares_lo": 100,
-        |    "sum_squares_hi": 0
-        |  }
-        |}
-      """.stripMargin)
-
     var expected = 0
     for ((k, e, s, c) <- List(
       ("google.abouthome", "google", "abouthome", 1),
@@ -313,5 +313,87 @@ class MainSummaryTest extends FlatSpec with Matchers{
       })
     }
     payloadCount should be (88)
+  }
+
+  "SearchCounts schema" can "be used" in {
+    val ms = MainSummary("")
+    val schema = ms.buildSchema
+    val fieldSchema = schema.getField("searchCounts").schema().getTypes().get(1).getElementType()
+
+    val root = new GenericRecordBuilder(fieldSchema)
+    root should not be (null)
+
+    val searches = TelemetryUtils.searchHistogramToMap("google.urlbar", exampleSearches \ "google.urlbar").get
+    val built = ms.buildRecord(searches, fieldSchema)
+    built.isEmpty should be (false)
+    val b = built.get
+    b.get("engine") should be ("google")
+    b.get("source") should be ("urlbar")
+    b.get("count") should be (67)
+  }
+
+  "MainSummary records" can "be built" in {
+    val testMap = Map[String, Any](
+      "documentId" -> "foo",
+      "submissionDate" -> "20160330",
+      "timestamp" -> 1000,
+      "clientId" -> "hello",
+      "sampleId" -> 10,
+      "channel" -> "nightly",
+      "normalizedChannel" -> "nightly",
+      "country" -> "CA",
+      "profileCreationDate" -> 16000,
+      "syncConfigured" -> true,
+      "syncCountDesktop" -> 1,
+      "syncCountMobile" -> 1,
+      "subsessionStartDate" -> "2016-03-30T00:00:00",
+      "subsessionLength" -> 300,
+      "distributionId" -> "mozilla31",
+      "e10sEnabled" -> true,
+      "e10sCohort" -> "something",
+      "os" -> "Darwin",
+      "osVersion" -> "10",
+      "osServicepackMajor" -> null,
+      "osServicepackMinor" -> null,
+      "appBuildId" -> "20160330000000",
+      "appDisplayVersion" -> "47.0",
+      "appName" -> "Firefox",
+      "appVersion" -> "47.0a1",
+      "envBuildId" -> "20160329000000",
+      "envBuildVersion" -> "46.0a1",
+      "envBuildArch" -> "victorian",
+      "locale" -> "en-US",
+      "activeExperimentId" -> null,
+      "activeExperimentBranch" -> null,
+      "reason" -> "gather-payload",
+      "vendor" -> "Mozilla",
+      "timezoneOffset" -> -180,
+      // Crash count fields
+      "pluginHangs" -> 0,
+      "abortsPlugin" -> 0,
+      "abortsContent" -> 0,
+      "abortsGmplugin" -> 0,
+      "crashesdetectedPlugin" -> 0,
+      "crashesdetectedContent" -> 0,
+      "crashesdetectedGmplugin" -> 0,
+      "crashSubmitAttemptMain" -> 0,
+      "crashSubmitAttemptContent" -> 0,
+      "crashSubmitAttemptPlugin" -> 0,
+      "crashSubmitSuccessMain" -> 0,
+      "crashSubmitSuccessContent" -> 0,
+      "crashSubmitSuccessPlugin" -> 0,
+      // End crash count fields
+      "activeAddonsCount" -> 3,
+      "flashVersion" -> null,
+      "isDefaultBrowser" -> true,
+      "defaultSearchEngineDataName" -> "Google",
+      "searchCounts" -> TelemetryUtils.getSearchCounts(exampleSearches)
+    )
+
+    val ms = MainSummary("")
+    val schema = ms.buildSchema
+    val built = ms.buildRecord(testMap, schema)
+
+    built.isEmpty should be (false)
   }
 }

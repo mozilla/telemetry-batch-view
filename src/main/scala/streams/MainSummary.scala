@@ -27,8 +27,10 @@ case class MainSummary(prefix: String) extends DerivedStream{
 
     // Don't compute the expensive stuff until we need it. We may skip a record
     // due to missing required fields.
+
     lazy val addons = parse(fields.getOrElse("environment.addons", "{}").asInstanceOf[String])
-    lazy val application = parse(fields.getOrElse("application", "{}").asInstanceOf[String])
+    lazy val payload = parse(message.payload.getOrElse("{}").asInstanceOf[String])
+    lazy val application = payload \ "application"
     lazy val build = parse(fields.getOrElse("environment.build", "{}").asInstanceOf[String])
     lazy val profile = parse(fields.getOrElse("environment.profile", "{}").asInstanceOf[String])
     lazy val partner = parse(fields.getOrElse("environment.partner", "{}").asInstanceOf[String])
@@ -51,11 +53,17 @@ case class MainSummary(prefix: String) extends DerivedStream{
         case x: String => x
         // documentId is required, and must be a string. If either
         // condition is not satisfied, we skip this record.
-        case _ => return None
+        case _ => {
+          println("None 1")
+          return None
+        }
       }),
       "submissionDate" -> (fields.getOrElse("submissionDate", None) match {
         case x: String => x
-        case _ => return None // required
+        case _ => {
+          println("None 2")
+          return None
+        } // required
       }),
       "timestamp" -> message.timestamp, // required
       "clientId" -> (fields.getOrElse("clientId", None) match {
@@ -76,10 +84,6 @@ case class MainSummary(prefix: String) extends DerivedStream{
         case _ => ""
       }),
       "country" -> (fields.getOrElse("geoCountry", None) match {
-        case x: String => x
-        case _ => ""
-      }),
-      "version" -> (fields.getOrElse("appVersion", None) match {
         case x: String => x
         case _ => ""
       }),
@@ -170,7 +174,7 @@ case class MainSummary(prefix: String) extends DerivedStream{
         case JString(x) => x
         case _ => null
       }),
-      "vendor" -> ((info \ "vendor") match {
+      "vendor" -> ((application \ "vendor") match {
         case JString(x) => x
         case _ => null
       }),
@@ -253,6 +257,7 @@ case class MainSummary(prefix: String) extends DerivedStream{
           } yield saveable
 
           while(!records.isEmpty) {
+//            println(s"Records = $records")
             val localFile = ParquetFile.serialize(records, schema)
             uploadLocalFileToS3(localFile, s"$streamVersion/submission_date_s3=$currentDay")
           }
@@ -260,7 +265,7 @@ case class MainSummary(prefix: String) extends DerivedStream{
     }
   }
 
-  private def buildSchema: Schema = {
+  def buildSchema: Schema = {
     // Type for encapsulating search counts
     val searchCountsType = SchemaBuilder
       .record("SearchCounts").fields()
@@ -313,7 +318,7 @@ case class MainSummary(prefix: String) extends DerivedStream{
 
       .name("timezoneOffset").`type`().nullable().intType().noDefault() // info/timezoneOffset
 
-      // Different types of hangs:
+      // Different types of crashes / hangs:
       .name("pluginHangs").`type`().nullable().intType().noDefault() // SUBPROCESS_CRASHES_WITH_DUMP / pluginhang
       .name("abortsPlugin").`type`().nullable().intType().noDefault() // SUBPROCESS_ABNORMAL_ABORT / plugin
       .name("abortsContent").`type`().nullable().intType().noDefault() // SUBPROCESS_ABNORMAL_ABORT / content
@@ -332,7 +337,7 @@ case class MainSummary(prefix: String) extends DerivedStream{
 
       // See https://github.com/mozilla-services/data-pipeline/blob/master/hindsight/modules/fx/ping.lua#L82
       .name("flashVersion").`type`().nullable().stringType().noDefault() // latest installable version of flash plugin.
-      .name("vendor").`type`().nullable().stringType().noDefault() // info/vendor
+      .name("vendor").`type`().nullable().stringType().noDefault() // application/vendor
       .name("isDefaultBrowser").`type`().nullable().booleanType().noDefault() // environment/settings/isDefaultBrowser
       .name("defaultSearchEngineDataName").`type`().nullable().stringType().noDefault() // environment/settings/defaultSearchEngineData/name
 
@@ -341,26 +346,30 @@ case class MainSummary(prefix: String) extends DerivedStream{
       .endRecord
   }
 
-  def buildRecord(fields: Map[String,Any], schema: Schema): Option[GenericRecord] ={
+  def buildRecord(fields: Map[String,Any], schema: Schema): Option[GenericRecord] = {
     val root = new GenericRecordBuilder(schema)
     for ((k, v) <- fields) {
       v match {
-        case x: List[Map[String,Any]] => {
-          // Handle "list" type fields (namely search counts)
-          val items = scala.collection.mutable.ArrayBuffer.empty[GenericRecord]
-          val fieldSchema = schema.getField(k).schema()
-          for (r <- x) {
-            r match {
-              case m: Map[String,Any] => {
-                val built = buildRecord(m, fieldSchema)
-                for (b <- built)
-                  items.append(b)
+        case Some(y) => y match {
+          case x: List[Map[String,Any]] => {
+            // Handle "list" type fields (namely search counts)
+            val items = scala.collection.mutable.ArrayBuffer.empty[GenericRecord]
+            val fieldSchema = schema.getField(k).schema().getTypes().get(1).getElementType()
+            for (r <- x) {
+              r match {
+                case m: Map[String,Any] => {
+                  val built = buildRecord(m, fieldSchema)
+//                  for (b <- built)
+//                    items.append(b)
+                }
               }
             }
+            if (items.nonEmpty) {
+              println(s"Setting key $k to $items")
+              root.set(k, items.toArray)
+            }
           }
-          if (items.nonEmpty) {
-            root.set(k, items.toArray)
-          }
+          case _ => println(s"What is this? k=$k, v=$v")
         }
         case _ => root.set(k, v) // Simple case: scalar fields.
       }
