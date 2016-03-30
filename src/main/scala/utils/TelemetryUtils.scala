@@ -185,7 +185,6 @@ object TelemetryUtils{
       case JObject(x) => {
         val buf = scala.collection.mutable.ListBuffer.empty[Map[String,Any]]
         for ((k, v) <- x) {
-          println(s"Found search $k")
           for (c <- searchHistogramToMap(k, v)) {
             buf.append(c)
           }
