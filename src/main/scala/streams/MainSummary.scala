@@ -1,4 +1,4 @@
-package streams
+package telemetry.streams
 
 import awscala.s3.Bucket
 import org.apache.avro.{Schema, SchemaBuilder}
@@ -53,20 +53,20 @@ case class MainSummary(prefix: String) extends DerivedStream{
         // condition is not satisfied, we skip this record.
         case _ => return None
       }),
-      "clientId" -> (fields.getOrElse("clientId", None) match {
-        case x: String => x
-        case _ => return None // required
-      }),
-      "sampleId" -> (fields.getOrElse("sampleId", None) match {
-        case x: Long => x
-        case x: Double => x.toLong
-        case _ => return None // required
-      }),
       "submissionDate" -> (fields.getOrElse("submissionDate", None) match {
         case x: String => x
         case _ => return None // required
       }),
       "timestamp" -> message.timestamp, // required
+      "clientId" -> (fields.getOrElse("clientId", None) match {
+        case x: String => x
+        case _ => null
+      }),
+      "sampleId" -> (fields.getOrElse("sampleId", None) match {
+        case x: Long => x
+        case x: Double => x.toLong
+        case _ => null
+      }),
       "channel" -> (fields.getOrElse("appUpdateChannel", None) match {
         case x: String => x
         case _ => ""
@@ -240,6 +240,7 @@ case class MainSummary(prefix: String) extends DerivedStream{
       val churnMessages = sc.parallelize(groups, groups.size)
         .flatMap(x => x)
         .flatMap{ case obj =>
+          println("getting " + obj.key)
           val hekaFile = bucket.getObject(obj.key).getOrElse(throw new Exception("File missing on S3: " + obj.key))
           for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey()))  yield message }
         .flatMap{ case message => messageToMap(message) }
@@ -271,12 +272,12 @@ case class MainSummary(prefix: String) extends DerivedStream{
     SchemaBuilder
       .record("MainSummary").fields
       .name("documentId").`type`().stringType().noDefault() // id
-      .name("clientId").`type`().stringType().noDefault() // clientId
-      .name("sampleId").`type`().intType().noDefault() // Fields[sampleId]
-      .name("channel").`type`().stringType().noDefault() // appUpdateChannel
-      .name("normalizedChannel").`type`().stringType().noDefault() // normalizedChannel
-      .name("country").`type`().stringType().noDefault() // geoCountry
-      .name("os").`type`().stringType().noDefault() // environment/system/os/name
+      .name("clientId").`type`().nullable().stringType().noDefault() // clientId
+      .name("sampleId").`type`().nullable().intType().noDefault() // Fields[sampleId]
+      .name("channel").`type`().nullable().stringType().noDefault() // appUpdateChannel
+      .name("normalizedChannel").`type`().nullable().stringType().noDefault() // normalizedChannel
+      .name("country").`type`().nullable().stringType().noDefault() // geoCountry
+      .name("os").`type`().nullable().stringType().noDefault() // environment/system/os/name
       .name("osVersion").`type`().nullable().stringType().noDefault() // environment/system/os/version
       .name("osServicepackMajor").`type`().nullable().stringType().noDefault() // environment/system/os/servicePackMajor
       .name("osServicepackMinor").`type`().nullable().stringType().noDefault() // environment/system/os/servicePackMinor
@@ -291,10 +292,10 @@ case class MainSummary(prefix: String) extends DerivedStream{
       .name("syncConfigured").`type`().nullable().booleanType().noDefault() // WEAVE_CONFIGURED
       .name("syncCountDesktop").`type`().nullable().intType().noDefault() // WEAVE_DEVICE_COUNT_DESKTOP
       .name("syncCountMobile").`type`().nullable().intType().noDefault() // WEAVE_DEVICE_COUNT_MOBILE
-      .name("appBuildId").`type`().stringType().noDefault() // application/buildId
+      .name("appBuildId").`type`().nullable().stringType().noDefault() // application/buildId
       .name("appDisplayVersion").`type`().nullable().stringType().noDefault() // application/displayVersion
-      .name("appName").`type`().stringType().noDefault() // application/name
-      .name("appVersion").`type`().stringType().noDefault() // application/version
+      .name("appName").`type`().nullable().stringType().noDefault() // application/name
+      .name("appVersion").`type`().nullable().stringType().noDefault() // application/version
       .name("timestamp").`type`().longType().noDefault() // server-assigned timestamp when record was received
 
       .name("envBuildId").`type`().nullable().stringType().noDefault() // environment/build/buildId
