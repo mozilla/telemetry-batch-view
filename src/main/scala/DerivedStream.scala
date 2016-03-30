@@ -5,18 +5,20 @@ import awscala.s3._
 import com.typesafe.config._
 import java.io.File
 import java.util.UUID
+
 import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.joda.time.{Days, DateTime}
+import org.joda.time.{DateTime, Days}
 import org.joda.time.format.DateTimeFormat
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
+
 import scala.collection.JavaConverters._
 import scala.io.Source
-import telemetry.streams.{E10sExperiment, ExecutiveStream, Churn, Longitudinal}
+import telemetry.streams.{E10sExperiment, ExecutiveStream, Churn, Longitudinal, MainSummary}
 import telemetry.utils.Utils
 
 // key is the S3 filename, size is the object size in bytes.
@@ -166,6 +168,7 @@ object DerivedStream {
     val res = for {
       stream <- options.get('stream)
 
+
       to = options.get('toDate) match {
         case Some(date) => date
         case None =>
@@ -185,6 +188,10 @@ object DerivedStream {
         case "Churn" =>
           val churn = Churn("telemetry/4/main/Firefox")
           Some(options.getOrElse('fromDate, to), churn)
+
+        case "MainSummary" =>
+          val mainSummary = MainSummary("telemetry/4/main/Firefox")
+          Some(options.getOrElse('fromDate, to), mainSummary)
 
         case "e10s-enabled-aurora-43" =>
           val from = options.getOrElse('fromDate, "20151022")
