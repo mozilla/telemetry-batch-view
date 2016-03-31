@@ -238,26 +238,45 @@ case class MainSummary(prefix: String) extends DerivedStream{
                         .map(summary => ObjectSummary(summary.getKey(), summary.getSize())))
 
       val groups = DerivedStream.groupBySize(summaries.collect().toIterator)
-      val churnMessages = sc.parallelize(groups, groups.size)
+      val summaryMessages = sc.parallelize(groups, groups.size)
         .flatMap(x => x)
-        .flatMap{ case obj =>
-          println("getting " + obj.key)
+        .flatMap { case obj =>
           val hekaFile = bucket.getObject(obj.key).getOrElse(throw new Exception("File missing on S3: " + obj.key))
-          for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey()))  yield message }
-        .flatMap{ case message => messageToMap(message) }
-        .repartition(100) // TODO: partition by sampleId
-        .foreachPartition{ case partitionIterator =>
-          val schema = buildSchema
-          val records = for {
-            record <- partitionIterator
-            saveable <- buildRecord(record, schema)
-          } yield saveable
-
-          while(!records.isEmpty) {
-            val localFile = ParquetFile.serialize(records, schema)
-            uploadLocalFileToS3(localFile, s"$streamVersion/submission_date_s3=$currentDay")
-          }
+          for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey())) yield message
         }
+        .flatMap { case message => messageToMap(message) }
+        .repartition(100) // TODO: partition by sampleId
+
+
+      val partitionCounts = summaryMessages.mapPartitions { case partitionIterator =>
+        val schema = buildSchema
+        val allRecords = for {
+          record <- partitionIterator
+          saveable = buildRecord(record, schema)
+        } yield saveable
+
+        var ignoredCount = 0
+        var processedCount = 0
+        val records = allRecords.map(r => r match {
+          case Some(_) =>
+            processedCount += 1
+            r
+          case None =>
+            ignoredCount += 1
+            r
+        }).flatten
+
+        while (!records.isEmpty) {
+          val localFile = ParquetFile.serialize(records, schema)
+          uploadLocalFileToS3(localFile, s"$streamVersion/submission_date_s3=$currentDay")
+        }
+
+        List((processedCount + ignoredCount, ignoredCount)).toIterator
+      }
+
+      val counts = partitionCounts.reduce( (x, y) => (x._1 + y._1, x._2 + y._2))
+      println("%s: Records seen:    %d".format(currentDay, counts._1))
+      println("%s: Records ignored: %d".format(currentDay, counts._2))
     }
   }
 
