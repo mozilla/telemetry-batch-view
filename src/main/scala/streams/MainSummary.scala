@@ -359,8 +359,8 @@ case class MainSummary(prefix: String) extends DerivedStream{
               r match {
                 case m: Map[String,Any] => {
                   val built = buildRecord(m, fieldSchema)
-//                  for (b <- built)
-//                    items.append(b)
+                  for (b <- built)
+                    items.append(b)
                 }
               }
             }
@@ -371,6 +371,7 @@ case class MainSummary(prefix: String) extends DerivedStream{
           }
           case _ => println(s"What is this? k=$k, v=$v")
         }
+        case None => println(s"Skipping None field $k")
         case _ => root.set(k, v) // Simple case: scalar fields.
       }
     }
