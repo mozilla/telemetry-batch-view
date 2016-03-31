@@ -3,8 +3,7 @@ package telemetry.test
 import org.apache.avro.generic.GenericRecordBuilder
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{FlatSpec, Matchers}
-import utils.TelemetryUtils
-import org.json4s.JsonDSL._
+import telemetry.utils.Utils
 import telemetry.parquet.ParquetFile
 import telemetry.streams.MainSummary
 
@@ -133,19 +132,19 @@ class MainSummaryTest extends FlatSpec with Matchers{
   "A json object's keys" can "be counted" in {
     val json = parse(testPayload)
 
-    TelemetryUtils.countKeys(json \ "environment" \ "addons" \ "activeAddons").get should be (3)
-    TelemetryUtils.countKeys(json).get should be (2)
-    TelemetryUtils.countKeys(json \ "payload").get should be (2)
-    TelemetryUtils.countKeys(json \ "payload" \ "emptyKey").get should be (0)
-    TelemetryUtils.countKeys(json \ "dummy") should be (None)
+    Utils.countKeys(json \ "environment" \ "addons" \ "activeAddons").get should be (3)
+    Utils.countKeys(json).get should be (2)
+    Utils.countKeys(json \ "payload").get should be (2)
+    Utils.countKeys(json \ "payload" \ "emptyKey").get should be (0)
+    Utils.countKeys(json \ "dummy") should be (None)
   }
 
   "Latest flash version" can "be extracted" in {
     // Valid data
     val json = parse(testPayload)
-    TelemetryUtils.getFlashVersion(json \ "environment" \ "addons").get should be ("19.0.0.226")
-    TelemetryUtils.getFlashVersion(json \ "environment") should be (None)
-    TelemetryUtils.getFlashVersion(json \ "foo") should be (None)
+    Utils.getFlashVersion(json \ "environment" \ "addons").get should be ("19.0.0.226")
+    Utils.getFlashVersion(json \ "environment") should be (None)
+    Utils.getFlashVersion(json \ "foo") should be (None)
 
     // Contains plugins, but not Flash:
     val json2 = parse(
@@ -169,7 +168,7 @@ class MainSummaryTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    TelemetryUtils.getFlashVersion(json2 \ "environment" \ "addons") should be (None)
+    Utils.getFlashVersion(json2 \ "environment" \ "addons") should be (None)
 
     // Doesn't contain any plugins:
     val json3 = parse(
@@ -182,7 +181,7 @@ class MainSummaryTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    TelemetryUtils.getFlashVersion(json3 \ "environment" \ "addons") should be (None)
+    Utils.getFlashVersion(json3 \ "environment" \ "addons") should be (None)
 
     // Contains many plugins, some with invalid versions
     val json4 = parse(
@@ -219,26 +218,26 @@ class MainSummaryTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    TelemetryUtils.getFlashVersion(json4 \ "environment" \ "addons").get should be ("19.0.0.225")
+    Utils.getFlashVersion(json4 \ "environment" \ "addons").get should be ("19.0.0.225")
   }
 
   "Flash versions" can "be compared" in {
-    TelemetryUtils.compareFlashVersions(Some("1.2.3.4"), Some("1.2.3.4")).get should be (0)
-    TelemetryUtils.compareFlashVersions(Some("1.2.3.5"), Some("1.2.3.4")).get should be (1)
-    TelemetryUtils.compareFlashVersions(Some("1.2.3.4"), Some("1.2.3.5")).get should be (-1)
+    Utils.compareFlashVersions(Some("1.2.3.4"), Some("1.2.3.4")).get should be (0)
+    Utils.compareFlashVersions(Some("1.2.3.5"), Some("1.2.3.4")).get should be (1)
+    Utils.compareFlashVersions(Some("1.2.3.4"), Some("1.2.3.5")).get should be (-1)
 
     // Lexically less, but numerically greater:
-    TelemetryUtils.compareFlashVersions(Some("10.2.3.5"), Some("9.3.4.8")).get should be (1)
-    TelemetryUtils.compareFlashVersions(Some("foo"), Some("1.2.3.4")).get should be (-1)
-    TelemetryUtils.compareFlashVersions(Some("1.2.3.4"), Some("foo")).get should be (1)
-    TelemetryUtils.compareFlashVersions(Some("foo"), Some("bar")) should be (None)
+    Utils.compareFlashVersions(Some("10.2.3.5"), Some("9.3.4.8")).get should be (1)
+    Utils.compareFlashVersions(Some("foo"), Some("1.2.3.4")).get should be (-1)
+    Utils.compareFlashVersions(Some("1.2.3.4"), Some("foo")).get should be (1)
+    Utils.compareFlashVersions(Some("foo"), Some("bar")) should be (None)
 
     // Equal but bogus values are equal (for efficiency).
-    TelemetryUtils.compareFlashVersions(Some("foo"), Some("foo")).get should be (0)
+    Utils.compareFlashVersions(Some("foo"), Some("foo")).get should be (0)
 
     // Something > Nothing
-    TelemetryUtils.compareFlashVersions(Some("1.2.3.5"), None).get should be (1)
-    TelemetryUtils.compareFlashVersions(None, Some("1.2.3.5")).get should be (-1)
+    Utils.compareFlashVersions(Some("1.2.3.5"), None).get should be (1)
+    Utils.compareFlashVersions(None, Some("1.2.3.5")).get should be (-1)
   }
   val exampleSearches = parse("""
       |{
@@ -287,17 +286,17 @@ class MainSummaryTest extends FlatSpec with Matchers{
       ("google.abouthome", "google", "abouthome", 1),
       ("google.urlbar",    "google", "urlbar",    67),
       ("yahoo.urlbar",     "yahoo",  "urlbar",    78))) {
-      val m = TelemetryUtils.searchHistogramToMap(k, exampleSearches \ k).get
+      val m = Utils.searchHistogramToMap(k, exampleSearches \ k).get
       m("engine") shouldBe e
       m("source") shouldBe s
       m("count") shouldBe c
       expected = expected + c
     }
 
-    TelemetryUtils.searchHistogramToMap("toast", exampleSearches \ "toast") should be (None)
+    Utils.searchHistogramToMap("toast", exampleSearches \ "toast") should be (None)
 
     var actual = 0
-    for (search <- TelemetryUtils.getSearchCounts(exampleSearches).get) {
+    for (search <- Utils.getSearchCounts(exampleSearches).get) {
       actual = actual + (search("count") match {
         case x: Int => x
         case _ => -1000
@@ -307,7 +306,7 @@ class MainSummaryTest extends FlatSpec with Matchers{
 
     val json = parse(testPayload)
     var payloadCount = 0
-    for (search <- TelemetryUtils.getSearchCounts(json \ "payload" \ "keyedHistograms" \ "SEARCH_COUNTS").get) {
+    for (search <- Utils.getSearchCounts(json \ "payload" \ "keyedHistograms" \ "SEARCH_COUNTS").get) {
       payloadCount = payloadCount + (search("count") match {
         case x: Int => x
         case _ => -1000
@@ -324,7 +323,7 @@ class MainSummaryTest extends FlatSpec with Matchers{
     val root = new GenericRecordBuilder(fieldSchema)
     root should not be (null)
 
-    val searches = TelemetryUtils.searchHistogramToMap("google.urlbar", exampleSearches \ "google.urlbar").get
+    val searches = Utils.searchHistogramToMap("google.urlbar", exampleSearches \ "google.urlbar").get
     val built = ms.buildRecord(searches, fieldSchema)
     built.isEmpty should be (false)
     val b = built.get
@@ -386,7 +385,7 @@ class MainSummaryTest extends FlatSpec with Matchers{
     "flashVersion" -> null,
     "isDefaultBrowser" -> true,
     "defaultSearchEngineDataName" -> "Google",
-    "searchCounts" -> TelemetryUtils.getSearchCounts(exampleSearches)
+    "searchCounts" -> Utils.getSearchCounts(exampleSearches)
   )
   "MainSummary records" can "be built" in {
     val ms = MainSummary("")

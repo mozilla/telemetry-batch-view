@@ -2,7 +2,7 @@ package telemetry.test
 
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{FlatSpec, Matchers}
-import utils.TelemetryUtils
+import telemetry.utils.Utils
 
 class ChurnTest extends FlatSpec with Matchers{
   val testHistogram = """
@@ -82,18 +82,18 @@ class ChurnTest extends FlatSpec with Matchers{
     val json = parse(testHistogram)
     val histograms = json \ "payload" \ "histograms"
 
-    TelemetryUtils.booleanHistogramToBoolean(histograms \ "TEST_BOOLEAN_1").get should be (true)
-    TelemetryUtils.booleanHistogramToBoolean(histograms \ "TEST_BOOLEAN_2").get should be (false)
-    TelemetryUtils.booleanHistogramToBoolean(histograms \ "TEST_BOOLEAN_3") should be (None)
-    TelemetryUtils.booleanHistogramToBoolean(histograms \ "NO_SUCH_HISTOGRAM") should be (None)
+    Utils.booleanHistogramToBoolean(histograms \ "TEST_BOOLEAN_1").get should be (true)
+    Utils.booleanHistogramToBoolean(histograms \ "TEST_BOOLEAN_2").get should be (false)
+    Utils.booleanHistogramToBoolean(histograms \ "TEST_BOOLEAN_3") should be (None)
+    Utils.booleanHistogramToBoolean(histograms \ "NO_SUCH_HISTOGRAM") should be (None)
   }
 
   "An enum histogram" can "be converted to a number" in {
     val json = parse(testHistogram)
     val histograms = json \ "payload" \ "histograms"
 
-    TelemetryUtils.enumHistogramToCount(histograms \ "TEST_ENUM_1").get should be (1)
-    TelemetryUtils.enumHistogramToCount(histograms \ "TEST_ENUM_2").get should be (100)
-    TelemetryUtils.enumHistogramToCount(histograms \ "NO_SUCH_HISTOGRAM") should be (None)
+    Utils.enumHistogramToCount(histograms \ "TEST_ENUM_1").get should be (1)
+    Utils.enumHistogramToCount(histograms \ "TEST_ENUM_2").get should be (100)
+    Utils.enumHistogramToCount(histograms \ "NO_SUCH_HISTOGRAM") should be (None)
   }
 }

@@ -13,7 +13,7 @@ import telemetry.{DerivedStream, ObjectSummary}
 import telemetry.DerivedStream.s3
 import telemetry.heka.{HekaFrame, Message}
 import telemetry.parquet.ParquetFile
-import utils.TelemetryUtils
+import telemetry.utils.Utils
 
 case class Churn(prefix: String) extends DerivedStream{
   override def filterPrefix: String = prefix
@@ -32,9 +32,9 @@ case class Churn(prefix: String) extends DerivedStream{
     lazy val info = parse(fields.getOrElse("payload.info", "{}").asInstanceOf[String])
     lazy val histograms = parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
 
-    lazy val weaveConfigured = TelemetryUtils.booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
-    lazy val weaveDesktop = TelemetryUtils.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
-    lazy val weaveMobile = TelemetryUtils.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
+    lazy val weaveConfigured = Utils.booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
+    lazy val weaveDesktop = Utils.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
+    lazy val weaveMobile = Utils.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
 
     val map = Map[String, Any](
         "clientId" -> (fields.getOrElse("clientId", None) match {

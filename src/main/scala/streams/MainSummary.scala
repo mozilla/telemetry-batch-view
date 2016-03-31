@@ -13,7 +13,7 @@ import telemetry.{DerivedStream, ObjectSummary}
 import telemetry.DerivedStream.s3
 import telemetry.heka.{HekaFrame, Message}
 import telemetry.parquet.ParquetFile
-import utils.TelemetryUtils
+import telemetry.utils.Utils
 
 case class MainSummary(prefix: String) extends DerivedStream{
   override def filterPrefix: String = prefix
@@ -27,7 +27,6 @@ case class MainSummary(prefix: String) extends DerivedStream{
 
     // Don't compute the expensive stuff until we need it. We may skip a record
     // due to missing required fields.
-
     lazy val addons = parse(fields.getOrElse("environment.addons", "{}").asInstanceOf[String])
     lazy val payload = parse(message.payload.getOrElse("{}").asInstanceOf[String])
     lazy val application = payload \ "application"
@@ -40,30 +39,24 @@ case class MainSummary(prefix: String) extends DerivedStream{
     lazy val histograms = parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
     lazy val keyedHistograms = parse(fields.getOrElse("payload.keyedHistograms", "{}").asInstanceOf[String])
 
-    lazy val weaveConfigured = TelemetryUtils.booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
-    lazy val weaveDesktop = TelemetryUtils.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
-    lazy val weaveMobile = TelemetryUtils.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
+    lazy val weaveConfigured = Utils.booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
+    lazy val weaveDesktop = Utils.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
+    lazy val weaveMobile = Utils.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
 
     // TODO: confirm that it is safe to consider a wonky histogram as zero.
     //       wonky meaning that "sum" is not a valid number.
-    val hsum = TelemetryUtils.getHistogramSum(_: JValue, 0)
+    val hsum = Utils.getHistogramSum(_: JValue, 0)
 
     val map = Map[String, Any](
       "documentId" -> (fields.getOrElse("documentId", None) match {
         case x: String => x
         // documentId is required, and must be a string. If either
         // condition is not satisfied, we skip this record.
-        case _ => {
-          println("None 1")
-          return None
-        }
+        case _ => return None
       }),
       "submissionDate" -> (fields.getOrElse("submissionDate", None) match {
         case x: String => x
-        case _ => {
-          println("None 2")
-          return None
-        } // required
+        case _ => return None // required
       }),
       "timestamp" -> message.timestamp, // required
       "clientId" -> (fields.getOrElse("clientId", None) match {
@@ -197,11 +190,11 @@ case class MainSummary(prefix: String) extends DerivedStream{
       "crashSubmitSuccessContent" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash"),
       "crashSubmitSuccessPlugin" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash"),
       // End crash count fields
-      "activeAddonsCount" -> (TelemetryUtils.countKeys(addons \ "activeAddons") match {
+      "activeAddonsCount" -> (Utils.countKeys(addons \ "activeAddons") match {
         case Some(x) => x
         case _ => null
       }),
-      "flashVersion" -> (TelemetryUtils.getFlashVersion(addons) match {
+      "flashVersion" -> (Utils.getFlashVersion(addons) match {
         case Some(x) => x
         case _ => null
       }),
@@ -213,7 +206,7 @@ case class MainSummary(prefix: String) extends DerivedStream{
         case JString(x) => x
         case _ => null
       }),
-      "searchCounts" -> TelemetryUtils.getSearchCounts(keyedHistograms \ "SEARCH_COUNTS")
+      "searchCounts" -> Utils.getSearchCounts(keyedHistograms \ "SEARCH_COUNTS")
     )
     Some(map)
   }
@@ -257,7 +250,6 @@ case class MainSummary(prefix: String) extends DerivedStream{
           } yield saveable
 
           while(!records.isEmpty) {
-//            println(s"Records = $records")
             val localFile = ParquetFile.serialize(records, schema)
             uploadLocalFileToS3(localFile, s"$streamVersion/submission_date_s3=$currentDay")
           }
@@ -348,14 +340,14 @@ case class MainSummary(prefix: String) extends DerivedStream{
 
   def buildRecord(fields: Map[String,Any], schema: Schema): Option[GenericRecord] = {
     val root = new GenericRecordBuilder(schema)
-    for ((k, v) <- fields) {
-      v match {
-        case Some(y) => y match {
-          case x: List[Map[String,Any]] => {
+    for ((fieldName, fieldValue) <- fields) {
+      fieldValue match {
+        case Some(optValue) => optValue match {
+          case listValue: List[Map[String,Any]] => {
             // Handle "list" type fields (namely search counts)
             val items = scala.collection.mutable.ArrayBuffer.empty[GenericRecord]
-            val fieldSchema = schema.getField(k).schema().getTypes().get(1).getElementType()
-            for (r <- x) {
+            val fieldSchema = schema.getField(fieldName).schema().getTypes().get(1).getElementType()
+            for (r <- listValue) {
               r match {
                 case m: Map[String,Any] => {
                   val built = buildRecord(m, fieldSchema)
@@ -365,14 +357,13 @@ case class MainSummary(prefix: String) extends DerivedStream{
               }
             }
             if (items.nonEmpty) {
-              println(s"Setting key $k to $items")
-              root.set(k, items.toArray)
+              root.set(fieldName, items.toArray)
             }
           }
-          case _ => println(s"What is this? k=$k, v=$v")
+          case _ => root.set(fieldName, optValue) // Treat it as Some(<scalar>)
         }
-        case None => println(s"Skipping None field $k")
-        case _ => root.set(k, v) // Simple case: scalar fields.
+        case None => println(s"Skipping None field $fieldName")
+        case _ => root.set(fieldName, fieldValue) // Simple case: scalar fields.
       }
     }
     Some(root.build)
