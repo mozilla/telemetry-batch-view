@@ -318,7 +318,7 @@ class MainSummaryTest extends FlatSpec with Matchers{
   "SearchCounts schema" can "be used" in {
     val ms = MainSummary("")
     val schema = ms.buildSchema
-    val fieldSchema = schema.getField("searchCounts").schema().getTypes().get(1).getElementType()
+    val fieldSchema = schema.getField("search_counts").schema().getTypes().get(1).getElementType()
 
     val root = new GenericRecordBuilder(fieldSchema)
     root should not be (null)
@@ -332,60 +332,59 @@ class MainSummaryTest extends FlatSpec with Matchers{
     b.get("count") should be (67)
   }
   val testMap = Map[String, Any](
-    "documentId" -> "foo",
-    "submissionDate" -> "20160330",
+    "document_id" -> "foo",
+    "submission_date" -> "20160330",
     "timestamp" -> 1000,
-    "clientId" -> "hello",
-    "sampleId" -> 10,
+    "client_id" -> "hello",
+    "sample_id" -> 10,
     "channel" -> "nightly",
-    "normalizedChannel" -> "nightly",
+    "normalized_channel" -> "nightly",
     "country" -> "CA",
-    "profileCreationDate" -> 16000,
-    "syncConfigured" -> true,
-    "syncCountDesktop" -> 1,
-    "syncCountMobile" -> 1,
-    "subsessionStartDate" -> "2016-03-30T00:00:00",
-    "subsessionLength" -> 300,
-    "distributionId" -> "mozilla31",
-    "e10sEnabled" -> true,
-    "e10sCohort" -> "something",
+    "city" -> "",
+    "profile_creation_date" -> 16000,
+    "sync_configured" -> true,
+    "sync_count_desktop" -> 1,
+    "sync_count_mobile" -> 1,
+    "subsession_start_date" -> "2016-03-30T00:00:00",
+    "subsession_length" -> 300,
+    "distribution_id" -> "mozilla31",
+    "e10s_enabled" -> true,
+    "e10s_cohort" -> "something",
     "os" -> "Darwin",
-    "osVersion" -> "10",
-    "osServicepackMajor" -> null,
-    "osServicepackMinor" -> null,
-    "appBuildId" -> "20160330000000",
-    "appDisplayVersion" -> "47.0",
-    "appName" -> "Firefox",
-    "appVersion" -> "47.0a1",
-    "envBuildId" -> "20160329000000",
-    "envBuildVersion" -> "46.0a1",
-    "envBuildArch" -> "victorian",
+    "os_version" -> "10",
+    "os_service_pack_major" -> null,
+    "os_service_pack_minor" -> null,
+    "app_build_id" -> "20160330000000",
+    "app_display_version" -> "47.0",
+    "app_name" -> "Firefox",
+    "app_version" -> "47.0a1",
+    "env_build_id" -> "20160329000000",
+    "env_build_version" -> "46.0a1",
+    "env_build_arch" -> "victorian",
     "locale" -> "en-US",
-    "activeExperimentId" -> null,
-    "activeExperimentBranch" -> null,
+    "active_experiment_id" -> null,
+    "active_experiment_branch" -> null,
     "reason" -> "gather-payload",
     "vendor" -> "Mozilla",
-    "timezoneOffset" -> -180,
-    // Crash count fields
-    "pluginHangs" -> 0,
-    "abortsPlugin" -> 0,
-    "abortsContent" -> 0,
-    "abortsGmplugin" -> 0,
-    "crashesdetectedPlugin" -> 0,
-    "crashesdetectedContent" -> 0,
-    "crashesdetectedGmplugin" -> 0,
-    "crashSubmitAttemptMain" -> 0,
-    "crashSubmitAttemptContent" -> 0,
-    "crashSubmitAttemptPlugin" -> 0,
-    "crashSubmitSuccessMain" -> 0,
-    "crashSubmitSuccessContent" -> 0,
-    "crashSubmitSuccessPlugin" -> 0,
-    // End crash count fields
-    "activeAddonsCount" -> 3,
-    "flashVersion" -> null,
-    "isDefaultBrowser" -> true,
-    "defaultSearchEngineDataName" -> "Google",
-    "searchCounts" -> Utils.getSearchCounts(exampleSearches)
+    "timezone_offset" -> -180,
+    "plugin_hangs" -> 0,
+    "aborts_plugin" -> 0,
+    "aborts_content" -> 0,
+    "aborts_gmplugin" -> 0,
+    "crashes_detected_plugin" -> 0,
+    "crashes_detected_content" -> 0,
+    "crashes_detected_gmplugin" -> 0,
+    "crash_submit_attempt_main" -> 0,
+    "crash_submit_attempt_content" -> 0,
+    "crash_submit_attempt_plugin" -> 0,
+    "crash_submit_success_main" -> 0,
+    "crash_submit_success_content" -> 0,
+    "crash_submit_success_plugin" -> 0,
+    "active_addons_count" -> 3,
+    "flash_version" -> null,
+    "is_default_browser" -> true,
+    "default_search_engine_data_name" -> "Google",
+    "search_counts" -> Utils.getSearchCounts(exampleSearches)
   )
   "MainSummary records" can "be built" in {
     val ms = MainSummary("")
@@ -407,7 +406,7 @@ class MainSummaryTest extends FlatSpec with Matchers{
     for (recovered <- data) {
       println("Got one")
       counter = counter + 1
-      recovered.get("documentId") should be ("foo")
+      recovered.get("document_id") should be ("foo")
     }
     counter should be (1)
   }

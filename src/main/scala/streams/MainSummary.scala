@@ -48,22 +48,22 @@ case class MainSummary(prefix: String) extends DerivedStream{
     val hsum = Utils.getHistogramSum(_: JValue, 0)
 
     val map = Map[String, Any](
-      "documentId" -> (fields.getOrElse("documentId", None) match {
+      "document_id" -> (fields.getOrElse("documentId", None) match {
         case x: String => x
         // documentId is required, and must be a string. If either
         // condition is not satisfied, we skip this record.
         case _ => return None
       }),
-      "submissionDate" -> (fields.getOrElse("submissionDate", None) match {
+      "submission_date" -> (fields.getOrElse("submissionDate", None) match {
         case x: String => x
         case _ => return None // required
       }),
       "timestamp" -> message.timestamp, // required
-      "clientId" -> (fields.getOrElse("clientId", None) match {
+      "client_id" -> (fields.getOrElse("clientId", None) match {
         case x: String => x
         case _ => null
       }),
-      "sampleId" -> (fields.getOrElse("sampleId", None) match {
+      "sample_id" -> (fields.getOrElse("sampleId", None) match {
         case x: Long => x
         case x: Double => x.toLong
         case _ => null
@@ -72,7 +72,7 @@ case class MainSummary(prefix: String) extends DerivedStream{
         case x: String => x
         case _ => ""
       }),
-      "normalizedChannel" -> (fields.getOrElse("normalizedChannel", None) match {
+      "normalized_channel" -> (fields.getOrElse("normalizedChannel", None) match {
         case x: String => x
         case _ => ""
       }),
@@ -80,30 +80,34 @@ case class MainSummary(prefix: String) extends DerivedStream{
         case x: String => x
         case _ => ""
       }),
-      "profileCreationDate" -> ((profile \ "creationDate") match {
+      "city" -> (fields.getOrElse("geoCity", None) match {
+        case x: String => x
+        case _ => ""
+      }),
+      "profile_creation_date" -> ((profile \ "creationDate") match {
         case x: JInt => x.num.toLong
         case _ => null
       }),
-      "syncConfigured" -> weaveConfigured.getOrElse(null),
-      "syncCountDesktop" -> weaveDesktop.getOrElse(null),
-      "syncCountMobile" -> weaveMobile.getOrElse(null),
-      "subsessionStartDate" -> ((info \ "subsessionStartDate") match {
+      "sync_configured" -> weaveConfigured.getOrElse(null),
+      "sync_count_desktop" -> weaveDesktop.getOrElse(null),
+      "sync_count_mobile" -> weaveMobile.getOrElse(null),
+      "subsession_start_date" -> ((info \ "subsessionStartDate") match {
         case JString(x) => x
         case _ => null
       }),
-      "subsessionLength" -> ((info \ "subsessionLength") match {
+      "subsession_length" -> ((info \ "subsessionLength") match {
         case x: JInt => x.num.toLong
         case _ => null
       }),
-      "distributionId" -> ((partner \ "distributionId") match {
+      "distribution_id" -> ((partner \ "distributionId") match {
         case JString(x) => x
         case _ => null
       }),
-      "e10sEnabled" -> ((settings \ "e10sEnabled") match {
+      "e10s_enabled" -> ((settings \ "e10sEnabled") match {
         case JBool(x) => x
         case _ => null
       }),
-      "e10sCohort" -> ((settings \ "e10sCohort") match {
+      "e10s_cohort" -> ((settings \ "e10sCohort") match {
         case JString(x) => x
         case _ => null
       }),
@@ -111,43 +115,43 @@ case class MainSummary(prefix: String) extends DerivedStream{
         case JString(x) => x
         case _ => null
       }),
-      "osVersion" -> ((system \ "os" \ "version") match {
+      "os_version" -> ((system \ "os" \ "version") match {
         case JString(x) => x
         case _ => null
       }),
-      "osServicepackMajor" -> ((system \ "os" \ "servicePackMajor") match {
+      "os_service_pack_major" -> ((system \ "os" \ "servicePackMajor") match {
         case JString(x) => x
         case _ => null
       }),
-      "osServicepackMinor" -> ((system \ "os" \ "servicePackMinor") match {
+      "os_service_pack_minor" -> ((system \ "os" \ "servicePackMinor") match {
         case JString(x) => x
         case _ => null
       }),
-      "appBuildId" -> ((application \ "buildId") match {
+      "app_build_id" -> ((application \ "buildId") match {
         case JString(x) => x
         case _ => null
       }),
-      "appDisplayVersion" -> ((application \ "displayVersion") match {
+      "app_display_version" -> ((application \ "displayVersion") match {
         case JString(x) => x
         case _ => null
       }),
-      "appName" -> ((application \ "name") match {
+      "app_name" -> ((application \ "name") match {
         case JString(x) => x
         case _ => null
       }),
-      "appVersion" -> ((application \ "version") match {
+      "app_version" -> ((application \ "version") match {
         case JString(x) => x
         case _ => null
       }),
-      "envBuildId" -> ((build \ "buildId") match {
+      "env_build_id" -> ((build \ "buildId") match {
         case JString(x) => x
         case _ => null
       }),
-      "envBuildVersion" -> ((build \ "version") match {
+      "env_build_version" -> ((build \ "version") match {
         case JString(x) => x
         case _ => null
       }),
-      "envBuildArch" -> ((build \ "architecture") match {
+      "env_build_arch" -> ((build \ "architecture") match {
         case JString(x) => x
         case _ => null
       }),
@@ -155,11 +159,11 @@ case class MainSummary(prefix: String) extends DerivedStream{
         case JString(x) => x
         case _ => null
       }),
-      "activeExperimentId" -> ((addons \ "activeExperiment" \ "id") match {
+      "active_experiment_id" -> ((addons \ "activeExperiment" \ "id") match {
         case JString(x) => x
         case _ => null
       }),
-      "activeExperimentBranch" -> ((addons \ "activeExperiment" \ "branch") match {
+      "active_experiment_branch" -> ((addons \ "activeExperiment" \ "branch") match {
         case JString(x) => x
         case _ => null
       }),
@@ -171,42 +175,42 @@ case class MainSummary(prefix: String) extends DerivedStream{
         case JString(x) => x
         case _ => null
       }),
-      "timezoneOffset" -> ((info \ "timezoneOffset") match {
+      "timezone_offset" -> ((info \ "timezoneOffset") match {
         case x: JInt => x.num.toLong
         case _ => null
       }),
       // Crash count fields
-      "pluginHangs" -> hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "pluginhang"),
-      "abortsPlugin" -> hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "plugin"),
-      "abortsContent" -> hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "content"),
-      "abortsGmplugin" -> hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "gmplugin"),
-      "crashesdetectedPlugin" -> hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "plugin"),
-      "crashesdetectedContent" -> hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "content"),
-      "crashesdetectedGmplugin" -> hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "gmplugin"),
-      "crashSubmitAttemptMain" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "main-crash"),
-      "crashSubmitAttemptContent" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "content-crash"),
-      "crashSubmitAttemptPlugin" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "plugin-crash"),
-      "crashSubmitSuccessMain" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "main-crash"),
-      "crashSubmitSuccessContent" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash"),
-      "crashSubmitSuccessPlugin" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash"),
+      "plugin_hangs" -> hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "pluginhang"),
+      "aborts_plugin" -> hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "plugin"),
+      "aborts_content" -> hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "content"),
+      "aborts_gmplugin" -> hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "gmplugin"),
+      "crashes_detected_plugin" -> hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "plugin"),
+      "crashes_detected_content" -> hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "content"),
+      "crashes_detected_gmplugin" -> hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "gmplugin"),
+      "crash_submit_attempt_main" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "main-crash"),
+      "crash_submit_attempt_content" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "content-crash"),
+      "crash_submit_attempt_plugin" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "plugin-crash"),
+      "crash_submit_success_main" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "main-crash"),
+      "crash_submit_success_content" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash"),
+      "crash_submit_success_plugin" -> hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash"),
       // End crash count fields
-      "activeAddonsCount" -> (Utils.countKeys(addons \ "activeAddons") match {
+      "active_addons_count" -> (Utils.countKeys(addons \ "activeAddons") match {
         case Some(x) => x
         case _ => null
       }),
-      "flashVersion" -> (Utils.getFlashVersion(addons) match {
+      "flash_version" -> (Utils.getFlashVersion(addons) match {
         case Some(x) => x
         case _ => null
       }),
-      "isDefaultBrowser" -> ((settings \ "isDefaultBrowser") match {
+      "is_default_browser" -> ((settings \ "isDefaultBrowser") match {
         case JBool(x) => x
         case _ => null
       }),
-      "defaultSearchEngineDataName" -> ((settings \ "defaultSearchEngineData" \ "name") match {
+      "default_search_engine_data_name" -> ((settings \ "defaultSearchEngineData" \ "name") match {
         case JString(x) => x
         case _ => null
       }),
-      "searchCounts" -> Utils.getSearchCounts(keyedHistograms \ "SEARCH_COUNTS")
+      "search_counts" -> Utils.getSearchCounts(keyedHistograms \ "SEARCH_COUNTS")
     )
     Some(map)
   }
@@ -268,73 +272,74 @@ case class MainSummary(prefix: String) extends DerivedStream{
 
     SchemaBuilder
       .record("MainSummary").fields
-      .name("documentId").`type`().stringType().noDefault() // id
-      .name("clientId").`type`().nullable().stringType().noDefault() // clientId
-      .name("sampleId").`type`().nullable().intType().noDefault() // Fields[sampleId]
+      .name("document_id").`type`().stringType().noDefault() // id
+      .name("client_id").`type`().nullable().stringType().noDefault() // clientId
+      .name("sample_id").`type`().nullable().intType().noDefault() // Fields[sampleId]
       .name("channel").`type`().nullable().stringType().noDefault() // appUpdateChannel
-      .name("normalizedChannel").`type`().nullable().stringType().noDefault() // normalizedChannel
+      .name("normalized_channel").`type`().nullable().stringType().noDefault() // normalizedChannel
       .name("country").`type`().nullable().stringType().noDefault() // geoCountry
+      .name("city").`type`().nullable().stringType().noDefault() // geoCity
       .name("os").`type`().nullable().stringType().noDefault() // environment/system/os/name
-      .name("osVersion").`type`().nullable().stringType().noDefault() // environment/system/os/version
-      .name("osServicepackMajor").`type`().nullable().stringType().noDefault() // environment/system/os/servicePackMajor
-      .name("osServicepackMinor").`type`().nullable().stringType().noDefault() // environment/system/os/servicePackMinor
+      .name("os_version").`type`().nullable().stringType().noDefault() // environment/system/os/version
+      .name("os_service_pack_major").`type`().nullable().stringType().noDefault() // environment/system/os/servicePackMajor
+      .name("os_service_pack_minor").`type`().nullable().stringType().noDefault() // environment/system/os/servicePackMinor
 
       // TODO: use proper 'date' type for date columns.
-      .name("profileCreationDate").`type`().nullable().intType().noDefault() // environment/profile/creationDate
-      .name("subsessionStartDate").`type`().nullable().stringType().noDefault() // info/subsessionStartDate
-      .name("subsessionLength").`type`().nullable().intType().noDefault() // info/subsessionLength
-      .name("distributionId").`type`().nullable().stringType().noDefault() // environment/partner/distributionId
-      .name("submissionDate").`type`().stringType().noDefault()
+      .name("profile_creation_date").`type`().nullable().intType().noDefault() // environment/profile/creationDate
+      .name("subsession_start_date").`type`().nullable().stringType().noDefault() // info/subsessionStartDate
+      .name("subsession_length").`type`().nullable().intType().noDefault() // info/subsessionLength
+      .name("distribution_id").`type`().nullable().stringType().noDefault() // environment/partner/distributionId
+      .name("submission_date").`type`().stringType().noDefault()
       // See bug 1232050
-      .name("syncConfigured").`type`().nullable().booleanType().noDefault() // WEAVE_CONFIGURED
-      .name("syncCountDesktop").`type`().nullable().intType().noDefault() // WEAVE_DEVICE_COUNT_DESKTOP
-      .name("syncCountMobile").`type`().nullable().intType().noDefault() // WEAVE_DEVICE_COUNT_MOBILE
-      .name("appBuildId").`type`().nullable().stringType().noDefault() // application/buildId
-      .name("appDisplayVersion").`type`().nullable().stringType().noDefault() // application/displayVersion
-      .name("appName").`type`().nullable().stringType().noDefault() // application/name
-      .name("appVersion").`type`().nullable().stringType().noDefault() // application/version
+      .name("sync_configured").`type`().nullable().booleanType().noDefault() // WEAVE_CONFIGURED
+      .name("sync_count_desktop").`type`().nullable().intType().noDefault() // WEAVE_DEVICE_COUNT_DESKTOP
+      .name("sync_count_mobile").`type`().nullable().intType().noDefault() // WEAVE_DEVICE_COUNT_MOBILE
+      .name("app_build_id").`type`().nullable().stringType().noDefault() // application/buildId
+      .name("app_display_version").`type`().nullable().stringType().noDefault() // application/displayVersion
+      .name("app_name").`type`().nullable().stringType().noDefault() // application/name
+      .name("app_version").`type`().nullable().stringType().noDefault() // application/version
       .name("timestamp").`type`().longType().noDefault() // server-assigned timestamp when record was received
 
-      .name("envBuildId").`type`().nullable().stringType().noDefault() // environment/build/buildId
-      .name("envBuildVersion").`type`().nullable().stringType().noDefault() // environment/build/version
-      .name("envBuildArch").`type`().nullable().stringType().noDefault() // environment/build/architecture
+      .name("env_build_id").`type`().nullable().stringType().noDefault() // environment/build/buildId
+      .name("env_build_version").`type`().nullable().stringType().noDefault() // environment/build/version
+      .name("env_build_arch").`type`().nullable().stringType().noDefault() // environment/build/architecture
 
       // See bug 1251259
-      .name("e10sEnabled").`type`().nullable().booleanType().noDefault() // environment/settings/e10sEnabled
-      .name("e10sCohort").`type`().nullable().stringType().noDefault() // environment/settings/e10sCohort
+      .name("e10s_enabled").`type`().nullable().booleanType().noDefault() // environment/settings/e10sEnabled
+      .name("e10s_cohort").`type`().nullable().stringType().noDefault() // environment/settings/e10sCohort
       .name("locale").`type`().nullable().stringType().noDefault() // environment/settings/locale
 
-      .name("activeExperimentId").`type`().nullable().stringType().noDefault() // environment/addons/activeExperiment/id
-      .name("activeExperimentBranch").`type`().nullable().stringType().noDefault() // environment/addons/activeExperiment/branch
+      .name("active_experiment_id").`type`().nullable().stringType().noDefault() // environment/addons/activeExperiment/id
+      .name("active_experiment_branch").`type`().nullable().stringType().noDefault() // environment/addons/activeExperiment/branch
       .name("reason").`type`().nullable().stringType().noDefault() // info/reason
 
-      .name("timezoneOffset").`type`().nullable().intType().noDefault() // info/timezoneOffset
+      .name("timezone_offset").`type`().nullable().intType().noDefault() // info/timezoneOffset
 
       // Different types of crashes / hangs:
-      .name("pluginHangs").`type`().nullable().intType().noDefault() // SUBPROCESS_CRASHES_WITH_DUMP / pluginhang
-      .name("abortsPlugin").`type`().nullable().intType().noDefault() // SUBPROCESS_ABNORMAL_ABORT / plugin
-      .name("abortsContent").`type`().nullable().intType().noDefault() // SUBPROCESS_ABNORMAL_ABORT / content
-      .name("abortsGmplugin").`type`().nullable().intType().noDefault() // SUBPROCESS_ABNORMAL_ABORT / gmplugin
-      .name("crashesdetectedPlugin").`type`().nullable().intType().noDefault() // SUBPROCESS_CRASHES_WITH_DUMP / plugin
-      .name("crashesdetectedContent").`type`().nullable().intType().noDefault() // SUBPROCESS_CRASHES_WITH_DUMP / content
-      .name("crashesdetectedGmplugin").`type`().nullable().intType().noDefault() // SUBPROCESS_CRASHES_WITH_DUMP / gmplugin
-      .name("crashSubmitAttemptMain").`type`().nullable().intType().noDefault() // PROCESS_CRASH_SUBMIT_ATTEMPT / main-crash
-      .name("crashSubmitAttemptContent").`type`().nullable().intType().noDefault() // PROCESS_CRASH_SUBMIT_ATTEMPT / content-crash
-      .name("crashSubmitAttemptPlugin").`type`().nullable().intType().noDefault() // PROCESS_CRASH_SUBMIT_ATTEMPT / plugin-crash
-      .name("crashSubmitSuccessMain").`type`().nullable().intType().noDefault() // PROCESS_CRASH_SUBMIT_SUCCESS / main-crash
-      .name("crashSubmitSuccessContent").`type`().nullable().intType().noDefault() // PROCESS_CRASH_SUBMIT_SUCCESS / content-crash
-      .name("crashSubmitSuccessPlugin").`type`().nullable().intType().noDefault() // PROCESS_CRASH_SUBMIT_SUCCESS / plugin-crash
+      .name("plugin_hangs").`type`().nullable().intType().noDefault() // SUBPROCESS_CRASHES_WITH_DUMP / pluginhang
+      .name("aborts_plugin").`type`().nullable().intType().noDefault() // SUBPROCESS_ABNORMAL_ABORT / plugin
+      .name("aborts_content").`type`().nullable().intType().noDefault() // SUBPROCESS_ABNORMAL_ABORT / content
+      .name("aborts_gmplugin").`type`().nullable().intType().noDefault() // SUBPROCESS_ABNORMAL_ABORT / gmplugin
+      .name("crashes_detected_plugin").`type`().nullable().intType().noDefault() // SUBPROCESS_CRASHES_WITH_DUMP / plugin
+      .name("crashes_detected_content").`type`().nullable().intType().noDefault() // SUBPROCESS_CRASHES_WITH_DUMP / content
+      .name("crashes_detected_gmplugin").`type`().nullable().intType().noDefault() // SUBPROCESS_CRASHES_WITH_DUMP / gmplugin
+      .name("crash_submit_attempt_main").`type`().nullable().intType().noDefault() // PROCESS_CRASH_SUBMIT_ATTEMPT / main-crash
+      .name("crash_submit_attempt_content").`type`().nullable().intType().noDefault() // PROCESS_CRASH_SUBMIT_ATTEMPT / content-crash
+      .name("crash_submit_attempt_plugin").`type`().nullable().intType().noDefault() // PROCESS_CRASH_SUBMIT_ATTEMPT / plugin-crash
+      .name("crash_submit_success_main").`type`().nullable().intType().noDefault() // PROCESS_CRASH_SUBMIT_SUCCESS / main-crash
+      .name("crash_submit_success_content").`type`().nullable().intType().noDefault() // PROCESS_CRASH_SUBMIT_SUCCESS / content-crash
+      .name("crash_submit_success_plugin").`type`().nullable().intType().noDefault() // PROCESS_CRASH_SUBMIT_SUCCESS / plugin-crash
 
-      .name("activeAddonsCount").`type`().nullable().intType().noDefault() // number of keys in environment/addons/activeAddons
+      .name("active_addons_count").`type`().nullable().intType().noDefault() // number of keys in environment/addons/activeAddons
 
       // See https://github.com/mozilla-services/data-pipeline/blob/master/hindsight/modules/fx/ping.lua#L82
-      .name("flashVersion").`type`().nullable().stringType().noDefault() // latest installable version of flash plugin.
+      .name("flash_version").`type`().nullable().stringType().noDefault() // latest installable version of flash plugin.
       .name("vendor").`type`().nullable().stringType().noDefault() // application/vendor
-      .name("isDefaultBrowser").`type`().nullable().booleanType().noDefault() // environment/settings/isDefaultBrowser
-      .name("defaultSearchEngineDataName").`type`().nullable().stringType().noDefault() // environment/settings/defaultSearchEngineData/name
+      .name("is_default_browser").`type`().nullable().booleanType().noDefault() // environment/settings/isDefaultBrowser
+      .name("default_search_engine_data_name").`type`().nullable().stringType().noDefault() // environment/settings/defaultSearchEngineData/name
 
       // Search counts
-      .name("searchCounts").`type`().optional().array().items(searchCountsType) // split up and organize the SEARCH_COUNTS keyed histogram
+      .name("search_counts").`type`().optional().array().items(searchCountsType) // split up and organize the SEARCH_COUNTS keyed histogram
       .endRecord
   }
 
