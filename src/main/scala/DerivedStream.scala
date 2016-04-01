@@ -185,7 +185,7 @@ object DerivedStream {
           val churn = Churn("telemetry/4/main/Firefox")
           Some(options.getOrElse('fromDate, to), churn)
 
-        case "MainSummary" => https://bugzilla.mozilla.org/show_bug.cgi?id=1260847
+        case "MainSummary" => // https://bugzilla.mozilla.org/show_bug.cgi?id=1260847
           val mainSummary = MainSummary("telemetry/4/main/Firefox")
           Some(options.getOrElse('fromDate, to), mainSummary)
 
