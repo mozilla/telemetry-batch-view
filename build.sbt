@@ -17,8 +17,14 @@ lazy val root = (project in file(".")).
     libraryDependencies += "org.json4s" %% "json4s-jackson" % "3.2.11",
     libraryDependencies += "joda-time" % "joda-time" % "2.9.1",
     libraryDependencies += "org.apache.hadoop" % "hadoop-client" % "2.6.0" excludeAll(ExclusionRule(organization = "javax.servlet")),
-    libraryDependencies += "org.apache.spark" %% "spark-yarn" % "1.6.1",
-    libraryDependencies += "com.github.nscala-time" %% "nscala-time" % "2.10.0"
+    libraryDependencies += "org.apache.hadoop" % "hadoop-aws" % "2.6.0" excludeAll(ExclusionRule(organization = "javax.servlet")),
+    libraryDependencies += "net.java.dev.jets3t" % "jets3t" % "0.9.4" excludeAll(ExclusionRule(organization = "javax.servlet")),
+    libraryDependencies += "org.apache.spark" %% "spark-yarn" % "1.6.0",
+    libraryDependencies += "org.apache.spark" %% "spark-sql" % "1.6.0",
+    libraryDependencies += "org.apache.spark" %% "spark-hive" % "1.6.0",
+    libraryDependencies += "com.github.nscala-time" %% "nscala-time" % "2.10.0",
+    libraryDependencies += "org.rogach" %% "scallop" % "1.0.0",
+    libraryDependencies += "com.twitter" %% "algebird-core" % "0.12.0"
   )
 
 run in Compile <<= Defaults.runTask(fullClasspath in Compile, mainClass in (Compile, run), runner in (Compile, run))
