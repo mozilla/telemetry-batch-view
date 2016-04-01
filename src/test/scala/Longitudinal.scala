@@ -91,8 +91,10 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
         ("userPrefs" -> Map("browser.download.lastDir" -> "/home/anthony/Desktop"))
 
       val system =
-          ("cpu" -> ("count" -> 4)) ~
           ("memoryMB" -> 2048) ~
+          ("cpu" -> ("count" -> 4)) ~
+          ("device" ->
+             ("model" -> "SHARP")) ~
           ("os" ->
              ("name"    -> "Windows_NT") ~
              ("locale"  -> "en_US") ~
@@ -254,7 +256,52 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     records.foreach{ x =>
       val record = x.asInstanceOf[Record]
       assert(record.get("memory_mb") == 2048)
-      assert(record.get("cpu").asInstanceOf[Record].get("count") == 4)
+    }
+  }
+
+  "environment.system/cpu" must "be converted correctly" in {
+    val records = fixture.record.get("system_cpu").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Record]
+      assert(record.get("count") == 4)
+    }
+  }
+
+  "environment.system/device" must "be converted correctly" in {
+    val records = fixture.record.get("system_device").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Record]
+      println(record)
+      assert(record.get("model") == "SHARP")
+    }
+  }
+
+  "environment.system/os" must "be converted correctly" in {
+    val records = fixture.record.get("system_os").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Record]
+      assert(record.get("name") == "Windows_NT")
+    }
+  }
+
+  "environment.system/hdd" must "be converted correctly" in {
+    val records = fixture.record.get("system_hdd").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Record]
+      assert(record.get("profile").asInstanceOf[Record].get("revision") == "12345")
+    }
+  }
+
+  "environment.system/gfx" must "be converted correctly" in {
+    val records = fixture.record.get("system_gfx").asInstanceOf[Array[Any]].toList
+    assert(records.length == fixture.payloads.length)
+    records.foreach{ x =>
+      val record = x.asInstanceOf[Record].get("adapters").asInstanceOf[Array[Any]](0).asInstanceOf[Record]
+      assert(record.get("ram") == 1024)
     }
   }
 

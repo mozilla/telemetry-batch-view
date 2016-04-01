@@ -2,7 +2,7 @@
 
 # telemetry-batch-view
 
-This is a Scala "framework" to build derived datasets, aka batch views, of [Telemetry](https://wiki.mozilla.org/Telemetry) data.
+This is a Scala "framework" to build derived datasets, also known as [batch views](http://robertovitillo.com/2016/01/06/batch-views/), of [Telemetry](https://wiki.mozilla.org/Telemetry) data.
 
 Raw JSON [pings](https://ci.mozilla.org/job/mozilla-central-docs/Tree_Documentation/toolkit/components/telemetry/telemetry/pings.html) are stored on S3 within files containing [framed Heka records](https://hekad.readthedocs.org/en/latest/message/index.html#stream-framing). Reading the raw data in through e.g. Spark can be slow as for a given analysis only a few fields are typically used; not to mention the cost of parsing the JSON blobs. Furthermore, Heka files might contain only a handful of records under certain circumstances.
 
@@ -12,7 +12,9 @@ The converted datasets are stored in the bucket specified in [*application.conf*
 
 ### Adding a new derived dataset
 
-See the [streams](https://github.com/vitillo/telemetry-parquet/blob/master/src/main/scala/streams) folder for the currently defined datasets.
+See the [streams](https://github.com/mozilla/telemetry-batch-view/tree/master/src/main/scala/streams) folder for the currently defined datasets.
+
+See the [docs](https://github.com/mozilla/telemetry-batch-view/tree/master/docs) folder for more information about the derived datasets.
 
 ### Local execution
 Given a subtype of `DerivedStream` of type `MyStream`, a dataset for e.g. the 28th of October can be generated with:
