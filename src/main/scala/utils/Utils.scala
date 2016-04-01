@@ -1,7 +1,7 @@
 package telemetry.utils
 
 import org.joda.time._
-import org.json4s.JsonAST.{JString, _}
+import org.json4s.JsonAST._
 
 object Utils{
   val dict = Map("submission_url" -> "submissionURL",
