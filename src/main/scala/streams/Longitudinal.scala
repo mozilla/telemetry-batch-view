@@ -1,6 +1,5 @@
 package telemetry.streams
 
-import awscala._
 import awscala.s3._
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericData, GenericRecord, GenericRecordBuilder}
@@ -11,7 +10,7 @@ import org.json4s.jackson.JsonMethods._
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
-import scala.math.{max, abs}
+import scala.math.abs
 import scala.reflect.ClassTag
 import telemetry.{DerivedStream, ObjectSummary}
 import telemetry.DerivedStream.s3
