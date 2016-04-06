@@ -112,7 +112,7 @@ case class Longitudinal() extends DerivedStream {
           (startDate, counter) <- tmp.headOption
         } yield ((clientId, startDate, counter.toInt), fields)
       }
-      .repartitionAndSortWithinPartitions(new ClientIdPartitioner(320))
+      .repartitionAndSortWithinPartitions(new ClientIdPartitioner(480))
       .map{case (key, value) => (key._1, value)}
 
     /* One file per partition is generated at the end of the job. We want to have
