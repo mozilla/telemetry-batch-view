@@ -24,6 +24,15 @@ private class SampleIdPartitioner extends Partitioner{
   }
 }
 
+/*
+Useful links re: e10sCohort experiment design and structure:
+
+* An overview of the rationale: https://bugzilla.mozilla.org/show_bug.cgi?id=1251259
+* Original bug for e10sCohort: https://bugzilla.mozilla.org/show_bug.cgi?id=1249845
+* A brief description of e10sCohort's schema: https://github.com/mozilla-services/mozilla-pipeline-schemas/issues/4
+* A later addition to the schema: https://bugzilla.mozilla.org/show_bug.cgi?id=1255013
+*/
+
 case class E10sExperiment(experimentId: String, prefix: String) extends DerivedStream {
   override def streamName: String = "telemetry"
 
@@ -48,26 +57,22 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
         val fields = HekaFrame.fields(message)
         val clientId = fields.get("clientId")
         val sampleId = fields.get("sampleId")
+        val settings = parse(fields.getOrElse("environment.settings", "{}").asInstanceOf[String])
 
-        val addons = parse(fields.getOrElse("environment.addons", "{}").asInstanceOf[String])
-        val id = addons \ "activeExperiment" \ "id"
-        val branch = addons \ "activeExperiment" \ "branch"
+        // the e10s cohort determines which group a user belongs to in the e10s experiment
+        // (as of beta46 experiment 2; previously, we used the Telemetry Experiments framework)
+        val cohort = settings \ "e10sCohort"
 
-        // Ignore the first session of the experiment
-        val log = parse(fields.getOrElse("payload.log", "[]").asInstanceOf[String])
-        val status = for {
-          JArray(entries) <- log
-          JArray(entry) <- entries
-          JString(key) <- entry(0)
-          if key == "EXPERIMENT_ACTIVATION"
-          JString(status) <- entry(2)
-          if status == "ACTIVATED"
-          JString(exp) <- entry(3)
-          if exp == experimentId
-        } yield status
+        // the first time the system addon is run, it is possible that the addon determines the
+        // user should have e10s enabled for the experiment, and sets the e10sCohort to "test",
+        // yet it is too late in the session to actually enable e10s
+        // the suggested solution is to check the value of environment/settings/e10sEnabled, and exclude those pings from consideration
+        val JBool(e10sEnabled) = settings \ "e10sEnabled"
+        val pingShouldBeExcluded = (cohort == "test" && !e10sEnabled) || // should have e10s enabled, but doesn't
+                                   (cohort == "control" && e10sEnabled) // shouldn't have e10s enabled, but does
 
-        (clientId, sampleId, id, branch) match {
-          case (Some(client: String), Some(sample: Double), JString(id), JString(branch)) if id == experimentId && status.isEmpty =>
+        (clientId, sampleId, cohort) match {
+          case (Some(client: String), Some(sample: Double), JString(cohort)) if !pingShouldBeExcluded =>
             List(((client, sample.toInt), fields))
           case _ => Nil
         }
@@ -102,7 +107,7 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
     SchemaBuilder
       .record("Submission").fields
       .name("clientId").`type`().stringType().noDefault()
-      .name("experimentBranch").`type`().stringType().noDefault()
+      .name("e10sCohort").`type`().stringType().noDefault()
       .name("creationTimestamp").`type`().stringType().noDefault()
       .name("submissionDate").`type`().stringType().noDefault()
       .name("documentId").`type`().stringType().noDefault()
@@ -119,14 +124,15 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
       .endRecord
   }
 
-  private def buildRecord(fields: Map[String, Any], schema: Schema): Option[GenericRecord] ={
+  private def buildRecord(fields: Map[String, Any], schema: Schema): Option[GenericRecord] = {
     val addons = fields.getOrElse("environment.addons", "{}").asInstanceOf[String]
     val system = fields.getOrElse("environment.system", "{}").asInstanceOf[String]
-    val JString(branch) = parse(addons) \ "activeExperiment" \ "branch"
+    val settings = fields.getOrElse("environment.settings", "").asInstanceOf[String]
+    val JString(cohort) = parse(settings) \ "e10sCohort"
 
     val root = new GenericRecordBuilder(schema)
       .set("clientId", fields.getOrElse("clientId", ""))
-      .set("experimentBranch", branch)
+      .set("e10sCohort", cohort)
       .set("creationTimestamp", fields.getOrElse("creationTimestamp", ""))
       .set("submissionDate", fields.getOrElse("submissionDate", ""))
       .set("documentId", fields.getOrElse("documentId", ""))
