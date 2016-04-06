@@ -186,29 +186,9 @@ object DerivedStream {
           val churn = Churn("telemetry/4/main/Firefox")
           Some(options.getOrElse('fromDate, to), churn)
 
-        case "e10s-enabled-aurora-43" => // https://bugzilla.mozilla.org/show_bug.cgi?id=1193089
-          val from = options.getOrElse('fromDate, "20151022")
-          val exp = E10sExperiment("e10s-enabled-aurora-20151020@experiments.mozilla.org", "telemetry/4/saved_session/Firefox/aurora/43.0a2/")
-          Some(from, exp)
-
-        case "e10s-enabled-beta-44" => // https://bugzilla.mozilla.org/show_bug.cgi?id=1229104
-          val from = options.getOrElse('fromDate, "20151214")
-          val exp = E10sExperiment("e10s-enabled-beta-20151214@experiments.mozilla.org", "telemetry/4/saved_session/Firefox/beta/44.0/")
-          Some(from, exp)
-
-        case "e10s-enabled-beta-45-withaddons" => // https://bugzilla.mozilla.org/show_bug.cgi?id=1241336
-          val from = options.getOrElse('fromDate, "20160129")
-          val exp = E10sExperiment("e10s-beta45-withaddons@experiments.mozilla.org", "telemetry/4/saved_session/Firefox/beta/45.0/")
-          Some(from, exp)
-
-        case "e10s-enabled-beta-45-withoutaddons" => // https://bugzilla.mozilla.org/show_bug.cgi?id=1244187
-          val from = options.getOrElse('fromDate, "20160211")
-          val exp = E10sExperiment("e10s-beta45-withoutaddons@experiments.mozilla.org", "telemetry/4/saved_session/Firefox/beta/45.0/")
-          Some(from, exp)
-
-        case "e10s-beta46-noapz" => // https://bugzilla.mozilla.org/show_bug.cgi?id=1253669
-          val from = options.getOrElse('fromDate, "20160309")
-          val exp = E10sExperiment("e10s-beta46-noapz@experiments.mozilla.org", "telemetry/4/saved_session/Firefox/beta/46.0/")
+        case "E10SExperiment" =>
+          val from = options.getOrElse('fromDate, "20160321")
+          val exp = E10sExperiment("e10s-beta46-cohorts", "telemetry/4/saved_session/Firefox/beta/46.0/")
           Some(from, exp)
 
         case _ =>
