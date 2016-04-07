@@ -61,7 +61,7 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
 
         // the e10s cohort determines which group a user belongs to in the e10s experiment
         // (as of beta46 experiment 2; previously, we used the Telemetry Experiments framework)
-        val cohort = settings \ "e10sCohort"
+        val JString(cohort) = settings \ "e10sCohort"
 
         // the first time the system addon is run, it is possible that the addon determines the
         // user should have e10s enabled for the experiment, and sets the e10sCohort to "test",
@@ -71,8 +71,8 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
         val pingShouldBeExcluded = (cohort == "test" && !e10sEnabled) || // should have e10s enabled, but doesn't
                                    (cohort == "control" && e10sEnabled) // shouldn't have e10s enabled, but does
 
-        (clientId, sampleId, cohort) match {
-          case (Some(client: String), Some(sample: Double), JString(cohort)) if !pingShouldBeExcluded =>
+        (clientId, sampleId) match {
+          case (Some(client: String), Some(sample: Double)) if !pingShouldBeExcluded =>
             List(((client, sample.toInt), fields))
           case _ => Nil
         }
