@@ -13,6 +13,7 @@ import telemetry.{DerivedStream, ObjectSummary}
 import telemetry.DerivedStream.s3
 import telemetry.heka.{HekaFrame, Message}
 import telemetry.parquet.ParquetFile
+import telemetry.streams.main_summary.Utils
 
 case class Churn(prefix: String) extends DerivedStream{
   override def filterPrefix: String = prefix
@@ -31,9 +32,9 @@ case class Churn(prefix: String) extends DerivedStream{
     lazy val info = parse(fields.getOrElse("payload.info", "{}").asInstanceOf[String])
     lazy val histograms = parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
 
-    lazy val weaveConfigured = booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
-    lazy val weaveDesktop = enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
-    lazy val weaveMobile = enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
+    lazy val weaveConfigured = Utils.booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
+    lazy val weaveDesktop = Utils.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
+    lazy val weaveMobile = Utils.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
 
     val map = Map[String, Any](
         "clientId" -> (fields.getOrElse("clientId", None) match {
@@ -171,55 +172,6 @@ case class Churn(prefix: String) extends DerivedStream{
       .name("e10sCohort").`type`().nullable.stringType().noDefault() // environment/settings/e10sCohort
 
       .endRecord
-  }
-
-  // Check if a json value contains a number greater than zero.
-  def gtZero(v: JValue): Boolean = {
-    v match {
-      case x: JInt => x.num.toInt > 0
-      case _ => false
-    }
-  }
-
-  // Given histogram h, return true if it has a value in the "true" bucket,
-  // or false if it has a value in the "false" bucket, or None otherwise.
-  def booleanHistogramToBoolean(h: JValue): Option[Boolean] = {
-    (gtZero(h \ "values" \ "1"), gtZero(h \ "values" \ "0")) match {
-      case (true, _) => Some(true)
-      case (_, true) => Some(false)
-      case _ => None
-    }
-  }
-
-  def toInt(s: String): Option[Int] = {
-    try {
-      Some(s.toInt)
-    } catch {
-      case e: Exception => None
-    }
-  }
-
-  // Find the largest numeric bucket that contains a value greater than zero.
-  def enumHistogramToCount(h: JValue): Option[Long] = {
-    (h \ "values") match {
-      case JNothing => None
-      case JObject(x) => {
-        var topBucket = -1
-        for {
-          (k, v) <- x
-          b <- toInt(k) if b > topBucket && gtZero(v)
-        } topBucket = b
-
-        if (topBucket >= 0) {
-          Some(topBucket)
-        } else {
-          None
-        }
-      }
-      case _ => {
-        None
-      }
-    }
   }
 
   def buildRecord(fields: Map[String,Any], schema: Schema): Option[GenericRecord] ={

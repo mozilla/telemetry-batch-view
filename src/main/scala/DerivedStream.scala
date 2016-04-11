@@ -6,8 +6,7 @@ import com.typesafe.config._
 import java.io.File
 import java.util.UUID
 import org.apache.hadoop.fs.Path
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
+import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.joda.time.{Days, DateTime}
@@ -17,6 +16,7 @@ import org.json4s.jackson.JsonMethods._
 import scala.collection.JavaConverters._
 import scala.io.Source
 import telemetry.streams.{E10sExperiment, ExecutiveStream, Churn, Longitudinal}
+import telemetry.streams.main_summary.MainSummary
 import telemetry.utils.Utils
 
 // key is the S3 filename, size is the object size in bytes.
@@ -190,6 +190,10 @@ object DerivedStream {
           val from = options.getOrElse('fromDate, "20160321")
           val exp = E10sExperiment("e10s-beta46-cohorts", "telemetry/4/saved_session/Firefox/beta/46.0/")
           Some(from, exp)
+
+        case "MainSummary" => // https://bugzilla.mozilla.org/show_bug.cgi?id=1260847
+          val mainSummary = MainSummary("telemetry/4/main/Firefox")
+          Some(options.getOrElse('fromDate, to), mainSummary)
 
         case _ =>
           None
