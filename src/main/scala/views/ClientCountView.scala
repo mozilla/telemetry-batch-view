@@ -2,13 +2,13 @@ package telemetry.views
 
 import com.github.nscala_time.time.Imports._
 import com.typesafe.config._
+import com.mozilla.spark.sql.hyperloglog.aggregates._
+import com.mozilla.spark.sql.hyperloglog.functions._
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveContext
 import org.rogach.scallop._
-import telemetry.spark.sql.aggregates._
-import telemetry.spark.sql.functions._
 
 class Conf(args: Array[String]) extends ScallopConf(args) {
   val from = opt[String]("from", descr = "From submission date", required = false)
@@ -19,7 +19,8 @@ class Conf(args: Array[String]) extends ScallopConf(args) {
 object ClientCountView {
   private val hllMerge = new HyperLogLogMerge
   private val base = List("normalizedChannel", "country", "version", "e10sEnabled", "e10sCohort")
-  private val selection = "hll_create(clientId) as clientId" :: "substr(subsessionStartDate, 0, 10) as activityDate" :: base
+  // 12 bits corresponds to an error of 0.0163
+  private val selection = "hll_create(clientId, 12) as clientId" :: "substr(subsessionStartDate, 0, 10) as activityDate" :: base
 
   val dimensions = "activityDate" :: base
 
