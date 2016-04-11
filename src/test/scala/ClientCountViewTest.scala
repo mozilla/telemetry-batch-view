@@ -1,13 +1,12 @@
 package telemetry.test
 
+import com.mozilla.spark.sql.hyperloglog.aggregates._
+import com.mozilla.spark.sql.hyperloglog.functions._
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveContext
 import org.scalatest.{FlatSpec, Matchers}
 import telemetry.views.ClientCountView
-import telemetry.spark.sql.functions._
-import telemetry.spark.sql.aggregates._
 
 case class Submission(clientId: String,
                       normalizedChannel: String,
@@ -58,6 +57,7 @@ class ClientCountViewTest extends FlatSpec with Matchers{
     val sc = new SparkContext(sparkConf)
     val sqlContext = new HiveContext(sc)
     sqlContext.udf.register("hll_create", hllCreate _)
+    sqlContext.udf.register("hll_cardinality", hllCardinality _)
     import sqlContext.implicits._
 
     val dataset = sc.parallelize(Submission.randomList).toDF()
@@ -66,7 +66,7 @@ class ClientCountViewTest extends FlatSpec with Matchers{
     val dimensions = Set(ClientCountView.dimensions:_*) -- Set("clientId")
     (Set(aggregates.columns:_*) -- Set("clientId", "hll", "sum")) should be (dimensions)
 
-    var estimates = aggregates.select(hllCardinalityUDF(col("hll"))).collect()
+    var estimates = aggregates.select(expr("hll_cardinality(hll)")).collect()
     estimates.foreach{ x =>
       x(0) should be (Submission.dimensions("clientId").size)
     }
@@ -75,7 +75,7 @@ class ClientCountViewTest extends FlatSpec with Matchers{
     val count = aggregates
       .select(col("hll"))
       .agg(hllMerge(col("hll")).as("hll"))
-      .select(hllCardinalityUDF(col("hll"))).collect()
+      .select(expr("hll_cardinality(hll)")).collect()
 
     count.size should be (1)
     count(0)(0) should be (Submission.dimensions("clientId").size)
