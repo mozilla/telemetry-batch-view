@@ -20,28 +20,29 @@ import telemetry.heka.{HekaFrame, Message}
 import telemetry.histograms._
 import telemetry.parquet.ParquetFile
 import telemetry.utils.Utils
+import org.joda.time._
 
 case class Crash(prefix: String) extends DerivedStream {
   override def streamName: String = "telemetry"
   override def filterPrefix: String = prefix
 
   // paths/dimensions within the ping to compare by
-  def comparableDimensions = List(
-    ("environment.build", "version"),
-    ("environment.build", "buildId"),
-    (null, "normalizedChannel"),
-    (null, "appName"),
-    ("environment.system", "os", "name"),
-    ("environment.system", "os", "version"),
-    ("environment.build", "architecture"),
-    (null, "geoCountry"),
-    ("environment.addons", "activeExperiment", "id"),
-    ("environment.addons", "activeExperiment", "branch"),
-    ("environment.settings", "e10sEnabled")
+  val comparableDimensions = List(
+    List("environment.build", "version"),
+    List("environment.build", "buildId"),
+    List(null, "normalizedChannel"),
+    List(null, "appName"),
+    List("environment.system", "os", "name"),
+    List("environment.system", "os", "version"),
+    List("environment.build", "architecture"),
+    List(null, "geoCountry"),
+    List("environment.addons", "activeExperiment", "id"),
+    List("environment.addons", "activeExperiment", "branch"),
+    List("environment.settings", "e10sEnabled")
   )
 
   // names of the comparable dimensions above, used as dimension names in the database
-  def dimensionNames = List(
+  val dimensionNames = List(
     "build_version",
     "build_id",
     "channel",
@@ -53,6 +54,14 @@ case class Crash(prefix: String) extends DerivedStream {
     "experiment_id",
     "experiment_branch",
     "e10s_enabled"
+  )
+
+  val statsNames = List(
+    "ping_count",
+    "usage_hours", "main_crashes", "content_crashes",
+    "plugin_crashes", "gmplugin_crashes",
+    "usage_hours_squared", "main_crashes_squared", "content_crashes_squared",
+    "plugin_crashes_squared", "gmplugin_crashes_squared"
   )
 
   override def transform(sc: SparkContext, bucket: Bucket, summaries: RDD[ObjectSummary], from: String, to: String) {
@@ -68,13 +77,155 @@ case class Crash(prefix: String) extends DerivedStream {
       .flatMap(x => x) // convert the list of heka key groups into a list of heka keys
       .flatMap{ case obj => // convert the list of heka keys to a stream of actual heka messages
         val hekaFile = bucket.getObject(obj.key).getOrElse(throw new Exception("File missing on S3: %s".format(obj.key)))
-        for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey())) yield message
+        for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey())) yield HekaFrame.fields(message)
       }
 
-    val aggregates = messages.flatMap(getCrashPairs)
+    // obtain the records for the crash aggregates as an iterator
+    val records = compareCrashes(sc, messages).toLocalIterator
+
+    // upload the resulting aggregate Avro records to S3
+    val schema = buildSchema()
+    val localFile = ParquetFile.serialize(records, schema)
+    uploadLocalFileToS3(localFile, prefix)
   }
 
-  private def buildSchema: Schema = {
+  private def getCountHistogramValue(histogram: JValue): Double = {
+    histogram \ "values" \ "0" match {
+      case JInt(count) => count.toDouble
+      case _ => 0
+    }
+  }
+
+  private def compareCrashes(sc: SparkContext, messages: RDD[Map[String, Any]]): RDD[GenericRecord] = {
+    // get the crash pairs for all of the pings, keeping track of how many we see
+    val processedAccumulator = sc.accumulator(0, "Number of processed pings")
+    val ignoredAccumulator = sc.accumulator(0, "Number of ignored pings")
+    val crashPairs = messages.flatMap((pingFields) => {
+      getCrashPair(pingFields) match {
+        case Some(crashPair) => {
+          processedAccumulator += 1
+          List(crashPair)
+        }
+        case None => {
+          ignoredAccumulator += 1
+          List()
+        }
+      }
+    })
+
+    // aggregate crash pairs by their keys
+    val aggregates = crashPairs.reduceByKey(
+      (crashStatsA: List[Double], crashStatsB: List[Double]) =>
+        (crashStatsA, crashStatsB).zipped.map(_ + _)
+    )
+
+    // build Avro records from the aggregated crash pairs
+    val schema = buildSchema()
+    aggregates.map(
+      (aggregatedCrashPair) => buildRecord(aggregatedCrashPair, schema)
+    )
+  }
+
+  private def getCrashPair(pingFields: Map[String, Any]): Option[(List[java.io.Serializable], List[Double])] = {
+    val build = pingFields.get("environment.build") match {
+      case Some(value: String) => parse(value)
+      case _ => JObject()
+    }
+    val info = pingFields.get("payload.info") match {
+      case Some(value: String) => parse(value)
+      case _ => JObject()
+    }
+    val keyedHistograms = pingFields.get("payload.keyedHistograms") match {
+      case Some(value: String) => parse(value)
+      case _ => JObject()
+    }
+
+    // obtain the activity date clamped to a reasonable time range
+    val submissionDate = pingFields.get("submissionDate") match {
+      case Some(date: String) =>
+        // convert YYYYMMDD timestamp to a real date
+        try {
+          format.DateTimeFormat.forPattern("yyyyMMdd").withZone(org.joda.time.DateTimeZone.UTC).parseDateTime(date)
+        } catch {
+          case _: Throwable => return None 
+        }
+      case _ => return None
+    }
+    val activityDateRaw = pingFields.get("creationTimestamp") match {
+      case Some(date: Double) =>
+        // convert nanosecond timestamp to a second timestamp to a real date
+        try { new DateTime(date / 1e6).withMillisOfDay(0) } catch { case _: Throwable => return None } // only keep the date part of the timestamp
+      case _ => return None
+    }
+    val activityDate = if (activityDateRaw.isBefore(submissionDate.minusDays(7))) { // clamp activity date to a good range
+      submissionDate.minusDays(7)
+    } else if (activityDateRaw.isAfter(submissionDate)) {
+      submissionDate
+    } else {
+      activityDateRaw
+    }
+    val activityDateString = format.DateTimeFormat.forPattern("yyyy-MM-dd").print(activityDate) // format activity date as YYYY-MM-DD
+
+    // obtain the unique key of the aggregate that this ping belongs to
+    val uniqueKey = activityDateString :: (
+      for (path <- comparableDimensions) yield {
+        if (path.head == null) {
+          pingFields.get(path.tail.head) match {
+            case Some(topLevelField: String) => Some(topLevelField)
+            case _ => None
+          }
+        } else {
+          pingFields.get(path.head) match {
+            case Some(topLevelField: String) =>
+              try {
+                val dimensionValue = path.tail.foldLeft(parse(topLevelField))((value, fieldName) => value \ fieldName) // retrieve the value at the given path
+                Some(dimensionValue)
+              } catch { case _: Throwable => None }
+            case _ => None
+          }
+        }
+      }
+    )
+    val buildId = uniqueKey(dimensionNames.indexOf("build_id") + 1).asInstanceOf[String] // we add 1 because the first element is taken by activityDateString
+    if (!buildId.matches("\\d{14}")) { // validate build IDs
+      return None
+    }
+
+    // obtain the relevant stats for the ping
+    val usageHours: Double = info \ "subsessionLength" match {
+      case JDouble(subsessionLength) =>
+        Math.min(25, Math.max(0, subsessionLength / 3600))
+      case JNothing => 0
+      case _ => return None
+    }
+    val mainCrashes = pingFields.get("docType") match {
+      case Some(JString(docType)) => if (docType == "crash") 1 else 0
+      case _ => return None
+    }
+    val contentCrashes = try {
+      getCountHistogramValue(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "content")
+    } catch { case _: Throwable => 0 }
+    val pluginCrashes = try {
+      getCountHistogramValue(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "plugin")
+    } catch { case _: Throwable => 0 }
+    val geckoMediaPluginCrashes = try {
+      getCountHistogramValue(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "gmplugin")
+    } catch { case _: Throwable => 0 }
+    val stats = List(
+      1,  // number of pings represented by the aggregate
+      usageHours, mainCrashes, contentCrashes,
+      pluginCrashes, geckoMediaPluginCrashes,
+
+      // squared versions in order to compute stddev (with $$\sigma = \sqrt{\frac{\sum X^2}{N} - \mu^2}$$)
+      usageHours * usageHours, mainCrashes * mainCrashes, contentCrashes * contentCrashes,
+      pluginCrashes * pluginCrashes, geckoMediaPluginCrashes * geckoMediaPluginCrashes
+    )
+
+    // return a pair so we can use PairRDD operations on this data later
+    Some((uniqueKey, stats))
+  }
+
+  private def buildSchema(): Schema = {
     SchemaBuilder
       .record("Submission").fields()
         .name("activity_date").`type`().stringType().noDefault()
@@ -83,113 +234,21 @@ case class Crash(prefix: String) extends DerivedStream {
       .endRecord()
   }
 
-  private def getCountHistogramValue(histogram: JValue): BigInt = {
-    histogram \ "values" \ "0" match {
-      case JInt(count) => count
-      case _ => 0
-    }
-  }
-
-  private def getCrashPairs(pingFields: Map[String, Any]): Option[Map[String, Any]] = {
-    val info = parse(pingFields.getOrElse("payload.info", "{}"))
-    val build = parse(pingFields.getOrElse("environment.build", "{}"))
-    val keyedHistograms = parse(pingFields.getOrElse("payload.keyedHistograms", "{}"))
-
-    val submissionDate = pingFields.get("submissionDate") match {
-      case Some(date: String) =>
-        // convert YYYYMMDD timestamp to a real date
-        try { normalizeYYYYMMDDTimestamp(date) } catch { case _ => return None }
-      case _ => return None
-    }
-    val activityDateRaw = pingFields.get("creationTimestamp") match {
-      case Some(date: Double) =>
-        // convert nanosecond timestamp to a second timestamp to a real date
-        try { normalizeEpochTimestamp(date / 1e9) } catch { case _ => return None }
-      case _ => return None
-    }
-    val activityDate = activityDateRaw //wip: round to nearest day, clamp based on submissionDate
-    val uniqueKey = activityDate :: (
-      for (path <- comparableDimensions) yield (
-        if (path.head == null) {
-          pingFields.get(path.tail.head) match {
-            case field: String => Some(field)
-            case _ => None
-          }
-        } else {
-          pingFields.get(path.head) match {
-            case Some(field: String) =>
-              try {
-                val dimensionValue = foldLeft(parse(field))(path.tail) // retrieve the value at the given path
-                Some(dimensionValue)
-              } catch { case _ => None }
-            case None => None
-          }
-        }
-      )
-    )
-    if (!uniqueKey("build_id").matches("\\d{14}")) { // validate build IDs
-      return None
-    }
-
-    val usageHours = info \ "subsessionLength" match {
-      case JDouble(subsessionLength) =>
-        min(25, max(0, subsessionLength / 3600))
-      case JNothing => 0
-      case _ => return None
-    }
-    val mainCrashes = pingFields \ "docType" match {
-      case JString(docType) => if (docType == "crash") 1 else 0
-      case _ => return None
-    }
-    val contentCrashes = try {
-      getCountHistogramValue(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "content")
-    } catch { case _ => 0 }
-    val pluginCrashes = try {
-      getCountHistogramValue(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "plugin")
-    } catch { case _ => 0 }
-    val geckoMediaPluginCrashes = try {
-      getCountHistogramValue(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "gmplugin")
-    } catch { case _ => 0 }
-    val stats = List(
-      1,  // number of pings represented by the aggregate
-      usageHours, mainCrashes, contentCrashes,
-      pluginCrashes, geckoMediaPluginCrashes,
-
-      // squared versions in order to compute stddev (with $$\sigma = \sqrt{\frac{\sum X^2}{N} - \mu^2}$$)
-      usageHours ** 2, mainCrashes ** 2, contentCrashes ** 2,
-      pluginCrashes ** 2, geckoMediaPluginCrashes ** 2
-    )
-
-    Some((uniqueKey, stats))
-  }
-
-  private def buildRecord(history: Iterable[Map[String, Any]], schema: Schema): Option[GenericRecord] = {
-    val sorted = history.foldLeft((List[Map[String, Any]](), Set[String]()))(
-      { case ((submissions, seen), current) =>
-        current.get("documentId") match {
-          case Some(docId) =>
-            if (seen.contains(docId.asInstanceOf[String]))
-              (submissions, seen) // Duplicate documentId, ignore it
-            else
-              (current :: submissions, seen + docId.asInstanceOf[String]) // new documentId, add it to the list
-          case None =>
-            (submissions, seen) // Ignore clients with records that have a missing documentId
-        }
-      })._1.reverse  // preserve ordering
+  private def buildRecord(aggregatedCrashPair: (List[Any], List[Double]), schema: Schema): GenericRecord = {
+    // extract and compute the record fields
+    val (uniqueKey, stats) = aggregatedCrashPair
+    val (activityDate, dimensions) = (uniqueKey.head.asInstanceOf[DateTime], uniqueKey.tail.asInstanceOf[List[Option[String]]])
+    val dimensionsMap = (dimensionNames, dimensions).zipped.flatMap((key, value) => (key, value) match { // remove dimensions that don't have values
+      case (key, Some(value)) => Some(key, value)
+      case (key, None) => None
+    }).toMap
+    val statsMap = (statsNames, stats).zipped.toMap
 
     val root = new GenericRecordBuilder(schema)
-      .set("client_id", sorted(0)("clientId").asInstanceOf[String])
-      .set("os", sorted(0)("os").asInstanceOf[String])
-      .set("normalized_channel", sorted(0)("normalizedChannel").asInstanceOf[String])
+      .set("activity_date", activityDate)
+      .set("dimensions", mapAsJavaMap(dimensionsMap))
+      .set("stats", mapAsJavaMap(statsMap))
 
-    try {
-      threadHangStats2Avro(sorted, root, schema)
-    } catch {
-      case e : Throwable =>
-        // Ignore buggy clients
-        return None
-    }
-
-    Some(root.build)
+    root.build()
   }
 }

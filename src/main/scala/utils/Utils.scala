@@ -66,8 +66,8 @@ object Utils{
     val formatISO = org.joda.time.format.ISODateTimeFormat.dateTime()
     formatISO.withZone(org.joda.time.DateTimeZone.UTC).print(
       format.DateTimeFormat.forPattern("yyyyMMdd")
-                                .withZone(org.joda.time.DateTimeZone.UTC)
-                                .parseDateTime(YYYYMMDD.asInstanceOf[String])
+                           .withZone(org.joda.time.DateTimeZone.UTC)
+                           .parseDateTime(YYYYMMDD.asInstanceOf[String])
     )
   }
 
