@@ -4,7 +4,7 @@ import awscala._
 import awscala.s3._
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericData, GenericRecord, GenericRecordBuilder}
-import org.apache.spark.{SparkContext, Partitioner}
+import org.apache.spark.{SparkContext, Accumulator}
 import org.apache.spark.rdd.RDD
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -81,12 +81,17 @@ case class Crash(prefix: String) extends DerivedStream {
       }
 
     // obtain the records for the crash aggregates as an iterator
-    val records = compareCrashes(sc, messages).toLocalIterator
+    val (records, processed, ignored) = compareCrashes(sc, messages)
 
     // upload the resulting aggregate Avro records to S3
     val schema = buildSchema()
-    val localFile = ParquetFile.serialize(records, schema)
+    val localFile = ParquetFile.serialize(records.toLocalIterator, schema)
     uploadLocalFileToS3(localFile, prefix)
+
+    println("========================================")
+    println("JOB COMPLETED SUCCESSFULLY")
+    println("{} pings processed, {} pings ignored".format(processed.value, ignored.value))
+    println("========================================")
   }
 
   private def getCountHistogramValue(histogram: JValue): Double = {
@@ -96,7 +101,7 @@ case class Crash(prefix: String) extends DerivedStream {
     }
   }
 
-  private def compareCrashes(sc: SparkContext, messages: RDD[Map[String, Any]]): RDD[GenericRecord] = {
+  private def compareCrashes(sc: SparkContext, messages: RDD[Map[String, Any]]): (RDD[GenericData.Record], Accumulator[Int], Accumulator[Int]) = {
     // get the crash pairs for all of the pings, keeping track of how many we see
     val processedAccumulator = sc.accumulator(0, "Number of processed pings")
     val ignoredAccumulator = sc.accumulator(0, "Number of ignored pings")
@@ -119,11 +124,28 @@ case class Crash(prefix: String) extends DerivedStream {
         (crashStatsA, crashStatsB).zipped.map(_ + _)
     )
 
-    // build Avro records from the aggregated crash pairs
-    val schema = buildSchema()
-    aggregates.map(
-      (aggregatedCrashPair) => buildRecord(aggregatedCrashPair, schema)
-    )
+    val records = aggregates.map((aggregatedCrashPair: (List[Any], List[Double])) => {
+      // extract and compute the record fields
+      val (uniqueKey, stats) = aggregatedCrashPair
+      val (activityDate, dimensions) = (uniqueKey.head.asInstanceOf[String], uniqueKey.tail.asInstanceOf[List[Option[String]]])
+      val dimensionsMap: Map[String, String] = (dimensionNames, dimensions).zipped.flatMap((key, value) =>
+        (key, value) match { // remove dimensions that don't have values
+          case (key, Some(value)) => Some(key, value)
+          case (key, None) => None
+        }
+      ).toMap
+      val statsMap = (statsNames, stats).zipped.toMap
+
+      val schema = buildSchema()
+      val root = new GenericRecordBuilder(schema)
+        .set("activity_date", activityDate)
+        .set("dimensions", mapAsJavaMap(dimensionsMap))
+        .set("stats", mapAsJavaMap(statsMap))
+
+      root.build()
+    })
+
+    (records, processedAccumulator, ignoredAccumulator)
   }
 
   private def getCrashPair(pingFields: Map[String, Any]): Option[(List[java.io.Serializable], List[Double])] = {
@@ -147,14 +169,19 @@ case class Crash(prefix: String) extends DerivedStream {
         try {
           format.DateTimeFormat.forPattern("yyyyMMdd").withZone(org.joda.time.DateTimeZone.UTC).parseDateTime(date)
         } catch {
-          case _: Throwable => return None 
+          case _: Throwable => return None
         }
       case _ => return None
     }
     val activityDateRaw = pingFields.get("creationTimestamp") match {
-      case Some(date: Double) =>
+      case Some(date: Double) => {
         // convert nanosecond timestamp to a second timestamp to a real date
-        try { new DateTime(date / 1e6).withMillisOfDay(0) } catch { case _: Throwable => return None } // only keep the date part of the timestamp
+        try {
+          new DateTime((date / 1e6).toLong).withZone(org.joda.time.DateTimeZone.UTC).withMillisOfDay(0) // only keep the date part of the timestamp
+        } catch {
+          case _: Throwable => return None
+        }
+      }
       case _ => return None
     }
     val activityDate = if (activityDateRaw.isBefore(submissionDate.minusDays(7))) { // clamp activity date to a good range
@@ -177,29 +204,35 @@ case class Crash(prefix: String) extends DerivedStream {
         } else {
           pingFields.get(path.head) match {
             case Some(topLevelField: String) =>
-              try {
-                val dimensionValue = path.tail.foldLeft(parse(topLevelField))((value, fieldName) => value \ fieldName) // retrieve the value at the given path
-                Some(dimensionValue)
-              } catch { case _: Throwable => None }
+              val dimensionValue = path.tail.foldLeft(parse(topLevelField))((value, fieldName) => value \ fieldName) // retrieve the value at the given path
+              dimensionValue match {
+                case JString(value) => Some(value)
+                case JBool(value) => Some(if (value) "True" else "False")
+                case JInt(value) => Some(value.toString)
+                case _ => None
+              }
             case _ => None
           }
         }
       }
     )
-    val buildId = uniqueKey(dimensionNames.indexOf("build_id") + 1).asInstanceOf[String] // we add 1 because the first element is taken by activityDateString
-    if (!buildId.matches("\\d{14}")) { // validate build IDs
-      return None
+
+    // validate build IDs
+    val buildId = uniqueKey(dimensionNames.indexOf("build_id") + 1) // we add 1 because the first element is taken by activityDateString
+    buildId match {
+      case Some(value: String) if value.matches("\\d{14}") => null
+      case _ => return None
     }
 
     // obtain the relevant stats for the ping
     val usageHours: Double = info \ "subsessionLength" match {
-      case JDouble(subsessionLength) =>
-        Math.min(25, Math.max(0, subsessionLength / 3600))
+      case JInt(subsessionLength) =>
+        Math.min(25, Math.max(0, subsessionLength.toDouble / 3600))
       case JNothing => 0
       case _ => return None
     }
     val mainCrashes = pingFields.get("docType") match {
-      case Some(JString(docType)) => if (docType == "crash") 1 else 0
+      case Some(docType: String) => if (docType == "crash") 1 else 0
       case _ => return None
     }
     val contentCrashes = try {
@@ -229,26 +262,8 @@ case class Crash(prefix: String) extends DerivedStream {
     SchemaBuilder
       .record("Submission").fields()
         .name("activity_date").`type`().stringType().noDefault()
-        .name("dimensions").`type`().optional().map().values().stringType()
-        .name("stats").`type`().optional().map().values().doubleType()
+        .name("dimensions").`type`().map().values().stringType().noDefault()
+        .name("stats").`type`().map().values().doubleType().noDefault()
       .endRecord()
-  }
-
-  private def buildRecord(aggregatedCrashPair: (List[Any], List[Double]), schema: Schema): GenericRecord = {
-    // extract and compute the record fields
-    val (uniqueKey, stats) = aggregatedCrashPair
-    val (activityDate, dimensions) = (uniqueKey.head.asInstanceOf[DateTime], uniqueKey.tail.asInstanceOf[List[Option[String]]])
-    val dimensionsMap = (dimensionNames, dimensions).zipped.flatMap((key, value) => (key, value) match { // remove dimensions that don't have values
-      case (key, Some(value)) => Some(key, value)
-      case (key, None) => None
-    }).toMap
-    val statsMap = (statsNames, stats).zipped.toMap
-
-    val root = new GenericRecordBuilder(schema)
-      .set("activity_date", activityDate)
-      .set("dimensions", mapAsJavaMap(dimensionsMap))
-      .set("stats", mapAsJavaMap(statsMap))
-
-    root.build()
   }
 }

@@ -273,7 +273,6 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     assert(records.length == fixture.payloads.length)
     records.foreach{ x =>
       val record = x.asInstanceOf[Record]
-      println(record)
       assert(record.get("model") == "SHARP")
     }
   }
