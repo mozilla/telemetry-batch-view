@@ -22,9 +22,9 @@ import telemetry.parquet.ParquetFile
 import telemetry.utils.Utils
 import org.joda.time._
 
-case class Crash(prefix: String) extends DerivedStream {
+case class Crash() extends DerivedStream {
   override def streamName: String = "telemetry"
-  override def filterPrefix: String = prefix
+  override def filterPrefix: String = "telemetry/4/*/*/*/*/*/"
 
   // paths/dimensions within the ping to compare by
   val comparableDimensions = List(

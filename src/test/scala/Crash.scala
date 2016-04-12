@@ -105,7 +105,7 @@ class CrashTest extends FlatSpec with Matchers with PrivateMethodTester {
     }
 
     new {
-      private val view = Crash("telemetry/4/main/*/*/*/")
+      private val view = Crash()
 
       private val buildSchema = PrivateMethod[Schema]('buildSchema)
       private val compareCrashes = PrivateMethod[(RDD[GenericRecord], Accumulator[Int], Accumulator[Int])]('compareCrashes)
