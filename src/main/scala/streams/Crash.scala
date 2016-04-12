@@ -224,6 +224,13 @@ case class Crash() extends DerivedStream {
       case _ => return None
     }
 
+    // validate docType
+    pingFields.get("docType") match {
+      case Some("main") => null
+      case Some("crash") => null
+      case _ => return None
+    }
+
     // obtain the relevant stats for the ping
     val usageHours: Double = info \ "subsessionLength" match {
       case JInt(subsessionLength) =>
