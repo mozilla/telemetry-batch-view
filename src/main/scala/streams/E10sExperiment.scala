@@ -117,6 +117,7 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
       .name("settings").`type`().stringType().noDefault()
       .name("addons").`type`().stringType().noDefault()
       .name("system").`type`().stringType().noDefault()
+      .name("build").`type`().stringType().noDefault()
       .name("threadHangStats").`type`().stringType().noDefault()
       .name("histograms").`type`().stringType().noDefault()
       .name("keyedHistograms").`type`().stringType().noDefault()
@@ -127,6 +128,7 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
   private def buildRecord(fields: Map[String, Any], schema: Schema): Option[GenericRecord] = {
     val addons = fields.getOrElse("environment.addons", "{}").asInstanceOf[String]
     val system = fields.getOrElse("environment.system", "{}").asInstanceOf[String]
+    val build = fields.getOrElse("environment.build", "{}").asInstanceOf[String]
     val settings = fields.getOrElse("environment.settings", "").asInstanceOf[String]
     val JString(cohort) = parse(settings) \ "e10sCohort"
 
@@ -142,6 +144,7 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
       .set("settings", fields.getOrElse("environment.settings", ""))
       .set("addons", addons)
       .set("system", system)
+      .set("build", build)
       .set("threadHangStats", fields.getOrElse("payload.threadHangStats", ""))
       .set("histograms", fields.getOrElse("payload.histograms", ""))
       .set("keyedHistograms", fields.getOrElse("payload.keyedHistograms", ""))
