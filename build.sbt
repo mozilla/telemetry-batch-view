@@ -20,7 +20,7 @@ lazy val root = (project in file(".")).
     libraryDependencies += "com.typesafe" % "config" % "1.2.1",
     libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.4",
     libraryDependencies += "org.xerial.snappy" % "snappy-java" % "1.1.2",
-    libraryDependencies += "org.json4s" %% "json4s-jackson" % "3.2.11",
+    libraryDependencies += "org.json4s" %% "json4s-jackson" % "3.2.10",
     libraryDependencies += "joda-time" % "joda-time" % "2.9.1",
     libraryDependencies += "org.apache.hadoop" % "hadoop-client" % "2.6.0" excludeAll(ExclusionRule(organization = "javax.servlet")),
     libraryDependencies += "org.apache.hadoop" % "hadoop-aws" % "2.6.0" excludeAll(ExclusionRule(organization = "javax.servlet")),

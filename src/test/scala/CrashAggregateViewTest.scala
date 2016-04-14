@@ -41,8 +41,6 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
   override def beforeAll(configMap: org.scalatest.ConfigMap) {
     // set up and configure Spark
     val sparkConf = new SparkConf().setAppName("KPI")
-    sparkConf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer") 
-    sparkConf.registerKryoClasses(Array(classOf[org.apache.avro.generic.GenericData.Record])) // this is necessary in order to be able to transfer records between workers and the master
     sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
     sc = Some(new SparkContext(sparkConf))
     sqlContext = Some(new SQLContext(sc.get))
