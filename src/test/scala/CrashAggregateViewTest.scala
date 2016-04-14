@@ -1,11 +1,14 @@
 package telemetry.test
 
+import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import org.apache.spark.{SparkConf, SparkContext, Accumulator}
 import org.apache.spark.rdd.RDD
-import org.scalatest.{FlatSpec, Matchers, PrivateMethodTester}
-import telemetry.streams.Crash
+import org.apache.spark.sql.{SQLContext, SaveMode}
+import org.apache.spark.sql.types._
+import org.scalatest.{FlatSpec, Matchers, PrivateMethodTester, BeforeAndAfterAll}
+import telemetry.views.CrashAggregateView
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericRecord, GenericData, GenericRecordBuilder}
 import org.apache.avro.generic.GenericData.Record
@@ -13,7 +16,7 @@ import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import telemetry.parquet.ParquetFile
 
-class CrashTest extends FlatSpec with Matchers with PrivateMethodTester {
+class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   val pingDimensions = List(
     ("submission_date",   List("20160305", "20160607")),
     ("activity_date",     List(1456906203503000000.0, 1464768617492000000.0)),
@@ -28,8 +31,26 @@ class CrashTest extends FlatSpec with Matchers with PrivateMethodTester {
     ("country",           List("US", "UK")),
     ("experiment_id",     List(null, "displayport-tuning-nightly@experiments.mozilla.org")),
     ("experiment_branch", List("control", "experiment")),
-    ("e10s",              List(true, false))
+    ("e10s",              List(true, false)),
+    ("e10s_cohort",       List("control", "test"))
   )
+
+  var sc: Option[SparkContext] = None
+  var sqlContext: Option[SQLContext] = None
+
+  override def beforeAll(configMap: org.scalatest.ConfigMap) {
+    // set up and configure Spark
+    val sparkConf = new SparkConf().setAppName("KPI")
+    sparkConf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer") 
+    sparkConf.registerKryoClasses(Array(classOf[org.apache.avro.generic.GenericData.Record])) // this is necessary in order to be able to transfer records between workers and the master
+    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
+    sc = Some(new SparkContext(sparkConf))
+    sqlContext = Some(new SQLContext(sc.get))
+  }
+
+  override def afterAll(configMap: org.scalatest.ConfigMap) {
+    sc.get.stop()
+  }
 
   def fixture = {
     def cartesianProduct(dimensions: List[(String, List[Any])]): Iterable[Map[String, Any]] = {
@@ -78,7 +99,8 @@ class CrashTest extends FlatSpec with Matchers with PrivateMethodTester {
           ("version" -> dimensions("os_version").asInstanceOf[String])
         )
       val settings =
-        ("e10sEnabled" -> dimensions("e10s").asInstanceOf[Boolean])
+        ("e10sEnabled" -> dimensions("e10s").asInstanceOf[Boolean]) ~
+        ("e10sCohort" -> dimensions("e10s_cohort").asInstanceOf[String])
       val build =
         ("version" -> dimensions("build_version").asInstanceOf[String]) ~
         ("buildId" -> dimensions("build_id").asInstanceOf[String]) ~
@@ -88,6 +110,7 @@ class CrashTest extends FlatSpec with Matchers with PrivateMethodTester {
           ("id" -> dimensions("experiment_id").asInstanceOf[String]) ~
           ("branch" -> dimensions("experiment_branch").asInstanceOf[String])
         )
+      implicit val formats = DefaultFormats
       Map(
         "creationTimestamp" -> dimensions("activity_date").asInstanceOf[Double],
         "submissionDate" -> dimensions("submission_date").asInstanceOf[String],
@@ -105,34 +128,29 @@ class CrashTest extends FlatSpec with Matchers with PrivateMethodTester {
     }
 
     new {
-      private val view = Crash()
-
-      private val buildSchema = PrivateMethod[Schema]('buildSchema)
-      private val compareCrashes = PrivateMethod[(RDD[GenericRecord], Accumulator[Int], Accumulator[Int])]('compareCrashes)
-
       val pings: List[Map[String, Any]] = (for (configuration <- cartesianProduct(pingDimensions)) yield createPing(configuration)).toList
 
-      val sparkConf = new SparkConf().setAppName("KPI")
-      sparkConf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer") 
-      sparkConf.registerKryoClasses(Array(classOf[org.apache.avro.generic.GenericData.Record])) // this is necessary in order to be able to transfer records between workers and the master
-      sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
-      val sc = new SparkContext(sparkConf)
-      val (recordsRDD, processed, ignored) = view invokePrivate compareCrashes(sc, sc.parallelize(pings))
-      val records = recordsRDD.collect()
-      sc.stop()
-      val schema = view invokePrivate buildSchema()
+      val (
+        rowRDD,
+        mainProcessedAccumulator, mainIgnoredAccumulator,
+        crashProcessedAccumulator, crashIgnoredAccumulator
+      ) = CrashAggregateView.compareCrashes(sc.get, sc.get.parallelize(pings))
+      val schema = CrashAggregateView.buildSchema()
+      val records = sqlContext.get.createDataFrame(rowRDD, schema)
+      records.count() // Spark is pretty lazy; kick it so it'll update our accumulators properly
     }
   }
 
   "Records" can "be serialized" in {
-    ParquetFile.serialize(fixture.records.iterator, fixture.schema)
+    fixture.records.write.mode(SaveMode.Overwrite).parquet("TEST.parquet")
   }
 
   "Records" must "have the correct lengths" in {
-    assert(fixture.pings.length == 16384)
-    //assert(fixture.records.length == fixture.pings.length / 2)
-    assert(fixture.processed.value == fixture.pings.length)
-    assert(fixture.ignored.value == 0)
+    assert(fixture.records.count() == fixture.pings.length / 2)
+    assert(fixture.mainProcessedAccumulator.value == fixture.pings.length / 2)
+    assert(fixture.mainIgnoredAccumulator.value == 0)
+    assert(fixture.crashProcessedAccumulator.value == fixture.pings.length / 2)
+    assert(fixture.crashIgnoredAccumulator.value == 0)
   }
 
   "activity date" must "be in a fixed set of dates" in {
@@ -140,16 +158,15 @@ class CrashTest extends FlatSpec with Matchers with PrivateMethodTester {
       "2016-03-02", "2016-06-01", // these are directly from the dataset
       "2016-03-05", "2016-05-31" // these are bounded to be around the submission date
     )
-    for (record <- fixture.records) {
-      assert(validValues contains record.get("activity_date").toString)
+    for (row <- fixture.records.select("activity_date").collect()) {
+      assert(validValues contains row(0))
     }
   }
 
   "dimensions" must "be converted correctly" in {
     val dimensionValues = pingDimensions.toMap
-    for (record <- fixture.records) {
-      val dimensionFields = record.get("dimensions").asInstanceOf[java.util.Map[org.apache.avro.util.Utf8, org.apache.avro.util.Utf8]]
-      val dimensions = (for ((key, value) <- dimensionFields) yield (key.toString, value.toString)).toMap
+    for (row <- fixture.records.select("dimensions").collect()) {
+      val dimensions = row.getJavaMap[String, String](0)
       assert(dimensionValues("build_version")     contains dimensions.getOrElse("build_version", null))
       assert(dimensionValues("build_id")          contains dimensions.getOrElse("build_id", null))
       assert(dimensionValues("channel")           contains dimensions.getOrElse("channel", null))
@@ -160,13 +177,14 @@ class CrashTest extends FlatSpec with Matchers with PrivateMethodTester {
       assert(dimensionValues("country")           contains dimensions.getOrElse("country", null))
       assert(dimensionValues("experiment_id")     contains dimensions.getOrElse("experiment_id", null))
       assert(dimensionValues("experiment_branch") contains dimensions.getOrElse("experiment_branch", null))
+      assert(List("True", "False")                contains dimensions.getOrElse("e10s_enabled", null))
+      assert(dimensionValues("e10s_cohort")       contains dimensions.getOrElse("e10s_cohort", null))
     }
   }
 
   "crash rates" must "be converted correctly" in {
-    for (record <- fixture.records) {
-      val statsFields = record.get("stats").asInstanceOf[java.util.Map[org.apache.avro.util.Utf8, Double]]
-      val stats = (for ((key, value) <- statsFields) yield (key.toString, value)).toMap
+    for (row <- fixture.records.select("stats").collect()) {
+      val stats = row.getJavaMap[String, Double](0)
       assert(stats("ping_count")               == 2)
       assert(stats("usage_hours")              == 42 * 2 / 3600.0)
       assert(stats("main_crashes")             == 1)
