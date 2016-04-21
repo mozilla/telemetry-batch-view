@@ -5,7 +5,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import org.apache.spark.{SparkConf, SparkContext, Accumulator}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{SQLContext, SaveMode}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.types._
 import org.scalatest.{FlatSpec, Matchers, PrivateMethodTester, BeforeAndAfterAll}
 import telemetry.views.CrashAggregateView
@@ -137,10 +137,6 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
       val records = sqlContext.get.createDataFrame(rowRDD, schema)
       records.count() // Spark is pretty lazy; kick it so it'll update our accumulators properly
     }
-  }
-
-  "Records" can "be serialized" in {
-    fixture.records.write.mode(SaveMode.Overwrite).parquet("TEST.parquet")
   }
 
   "Records" must "have the correct lengths" in {
