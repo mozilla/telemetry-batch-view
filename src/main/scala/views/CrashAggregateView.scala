@@ -47,7 +47,7 @@ object CrashAggregateView {
     val appConf = ConfigFactory.load()
     val parquetBucket = appConf.getString("app.parquetBucket")
 
-    for (offset <- 0 until Days.daysBetween(from, to).getDays()) {
+    for (offset <- 0 to Days.daysBetween(from, to).getDays()) {
       val currentDate = from.plusDays(offset)
 
       // obtain the crash aggregates from telemetry ping data
