@@ -188,7 +188,7 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
       assert(stats("content_crashes")          == 42 * 2)
       assert(stats("plugin_crashes")           == 42 * 2)
       assert(stats("gmplugin_crashes")         == 42 * 2)
-      assert(stats("usage_hours_squared")      == 0.00027222222222222226)
+      assert(stats("usage_hours_squared")      == 0.00013611111111111113)
       assert(stats("main_crashes_squared")     == 1)
       assert(stats("content_crashes_squared")  == 3528)
       assert(stats("plugin_crashes_squared")   == 3528)
