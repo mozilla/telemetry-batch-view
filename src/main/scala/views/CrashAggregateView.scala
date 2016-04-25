@@ -25,7 +25,7 @@ object CrashAggregateView {
   }
 
   def main(args: Array[String]) {
-    // load configuration for the 
+    // load configuration for the time range
     val conf = new Conf(args)
     val fmt = format.DateTimeFormat.forPattern("yyyyMMdd")
     val to = conf.to.get match {
@@ -37,7 +37,7 @@ object CrashAggregateView {
       case _ => DateTime.now.minusDays(1)
     }
 
-    // set up the Spark, Hadoop, and other configurations
+    // set up Spark
     val sparkConf = new SparkConf().setAppName("CrashAggregateVie")
     sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
     val sc = new SparkContext(sparkConf)
@@ -116,15 +116,16 @@ object CrashAggregateView {
   }
 
   // paths/dimensions within the ping to compare by
+  // if the path only has a single element, then the field is interpreted as a literal string rather than a JSON string
   val comparableDimensions = List(
     List("environment.build", "version"),
     List("environment.build", "buildId"),
-    List(null, "normalizedChannel"),
-    List(null, "appName"),
+    List("normalizedChannel"),
+    List("appName"),
     List("environment.system", "os", "name"),
     List("environment.system", "os", "version"),
     List("environment.build", "architecture"),
-    List(null, "geoCountry"),
+    List("geoCountry"),
     List("environment.addons", "activeExperiment", "id"),
     List("environment.addons", "activeExperiment", "branch"),
     List("environment.settings", "e10sEnabled"),
@@ -156,10 +157,12 @@ object CrashAggregateView {
   )
 
   private def getCountHistogramValue(histogram: JValue): Double = {
-    histogram \ "values" \ "0" match {
-      case JInt(count) => count.toDouble
-      case _ => 0
-    }
+    try {
+      histogram \ "values" \ "0" match {
+        case JInt(count) => count.toDouble
+        case _ => 0
+      }
+    } catch { case _: Throwable => 0 }
   }
 
   def compareCrashes(sc: SparkContext, messages: RDD[Map[String, Any]]): (RDD[Row], Accumulator[Int], Accumulator[Int], Accumulator[Int], Accumulator[Int]) = {
@@ -261,14 +264,11 @@ object CrashAggregateView {
     // obtain the unique key of the aggregate that this ping belongs to
     val uniqueKey = activityDateString :: (
       for (path <- comparableDimensions) yield {
-        if (path.head == null) {
-          pingFields.get(path.tail.head) match {
-            case Some(topLevelField: String) => Some(topLevelField)
-            case _ => None
-          }
-        } else {
-          pingFields.get(path.head) match {
-            case Some(topLevelField: String) =>
+        pingFields.get(path.head) match {
+          case Some(topLevelField: String) =>
+            if (path.tail == List.empty) { // list of length 1, interpret field as string rather than JSON
+              Some(topLevelField)
+            } else { // JSON field, the rest of the path tells us where to look in the JSON
               val dimensionValue = path.tail.foldLeft(parse(topLevelField))((value, fieldName) => value \ fieldName) // retrieve the value at the given path
               dimensionValue match {
                 case JString(value) => Some(value)
@@ -276,8 +276,8 @@ object CrashAggregateView {
                 case JInt(value) => Some(value.toString)
                 case _ => None
               }
-            case _ => None
-          }
+            }
+          case _ => None
         }
       }
     )
@@ -301,15 +301,9 @@ object CrashAggregateView {
       case Some("crash") => 1
       case _ => return None
     }
-    val contentCrashes: Double = try {
-      getCountHistogramValue(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "content")
-    } catch { case _: Throwable => 0 }
-    val pluginCrashes: Double = try {
-      getCountHistogramValue(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "plugin")
-    } catch { case _: Throwable => 0 }
-    val geckoMediaPluginCrashes: Double = try {
-      getCountHistogramValue(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "gmplugin")
-    } catch { case _: Throwable => 0 }
+    val contentCrashes: Double = getCountHistogramValue(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "content")
+    val pluginCrashes: Double = getCountHistogramValue(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "plugin")
+    val geckoMediaPluginCrashes: Double = getCountHistogramValue(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "gmplugin")
     val stats = List(
       1, // number of pings represented by the aggregate
       usageHours, mainCrashes, contentCrashes,

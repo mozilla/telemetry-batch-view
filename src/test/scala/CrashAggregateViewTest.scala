@@ -140,6 +140,9 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
   }
 
   "Records" must "have the correct lengths" in {
+    // the number of aggregates is half of the number of pings originally - this is because pings vary all their dimensions, including the doc type
+    // when the doc type is "crash", the ping gets treated the same as if it was a "main" ping that also contains a main process crash
+    // we basically "fold" the doc type dimension into the aggregates
     assert(fixture.records.count() == fixture.pings.length / 2)
     assert(fixture.mainProcessedAccumulator.value == fixture.pings.length / 2)
     assert(fixture.mainIgnoredAccumulator.value == 0)
