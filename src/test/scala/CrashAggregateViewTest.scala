@@ -90,7 +90,7 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
           )
         )
       val info =
-        ("subsessionLength" -> SCALAR_VALUE)
+        JObject(if (dimensions("doc_type") == "main") List("subsessionLength" -> JInt(SCALAR_VALUE)) else List[JField]()) // only include the subsession length in main pings
       val system =
         ("os" ->
           ("name" -> dimensions("os_name").asInstanceOf[String]) ~
@@ -182,8 +182,8 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
   "crash rates" must "be converted correctly" in {
     for (row <- fixture.records.select("stats").collect()) {
       val stats = row.getJavaMap[String, Double](0)
-      assert(stats("ping_count")               == 2)
-      assert(stats("usage_hours")              == 42 * 2 / 3600.0)
+      assert(stats("ping_count")               == 1)
+      assert(stats("usage_hours")              == 42 / 3600.0)
       assert(stats("main_crashes")             == 1)
       assert(stats("content_crashes")          == 42 * 2)
       assert(stats("plugin_crashes")           == 42 * 2)

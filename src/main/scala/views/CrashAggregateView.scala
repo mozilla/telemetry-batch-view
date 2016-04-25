@@ -290,22 +290,23 @@ object CrashAggregateView {
     }
 
     // obtain the relevant stats for the ping
+    val isMainPing = pingFields.get("docType") match {
+      case Some("main") => true
+      case Some("crash") => false
+      case _ => return None
+    }
     val usageHours: Double = info \ "subsessionLength" match {
-      case JInt(subsessionLength) =>
+      case JInt(subsessionLength) if isMainPing => // main ping, which should always have the subsession length field
         Math.min(25, Math.max(0, subsessionLength.toDouble / 3600))
-      case JNothing => 0
-      case _ => return None
+      case JNothing if !isMainPing => 0 // crash ping, which shouldn't have the subsession length field
+      case _ => return None // invalid ping - main ping without subsession length or crash ping with subsession length
     }
-    val mainCrashes: Double = pingFields.get("docType") match {
-      case Some("main") => 0
-      case Some("crash") => 1
-      case _ => return None
-    }
+    val mainCrashes = if (isMainPing) 0 else 1 // if this is a crash ping, it represents one main process crash
     val contentCrashes: Double = getCountHistogramValue(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "content")
     val pluginCrashes: Double = getCountHistogramValue(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "plugin")
     val geckoMediaPluginCrashes: Double = getCountHistogramValue(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "gmplugin")
     val stats = List(
-      1, // number of pings represented by the aggregate
+      if (isMainPing) 1 else 0, // number of pings represented by the aggregate
       usageHours, mainCrashes, contentCrashes,
       pluginCrashes, geckoMediaPluginCrashes,
 
