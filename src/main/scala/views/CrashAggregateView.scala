@@ -1,23 +1,24 @@
 package telemetry.views
 
-import awscala.s3._
+import awscala.s3.{S3, Bucket}
 import com.typesafe.config._
+import org.apache.spark.rdd.RDD
+import org.apache.spark.{SparkConf, SparkContext, Accumulator}
 import org.apache.spark.sql.{Row, SQLContext, SaveMode}
 import org.apache.spark.sql.types._
-import org.apache.spark.{SparkConf, SparkContext, Accumulator}
-import org.apache.spark.rdd.RDD
 import scala.io.Source
 import org.json4s._
-import org.json4s.jackson.JsonMethods._
+import org.json4s.jackson.JsonMethods.parse
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
-import scala.math.{max, abs}
+import scala.math.{min, max}
 import telemetry.heka.{HekaFrame, Message}
 import telemetry.utils.Utils
-import org.joda.time._
+import org.joda.time.{format, DateTime, Days}
 import org.rogach.scallop._
 
 object CrashAggregateView {
+  // configuration for command line arguments
   class Conf(args: Array[String]) extends ScallopConf(args) {
     val from = opt[String]("from", descr = "From submission date", required = false)
     val to = opt[String]("to", descr = "To submission date", required = false)
@@ -25,8 +26,7 @@ object CrashAggregateView {
   }
 
   def main(args: Array[String]) {
-    // load configuration for the time range
-    val conf = new Conf(args)
+    val conf = new Conf(args) // parse command line arguments
     val fmt = format.DateTimeFormat.forPattern("yyyyMMdd")
     val to = conf.to.get match {
       case Some(t) => fmt.parseDateTime(t)
@@ -53,7 +53,7 @@ object CrashAggregateView {
 
       // obtain the crash aggregates from telemetry ping data
       val messages = getRecords(sc, currentDate, "crash").union(getRecords(sc, currentDate, "main"))
-      val (rowRDD, main_processed, main_ignored, crash_processed, crash_ignored) = compareCrashes(sc, messages)
+      val (rowRDD, mainProcessed, mainIgnored, crashProcessed, crashIgnored) = compareCrashes(sc, messages)
 
       // create a dataframe containing all the crash aggregates
       val schema = buildSchema()
@@ -64,8 +64,8 @@ object CrashAggregateView {
 
       println("=======================================================================================")
       println(s"JOB COMPLETED SUCCESSFULLY FOR $currentDate")
-      println(s"${main_processed.value} main pings processed, ${main_ignored.value} pings ignored")
-      println(s"${crash_processed.value} crash pings processed, ${crash_ignored.value} pings ignored")
+      println(s"${mainProcessed.value} main pings processed, ${mainIgnored.value} pings ignored")
+      println(s"${crashProcessed.value} crash pings processed, ${crashIgnored.value} pings ignored")
       println("=======================================================================================")
     }
   }
@@ -300,7 +300,7 @@ object CrashAggregateView {
     }
     val usageHours: Double = info \ "subsessionLength" match {
       case JInt(subsessionLength) if isMainPing => // main ping, which should always have the subsession length field
-        Math.min(25, Math.max(0, subsessionLength.toDouble / 3600))
+        min(25, max(0, subsessionLength.toDouble / 3600))
       case JNothing if !isMainPing => 0 // crash ping, which shouldn't have the subsession length field
       case _ => return None // invalid ping - main ping without subsession length or crash ping with subsession length
     }
