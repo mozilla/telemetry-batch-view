@@ -9,11 +9,12 @@ import org.scalatest.{FlatSpec, Matchers}
 import telemetry.views.ClientCountView
 
 case class Submission(client_id: String,
+                      app_name: String,
+                      app_version: String,
                       normalized_channel: String,
                       submission_date: String,
                       subsession_start_date: String,
                       country: String,
-                      version: String,
                       e10s_enabled: Boolean,
                       e10s_cohort: String,
                       os: String,
@@ -23,11 +24,12 @@ case class Submission(client_id: String,
 
 object Submission{
   val dimensions = Map("client_id" -> List("x", "y", "z"),
+                       "app_name" -> List("Firefox", "Fennec"),
+                       "app_version" -> List("44.0"),
                        "normalized_channel" -> List("release", "nightly"),
                        "submission_date" -> List("20160107", "20160106"),
                        "subsession_start_date" -> List("2016-03-13T00:00:00.0+01:00"),
                        "country" -> List("IT", "US"),
-                       "version" -> List("44"),
                        "e10s_enabled" -> List(true, false),
                        "e10s_cohort" -> List("control", "test"),
                        "os" -> List("Windows", "Darwin"),
@@ -38,11 +40,12 @@ object Submission{
   def randomList: List[Submission] = {
     for {
       clientId <- dimensions("client_id")
+      appName <- dimensions("app_name")
+      appVersion <- dimensions("app_version")
       normalizedChannel <- dimensions("normalized_channel")
       submissionDate <- dimensions("submission_date")
       subsessionStartDate <- dimensions("subsession_start_date")
       country <- dimensions("country")
-      version <- dimensions("version")
       e10sEnabled <- dimensions("e10s_enabled")
       e10sCohort <- dimensions("e10s_cohort")
       os <- dimensions("os")
@@ -51,11 +54,12 @@ object Submission{
       loopActivityOpenPanel <- dimensions("loop_activity_open_panel")
     } yield {
       Submission(clientId.asInstanceOf[String],
+                 appName.asInstanceOf[String],
+                 appVersion.asInstanceOf[String],
                  normalizedChannel.asInstanceOf[String],
                  submissionDate.asInstanceOf[String],
                  subsessionStartDate.asInstanceOf[String],
                  country.asInstanceOf[String],
-                 version.asInstanceOf[String],
                  e10sEnabled.asInstanceOf[Boolean],
                  e10sCohort.asInstanceOf[String],
                  os.asInstanceOf[String],
