@@ -28,30 +28,19 @@ To run tests:
 sbt test
 ```
 
+### Generating Datasets
+
+See the [documentation for specific streams](https://github.com/mozilla/telemetry-batch-view/tree/master/docs) for details about running/generating them.
+
 To generate a `DerivedStream`-based dataset `MyStream` for October 28, 2015 to October 29, 2015:
 ```bash
 sbt "run-main telemetry.DerivedStream --from-date 20151028 --to-date 20151029 MyStream"
 ```
 
-To generate a view-based dataset `MyView` for October 28, 2015 to October 29, 2015:
-```bash
-sbt "run-main telemetry.views.MyView --from-date 20151028 --to-date 20151029"
-```
-
-### Distributed execution
-Build an uber-JAR (a JAR with all dependencies and classes bundled) with:
+For distributed execution, we pack all of the classes together into a single JAR, and then submit it to be run with Spark:
 ```bash
 sbt assembly
-```
-
-For a `DerivedStream`-based dataset `MyStream`, submit the job with:
-```bash
 spark-submit --master yarn-client --class telemetry.DerivedStream target/scala-2.10/telemetry-batch-view-*.jar --from-date 20151028 --to-date 20151029 MyStream
-```
-
-For a view-based dataset `MyView`, submit the job with:
-```bash
-spark-submit --master yarn-client --class telemetry.views.MyView target/scala-2.10/telemetry-batch-view-*.jar --from-date 20151028 --to-date 20151029
 ```
 
 ### Caveats
@@ -59,5 +48,3 @@ If you run into memory issues during compilation time issue the following comman
 ```bash
 export JAVA_OPTIONS="-Xss128M -Xmx2048M" 
 ```
-
-Currently, due to [avro-parquet issues](https://issues.apache.org/jira/browse/HIVE-12828), Parquet writing only works under the `spark-submit` commands (under `sbt`, Parquet writing fails with multiple different errors).
