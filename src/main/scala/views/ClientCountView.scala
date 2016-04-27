@@ -18,7 +18,7 @@ class Conf(args: Array[String]) extends ScallopConf(args) {
 
 object ClientCountView {
   private val hllMerge = new HyperLogLogMerge
-  private val base = List("normalized_channel", "country", "version", "e10s_enabled", "e10s_cohort")
+  private val base = List("normalized_channel", "country", "version", "e10s_enabled", "e10s_cohort", "os", "os_version")
   // 12 bits corresponds to an error of 0.0163
   private val selection = "hll_create(client_id, 12) as client_id" :: "substr(subsession_start_date, 0, 10) as activity_date" :: base
 

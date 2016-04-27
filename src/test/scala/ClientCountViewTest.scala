@@ -15,7 +15,9 @@ case class Submission(client_id: String,
                       country: String,
                       version: String,
                       e10s_enabled: Boolean,
-                      e10s_cohort: String)
+                      e10s_cohort: String,
+                      os: String,
+                      os_version: String)
 
 object Submission{
   val dimensions = Map("client_id" -> List("x", "y", "z"),
@@ -25,7 +27,9 @@ object Submission{
                        "country" -> List("IT", "US"),
                        "version" -> List("44"),
                        "e10s_enabled" -> List(true, false),
-                       "e10s_cohort" -> List("control", "test"))
+                       "e10s_cohort" -> List("control", "test"),
+                       "os" -> List("Windows", "Darwin"),
+                       "os_version" -> List("1.0", "1.1"))
 
   def randomList: List[Submission] = {
     for {
@@ -37,6 +41,8 @@ object Submission{
       version <- dimensions("version")
       e10sEnabled <- dimensions("e10s_enabled")
       e10sCohort <- dimensions("e10s_cohort")
+      os <- dimensions("os")
+      osVersion <- dimensions("os_version")
     } yield {
       Submission(clientId.asInstanceOf[String],
                  normalizedChannel.asInstanceOf[String],
@@ -45,7 +51,9 @@ object Submission{
                  country.asInstanceOf[String],
                  version.asInstanceOf[String],
                  e10sEnabled.asInstanceOf[Boolean],
-                 e10sCohort.asInstanceOf[String])
+                 e10sCohort.asInstanceOf[String],
+                 os.asInstanceOf[String],
+                 osVersion.asInstanceOf[String])
     }
   }
 }
