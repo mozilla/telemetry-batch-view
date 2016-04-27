@@ -17,7 +17,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
       // TODO: Use Scala Map and List directly?
       val histograms =
         ("TELEMETRY_TEST_FLAG" ->
-           ("values" -> ("0" -> 1) ~ ("1" -> 0)) ~
+           ("values" -> ("0" -> 0)) ~
            ("sum"    -> 0)) ~
         ("DEVTOOLS_TOOLBOX_OPENED_BOOLEAN" ->
            ("values" -> ("0" -> 42)) ~
