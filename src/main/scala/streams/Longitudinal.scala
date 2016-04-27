@@ -479,7 +479,7 @@ case class Longitudinal() extends DerivedStream {
     definition match {
       case _: FlagHistogram =>
         // A flag histograms is represented with a scalar.
-        vectorizeHistogram_(name, payloads, h => h.values("0") > 0, false)
+        vectorizeHistogram_(name, payloads, h => h.values("0") == 0, false)
 
       case _: BooleanHistogram =>
         // A boolean histograms is represented with an array of two integers.
