@@ -187,8 +187,8 @@ object DerivedStream {
           Some(options.getOrElse('fromDate, to), churn)
 
         case "E10SExperiment" =>
-          val from = options.getOrElse('fromDate, "20160321")
-          val exp = E10sExperiment("e10s-beta46-cohorts", "telemetry/4/saved_session/Firefox/beta/46.0/")
+          val from = options.getOrElse('fromDate, "20160426")
+          val exp = E10sExperiment("e10s-beta47-cohorts", "telemetry/4/saved_session/Firefox/beta/47.0/")
           Some(from, exp)
 
         case "MainSummary" => // https://bugzilla.mozilla.org/show_bug.cgi?id=1260847
