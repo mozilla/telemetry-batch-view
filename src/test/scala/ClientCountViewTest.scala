@@ -8,35 +8,35 @@ import org.apache.spark.sql.hive.HiveContext
 import org.scalatest.{FlatSpec, Matchers}
 import telemetry.views.ClientCountView
 
-case class Submission(clientId: String,
-                      normalizedChannel: String,
-                      submissionDate: String,
-                      subsessionStartDate: String,
+case class Submission(client_id: String,
+                      normalized_channel: String,
+                      submission_date: String,
+                      subsession_start_date: String,
                       country: String,
                       version: String,
-                      e10sEnabled: Boolean,
-                      e10sCohort: String)
+                      e10s_enabled: Boolean,
+                      e10s_cohort: String)
 
 object Submission{
-  val dimensions = Map("clientId" -> List("x", "y", "z"),
-                       "normalizedChannel" -> List("release", "nightly"),
-                       "submissionDate" -> List("20160107", "20160106"),
-                       "subsessionStartDate" -> List("2016-03-13T00:00:00.0+01:00"),
+  val dimensions = Map("client_id" -> List("x", "y", "z"),
+                       "normalized_channel" -> List("release", "nightly"),
+                       "submission_date" -> List("20160107", "20160106"),
+                       "subsession_start_date" -> List("2016-03-13T00:00:00.0+01:00"),
                        "country" -> List("IT", "US"),
                        "version" -> List("44"),
-                       "e10sEnabled" -> List(true, false),
-                       "e10sCohort" -> List("control", "test"))
+                       "e10s_enabled" -> List(true, false),
+                       "e10s_cohort" -> List("control", "test"))
 
   def randomList: List[Submission] = {
     for {
-      clientId <- dimensions("clientId")
-      normalizedChannel <- dimensions("normalizedChannel")
-      submissionDate <- dimensions("submissionDate")
-      subsessionStartDate <- dimensions("subsessionStartDate")
+      clientId <- dimensions("client_id")
+      normalizedChannel <- dimensions("normalized_channel")
+      submissionDate <- dimensions("submission_date")
+      subsessionStartDate <- dimensions("subsession_start_date")
       country <- dimensions("country")
       version <- dimensions("version")
-      e10sEnabled <- dimensions("e10sEnabled")
-      e10sCohort <- dimensions("e10sCohort")
+      e10sEnabled <- dimensions("e10s_enabled")
+      e10sCohort <- dimensions("e10s_cohort")
     } yield {
       Submission(clientId.asInstanceOf[String],
                  normalizedChannel.asInstanceOf[String],
@@ -63,12 +63,12 @@ class ClientCountViewTest extends FlatSpec with Matchers{
     val dataset = sc.parallelize(Submission.randomList).toDF()
     val aggregates = ClientCountView.aggregate(dataset)
 
-    val dimensions = Set(ClientCountView.dimensions:_*) -- Set("clientId")
-    (Set(aggregates.columns:_*) -- Set("clientId", "hll", "sum")) should be (dimensions)
+    val dimensions = Set(ClientCountView.dimensions:_*) -- Set("client_id")
+    (Set(aggregates.columns:_*) -- Set("client_id", "hll", "sum")) should be (dimensions)
 
     var estimates = aggregates.select(expr("hll_cardinality(hll)")).collect()
     estimates.foreach{ x =>
-      x(0) should be (Submission.dimensions("clientId").size)
+      x(0) should be (Submission.dimensions("client_id").size)
     }
 
     val hllMerge = new HyperLogLogMerge
@@ -78,6 +78,6 @@ class ClientCountViewTest extends FlatSpec with Matchers{
       .select(expr("hll_cardinality(hll)")).collect()
 
     count.size should be (1)
-    count(0)(0) should be (Submission.dimensions("clientId").size)
+    count(0)(0) should be (Submission.dimensions("client_id").size)
   }
 }
