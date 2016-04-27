@@ -31,7 +31,7 @@ object ClientCountView {
 
   // 12 bits corresponds to an error of 0.0163
   private val selection =
-    "hll_create(client_id, 12) as client_id" ::
+    "hll_create(client_id, 12) as hll" ::
     "substr(subsession_start_date, 0, 10) as activity_date" ::
     "devtools_toolbox_opened_count > 0 as devtools_toolbox_opened" ::
     "loop_activity_open_panel > 0 as loop_activity_open_panel" ::
@@ -41,9 +41,10 @@ object ClientCountView {
 
   def aggregate(frame: DataFrame): DataFrame = {
     frame
+      .where("client_id IS NOT NULL")
       .selectExpr(selection:_*)
       .groupBy(dimensions.head, dimensions.tail:_*)
-      .agg(hllMerge(col("client_id")).as("hll"))
+      .agg(hllMerge(col("hll")).as("hll"))
   }
 
   def main(args: Array[String]) {

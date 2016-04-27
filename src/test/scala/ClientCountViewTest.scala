@@ -23,7 +23,7 @@ case class Submission(client_id: String,
                       loop_activity_open_panel: Int)
 
 object Submission{
-  val dimensions = Map("client_id" -> List("x", "y", "z"),
+  val dimensions = Map("client_id" -> List("x", "y", "z", null),
                        "app_name" -> List("Firefox", "Fennec"),
                        "app_version" -> List("44.0"),
                        "normalized_channel" -> List("release", "nightly"),
@@ -88,7 +88,7 @@ class ClientCountViewTest extends FlatSpec with Matchers{
 
     var estimates = aggregates.select(expr("hll_cardinality(hll)")).collect()
     estimates.foreach{ x =>
-      x(0) should be (Submission.dimensions("client_id").size)
+      x(0) should be (Submission.dimensions("client_id").filter(x => x != null).size)
     }
 
     val hllMerge = new HyperLogLogMerge
@@ -98,6 +98,6 @@ class ClientCountViewTest extends FlatSpec with Matchers{
       .select(expr("hll_cardinality(hll)")).collect()
 
     count.size should be (1)
-    count(0)(0) should be (Submission.dimensions("client_id").size)
+    count(0)(0) should be (Submission.dimensions("client_id").filter(x => x != null).size)
   }
 }
