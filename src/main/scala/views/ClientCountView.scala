@@ -18,17 +18,33 @@ class Conf(args: Array[String]) extends ScallopConf(args) {
 
 object ClientCountView {
   private val hllMerge = new HyperLogLogMerge
-  private val base = List("normalizedChannel", "country", "version", "e10sEnabled", "e10sCohort")
-  // 12 bits corresponds to an error of 0.0163
-  private val selection = "hll_create(clientId, 12) as clientId" :: "substr(subsessionStartDate, 0, 10) as activityDate" :: base
 
-  val dimensions = "activityDate" :: base
+  private val base = List(
+    "normalized_channel",
+    "country",
+    "app_name",
+    "app_version",
+    "e10s_enabled",
+    "e10s_cohort",
+    "os",
+    "os_version")
+
+  // 12 bits corresponds to an error of 0.0163
+  private val selection =
+    "hll_create(client_id, 12) as hll" ::
+    "substr(subsession_start_date, 0, 10) as activity_date" ::
+    "devtools_toolbox_opened_count > 0 as devtools_toolbox_opened" ::
+    "loop_activity_open_panel > 0 as loop_activity_open_panel" ::
+    base
+
+  val dimensions = "activity_date" :: "devtools_toolbox_opened" :: "loop_activity_open_panel" :: base
 
   def aggregate(frame: DataFrame): DataFrame = {
     frame
+      .where("client_id IS NOT NULL")
       .selectExpr(selection:_*)
       .groupBy(dimensions.head, dimensions.tail:_*)
-      .agg(hllMerge(col("clientId")).as("hll"))
+      .agg(hllMerge(col("hll")).as("hll"))
   }
 
   def main(args: Array[String]) {
@@ -54,7 +70,7 @@ object ClientCountView {
     hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
     sqlContext.udf.register("hll_create", hllCreate _)
 
-    val df = sqlContext.read.load("s3://telemetry-parquet/churn/v1")
+    val df = sqlContext.read.load("s3://telemetry-parquet/main_summary/v2")
     val subset = df.where(s"submission_date_s3 >= $from and submission_date_s3 <= $to")
     val aggregates = aggregate(subset).coalesce(32)
 
