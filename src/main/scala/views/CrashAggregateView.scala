@@ -49,6 +49,7 @@ object CrashAggregateView {
 
     for (offset <- 0 to Days.daysBetween(from, to).getDays()) {
       val currentDate = from.plusDays(offset)
+      val currentDateString = currentDate.toString("yyyy-MM-dd")
 
       // obtain the crash aggregates from telemetry ping data
       val messages = getRecords(sc, currentDate, "crash").union(getRecords(sc, currentDate, "main"))
@@ -56,10 +57,10 @@ object CrashAggregateView {
 
       // create a dataframe containing all the crash aggregates
       val schema = buildSchema()
-      val records = sqlContext.createDataFrame(rowRDD, schema)
+      val records = sqlContext.createDataFrame(rowRDD.coalesce(1), schema)
 
       // upload the resulting aggregate Spark records to S3
-      records.write.mode(SaveMode.Overwrite).parquet(s"s3://$parquetBucket/crash_aggregates/v$currentDate")
+      records.write.mode(SaveMode.Overwrite).parquet(s"s3://$parquetBucket/crash_aggregates/v1/submission_date=$currentDateString")
 
       println("=======================================================================================")
       println(s"JOB COMPLETED SUCCESSFULLY FOR $currentDate")
@@ -108,10 +109,12 @@ object CrashAggregateView {
       List(telemetryPrefix, submissionDate.toString("yyyyMMdd"), "telemetry", "4", docType)
     ).flatMap(prefix => s3.objectSummaries(bucket, prefix))
 
+    // output the messages as heka ping maps
     sc.parallelize(summaries).flatMap(summary => {
       val key = summary.getKey()
-      val hekaFile = bucket.getObject(key).getOrElse(throw new Exception(s"File missing on S3: $key"))
-      for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey())) yield HekaFrame.fields(message)
+      val hekaFile = bucket.getObject(key).getOrElse(throw new Exception(s"Key is missing on S3: $key"))
+      for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey()))
+        yield HekaFrame.fields(message)
     })
   }
 

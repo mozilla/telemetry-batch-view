@@ -114,3 +114,13 @@ FROM channel_rates
 WHERE usage_kilohours > 100 -- only aggregates that have statistically significant usage hours
 ORDER BY build_id ASC
 ```
+
+Technical Details
+-----------------
+
+We ignore invalid pings in our processing. Invalid pings are defined as those that:
+
+* The submission dates or activity dates are invalid or missing.
+* The build ID is malformed.
+* The `docType` field is missing or unknown.
+* The ping is a main ping without usage hours or a crash ping with usage hours.
