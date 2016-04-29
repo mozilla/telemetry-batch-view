@@ -3,18 +3,14 @@ package telemetry.streams
 import awscala.s3.{S3, Bucket}
 import com.typesafe.config._
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext, Accumulator}
 import org.apache.spark.sql.{Row, SQLContext, SaveMode}
 import org.apache.spark.sql.types._
-import scala.io.Source
 import org.json4s._
 import org.json4s.jackson.JsonMethods.parse
-import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
 import telemetry.DerivedStream.s3
-import telemetry.heka.{HekaFrame, Message}
 import telemetry.streams.main_summary.Utils
+import telemetry.utils.Telemetry
 import org.joda.time.{format, DateTime, Days}
 import org.rogach.scallop._
 
@@ -39,7 +35,7 @@ object ChurnView {
     }
 
     // set up Spark
-    val sparkConf = new SparkConf().setAppName("CrashAggregateVie")
+    val sparkConf = new SparkConf().setAppName("ChurnView")
     sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
     val sc = new SparkContext(sparkConf)
     val sqlContext = new SQLContext(sc)
@@ -53,61 +49,15 @@ object ChurnView {
       val currentDateString = currentDate.toString("yyyyMMdd")
 
       val schema = buildSchema()
-      val messages = getRecords(sc, currentDate)
-      val rowRDD = messages.flatMap(message => messageToRow(message)).repartition(100) // TODO: partition by sampleId
-      val records = sqlContext.createDataFrame(rowRDD, schema)
+      val messages = Telemetry.getRecords(sc, currentDate, List("telemetry", "4", "main", "Firefox"))
+      val rowRDD = messages.flatMap(messageToRow).repartition(100) // TODO: partition by sampleId
+      val records = sqlContext.createDataFrame(rowRDD.coalesce(1), schema)
       records.write.mode(SaveMode.Overwrite).parquet(s"s3://$parquetBucket/churn/v1/submission_date_s3=$currentDateString")
 
       println("=======================================================================================")
       println(s"JOB COMPLETED SUCCESSFULLY FOR $currentDate")
       println("=======================================================================================")
     }
-  }
-
-  implicit lazy val s3: S3 = S3()
-  private def listS3Keys(bucket: Bucket, prefix: String, delimiter: String = "/"): Stream[String] = {
-    import com.amazonaws.services.s3.model.{ ListObjectsRequest, ObjectListing }
-
-    val request = new ListObjectsRequest().withBucketName(bucket.getName).withPrefix(prefix).withDelimiter(delimiter)
-    val firstListing = s3.listObjects(request)
-
-    def completeStream(listing: ObjectListing): Stream[String] = {
-      val prefixes = listing.getCommonPrefixes.asScala.toStream
-      prefixes #::: (if (listing.isTruncated) completeStream(s3.listNextBatchOfObjects(listing)) else Stream.empty)
-    }
-
-    completeStream(firstListing)
-  }
-  private def matchingPrefixes(bucket: Bucket, seenPrefixes: Stream[String], pattern: List[String]): Stream[String] = {
-    if (pattern.isEmpty) {
-      seenPrefixes
-    } else {
-      val matching = seenPrefixes
-        .flatMap(prefix => listS3Keys(bucket, prefix))
-        .filter(prefix => (pattern.head == "*" || prefix.endsWith(pattern.head + "/")))
-      matchingPrefixes(bucket, matching, pattern.tail)
-    }
-  }
-  private def getRecords(sc: SparkContext, submissionDate: DateTime): RDD[Map[String, Any]] = {
-    // obtain the prefix of the telemetry data source
-    val metadataBucket = Bucket("net-mozaws-prod-us-west-2-pipeline-metadata")
-    val Some(sourcesObj) = metadataBucket.get("sources.json")
-    val metaSources = parse(Source.fromInputStream(sourcesObj.getObjectContent()).getLines().mkString("\n"))
-    val JString(telemetryPrefix) = metaSources \\ "telemetry" \\ "prefix"
-
-    // get a stream of object summaries that match the desired criteria
-    val bucket = Bucket("net-mozaws-prod-us-west-2-pipeline-data")
-    val summaries = matchingPrefixes(
-      bucket,
-      List("").toStream,
-      List(telemetryPrefix, submissionDate.toString("yyyyMMdd"), "telemetry", "4", "main", "Firefox")
-    ).flatMap(prefix => s3.objectSummaries(bucket, prefix))
-
-    sc.parallelize(summaries).flatMap(summary => {
-      val key = summary.getKey()
-      val hekaFile = bucket.getObject(key).getOrElse(throw new Exception(s"File missing on S3: $key"))
-      for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey())) yield HekaFrame.fields(message)
-    })
   }
 
   // Convert a message to a row containing the schema fields
