@@ -50,9 +50,10 @@ object Telemetry {
     val Some(sourcesObj) = metadataBucket.get("sources.json")
     val metaSources = parse(Source.fromInputStream(sourcesObj.getObjectContent()).getLines().mkString("\n"))
     val JString(telemetryPrefix) = metaSources \\ "telemetry" \\ "prefix"
+    val JString(dataBucket) = metaSources \\ "telemetry" \\ "bucket"
 
     // get a stream of object summaries that match the desired criteria
-    val bucket = Bucket("net-mozaws-prod-us-west-2-pipeline-data")
+    val bucket = Bucket(dataBucket)
     val keys = matchingPrefixes(
       bucket,
       List("").toStream,
@@ -71,9 +72,10 @@ object Telemetry {
     val Some(sourcesObj) = metadataBucket.get("sources.json")
     val metaSources = parse(Source.fromInputStream(sourcesObj.getObjectContent()).getLines().mkString("\n"))
     val JString(telemetryPrefix) = metaSources \\ "telemetry" \\ "prefix"
+    val JString(dataBucket) = metaSources \\ "telemetry" \\ "bucket"
 
     // get a stream of object summaries that match the desired criteria
-    val bucket = Bucket("net-mozaws-prod-us-west-2-pipeline-data")
+    val bucket = Bucket(dataBucket)
     matchingPrefixes(
       bucket,
       List("").toStream,
