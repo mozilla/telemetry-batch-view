@@ -66,14 +66,12 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
     def createPing(dimensions: Map[String, Any]): Map[String, Any] = {
       val SCALAR_VALUE = 42
       val histograms =
-        ("histograms" ->
-          ("SUBPROCESS_SHUTDOWN_KILL" ->
+        ("SUBPROCESS_SHUTDOWN_KILL" ->
             ("bucket_count" -> 3) ~
             ("histogram_type" -> 4) ~
             ("range" -> List(1, 2)) ~
             ("sum" -> SCALAR_VALUE) ~
             ("values" -> Map("0" -> SCALAR_VALUE, "1" -> 0))
-          )
         )
       val keyedHistograms =
         ("SUBPROCESS_CRASHES_WITH_DUMP" ->
