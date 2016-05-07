@@ -65,6 +65,14 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
 
     def createPing(dimensions: Map[String, Any]): Map[String, Any] = {
       val SCALAR_VALUE = 42
+      val histograms =
+        ("SUBPROCESS_SHUTDOWN_KILL" ->
+            ("bucket_count" -> 3) ~
+            ("histogram_type" -> 4) ~
+            ("range" -> List(1, 2)) ~
+            ("sum" -> SCALAR_VALUE) ~
+            ("values" -> Map("0" -> SCALAR_VALUE, "1" -> 0))
+        )
       val keyedHistograms =
         ("SUBPROCESS_CRASHES_WITH_DUMP" ->
           ("content" ->
@@ -116,6 +124,7 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
         "geoCountry" -> dimensions("country").asInstanceOf[String],
         "normalizedChannel" -> dimensions("channel").asInstanceOf[String],
         "appName" -> dimensions("application").asInstanceOf[String],
+        "payload.histograms" -> compact(render(histograms)),
         "payload.keyedHistograms" -> compact(render(keyedHistograms)),
         "payload.info" -> compact(render(info)),
         "environment.system" -> compact(render(system)),
@@ -182,17 +191,19 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
   "crash rates" must "be converted correctly" in {
     for (row <- fixture.records.select("stats").collect()) {
       val stats = row.getJavaMap[String, Double](0)
-      assert(stats("ping_count")               == 1)
-      assert(stats("usage_hours")              == 42 / 3600.0)
-      assert(stats("main_crashes")             == 1)
-      assert(stats("content_crashes")          == 42 * 2)
-      assert(stats("plugin_crashes")           == 42 * 2)
-      assert(stats("gmplugin_crashes")         == 42 * 2)
-      assert(stats("usage_hours_squared")      == 0.00013611111111111113)
-      assert(stats("main_crashes_squared")     == 1)
-      assert(stats("content_crashes_squared")  == 3528)
-      assert(stats("plugin_crashes_squared")   == 3528)
-      assert(stats("gmplugin_crashes_squared") == 3528)
+      assert(stats("ping_count")                       == 1)
+      assert(stats("usage_hours")                      == 42 / 3600.0)
+      assert(stats("main_crashes")                     == 1)
+      assert(stats("content_crashes")                  == 42 * 2)
+      assert(stats("plugin_crashes")                   == 42 * 2)
+      assert(stats("gmplugin_crashes")                 == 42 * 2)
+      assert(stats("content_shutdown_crashes")         == 42 * 2)
+      assert(stats("usage_hours_squared")              == 0.00013611111111111113)
+      assert(stats("main_crashes_squared")             == 1)
+      assert(stats("content_crashes_squared")          == 3528)
+      assert(stats("plugin_crashes_squared")           == 3528)
+      assert(stats("gmplugin_crashes_squared")         == 3528)
+      assert(stats("content_shutdown_crashes_squared") == 3528)
     }
   }
 }
