@@ -39,11 +39,6 @@ object Telemetry {
     }
   }
 
-  def appendToFile(p: String, s: String): Unit = {
-    val pw = new java.io.PrintWriter(new java.io.FileOutputStream(new java.io.File(p),true))
-    try pw.write(s) finally pw.close()
-  }
-
   def getRecords(sc: SparkContext, submissionDate: DateTime, pingPath: List[String]): RDD[Map[String, Any]] = {
     // obtain the prefix of the telemetry data source
     val metadataBucket = Bucket("net-mozaws-prod-us-west-2-pipeline-metadata")
