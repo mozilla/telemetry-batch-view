@@ -1,14 +1,11 @@
 package telemetry.streams
 
-import awscala.s3.{S3, Bucket}
 import com.typesafe.config._
-import org.apache.spark.SparkContext
-import org.apache.spark.{SparkConf, SparkContext, Accumulator}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.{Row, SQLContext, SaveMode}
 import org.apache.spark.sql.types._
 import org.json4s._
 import org.json4s.jackson.JsonMethods.parse
-import telemetry.DerivedStream.s3
 import telemetry.streams.main_summary.Utils
 import telemetry.utils.Telemetry
 import org.joda.time.{format, DateTime, Days}
@@ -73,7 +70,8 @@ object ChurnView {
     lazy val weaveDesktop = Utils.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
     lazy val weaveMobile = Utils.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
 
-    val row = Row( // the entries in this correspond to the schema in `buildSchema()`
+    // entries in the row correspond exactly to the schema in `buildSchema()`
+    val row = Row(
       message.getOrElse("clientId", None) match {
         case x: String => x
         case _ => return None // required
@@ -81,14 +79,6 @@ object ChurnView {
       message.getOrElse("sampleId", None) match {
         case x: Long => x
         case x: Double => x.toLong
-        case _ => return None // required
-      },
-      message.getOrElse("submissionDate", None) match {
-        case x: String => x
-        case _ => return None // required
-      },
-      message.getOrElse("timestamp", None) match {
-        case x: String => x
         case _ => return None // required
       },
       message.getOrElse("appUpdateChannel", None) match {
@@ -103,17 +93,10 @@ object ChurnView {
         case x: String => x
         case _ => ""
       },
-      message.getOrElse("appVersion", None) match {
-        case x: String => x
-        case _ => ""
-      },
       (profile \ "creationDate") match {
         case x: JInt => x.num.toLong
         case _ => null
       },
-      weaveConfigured.getOrElse(null),
-      weaveDesktop.getOrElse(null),
-      weaveMobile.getOrElse(null),
       (info \ "subsessionStartDate") match {
         case JString(x) => x
         case _ => null
@@ -125,6 +108,23 @@ object ChurnView {
       (partner \ "distributionId") match {
         case JString(x) => x
         case _ => null
+      },
+      message.getOrElse("submissionDate", None) match {
+        case x: String => x
+        case _ => return None // required
+      },
+
+      weaveConfigured.getOrElse(null),
+      weaveDesktop.getOrElse(null),
+      weaveMobile.getOrElse(null),
+
+      message.getOrElse("appVersion", None) match {
+        case x: String => x
+        case _ => ""
+      },
+      message.getOrElse("timestamp", None) match {
+        case x: String => x
+        case _ => return None // required
       },
       (settings \ "e10sEnabled") match {
         case JBool(x) => x
