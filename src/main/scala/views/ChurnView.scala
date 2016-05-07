@@ -1,4 +1,4 @@
-package telemetry.streams
+package telemetry.views
 
 import com.typesafe.config._
 import org.apache.spark.{SparkConf, SparkContext}
@@ -48,7 +48,7 @@ object ChurnView {
       val schema = buildSchema()
       val messages = Telemetry.getRecords(sc, currentDate, List("telemetry", "4", "main", "Firefox"))
       val rowRDD = messages.flatMap(messageToRow).repartition(100) // TODO: partition by sampleId
-      val records = sqlContext.createDataFrame(rowRDD.coalesce(1), schema)
+      val records = sqlContext.createDataFrame(rowRDD, schema)
       records.write.mode(SaveMode.Overwrite).parquet(s"s3://$parquetBucket/churn/v1/submission_date_s3=$currentDateString")
 
       println("=======================================================================================")
