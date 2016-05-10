@@ -88,6 +88,15 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
             ("sum" -> SCALAR_VALUE) ~
             ("values" -> Map("0" -> SCALAR_VALUE, "1" -> 0))
           )
+        ) ~
+        ("SUBPROCESS_KILL_HARD" ->
+          ("ShutDownKill" ->
+            ("bucket_count" -> 3) ~
+            ("histogram_type" -> 4) ~
+            ("range" -> List(1, 2)) ~
+            ("sum" -> SCALAR_VALUE) ~
+            ("values" -> Map("0" -> SCALAR_VALUE, "1" -> 0))
+          )
         )
       val info =
         JObject(if (dimensions("doc_type") == "main") List("subsessionLength" -> JInt(SCALAR_VALUE)) else List[JField]()) // only include the subsession length in main pings
@@ -182,17 +191,19 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
   "crash rates" must "be converted correctly" in {
     for (row <- fixture.records.select("stats").collect()) {
       val stats = row.getJavaMap[String, Double](0)
-      assert(stats("ping_count")               == 1)
-      assert(stats("usage_hours")              == 42 / 3600.0)
-      assert(stats("main_crashes")             == 1)
-      assert(stats("content_crashes")          == 42 * 2)
-      assert(stats("plugin_crashes")           == 42 * 2)
-      assert(stats("gmplugin_crashes")         == 42 * 2)
-      assert(stats("usage_hours_squared")      == 0.00013611111111111113)
-      assert(stats("main_crashes_squared")     == 1)
-      assert(stats("content_crashes_squared")  == 3528)
-      assert(stats("plugin_crashes_squared")   == 3528)
-      assert(stats("gmplugin_crashes_squared") == 3528)
+      assert(stats("ping_count")                       == 1)
+      assert(stats("usage_hours")                      == 42 / 3600.0)
+      assert(stats("main_crashes")                     == 1)
+      assert(stats("content_crashes")                  == 42 * 2)
+      assert(stats("plugin_crashes")                   == 42 * 2)
+      assert(stats("gmplugin_crashes")                 == 42 * 2)
+      assert(stats("content_shutdown_crashes")         == 42 * 2)
+      assert(stats("usage_hours_squared")              == 0.00013611111111111113)
+      assert(stats("main_crashes_squared")             == 1)
+      assert(stats("content_crashes_squared")          == 3528)
+      assert(stats("plugin_crashes_squared")           == 3528)
+      assert(stats("gmplugin_crashes_squared")         == 3528)
+      assert(stats("content_shutdown_crashes_squared") == 3528)
     }
   }
 }

@@ -154,9 +154,9 @@ object CrashAggregateView {
   val statsNames = List(
     "ping_count",
     "usage_hours", "main_crashes", "content_crashes",
-    "plugin_crashes", "gmplugin_crashes",
+    "plugin_crashes", "gmplugin_crashes", "content_shutdown_crashes",
     "usage_hours_squared", "main_crashes_squared", "content_crashes_squared",
-    "plugin_crashes_squared", "gmplugin_crashes_squared"
+    "plugin_crashes_squared", "gmplugin_crashes_squared", "content_shutdown_crashes_squared"
   )
 
   private def getCountHistogramValue(histogram: JValue): Double = {
@@ -308,14 +308,16 @@ object CrashAggregateView {
     val contentCrashes: Double = getCountHistogramValue(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "content")
     val pluginCrashes: Double = getCountHistogramValue(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "plugin")
     val geckoMediaPluginCrashes: Double = getCountHistogramValue(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "gmplugin")
+    val contentShutdownCrashes: Double = getCountHistogramValue(keyedHistograms \ "SUBPROCESS_KILL_HARD" \ "ShutDownKill")
     val stats = List(
       if (isMainPing) 1 else 0, // number of pings represented by the aggregate
       usageHours, mainCrashes, contentCrashes,
-      pluginCrashes, geckoMediaPluginCrashes,
+      pluginCrashes, geckoMediaPluginCrashes, contentShutdownCrashes,
 
       // squared versions in order to compute stddev (with $$\sigma = \sqrt{\frac{\sum X^2}{N} - \mu^2}$$)
       usageHours * usageHours, mainCrashes * mainCrashes, contentCrashes * contentCrashes,
-      pluginCrashes * pluginCrashes, geckoMediaPluginCrashes * geckoMediaPluginCrashes
+      pluginCrashes * pluginCrashes, geckoMediaPluginCrashes * geckoMediaPluginCrashes,
+      contentShutdownCrashes * contentShutdownCrashes
     )
 
     // return a pair so we can use PairRDD operations on this data later
