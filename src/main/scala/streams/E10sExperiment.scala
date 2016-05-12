@@ -61,13 +61,13 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
 
         // the e10s cohort determines which group a user belongs to in the e10s experiment
         // (as of beta46 experiment 2; previously, we used the Telemetry Experiments framework)
-        val JString(cohort) = settings \ "e10sCohort"
+        val JString(cohort) = (settings \ "e10sCohort").toOption.getOrElse(JString("nothing"))
 
         // the first time the system addon is run, it is possible that the addon determines the
         // user should have e10s enabled for the experiment, and sets the e10sCohort to "test",
         // yet it is too late in the session to actually enable e10s
         // the suggested solution is to check the value of environment/settings/e10sEnabled, and exclude those pings from consideration
-        val JBool(e10sEnabled) = settings \ "e10sEnabled"
+        val JBool(e10sEnabled) = (settings \ "e10sEnabled").toOption.getOrElse(JBool(true))
         val pingShouldBeExcluded = (cohort == "test" && !e10sEnabled) || // should have e10s enabled, but doesn't
                                    (cohort == "control" && e10sEnabled) // shouldn't have e10s enabled, but does
 
