@@ -77,8 +77,8 @@ object ChurnView {
         case _ => return None // required
       },
       message.getOrElse("sampleId", None) match {
-        case x: Long => x
-        case x: Double => x.toLong
+        case x: Long => x.toInt
+        case x: Double => x.toInt
         case _ => return None // required
       },
       message.getOrElse("appUpdateChannel", None) match {
@@ -145,16 +145,16 @@ object ChurnView {
       StructField("channel",             StringType,  false) :: // appUpdateChannel
       StructField("normalizedChannel",   StringType,  false) :: // normalizedChannel
       StructField("country",             StringType,  false) :: // geoCountry
-      StructField("profileCreationDate", IntegerType, true) :: // environment/profile/creationDate
+      StructField("profileCreationDate", LongType,    true) :: // environment/profile/creationDate
       StructField("subsessionStartDate", StringType,  true) :: // info/subsessionStartDate
-      StructField("subsessionLength",    IntegerType, true) :: // info/subsessionLength
+      StructField("subsessionLength",    LongType,    true) :: // info/subsessionLength
       StructField("distributionId",      StringType,  true) :: // environment/partner/distributionId
       StructField("submissionDate",      StringType,  false) ::
 
       // bug 1232050
       StructField("syncConfigured",      BooleanType, true) :: // WEAVE_CONFIGURED
-      StructField("syncCountDesktop",    IntegerType, true) :: // WEAVE_DEVICE_COUNT_DESKTOP
-      StructField("syncCountMobile",     IntegerType, true) :: // WEAVE_DEVICE_COUNT_MOBILE
+      StructField("syncCountDesktop",    LongType,    true) :: // WEAVE_DEVICE_COUNT_DESKTOP
+      StructField("syncCountMobile",     LongType,    true) :: // WEAVE_DEVICE_COUNT_MOBILE
 
       StructField("version",             StringType,  false) :: // appVersion
       StructField("timestamp",           LongType,    false) :: // server-assigned timestamp when record was received
