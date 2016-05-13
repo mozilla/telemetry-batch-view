@@ -15,7 +15,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import scala.collection.JavaConverters._
 import scala.io.Source
-import telemetry.streams.{E10sExperiment, ExecutiveStream, Churn, Longitudinal}
+import telemetry.streams.{E10sExperiment, Longitudinal}
 import telemetry.streams.main_summary.MainSummary
 import telemetry.utils.Utils
 
@@ -178,13 +178,6 @@ object DerivedStream {
         case "Longitudinal" =>
           val longitudinal = Longitudinal()
           Some(options.getOrElse('fromDate, to), longitudinal)
-
-        case "ExecutiveStream" =>
-          Some(options.getOrElse('fromDate, to), ExecutiveStream)
-
-        case "Churn" =>
-          val churn = Churn("telemetry/4/main/Firefox")
-          Some(options.getOrElse('fromDate, to), churn)
 
         case "E10SExperiment" =>
           val from = options.getOrElse('fromDate, "20160426")
