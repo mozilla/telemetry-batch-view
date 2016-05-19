@@ -2,7 +2,7 @@ javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint")
 
 sparkVersion := "1.6.0"
 
-sparkComponents ++= Seq("yarn", "sql", "hive")
+sparkComponents ++= Seq("core", "yarn", "sql", "hive")
 
 spDependencies += "vitillo/spark-hyperloglog:1.0.2"
 
@@ -14,7 +14,7 @@ lazy val root = (project in file(".")).
     retrieveManaged := true,
     ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) },
     libraryDependencies += "org.apache.avro" % "avro" % "1.7.7",
-    libraryDependencies += "org.apache.parquet" % "parquet-avro" % "1.8.1",
+    libraryDependencies += "org.apache.parquet" % "parquet-avro" % "1.7.0",
     libraryDependencies += "com.github.seratch" %% "awscala" % "0.3.+",
     libraryDependencies += "net.sandrogrzicic" %% "scalabuff-runtime" % "1.4.0",
     libraryDependencies += "com.typesafe" % "config" % "1.2.1",

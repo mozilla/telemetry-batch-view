@@ -1,5 +1,9 @@
 package telemetry.utils
 
+import java.net.URI
+import java.rmi.dgc.VMID
+
+import org.apache.hadoop.fs.Path
 import org.joda.time._
 
 object Utils{
@@ -75,5 +79,12 @@ object Utils{
     val dateFormatter = org.joda.time.format.ISODateTimeFormat.dateTime()
     val millisecondsPerDay = 1000 * 60 * 60 * 24
     dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(new DateTime(timestamp.toLong * millisecondsPerDay))
+  }
+
+  def temporaryFileName(): Path = {
+    val tmpDir = System.getProperty("java.io.tmpdir")
+    val vmid = new VMID().toString().replaceAll(":|-", "")
+    val uri = URI.create(s"file:///$tmpDir/$vmid.tmp")
+    return new Path(uri)
   }
 }
