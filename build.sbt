@@ -14,7 +14,7 @@ lazy val root = (project in file(".")).
     retrieveManaged := true,
     ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) },
     libraryDependencies += "org.apache.avro" % "avro" % "1.7.7",
-    libraryDependencies += "org.apache.parquet" % "parquet-avro" % "1.7.0",
+    libraryDependencies += "org.apache.parquet" % "parquet-avro" % "1.8.1",
     libraryDependencies += "com.github.seratch" %% "awscala" % "0.3.+",
     libraryDependencies += "net.sandrogrzicic" %% "scalabuff-runtime" % "1.4.0",
     libraryDependencies += "com.typesafe" % "config" % "1.2.1",

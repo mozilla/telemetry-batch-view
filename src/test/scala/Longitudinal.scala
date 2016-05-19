@@ -177,7 +177,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
 
   "Records" can "be serialized" in {
     println("TODO: fix Avro+Parquet Serialization test")
-//    ParquetFile.serialize(List(fixture.record).toIterator, fixture.schema)
+    ParquetFile.serialize(List(fixture.record).toIterator, fixture.schema)
   }
 
   "payload.threadHangStats" must "be converted correctly" in {
