@@ -91,13 +91,27 @@ object MainSummaryView {
       })
 
       val records = sqlContext.createDataFrame(rowRDD, schema)
-      val s3path = s"s3://$parquetBucket/$jobName/$streamVersion/"
+
+      // Note we cannot just use 'partitionBy' below to automatically populate
+      // the submission_date partition, because none of the write modes do
+      // quite what we want:
+      //  - "overwrite" causes the entire vX partition to be deleted and replaced with
+      //    the current day's data, so doesn't work with incremental jobs
+      //  - "append" would allow us to generate duplicate data for the same day, so
+      //    we would need to add some manual checks before running
+      //  - "error" (the default) causes the job to fail after any data is
+      //    loaded, so we can't do single day incremental updates.
+      //  - "ignore" causes new data not to be saved.
+      // So we manually add the "submission_date_s3" parameter to the s3path.
+      val s3path = s"s3://$parquetBucket/$jobName/$streamVersion/submission_date_s3=$currentDateString"
 
       // Repartition the dataframe by sample_id before saving.
       val partitioned = records.repartition(100, records.col("sample_id"))
 
-      // Then write to S3 using the given fields as path name partitions.
-      partitioned.write.partitionBy("submission_date", "sample_id").mode("overwrite").parquet(s3path)
+      // Then write to S3 using the given fields as path name partitions. If any
+      // data already exists for the target day, cowardly refuse to run. In
+      // that case, go delete the data from S3 and try again.
+      partitioned.write.partitionBy("sample_id").mode("error").parquet(s3path)
 
       println(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
       println("     RECORDS SEEN:    %d".format(ignoredCount.value + processedCount.value))
