@@ -1,5 +1,6 @@
 package telemetry.streams.main_summary
 
+import org.apache.spark.sql.Row
 import org.json4s.JsonAST._
 
 object Utils{
@@ -88,30 +89,27 @@ object Utils{
   }
 
   private val searchKeyPattern = "^(.+)\\.(.+)$".r
-  def searchHistogramToMap(name: String, hist: JValue): Option[Map[String, Any]] = {
+
+  def searchHistogramToRow(name: String, hist: JValue): Option[Row] = {
     // Split name into engine and source, then insert count from histogram.
     try {
       val searchKeyPattern(engine, source) = name
       val count = (hist \ "sum") match {
-        case JInt(x) => x.toInt
+        case JInt(x) => x.toLong
         case _ => -1
       }
-      Some(Map(
-        "engine" -> engine,
-        "source" -> source,
-        "count" -> count
-      ))
+      Some(Row(engine, source, count))
     } catch {
       case e: scala.MatchError => None
     }
   }
 
-  def getSearchCounts(searchCounts: JValue): Option[List[Map[String,Any]]] = {
+  def getSearchCounts(searchCounts: JValue): Option[List[Row]] = {
     searchCounts match {
       case JObject(x) => {
-        val buf = scala.collection.mutable.ListBuffer.empty[Map[String,Any]]
+        val buf = scala.collection.mutable.ListBuffer.empty[Row]
         for ((k, v) <- x) {
-          for (c <- searchHistogramToMap(k, v)) {
+          for (c <- searchHistogramToRow(k, v)) {
             buf.append(c)
           }
         }
@@ -124,7 +122,7 @@ object Utils{
 
 
   // Find the largest numeric bucket that contains a value greater than zero.
-  def enumHistogramToCount(h: JValue): Option[Long] = {
+  def enumHistogramToCount(h: JValue): Option[Int] = {
     (h \ "values") match {
       case JNothing => None
       case JObject(x) => {

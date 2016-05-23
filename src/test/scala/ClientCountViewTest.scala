@@ -75,31 +75,34 @@ class ClientCountViewTest extends FlatSpec with Matchers{
     val sparkConf = new SparkConf().setAppName("KPI")
     sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
     val sc = new SparkContext(sparkConf)
-    val sqlContext = new HiveContext(sc)
-    sqlContext.udf.register("hll_create", hllCreate _)
-    sqlContext.udf.register("hll_cardinality", hllCardinality _)
-    import sqlContext.implicits._
+    sc.setLogLevel("WARN")
+    try {
+      val sqlContext = new HiveContext(sc)
+      sqlContext.udf.register("hll_create", hllCreate _)
+      sqlContext.udf.register("hll_cardinality", hllCardinality _)
+      import sqlContext.implicits._
 
-    val dataset = sc.parallelize(Submission.randomList).toDF()
-    val aggregates = ClientCountView.aggregate(dataset)
+      val dataset = sc.parallelize(Submission.randomList).toDF()
+      val aggregates = ClientCountView.aggregate(dataset)
 
-    val dimensions = Set(ClientCountView.dimensions:_*) -- Set("client_id")
-    (Set(aggregates.columns:_*) -- Set("client_id", "hll", "sum")) should be (dimensions)
+      val dimensions = Set(ClientCountView.dimensions: _*) -- Set("client_id")
+      (Set(aggregates.columns: _*) -- Set("client_id", "hll", "sum")) should be (dimensions)
 
-    var estimates = aggregates.select(expr("hll_cardinality(hll)")).collect()
-    estimates.foreach{ x =>
-      x(0) should be (Submission.dimensions("client_id").filter(x => x != null).size)
+      var estimates = aggregates.select(expr("hll_cardinality(hll)")).collect()
+      estimates.foreach { x =>
+        x(0) should be (Submission.dimensions("client_id").filter(x => x != null).size)
+      }
+
+      val hllMerge = new HyperLogLogMerge
+      val count = aggregates
+        .select(col("hll"))
+        .agg(hllMerge(col("hll")).as("hll"))
+        .select(expr("hll_cardinality(hll)")).collect()
+
+      count.size should be (1)
+      count(0)(0) should be (Submission.dimensions("client_id").filter(x => x != null).size)
+    } finally {
+      sc.stop()
     }
-
-    val hllMerge = new HyperLogLogMerge
-    val count = aggregates
-      .select(col("hll"))
-      .agg(hllMerge(col("hll")).as("hll"))
-      .select(expr("hll_cardinality(hll)")).collect()
-
-    count.size should be (1)
-    count(0)(0) should be (Submission.dimensions("client_id").filter(x => x != null).size)
-
-    sc.stop()
   }
 }

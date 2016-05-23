@@ -6,3 +6,4 @@ metastore_db/
 .idea/
 derby.log
 *.iml
+.DS_Store

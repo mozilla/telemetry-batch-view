@@ -1,13 +1,17 @@
 package telemetry.test
 
-import org.apache.avro.generic.GenericRecordBuilder
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{FlatSpec, Matchers}
 import telemetry.heka.HekaFrame
-import telemetry.streams.main_summary.{MainSummary, Utils}
-import telemetry.parquet.ParquetFile
+import telemetry.streams.main_summary.Utils
+import telemetry.views.MainSummaryView
+import org.apache.spark.sql.types.{ArrayType, StructType}
 
-class MainSummaryTest extends FlatSpec with Matchers{
+class MainSummaryViewTest extends FlatSpec with Matchers{
   val testPayload = """
 {
  "environment": {
@@ -132,7 +136,7 @@ class MainSummaryTest extends FlatSpec with Matchers{
   "A json object's keys" can "be counted" in {
     val json = parse(testPayload)
 
-    val countKeys = Utils.countKeys(_)
+    val countKeys = Utils.countKeys _
     countKeys(json \ "environment" \ "addons" \ "activeAddons").get should be (3)
     countKeys(json).get should be (2)
     countKeys(json \ "payload").get should be (2)
@@ -143,7 +147,7 @@ class MainSummaryTest extends FlatSpec with Matchers{
   "Latest flash version" can "be extracted" in {
     // Valid data
     val json = parse(testPayload)
-    val getFlash = Utils.getFlashVersion(_)
+    val getFlash = Utils.getFlashVersion _
     getFlash(json \ "environment" \ "addons").get should be ("19.0.0.226")
     getFlash(json \ "environment") should be (None)
     getFlash(json \ "foo") should be (None)
@@ -224,7 +228,7 @@ class MainSummaryTest extends FlatSpec with Matchers{
   }
 
   "Flash versions" can "be compared" in {
-    val cmpFlash = Utils.compareFlashVersions(_, _)
+    val cmpFlash = Utils.compareFlashVersions _
     cmpFlash(Some("1.2.3.4"), Some("1.2.3.4")).get should be (0)
     cmpFlash(Some("1.2.3.5"), Some("1.2.3.4")).get should be (1)
     cmpFlash(Some("1.2.3.4"), Some("1.2.3.5")).get should be (-1)
@@ -284,143 +288,72 @@ class MainSummaryTest extends FlatSpec with Matchers{
     """.stripMargin)
 
   "Search counts" can "be converted" in {
-    var expected = 0
+    var expected = 0l
     for ((k, e, s, c) <- List(
-      ("google.abouthome", "google", "abouthome", 1),
-      ("google.urlbar",    "google", "urlbar",    67),
-      ("yahoo.urlbar",     "yahoo",  "urlbar",    78))) {
-      val m = Utils.searchHistogramToMap(k, exampleSearches \ k).get
-      m("engine") shouldBe e
-      m("source") shouldBe s
-      m("count") shouldBe c
+      ("google.abouthome", "google", "abouthome", 1l),
+      ("google.urlbar",    "google", "urlbar",    67l),
+      ("yahoo.urlbar",     "yahoo",  "urlbar",    78l))) {
+      val m = Utils.searchHistogramToRow(k, exampleSearches \ k).get
+      m(0) shouldBe e
+      m(1) shouldBe s
+      m(2) shouldBe c
       expected = expected + c
     }
 
-    Utils.searchHistogramToMap("toast", exampleSearches \ "toast") should be (None)
+    Utils.searchHistogramToRow("toast", exampleSearches \ "toast") should be (None)
 
-    var actual = 0
+    var actual = 0l
     for (search <- Utils.getSearchCounts(exampleSearches).get) {
-      actual = actual + (search("count") match {
-        case x: Int => x
-        case _ => -1000
-      })
+      actual = actual + search.getLong(2)
     }
     actual should be (expected)
 
     val json = parse(testPayload)
-    var payloadCount = 0
+    var payloadCount = 0l
     for (search <- Utils.getSearchCounts(json \ "payload" \ "keyedHistograms" \ "SEARCH_COUNTS").get) {
-      payloadCount = payloadCount + (search("count") match {
-        case x: Int => x
-        case _ => -1000
-      })
+      payloadCount = payloadCount + search.getLong(2)
     }
-    payloadCount should be (88)
-  }
-
-  "SearchCounts schema" can "be used" in {
-    val ms = MainSummary("")
-    val schema = ms.buildSchema
-    val fieldSchema = schema.getField("search_counts").schema().getTypes().get(1).getElementType()
-
-    val root = new GenericRecordBuilder(fieldSchema)
-    root should not be (null)
-
-    val searches = Utils.searchHistogramToMap("google.urlbar", exampleSearches \ "google.urlbar").get
-    val built = ms.buildRecord(searches, fieldSchema)
-    built.isEmpty should be (false)
-    val b = built.get
-    b.get("engine") should be ("google")
-    b.get("source") should be ("urlbar")
-    b.get("count") should be (67)
-  }
-  val testMap = Map[String, Any](
-    "document_id" -> "foo",
-    "submission_date" -> "20160330",
-    "timestamp" -> 1000,
-    "client_id" -> "hello",
-    "sample_id" -> 10,
-    "channel" -> "nightly",
-    "normalized_channel" -> "nightly",
-    "country" -> "CA",
-    "city" -> "",
-    "profile_creation_date" -> 16000,
-    "sync_configured" -> true,
-    "sync_count_desktop" -> 1,
-    "sync_count_mobile" -> 1,
-    "subsession_start_date" -> "2016-03-30T00:00:00",
-    "subsession_length" -> 300,
-    "distribution_id" -> "mozilla31",
-    "e10s_enabled" -> true,
-    "e10s_cohort" -> "something",
-    "os" -> "Darwin",
-    "os_version" -> "10",
-    "os_service_pack_major" -> null,
-    "os_service_pack_minor" -> null,
-    "app_build_id" -> "20160330000000",
-    "app_display_version" -> "47.0",
-    "app_name" -> "Firefox",
-    "app_version" -> "47.0a1",
-    "env_build_id" -> "20160329000000",
-    "env_build_version" -> "46.0a1",
-    "env_build_arch" -> "victorian",
-    "locale" -> "en-US",
-    "active_experiment_id" -> null,
-    "active_experiment_branch" -> null,
-    "reason" -> "gather-payload",
-    "vendor" -> "Mozilla",
-    "timezone_offset" -> -180,
-    "plugin_hangs" -> 0,
-    "aborts_plugin" -> 0,
-    "aborts_content" -> 0,
-    "aborts_gmplugin" -> 0,
-    "crashes_detected_plugin" -> 0,
-    "crashes_detected_content" -> 0,
-    "crashes_detected_gmplugin" -> 0,
-    "crash_submit_attempt_main" -> 0,
-    "crash_submit_attempt_content" -> 0,
-    "crash_submit_attempt_plugin" -> 0,
-    "crash_submit_success_main" -> 0,
-    "crash_submit_success_content" -> 0,
-    "crash_submit_success_plugin" -> 0,
-    "active_addons_count" -> 3,
-    "flash_version" -> null,
-    "is_default_browser" -> true,
-    "default_search_engine_data_name" -> "Google",
-    "loop_activity_open_panel" -> 1,
-    "loop_activity_open_conversation" -> 1,
-    "loop_activity_room_open" -> 1,
-    "loop_activity_room_share" -> 1,
-    "loop_activity_room_delete" -> 1,
-    "devtools_toolbox_opened_count" -> 3,
-    "search_counts" -> Utils.getSearchCounts(exampleSearches)
-  )
-  "MainSummary records" can "be built" in {
-    val ms = MainSummary("")
-    val schema = ms.buildSchema
-    val built = ms.buildRecord(testMap, schema)
-
-    built.isEmpty should be (false)
+    payloadCount should be (88l)
   }
 
   "MainSummary records" can "be serialized" in {
-    val ms = MainSummary("")
-    val schema = ms.buildSchema
-    val built = ms.buildRecord(testMap, schema)
+    val sparkConf = new SparkConf().setAppName("MainSummary")
+    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
+    val sc = new SparkContext(sparkConf)
+    sc.setLogLevel("WARN")
+    try {
+      val schema = MainSummaryView.buildSchema
 
-    val filePath = ParquetFile.serialize(List(built.get).toIterator, schema)
+      // Use an example framed-heka message. It is based on test_main.json.gz,
+      // submitted with a URL of
+      //    /submit/telemetry/foo/main/Firefox/48.0a1/nightly/20160315030230
+      val hekaFileName = "/test_main.snappy.heka"
+      val hekaURL = getClass.getResource(hekaFileName)
+      val input = hekaURL.openStream()
+      val rows = HekaFrame.parse(input, hekaFileName).flatMap(MainSummaryView.messageToRow)
 
-    val data = ParquetFile.deserialize(filePath.toString)
-    var counter = 0
-    for (recovered <- data) {
-      counter = counter + 1
-      recovered.get("document_id") should be ("foo")
+      // Serialize this one row as Parquet
+      val sqlContext = new SQLContext(sc)
+      val dataframe = sqlContext.createDataFrame(sc.parallelize(rows.toSeq), schema)
+      val tempFile = telemetry.utils.Utils.temporaryFileName()
+      // TODO: re-enable this test code when we resolve the "parquet-avro"
+      //       incompatibility between 1.7.0 and 1.8.1
+//      dataframe.write.parquet(tempFile.toString)
+//
+//      // Then read it back
+//      val data = sqlContext.read.parquet(tempFile.toString)
+//
+//      data.count() should be (1)
+//      data.filter(data("document_id") === "foo").count() should be (1)
+    } finally {
+      sc.stop()
     }
-    counter should be (1)
   }
 
+  // Apply the given schema to the given potentially-generic Row.
+  def applySchema(row: Row, schema: StructType): Row = new GenericRowWithSchema(row.toSeq.toArray, schema)
+
   "Heka records" can "be summarized" in {
-    val ms = MainSummary("")
     // Use an example framed-heka message. It is based on test_main.json.gz,
     // submitted with a URL of
     //    /submit/telemetry/foo/main/Firefox/48.0a1/nightly/20160315030230
@@ -428,38 +361,108 @@ class MainSummaryTest extends FlatSpec with Matchers{
     val hekaURL = getClass.getResource(hekaFileName)
     val input = hekaURL.openStream()
 
+    val schema = MainSummaryView.buildSchema
+    val searchField = schema.fields.filter(p => p.name == "search_counts").head
+    val searchSchema = searchField.dataType match {
+      case searchCountsType: ArrayType =>
+        searchCountsType.elementType match {
+          case searchCountsStruct: StructType => searchCountsStruct
+        }
+    }
+
     var count = 0
     for (message <- HekaFrame.parse(input, hekaFileName)) {
       message.timestamp should be (1460036116829920000l)
       message.`type`.get should be ("telemetry")
       message.logger.get should be ("telemetry")
 
-      for (summary <- ms.messageToMap(message)) {
-        summary.get("document_id").get should be ("foo")
-        summary.get("app_build_id").get should be ("20160315030230")
-        summary.get("devtools_toolbox_opened_count").get should be (3)
-        var searchCounter = 0
-        for (searches <- summary.get("search_counts")) {
-          searches match {
-            case Some(x: List[Map[String, Any]]) =>
-              for (search <- x) {
-                val someSearches = search.get("count") match {
-                  case Some(x: Int) => x
-                  case _ => 0
-                }
-                searchCounter += someSearches
-              }
-          }
-        }
-        searchCounter should be (65)
+      for (summary <- MainSummaryView.messageToRow(message)) {
+        // Apply our schema to a generic Row object
+        val r = applySchema(summary, schema)
 
-        // Make sure we can also build a record from the resulting map.
-        val built = ms.buildRecord(summary, ms.buildSchema)
-        built.isEmpty should be (false)
+        val expected = Map(
+          "document_id"                     -> "foo",
+          "client_id"                       -> "c4582ba1-79fc-1f47-ae2a-671118dccd8b",
+          "sample_id"                       -> 4l,
+          "channel"                         -> "nightly",
+          "normalized_channel"              -> "nightly",
+          "country"                         -> "??",
+          "city"                            -> "??",
+          "os"                              -> "Darwin",
+          "os_version"                      -> "15.3.0",
+          "os_service_pack_major"           -> null,
+          "os_service_pack_minor"           -> null,
+          "profile_creation_date"           -> 16861l,
+          "subsession_start_date"           -> "2016-03-28T00:00:00.0-03:00",
+          "subsession_length"               -> 14557l,
+          "distribution_id"                 -> null,
+          "submission_date"                 -> "20160407",
+          "sync_configured"                 -> false,
+          "sync_count_desktop"              -> null,
+          "sync_count_mobile"               -> null,
+          "app_build_id"                    -> "20160315030230",
+          "app_display_version"             -> "48.0a1",
+          "app_name"                        -> "Firefox",
+          "app_version"                     -> "48.0a1",
+          "timestamp"                       -> 1460036116829920000l,
+          "env_build_id"                    -> "20160315030230",
+          "env_build_version"               -> "48.0a1",
+          "env_build_arch"                  -> "x86-64",
+          "e10s_enabled"                    -> true,
+          "e10s_cohort"                     -> "unsupportedChannel",
+          "locale"                          -> "en-US",
+          "active_experiment_id"            -> null,
+          "active_experiment_branch"        -> null,
+          "reason"                          -> "gather-payload",
+          "timezone_offset"                 -> -180,
+          "plugin_hangs"                    -> null,
+          "aborts_plugin"                   -> null,
+          "aborts_content"                  -> null,
+          "aborts_gmplugin"                 -> null,
+          "crashes_detected_plugin"         -> null,
+          "crashes_detected_content"        -> null,
+          "crashes_detected_gmplugin"       -> null,
+          "crash_submit_attempt_main"       -> null,
+          "crash_submit_attempt_content"    -> null,
+          "crash_submit_attempt_plugin"     -> null,
+          "crash_submit_success_main"       -> null,
+          "crash_submit_success_content"    -> null,
+          "crash_submit_success_plugin"     -> null,
+          "active_addons_count"             -> 3l,
+          "flash_version"                   -> null,
+          "vendor"                          -> "Mozilla",
+          "is_default_browser"              -> true,
+          "default_search_engine_data_name" -> "Google",
+          "loop_activity_open_panel"        -> null,
+          "loop_activity_open_conversation" -> null,
+          "loop_activity_room_open"         -> null,
+          "loop_activity_room_share"        -> null,
+          "loop_activity_room_delete"       -> null,
+          "devtools_toolbox_opened_count"   -> 3
+        )
+
+        val actual = r.getValuesMap(expected.keys.toList)
+        for ((f, v) <- expected) {
+          actual.get(f) should be (Some(v))
+        }
+        actual should be (expected)
+
+        val searches = r.getSeq[Row](r.fieldIndex("search_counts"))
+        val searchCounter = searches.map(search => {
+          val sW = applySchema(search, searchSchema)
+          sW.getLong(sW.fieldIndex("count"))
+        }).sum
+        searchCounter should be (65l)
         count += 1
       }
     }
     input.close()
     count should be (1)
+  }
+
+  "Job parameters" can "conform to expected values" in {
+    MainSummaryView.jobName should be ("main_summary")
+    val versionPattern = "^v[0-9]+$".r
+    (versionPattern findAllIn MainSummaryView.streamVersion).mkString("Oops") should be (MainSummaryView.streamVersion)
   }
 }

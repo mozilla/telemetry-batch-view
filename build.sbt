@@ -2,7 +2,7 @@ javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint")
 
 sparkVersion := "1.6.0"
 
-sparkComponents ++= Seq("yarn", "sql", "hive")
+sparkComponents ++= Seq("core", "yarn", "sql", "hive")
 
 spDependencies += "vitillo/spark-hyperloglog:1.0.2"
 

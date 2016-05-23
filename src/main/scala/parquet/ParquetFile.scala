@@ -21,18 +21,11 @@ object ParquetFile {
 
   hadoopConf.set("fs.file.impl", classOf[org.apache.hadoop.fs.LocalFileSystem].getName)
 
-  private def temporaryFileName(): Path = {
-    val tmpDir = System.getProperty("java.io.tmpdir")
-    val vmid = new VMID().toString().replaceAll(":|-", "")
-    val uri = URI.create(s"file:///$tmpDir/$vmid.tmp")
-    return new Path(uri)
-  }
-
   def serialize(data: Iterator[GenericRecord], schema: Schema, blockSizeMultiplier: Int = 1): Path = {
     val blockSize = blockSizeMultiplier*ParquetWriter.DEFAULT_BLOCK_SIZE
     val pageSize = ParquetWriter.DEFAULT_PAGE_SIZE
     val enableDict = ParquetWriter.DEFAULT_IS_DICTIONARY_ENABLED
-    val parquetFile = temporaryFileName()
+    val parquetFile = telemetry.utils.Utils.temporaryFileName()
     val parquetWriter = new AvroParquetWriter[GenericRecord](parquetFile, schema, CompressionCodecName.SNAPPY, blockSize, pageSize, enableDict, hadoopConf)
 
     // Disable Parquet logging
