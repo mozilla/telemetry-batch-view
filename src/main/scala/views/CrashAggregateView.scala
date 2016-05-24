@@ -15,6 +15,7 @@ import scala.math.{max, abs}
 import telemetry.heka.{HekaFrame, Message}
 import telemetry.ObjectSummary
 import telemetry.utils.Utils
+import telemetry.utils.Telemetry
 import org.joda.time._
 import org.rogach.scallop._
 
@@ -53,7 +54,9 @@ object CrashAggregateView {
       val currentDateString = currentDate.toString("yyyy-MM-dd")
 
       // obtain the crash aggregates from telemetry ping data
-      val messages = getRecords(sc, currentDate, "crash").union(getRecords(sc, currentDate, "main"))
+      val messages = Telemetry.getMessages(sc, currentDate, List("telemetry", "4", "crash"))
+        .union(Telemetry.getMessages(sc, currentDate, List("telemetry", "4", "main")))
+        .map(message => HekaFrame.fields(message) + ("payload" -> message.payload.getOrElse("")))
       val (rowRDD, main_processed, main_ignored, crash_processed, crash_ignored) = compareCrashes(sc, messages)
 
       // create a dataframe containing all the crash aggregates
@@ -69,55 +72,6 @@ object CrashAggregateView {
       println(s"${crash_processed.value} crash pings processed, ${crash_ignored.value} pings ignored")
       println("=======================================================================================")
     }
-  }
-
-  implicit lazy val s3: S3 = S3()
-  private def listS3Keys(bucket: Bucket, prefix: String, delimiter: String = "/"): Stream[String] = {
-    import com.amazonaws.services.s3.model.{ ListObjectsRequest, ObjectListing }
-
-    val request = new ListObjectsRequest().withBucketName(bucket.getName).withPrefix(prefix).withDelimiter(delimiter)
-    val firstListing = s3.listObjects(request)
-
-    def completeStream(listing: ObjectListing): Stream[String] = {
-      val prefixes = listing.getCommonPrefixes.asScala.toStream
-      prefixes #::: (if (listing.isTruncated) completeStream(s3.listNextBatchOfObjects(listing)) else Stream.empty)
-    }
-
-    completeStream(firstListing)
-  }
-  private def matchingPrefixes(bucket: Bucket, seenPrefixes: Stream[String], pattern: List[String]): Stream[String] = {
-    if (pattern.isEmpty) {
-      seenPrefixes
-    } else {
-      val matching = seenPrefixes
-        .flatMap(prefix => listS3Keys(bucket, prefix))
-        .filter(prefix => (pattern.head == "*" || prefix.endsWith(pattern.head + "/")))
-      matchingPrefixes(bucket, matching, pattern.tail)
-    }
-  }
-  private def getRecords(sc: SparkContext, submissionDate: DateTime, docType: String): RDD[Map[String, Any]] = {
-    // obtain the prefix of the telemetry data source
-    val metadataBucket = Bucket("net-mozaws-prod-us-west-2-pipeline-metadata")
-    val Some(sourcesObj) = metadataBucket.get("sources.json")
-    val metaSources = parse(Source.fromInputStream(sourcesObj.getObjectContent()).getLines().mkString("\n"))
-    val JString(telemetryPrefix) = metaSources \\ "telemetry" \\ "prefix"
-
-    // get a stream of object summaries that match the desired criteria
-    val bucket = Bucket("net-mozaws-prod-us-west-2-pipeline-data")
-    val summaries = matchingPrefixes(
-      bucket,
-      List("").toStream,
-      List(telemetryPrefix, submissionDate.toString("yyyyMMdd"), "telemetry", "4", docType)
-    ).flatMap(prefix => s3.objectSummaries(bucket, prefix)
-    ).map(summary => ObjectSummary(summary.getKey(), summary.getSize))
-
-    // output the messages as heka ping maps
-    sc.parallelize(summaries).flatMap(summary => {
-      val key = summary.key
-      val hekaFile = bucket.getObject(key).getOrElse(throw new Exception(s"Key is missing on S3: $key"))
-      for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey()))
-        yield HekaFrame.fields(message) + ("payload" -> message.payload.getOrElse(""))
-    })
   }
 
   // paths/dimensions within the ping to compare by
