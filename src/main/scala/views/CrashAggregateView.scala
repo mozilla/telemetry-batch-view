@@ -13,6 +13,7 @@ import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.math.{max, abs}
 import telemetry.heka.{HekaFrame, Message}
+import telemetry.ObjectSummary
 import telemetry.utils.Utils
 import org.joda.time._
 import org.rogach.scallop._
@@ -107,14 +108,15 @@ object CrashAggregateView {
       bucket,
       List("").toStream,
       List(telemetryPrefix, submissionDate.toString("yyyyMMdd"), "telemetry", "4", docType)
-    ).flatMap(prefix => s3.objectSummaries(bucket, prefix))
+    ).flatMap(prefix => s3.objectSummaries(bucket, prefix)
+    ).map(summary => ObjectSummary(summary.getKey(), summary.getSize))
 
     // output the messages as heka ping maps
     sc.parallelize(summaries).flatMap(summary => {
-      val key = summary.getKey()
+      val key = summary.key
       val hekaFile = bucket.getObject(key).getOrElse(throw new Exception(s"Key is missing on S3: $key"))
       for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey()))
-        yield HekaFrame.fields(message)
+        yield HekaFrame.fields(message) + ("payload" -> message.payload.getOrElse(""))
     })
   }
 
@@ -233,6 +235,12 @@ object CrashAggregateView {
       case _ => JObject()
     }
 
+    // obtain the relevant stats for the ping
+    val isMainPing = pingFields.get("docType") match {
+      case Some("main") => true
+      case Some("crash") => false
+      case _ => return None
+    }
     // obtain the activity date clamped to a reasonable time range
     val submissionDate = pingFields.get("submissionDate") match {
       case Some(date: String) =>
@@ -244,17 +252,44 @@ object CrashAggregateView {
         }
       case _ => return None
     }
-    val activityDateRaw = pingFields.get("creationTimestamp") match {
-      case Some(date: Double) => {
-        // convert nanosecond timestamp to a second timestamp to a real date
-        try {
-          new DateTime((date / 1e6).toLong).withZone(org.joda.time.DateTimeZone.UTC).withMillisOfDay(0) // only keep the date part of the timestamp
-        } catch {
-          case _: Throwable => return None
+    val activityDateRaw = if (isMainPing) {
+      info \ "subsessionStartDate" match {
+        case JString(date: String) => {
+          val activityDateFormat = format.ISODateTimeFormat.dateTime()
+          try {
+            // only keep the date part of the timestamp
+            activityDateFormat.withZone(org.joda.time.DateTimeZone.UTC).parseDateTime(date).withMillisOfDay(0)
+          } catch {
+            case _: Throwable =>
+              return None
+          }
+        }
+        case _ =>
+          return None
+      }
+    } else {
+      val payload = pingFields.get("payload") match {
+        case Some(value: String) => parse(value)
+        case _ => {
+          JObject()
         }
       }
-      case _ => return None
+
+      payload \ "payload" \ "crashDate" match {
+        case JString(date: String) => {
+          val activityDateFormat =  format.DateTimeFormat.forPattern("yyyy-MM-dd")
+          try {
+            activityDateFormat.withZone(org.joda.time.DateTimeZone.UTC).parseDateTime(date).withMillisOfDay(0)
+          } catch {
+            case _: Throwable =>
+              return None
+          }
+        }
+        case _ =>
+          return None
+      }
     }
+
     val activityDate = if (activityDateRaw.isBefore(submissionDate.minusDays(7))) { // clamp activity date to a good range
       submissionDate.minusDays(7)
     } else if (activityDateRaw.isAfter(submissionDate)) {
@@ -292,12 +327,6 @@ object CrashAggregateView {
       case _ => return None
     }
 
-    // obtain the relevant stats for the ping
-    val isMainPing = pingFields.get("docType") match {
-      case Some("main") => true
-      case Some("crash") => false
-      case _ => return None
-    }
     val usageHours: Double = info \ "subsessionLength" match {
       case JInt(subsessionLength) if isMainPing => // main ping, which should always have the subsession length field
         Math.min(25, Math.max(0, subsessionLength.toDouble / 3600))
