@@ -71,6 +71,13 @@ object JSON2Avro{
       None
   }
 
+  def parseFloat(Schema: Schema, json: JValue): Option[Double] = json match {
+    case JDouble(value) =>
+      Some(value.toFloat)
+    case _ =>
+      None
+  }
+
   def parseDouble(Schema: Schema, json: JValue): Option[Double] = json match {
     case JDouble(value) =>
       Some(value.toDouble)
@@ -86,6 +93,8 @@ object JSON2Avro{
   }
 
   def parse(schema: Schema, json: JValue): Option[Any] = schema.getType() match{
+    case Schema.Type.NULL => None // the null type is not used, except as part of the optional type or as a part of unions
+
     case Schema.Type.RECORD =>
       parseRecord(schema, json)
 
@@ -99,7 +108,9 @@ object JSON2Avro{
       parseString(schema, json)
 
     case Schema.Type.UNION =>
-      parse(schema.getTypes()(1), json)
+      // go through each possible option, taking the first one that successfully parses, or None if none parse successfully
+      // this is done in the same order as the types are defined in the union
+      schema.getTypes().flatMap(typePossibility => parse(typePossibility, json)).headOption
 
     case Schema.Type.INT =>
       parseInt(schema, json)
@@ -109,6 +120,9 @@ object JSON2Avro{
 
     case Schema.Type.DOUBLE =>
       parseDouble(schema, json)
+
+    case Schema.Type.FLOAT =>
+      parseFloat(schema, json)
 
     case Schema.Type.BOOLEAN =>
       parseBoolean(schema, json)
