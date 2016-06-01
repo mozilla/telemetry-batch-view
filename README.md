@@ -20,13 +20,12 @@ See the [views](https://github.com/mozilla/telemetry-batch-view/tree/master/src/
 See the [docs](https://github.com/mozilla/telemetry-batch-view/tree/master/docs) folder for more information about the derived datasets.
 
 ### Development
+Before opening the project with IntelliJ IDEA, apply the following changes to `Preferences` -> `Languages & Frameworks` -> `Scala Compile Server`:
 
-To set up a development environment, install [SBT](http://www.scala-sbt.org/) and [Spark](http://spark.apache.org/).
+- JVM maximum heap size, MB: `2048`
+- JVM parameters: `-server -Xmx2G -Xss4M`
 
-To run tests:
-```bash
-sbt test
-```
+Note that the first time the project is opened it takes some time to download all the dependencies.
 
 ### Generating Datasets
 
@@ -46,5 +45,5 @@ spark-submit --master yarn-client --class telemetry.DerivedStream target/scala-2
 ### Caveats
 If you run into memory issues during compilation time issue the following command before running sbt:
 ```bash
-export JAVA_OPTIONS="-Xss128M -Xmx2048M" 
+export JAVA_OPTIONS="-Xss4M -Xmx2G"
 ```
