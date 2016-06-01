@@ -19,7 +19,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
         ("TELEMETRY_TEST_FLAG" ->
            ("values" -> ("0" -> 0)) ~
            ("sum"    -> 0)) ~
-        ("DEVTOOLS_TOOLBOX_OPENED_BOOLEAN" ->
+        ("DEVTOOLS_WEBIDE_CONNECTION_RESULT" ->
            ("values" -> ("0" -> 42)) ~
            ("sum"    -> 0)) ~
         ("UPDATE_CHECK_NO_UPDATE_EXTERNAL" ->
@@ -380,7 +380,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
   }
 
   "Boolean histograms" must "be converted correctly" in {
-    val histograms = fixture.record.get("devtools_toolbox_opened_boolean").asInstanceOf[Array[Any]].toList
+    val histograms = fixture.record.get("devtools_webide_connection_result").asInstanceOf[Array[Any]].toList
     assert(histograms.length == fixture.payloads.length)
     histograms.foreach(h => assert(h.asInstanceOf[Array[Int]].toList == List(42, 0)))
   }
