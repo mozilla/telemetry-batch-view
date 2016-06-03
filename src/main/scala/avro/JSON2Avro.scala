@@ -3,10 +3,9 @@ package telemetry.avro
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericData
 import org.json4s._
-import org.json4s.jackson.JsonMethods._
+import telemetry.utils.Utils
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
-import telemetry.utils.Utils
 
 object JSON2Avro{
   def parseRecord(schema: Schema, json: JValue): Option[GenericData.Record] = {
@@ -24,12 +23,13 @@ object JSON2Avro{
     Some(record)
   }
 
-  def parseArray(schema : Schema, json: JValue): Option[Array[Any]] = json match {
-    case JArray(json) =>
-      val parsed = for { elem <- json } yield {
+  // Note that java.util.Collection is used for compatibility with parquet-avro
+  def parseArray(schema : Schema, json: JValue): Option[java.util.Collection[Any]] = json match {
+    case JArray(elems) =>
+      val parsed = for { elem <- elems } yield {
         parse(schema.getElementType(), elem)
       }
-      Some(parsed.flatten.toArray)
+      Some(parsed.flatten.asJava)
     case _ =>
       None
   }
