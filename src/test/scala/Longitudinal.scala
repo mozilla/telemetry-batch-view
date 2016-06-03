@@ -3,7 +3,7 @@ package telemetry.test
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -159,7 +159,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
       private val sc = new SparkContext(sparkConf)
       sc.setLogLevel("WARN")
-      private val sqlContext = new HiveContext(sc)
+      private val sqlContext = new SQLContext(sc)
       val rows = sqlContext.read.load(filename).collect()
       val row =  rows(0)
       sc.stop()
