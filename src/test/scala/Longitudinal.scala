@@ -1,6 +1,7 @@
 package telemetry.test
 
 import org.json4s.JsonDSL._
+import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{FlatSpec, Matchers, PrivateMethodTester}
 import telemetry.streams.Longitudinal
@@ -88,7 +89,12 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
 
       val settings =
         ("e10sEnabled" -> true) ~
-        ("userPrefs" -> Map("browser.download.lastDir" -> "/home/anthony/Desktop"))
+        ("userPrefs" -> Map(
+          "browser.download.lastDir" -> JString("/home/anthony/Desktop"),
+          "browser.startup.page" -> JInt(3),
+          "app.update.checkInstallTime" -> JBool(false),
+          "apz.axis_lock.lock_angle" -> JDouble(0.58)
+        ))
 
       val system =
           ("memoryMB" -> 2048) ~
@@ -310,6 +316,10 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
     records.foreach{ x =>
       val record = x.asInstanceOf[Record]
       assert(record.get("e10s_enabled") == true)
+      assert(record.get("user_prefs").asInstanceOf[java.util.Map[String, Any]].get("browser.download.lastDir") == "/home/anthony/Desktop")
+      assert(record.get("user_prefs").asInstanceOf[java.util.Map[String, Any]].get("browser.startup.page") == 3)
+      assert(record.get("user_prefs").asInstanceOf[java.util.Map[String, Any]].get("app.update.checkInstallTime") == false)
+      assert(record.get("user_prefs").asInstanceOf[java.util.Map[String, Any]].get("apz.axis_lock.lock_angle") == 0.58)
     }
   }
 
