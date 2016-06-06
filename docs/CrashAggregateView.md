@@ -60,8 +60,8 @@ The `crash_aggregates` table has 4 commonly-used columns:
 * `submission_date` is the date pings were submitted for a particular aggregate.
     * For example, `select sum(stats['usage_hours']) from crash_aggregates where submission_date = '2016-03-15'` will give the total number of user hours represented by pings submitted on March 15, 2016.
     * The dataset is partitioned by this field. Queries that limit the possible values of `submission_date` can run significantly faster.
-* `activity_date` is the date pings were generated on the client for a particular aggregate.
-    * For example, `select sum(stats['usage_hours']) from crash_aggregates where activity_date = '2016-03-15'` will give the total number of user hours represented by pings generated on March 15, 2016.
+* `activity_date` is the day when the activity being recorded took place.
+    * For example, `select sum(stats['usage_hours']) from crash_aggregates where activity_date = '2016-03-15'` will give the total number of user hours represented by activities that took place on March 15, 2016.
     * This can be several days before the pings are actually submitted, so it will always be before or on its corresponding `submission_date`.
     * Therefore, queries that are sensitive to when measurements were taken on the client should prefer this field over `submission_date`.
 * `dimensions` is a map of all the other dimensions that we currently care about. These fields include:

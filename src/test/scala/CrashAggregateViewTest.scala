@@ -3,23 +3,16 @@ package telemetry.test
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
-import org.apache.spark.{SparkConf, SparkContext, Accumulator}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.types._
-import org.scalatest.{FlatSpec, Matchers, PrivateMethodTester, BeforeAndAfterAll}
+import org.scalatest.{FlatSpec, Matchers, BeforeAndAfterAll}
 import telemetry.views.CrashAggregateView
-import org.apache.avro.{Schema, SchemaBuilder}
-import org.apache.avro.generic.{GenericRecord, GenericData, GenericRecordBuilder}
-import org.apache.avro.generic.GenericData.Record
 import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
-import telemetry.parquet.ParquetFile
 
 class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   val pingDimensions = List(
     ("submission_date",   List("20160305", "20160607")),
-    ("activity_date",     List(1456906203503000000.0, 1464768617492000000.0)),
+    ("activity_date",     List("2016-03-02T00:00:00.0-03:00", "2016-06-01T00:00:00.0-03:00")),
     ("application",       List("Firefox", "Fennec")),
     ("doc_type",          List("main", "crash")),
     ("channel",           List("nightly", "aurora")),
@@ -98,8 +91,12 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
             ("values" -> Map("0" -> SCALAR_VALUE, "1" -> 0))
           )
         )
-      val info =
-        JObject(if (dimensions("doc_type") == "main") List("subsessionLength" -> JInt(SCALAR_VALUE)) else List[JField]()) // only include the subsession length in main pings
+
+      val isMain = (dimensions("doc_type") == "main")
+      val info = if (isMain)
+        ("subsessionLength" -> JInt(SCALAR_VALUE)) ~
+        ("subsessionStartDate" -> JString(dimensions("activity_date").asInstanceOf[String]))
+      else JObject()
       val system =
         ("os" ->
           ("name" -> dimensions("os_name").asInstanceOf[String]) ~
@@ -117,9 +114,16 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
           ("id" -> dimensions("experiment_id").asInstanceOf[String]) ~
           ("branch" -> dimensions("experiment_branch").asInstanceOf[String])
         )
+      val payload = if (isMain) None else {
+        compact(render(
+          ("payload" ->
+            ("crashDate" -> dimensions("activity_date").asInstanceOf[String].substring(0, 10))
+          )))
+      }
+
       implicit val formats = DefaultFormats
+
       Map(
-        "creationTimestamp" -> dimensions("activity_date").asInstanceOf[Double],
         "submissionDate" -> dimensions("submission_date").asInstanceOf[String],
         "docType" -> dimensions("doc_type").asInstanceOf[String],
         "geoCountry" -> dimensions("country").asInstanceOf[String],
@@ -127,6 +131,7 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
         "appName" -> dimensions("application").asInstanceOf[String],
         "payload.keyedHistograms" -> compact(render(keyedHistograms)),
         "payload.info" -> compact(render(info)),
+        "payload" -> payload,
         "environment.system" -> compact(render(system)),
         "environment.settings" -> compact(render(settings)),
         "environment.build" -> compact(render(build)),
