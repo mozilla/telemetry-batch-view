@@ -459,7 +459,7 @@ case class Longitudinal() extends DerivedStream {
   private def vectorizeHistogram_[T:ClassTag](name: String,
                                               payloads: List[Map[String, RawHistogram]],
                                               flatten: RawHistogram => T,
-                                              default: T): Array[T] = {
+                                              default: T): java.util.Collection[T] = {
     val buffer = ListBuffer[T]()
     for (histograms <- payloads) {
       histograms.get(name) match {
@@ -469,13 +469,13 @@ case class Longitudinal() extends DerivedStream {
           buffer += default
       }
     }
-    buffer.toArray
+    buffer.asJava
   }
 
   private def vectorizeHistogram[T:ClassTag](name: String,
                                              definition: HistogramDefinition,
                                              payloads: List[Map[String, RawHistogram]],
-                                             histogramSchema: Schema): Array[Any] =
+                                             histogramSchema: Schema): java.util.Collection[Any] =
     definition match {
       case _: FlagHistogram =>
         // A flag histograms is represented with a scalar.
@@ -483,48 +483,24 @@ case class Longitudinal() extends DerivedStream {
 
       case _: BooleanHistogram =>
         // A boolean histograms is represented with an array of two integers.
-        def flatten(h: RawHistogram): Array[Int] = Array(h.values.getOrElse("0", 0), h.values.getOrElse("1", 0))
-        vectorizeHistogram_(name, payloads, flatten, Array(0, 0))
+        def flatten(h: RawHistogram): java.util.Collection[Int] = List(h.values.getOrElse("0", 0), h.values.getOrElse("1", 0)).asJavaCollection
+        vectorizeHistogram_(name, payloads, flatten, List(0, 0).asJavaCollection)
 
       case _: CountHistogram =>
         // A count histograms is represented with a scalar.
         vectorizeHistogram_(name, payloads, h => h.values.getOrElse("0", 0), 0)
 
-      case definition: TimeHistogram =>
-        val buckets = definition.ranges
-        def flatten(h: RawHistogram): GenericData.Record = {
-          val values = Array.fill(buckets.length){0}
-          h.values.foreach{ case (key, value) =>
-            val index = buckets.indexOf(key.toInt)
-            values(index) = value
-          }
-
-          val record = new GenericData.Record(histogramSchema)
-          record.put("values", values)
-          record.put("sum", h.sum)
-          record
-        }
-
-        val empty = {
-          val record = new GenericData.Record(histogramSchema)
-          record.put("values", Array.fill(buckets.length){0})
-          record.put("sum", 0)
-          record
-        }
-
-        vectorizeHistogram_(name, payloads, flatten, empty)
-
       case definition: EnumeratedHistogram =>
         // An enumerated histograms is represented with an array of N integers.
-        def flatten(h: RawHistogram): Array[Int] = {
+        def flatten(h: RawHistogram): java.util.Collection[Int] = {
           val values = Array.fill(definition.nValues + 1){0}
           h.values.foreach{case (key, value) =>
             values(key.toInt) = value
           }
-          values
+          values.toList.asJavaCollection
         }
 
-        vectorizeHistogram_(name, payloads, flatten, Array.fill(definition.nValues + 1){0})
+        vectorizeHistogram_(name, payloads, flatten, Array.fill(definition.nValues + 1){0}.toList.asJavaCollection)
 
       case definition: LinearHistogram =>
         // Exponential and linear histograms are represented with a struct containing
@@ -539,14 +515,14 @@ case class Longitudinal() extends DerivedStream {
           }
 
           val record = new GenericData.Record(histogramSchema)
-          record.put("values", values)
+          record.put("values", values.toList.asJavaCollection)
           record.put("sum", h.sum)
           record
         }
 
         val empty = {
           val record = new GenericData.Record(histogramSchema)
-          record.put("values", Array.fill(buckets.length){0})
+          record.put("values", Array.fill(buckets.length){0}.toList.asJavaCollection)
           record.put("sum", 0)
           record
         }
@@ -563,20 +539,19 @@ case class Longitudinal() extends DerivedStream {
           }
 
           val record = new GenericData.Record(histogramSchema)
-          record.put("values", values)
+          record.put("values", values.toList.asJavaCollection)
           record.put("sum", h.sum)
           record
         }
 
         val empty = {
           val record = new GenericData.Record(histogramSchema)
-          record.put("values", Array.fill(buckets.length){0})
+          record.put("values", Array.fill(buckets.length){0}.toList.asJavaCollection)
           record.put("sum", 0)
           record
         }
 
-        val x: Array[GenericData.Record] = vectorizeHistogram_(name, payloads, flatten, empty)
-        x.asInstanceOf[Array[Any]]
+        vectorizeHistogram_(name, payloads, flatten, empty)
     }
 
   private def JSON2Avro(jsonField: String, jsonPath: List[String], avroField: String,
@@ -599,7 +574,7 @@ case class Longitudinal() extends DerivedStream {
       avro.JSON2Avro.parse(fieldSchema, x)
     }
 
-    root.set(avroField, fieldValues.flatten.toArray)
+    root.set(avroField, fieldValues.flatten.asJava)
   }
 
   private def keyedHistograms2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
@@ -628,7 +603,6 @@ case class Longitudinal() extends DerivedStream {
       }
 
       val uniqueLabels = keyedHistogramsList.flatMap(x => x.keys).distinct.toSet
-      val vector = vectorizeHistogram(key, definition, keyedHistogramsList, histogramSchema)
       val vectorized = for {
         label <- uniqueLabels
         vector = vectorizeHistogram(label, definition, keyedHistogramsList, histogramSchema)
@@ -660,67 +634,11 @@ case class Longitudinal() extends DerivedStream {
     }
   }
 
-  private def threadHangStats2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
-    implicit val formats = DefaultFormats
-
-    var ranges = Array[Int]()
-    val threadHangStatsList = payloads.map{ case (payload) =>
-      val json = payload.getOrElse("payload.threadHangStats", return).asInstanceOf[String]
-      val body = parse(json)
-      body match {
-        // for some reason, when there are no thread hangs, it's an object rather than an array - we only want to accept the array
-        case _ : JArray => null
-        case _ => return
-      }
-      val threadHangStats = body.extract[Array[Map[String, JValue]]]
-      for (thread <- threadHangStats) {
-        ranges = thread.getOrElse("activity", return).extract[Map[String, JValue]]
-                       .getOrElse("ranges", return).extract[List[BigInt]]
-                       .map(x => x.toInt).toArray
-      }
-      threadHangStats
-    }
-
-    val definition = TimeHistogram(ranges)
-    val histogramSchema = schema.getField("gc_ms").schema().getTypes()(1).getElementType()
-
-    val threadHangActivityList = threadHangStatsList.map{ case (threadHangStats) =>
-      val threadHangActivity = threadHangStats.map{ case thread =>
-        val name = thread.getOrElse("name", return).extract[String]
-        val activity = thread.getOrElse("activity", return).extract[RawHistogram]
-        val histograms = vectorizeHistogram("activity", definition, List(Map("activity" -> activity)), histogramSchema)
-        val histogram = histograms(0).asInstanceOf[GenericData.Record]
-        (name -> histogram)
-      }.toMap
-      mapAsJavaMap(threadHangActivity)
-    } toArray
-
-    val threadHangStackMapList = threadHangStatsList.map{ case (threadHangStats) =>
-      val threadHangStackMap = threadHangStats.map{ case thread =>
-        val name = thread.getOrElse("name", return).extract[String]
-        val hangs = thread.getOrElse("hangs", return).extract[Array[Map[String, JValue]]]
-        val stackMapping = hangs.map{ case (hang) =>
-          val stack = hang.getOrElse("stack", return).extract[Array[String]]
-          val histogramEntry = hang.getOrElse("histogram", return).extract[RawHistogram]
-          val histograms = vectorizeHistogram("hang", definition, List(Map("hang" -> histogramEntry)), histogramSchema)
-          val histogram = histograms(0).asInstanceOf[GenericData.Record]
-          (stack.mkString("\n") -> histogram)
-        }.toMap
-        (name -> mapAsJavaMap(stackMapping))
-      }.toMap
-      mapAsJavaMap(threadHangStackMap)
-    } toArray
-
-    root.set("thread_hang_activity", threadHangActivityList)
-    root.set("thread_hang_stacks", threadHangStackMapList)
-  }
-
   private def subsessionStartDate2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
     implicit val formats = DefaultFormats
 
     val fieldValues = payloads.map{ case (x) =>
-      var record = parse(x.getOrElse("payload.info", return).asInstanceOf[String]) \ "subsessionStartDate"
-      record match {
+      parse(x.getOrElse("payload.info", return).asInstanceOf[String]) \ "subsessionStartDate" match {
         case JString(value) =>
           Utils.normalizeISOTimestamp(value)
         case _ =>
@@ -728,29 +646,27 @@ case class Longitudinal() extends DerivedStream {
       }
     }
 
-    root.set("subsession_start_date", fieldValues.toArray)
+    root.set("subsession_start_date", fieldValues.asJavaCollection)
   }
 
   private def profileDates2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
     implicit val formats = DefaultFormats
 
     val creationValues = payloads.map{ case (x) =>
-      var record = parse(x.getOrElse("environment.profile", return).asInstanceOf[String]) \ "creationDate"
-      record match {
+      parse(x.getOrElse("environment.profile", return).asInstanceOf[String]) \ "creationDate" match {
         case JInt(value) => Utils.normalizeEpochTimestamp(value)
         case _ => ""
       }
     }
-    root.set("profile_creation_date", creationValues.toArray)
+    root.set("profile_creation_date", creationValues.asJavaCollection)
 
     val resetValues = payloads.map{ case (x) =>
-      var record = parse(x.getOrElse("environment.profile", return).asInstanceOf[String]) \ "resetDate"
-      record match {
+      parse(x.getOrElse("environment.profile", return).asInstanceOf[String]) \ "resetDate" match {
         case JInt(value) => Utils.normalizeEpochTimestamp(value)
         case _ => ""
       }
     }
-    root.set("profile_reset_date", resetValues.toArray)
+    root.set("profile_reset_date", resetValues.asJavaCollection)
   }
 
   private def value2Avro[T:ClassTag](field: String, avroField: String, default: T,
@@ -767,7 +683,7 @@ case class Longitudinal() extends DerivedStream {
 
     // only set the keys if there are valid entries
     if (values.exists( value => value != default )) {
-      root.set(avroField, values.toArray)
+      root.set(avroField, values.asJava)
     }
   }
 
@@ -792,12 +708,12 @@ case class Longitudinal() extends DerivedStream {
       .set("normalized_channel", sorted(0)("normalizedChannel").asInstanceOf[String])
 
     try {
-      value2Avro("sampleId",          "sample_id",   0.0, x => x, sorted, root, schema)
-      value2Avro("Size",              "size",        0.0, x => x, sorted, root, schema)
-      value2Avro("geoCountry",        "geo_country", "",  x => x, sorted, root, schema)
-      value2Avro("geoCity",           "geo_city",    "",  x => x, sorted, root, schema)
-      value2Avro("DNT",               "dnt_header",  "",  x => x, sorted, root, schema)
-
+      value2Avro("sampleId",       "sample_id",       0.0, x => x, sorted, root, schema)
+      value2Avro("Size",           "size",            0.0, x => x, sorted, root, schema)
+      value2Avro("geoCountry",     "geo_country",     "", x => x, sorted, root, schema)
+      value2Avro("geoCity",        "geo_city",        "", x => x, sorted, root, schema)
+      value2Avro("DNT",            "dnt_header",      "", x => x, sorted, root, schema)
+      value2Avro("submissionDate", "submission_date", "", x => Utils.normalizeYYYYMMDDTimestamp(x.asInstanceOf[String]), sorted, root, schema)
       JSON2Avro("environment.build",          List[String](),                   "build", sorted, root, schema)
       JSON2Avro("environment.partner",        List[String](),                   "partner", sorted, root, schema)
       JSON2Avro("environment.settings",       List[String](),                   "settings", sorted, root, schema)
@@ -829,12 +745,9 @@ case class Longitudinal() extends DerivedStream {
       JSON2Avro("payload.info",               List("subsessionId"),             "subsession_id", sorted, root, schema)
       JSON2Avro("payload.info",               List("subsessionLength"),         "subsession_length", sorted, root, schema)
       JSON2Avro("payload.info",               List("timezoneOffset"),           "timezone_offset", sorted, root, schema)
-      keyedHistograms2Avro(sorted, root, schema)
       histograms2Avro(sorted, root, schema)
-      threadHangStats2Avro(sorted, root, schema)
-
+      keyedHistograms2Avro(sorted, root, schema)
       subsessionStartDate2Avro(sorted, root, schema)
-      value2Avro("submissionDate", "submission_date", "", x => Utils.normalizeYYYYMMDDTimestamp(x.asInstanceOf[String]), sorted, root, schema)
       profileDates2Avro(sorted, root, schema)
     } catch {
       case e : Throwable =>

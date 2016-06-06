@@ -20,7 +20,7 @@ See the [views](https://github.com/mozilla/telemetry-batch-view/tree/master/src/
 See the [docs](https://github.com/mozilla/telemetry-batch-view/tree/master/docs) folder for more information about the derived datasets.
 
 ### Development
-Before opening the project with IntelliJ IDEA, apply the following changes to `Preferences` -> `Languages & Frameworks` -> `Scala Compile Server`:
+Before importing the project in IntelliJ IDEA, apply the following changes to `Preferences` -> `Languages & Frameworks` -> `Scala Compile Server`:
 
 - JVM maximum heap size, MB: `2048`
 - JVM parameters: `-server -Xmx2G -Xss4M`

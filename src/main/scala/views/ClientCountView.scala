@@ -7,7 +7,7 @@ import com.mozilla.spark.sql.hyperloglog.functions._
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.SQLContext
 import org.rogach.scallop._
 
 class Conf(args: Array[String]) extends ScallopConf(args) {
@@ -64,7 +64,7 @@ object ClientCountView {
     val sparkConf = new SparkConf().setAppName("ClientCountView")
     sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
     val sc = new SparkContext(sparkConf)
-    val sqlContext = new HiveContext(sc)
+    val sqlContext = new SQLContext(sc)
 
     val hadoopConf = sc.hadoopConfiguration
     hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")

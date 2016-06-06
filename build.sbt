@@ -1,11 +1,5 @@
 javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint")
 
-sparkVersion := "1.6.0"
-
-sparkComponents ++= Seq("core", "yarn", "sql", "hive")
-
-spDependencies += "vitillo/spark-hyperloglog:1.0.2"
-
 lazy val root = (project in file(".")).
   settings(
     name := "telemetry-batch-view",
@@ -14,19 +8,22 @@ lazy val root = (project in file(".")).
     retrieveManaged := true,
     ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) },
     libraryDependencies += "org.apache.avro" % "avro" % "1.7.7",
-    libraryDependencies += "org.apache.parquet" % "parquet-avro" % "1.8.1",
+    libraryDependencies += "org.apache.parquet" % "parquet-avro" % "1.7.0",
     libraryDependencies += "com.github.seratch" %% "awscala" % "0.3.+",
     libraryDependencies += "net.sandrogrzicic" %% "scalabuff-runtime" % "1.4.0",
     libraryDependencies += "com.typesafe" % "config" % "1.2.1",
     libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.4",
     libraryDependencies += "org.xerial.snappy" % "snappy-java" % "1.1.2",
     libraryDependencies += "org.json4s" %% "json4s-jackson" % "3.2.10",
-    libraryDependencies += "joda-time" % "joda-time" % "2.9.1",
-    libraryDependencies += "org.apache.hadoop" % "hadoop-client" % "2.6.0" excludeAll(ExclusionRule(organization = "javax.servlet")),
-    libraryDependencies += "org.apache.hadoop" % "hadoop-aws" % "2.6.0" excludeAll(ExclusionRule(organization = "javax.servlet")),
+    libraryDependencies += "joda-time" % "joda-time" % "2.9.2",
+    libraryDependencies += "org.apache.hadoop" % "hadoop-client" % "2.7.1" excludeAll(ExclusionRule(organization = "javax.servlet")),
+    libraryDependencies += "org.apache.hadoop" % "hadoop-aws" % "2.7.1" excludeAll(ExclusionRule(organization = "javax.servlet")),
     libraryDependencies += "net.java.dev.jets3t" % "jets3t" % "0.9.4" excludeAll(ExclusionRule(organization = "javax.servlet")),
     libraryDependencies += "com.github.nscala-time" %% "nscala-time" % "2.10.0",
-    libraryDependencies += "org.rogach" %% "scallop" % "1.0.0"
+    libraryDependencies += "org.rogach" %% "scallop" % "1.0.0",
+    libraryDependencies += "org.apache.spark" %% "spark-core" % "1.6.0",
+    libraryDependencies += "org.apache.spark" %% "spark-sql" % "1.6.0",
+    libraryDependencies += "vitillo" % "spark-hyperloglog" % "1.0.2"
   )
 
 run in Compile <<= Defaults.runTask(fullClasspath in Compile, mainClass in (Compile, run), runner in (Compile, run))

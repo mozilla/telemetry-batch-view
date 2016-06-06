@@ -4,7 +4,7 @@ import com.mozilla.spark.sql.hyperloglog.aggregates._
 import com.mozilla.spark.sql.hyperloglog.functions._
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.SQLContext
 import org.scalatest.{FlatSpec, Matchers}
 import telemetry.views.ClientCountView
 
@@ -77,7 +77,7 @@ class ClientCountViewTest extends FlatSpec with Matchers{
     val sc = new SparkContext(sparkConf)
     sc.setLogLevel("WARN")
     try {
-      val sqlContext = new HiveContext(sc)
+      val sqlContext = new SQLContext(sc)
       sqlContext.udf.register("hll_create", hllCreate _)
       sqlContext.udf.register("hll_cardinality", hllCardinality _)
       import sqlContext.implicits._

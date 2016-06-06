@@ -1,205 +1,174 @@
 package telemetry.test
 
+import org.apache.avro.Schema
+import org.apache.avro.generic.GenericRecord
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{FlatSpec, Matchers, PrivateMethodTester}
-import telemetry.streams.Longitudinal
-import org.apache.avro.{Schema, SchemaBuilder}
-import org.apache.avro.generic.{GenericRecord, GenericData, GenericRecordBuilder}
-import org.apache.avro.generic.GenericData.Record
-import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
 import telemetry.parquet.ParquetFile
+import telemetry.streams.Longitudinal
+import scala.collection.JavaConversions._
+import scala.collection.mutable.WrappedArray
 
-class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
-  def fixture = {
+class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
+  val fixture = {
     def createPayload(idx: Int): Map[String, Any] = {
-      // TODO: Use Scala Map and List directly?
       val histograms =
         ("TELEMETRY_TEST_FLAG" ->
-           ("values" -> ("0" -> 0)) ~
-           ("sum"    -> 0)) ~
+          ("values" -> ("0" -> 0)) ~
+          ("sum" -> 0)) ~
         ("DEVTOOLS_WEBIDE_CONNECTION_RESULT" ->
-           ("values" -> ("0" -> 42)) ~
-           ("sum"    -> 0)) ~
+          ("values" -> ("0" -> 42)) ~
+          ("sum" -> 0)) ~
         ("UPDATE_CHECK_NO_UPDATE_EXTERNAL" ->
-           ("values" -> ("0" -> 42)) ~
-           ("sum"    -> 42)) ~
+          ("values" -> ("0" -> 42)) ~
+          ("sum" -> 42)) ~
         ("PLACES_BACKUPS_DAYSFROMLAST" ->
-           ("values" -> ("1" -> 42)) ~
-           ("sum"    -> 42)) ~
+          ("values" -> ("1" -> 42)) ~
+          ("sum" -> 42)) ~
         ("GC_BUDGET_MS" ->
-           ("values" -> ("1" -> 42)) ~
-           ("sum"    -> 42)) ~
+          ("values" -> ("1" -> 42)) ~
+          ("sum" -> 42)) ~
         ("GC_MS" ->
-           ("values" -> ("1" -> 42)) ~
-           ("sum"    -> 42))
+          ("values" -> ("1" -> 42)) ~
+          ("sum" -> 42))
 
       val keyedHistograms =
         ("ADDON_SHIM_USAGE" ->
-           ("foo" ->
-             ("values" -> ("1" -> 42)) ~
-             ("sum"    -> 42))) ~
+          ("foo" ->
+            ("values" -> ("1" -> 42)) ~
+            ("sum" -> 42))) ~
         ("SEARCH_COUNTS" ->
-           ("foo" ->
-              ("values" -> ("0" -> 42)) ~
-              ("sum"    -> 42))) ~
+          ("foo" ->
+            ("values" -> ("0" -> 42)) ~
+            ("sum" -> 42))) ~
         ("DEVTOOLS_PERFTOOLS_SELECTED_VIEW_MS" ->
-           ("foo" ->
-              ("values" -> ("1" -> 42)) ~
-              ("sum"    -> 42)))
+          ("foo" ->
+            ("values" -> ("1" -> 42)) ~
+            ("sum" -> 42)))
 
-      val simpleMeasurements =
-        ("uptime" -> 18L)
-
-      val threadHangStats =
-        List(
-          ("name" -> "Gecko") ~
-          ("activity" ->
-            ("ranges" -> List(0, 1, 3, 7, 15)) ~
-            ("values" -> ("0" -> 1) ~ ("1" -> 0)) ~
-            ("sum"    -> 0)) ~
-          ("hangs" ->
-            List(
-              ("histogram" ->
-                ("ranges" -> List(0, 1, 3, 7, 15)) ~
-                ("values" -> ("0" -> 1) ~ ("1" -> 0)) ~
-                ("sum"    -> 0)) ~
-              ("stack" -> List("A", "B", "C"))
-            ))
-        )
+      val simpleMeasurements = ("uptime" -> 18L)
 
       val build =
-        ("applicationId"   -> "{ec8030f7-c20a-464f-9b0e-13a3a9e97384}") ~
+        ("applicationId" -> "{ec8030f7-c20a-464f-9b0e-13a3a9e97384}") ~
         ("applicationName" -> "Firefox") ~
-        ("architecture"    -> "x86-64") ~
-        ("buildId"         -> "20160101001100") ~
-        ("version"         -> "46.0a2") ~
-        ("vendor"          -> "Mozilla") ~
+        ("architecture" -> "x86-64") ~
+        ("buildId" -> "20160101001100") ~
+        ("version" -> "46.0a2") ~
+        ("vendor" -> "Mozilla") ~
         ("platformVersion" -> "46.0a2") ~
-        ("xpcomAbi"        -> "x86_64-gcc3")
+        ("xpcomAbi" -> "x86_64-gcc3")
 
-      val partner =
-        ("partnerNames" -> List("A", "B", "C"))
+      val partner = ("partnerNames" -> List("A", "B", "C"))
 
       val profile =
         ("creationDate" -> 16122) ~
-        ("resetDate"    -> 16132)
+        ("resetDate" -> 16132)
 
       val settings =
         ("e10sEnabled" -> true) ~
         ("userPrefs" -> Map("browser.download.lastDir" -> "/home/anthony/Desktop"))
 
       val system =
-          ("memoryMB" -> 2048) ~
-          ("cpu" -> ("count" -> 4)) ~
-          ("device" ->
-             ("model" -> "SHARP")) ~
-          ("os" ->
-             ("name"    -> "Windows_NT") ~
-             ("locale"  -> "en_US") ~
-             ("version" -> "6.1")) ~
-          ("hdd" ->
-             ("profile" ->
-                ("revision" -> "12345") ~
-                ("model"    -> "SAMSUNG X"))) ~
-          ("gfx" ->
-             ("adapters" -> List(
-                ("RAM" -> 1024) ~ ("description" -> "FOO1") ~ ("deviceID" -> "1") ~ ("vendorID" -> "Vendor1") ~ ("GPUActive" -> true),
-                ("RAM" -> 1024) ~ ("description" -> "FOO2") ~ ("deviceID" -> "2") ~ ("vendorID" -> "Vendor2") ~ ("GPUActive" -> false)
-              )))
+        ("memoryMB" -> 2048) ~
+        ("cpu" ->
+          ("count" -> 4)) ~
+        ("device" ->
+          ("model" -> "SHARP")) ~
+        ("os" ->
+          ("name" -> "Windows_NT") ~
+          ("locale" -> "en_US") ~
+          ("version" -> "6.1")) ~
+        ("hdd" ->
+          ("profile" ->
+            ("revision" -> "12345") ~
+            ("model" -> "SAMSUNG X"))) ~
+        ("gfx" ->
+          ("adapters" -> List(
+            ("RAM" -> 1024) ~ ("description" -> "FOO1") ~ ("deviceID" -> "1") ~ ("vendorID" -> "Vendor1") ~ ("GPUActive" -> true),
+            ("RAM" -> 1024) ~ ("description" -> "FOO2") ~ ("deviceID" -> "2") ~ ("vendorID" -> "Vendor2") ~ ("GPUActive" -> false))))
 
       val addons =
-          ("activeAddons" -> Map(
-            "jid0-edalmuivkozlouyij0lpdx548bc@jetpack" ->
-              ("name" -> "geckoprofiler") ~ ("version" -> "1.16.14")
-          )) ~
-          ("theme" ->
-            ("id"          -> "{972ce4c6-7e08-4474-a285-3208198ce6fd}") ~
-            ("description" -> "The default theme.")) ~
-          ("activePlugins" -> List(
-            ("blocklisted" -> false) ~
-            ("description" -> "Adobe PDF Plug-In For Firefox and Netscape 10.1.16") ~
-            ("clicktoplay" -> true)
-          )) ~
-          ("activeGMPlugins" -> Map(
-            "gmp-eme-adobe" ->
-              ("applyBackgroundUpdates" -> 1) ~ ("userDisabled" -> false),
-            "gmp-gmpopenh264" ->
-              ("applyBackgroundUpdates" -> 1) ~ ("userDisabled" -> false)
-          )) ~
-          ("activeExperiment" ->
-            ("id" -> "A") ~
-            ("branch" -> "B"))
+        ("activeAddons" -> Map(
+          "jid0-edalmuivkozlouyij0lpdx548bc@jetpack" ->
+            ("name" -> "geckoprofiler") ~
+            ("version" -> "1.16.14"))) ~
+        ("theme" ->
+          ("id" -> "{972ce4c6-7e08-4474-a285-3208198ce6fd}") ~
+          ("description" -> "The default theme.")) ~
+        ("activePlugins" -> List(
+          ("blocklisted" -> false) ~
+          ("description" -> "Adobe PDF Plug-In For Firefox and Netscape 10.1.16") ~
+          ("clicktoplay" -> true))) ~
+        ("activeGMPlugins" -> Map(
+          "gmp-eme-adobe" ->
+            ("applyBackgroundUpdates" -> 1) ~
+            ("userDisabled" -> false),
+          "gmp-gmpopenh264" ->
+            ("applyBackgroundUpdates" -> 1) ~
+            ("userDisabled" -> false))) ~
+        ("activeExperiment" ->
+          ("id" -> "A") ~
+          ("branch" -> "B"))
 
       val info =
-        ("subsessionStartDate"      -> "2015-12-09T00:00:00.0-14:00") ~
+        ("subsessionStartDate" -> "2015-12-09T00:00:00.0-14:00") ~
         ("profileSubsessionCounter" -> (1000 - idx)) ~
-        ("flashVersion"             -> "19.0.0.226") ~
-        ("reason"                   -> "shutdown")
+        ("flashVersion" -> "19.0.0.226") ~
+        ("reason" -> "shutdown")
 
-      Map("clientId"                   -> "26c9d181-b95b-4af5-bb35-84ebf0da795d",
-          "os"                         -> "Windows_NT",
-          "normalizedChannel"          -> "aurora",
-          "documentId"                 -> idx.toString,
-          "submissionDate"             -> "20160128",
-          "sampleId"                   -> 42.0,
-          "Size"                       -> 93691.0,
-          "creationTimestamp"          -> 1.45393974518300006E18,
-          "geoCountry"                 -> "US",
-          "geoCity"                    -> "New York",
-          "DNT"                        -> "1",
-          "payload.info"               -> compact(render(info)),
-          "payload.simpleMeasurements" -> compact(render(simpleMeasurements)),
-          "payload.histograms"         -> compact(render(histograms)),
-          "payload.keyedHistograms"    -> compact(render(keyedHistograms)),
-          "payload.threadHangStats"    -> compact(render(threadHangStats)),
-          "environment.build"          -> compact(render(build)),
-          "environment.partner"        -> compact(render(partner)),
-          "environment.profile"        -> compact(render(profile)),
-          "environment.settings"       -> compact(render(settings)),
-          "environment.system"         -> compact(render(system)),
-          "environment.addons"         -> compact(render(addons)))
+      Map("clientId" -> "26c9d181-b95b-4af5-bb35-84ebf0da795d",
+        "os" -> "Windows_NT",
+        "normalizedChannel" -> "aurora",
+        "documentId" -> idx.toString,
+        "submissionDate" -> "20160128",
+        "sampleId" -> 42.0,
+        "Size" -> 93691.0,
+        "creationTimestamp" -> 1.45393974518300006E18,
+        "geoCountry" -> "US",
+        "geoCity" -> "New York",
+        "DNT" -> "1",
+        "payload.info" -> compact(render(info)),
+        "payload.simpleMeasurements" -> compact(render(simpleMeasurements)),
+        "payload.histograms" -> compact(render(histograms)),
+        "payload.keyedHistograms" -> compact(render(keyedHistograms)),
+        "environment.build" -> compact(render(build)),
+        "environment.partner" -> compact(render(partner)),
+        "environment.profile" -> compact(render(profile)),
+        "environment.settings" -> compact(render(settings)),
+        "environment.system" -> compact(render(system)),
+        "environment.addons" -> compact(render(addons)))
     }
 
     new {
       private val view = Longitudinal()
-
       private val buildSchema = PrivateMethod[Schema]('buildSchema)
       private val buildRecord = PrivateMethod[Option[GenericRecord]]('buildRecord)
 
-      val schema = view invokePrivate buildSchema()
+      private val schema = view invokePrivate buildSchema()
       val payloads = for (i <- 1 to 10) yield createPayload(i)
-      val dupes = for (i <- 1 to 10) yield createPayload(1)
-      val record = (view invokePrivate buildRecord((payloads ++ dupes).toIterable, schema)).get
+      private val dupes = for (i <- 1 to 10) yield createPayload(1)
+      private val record = (view invokePrivate buildRecord((payloads ++ dupes).toIterable, schema)).get
+      private val path = ParquetFile.serialize(List(record).toIterator, schema)
+      private val filename = path.toString().replace("file:", "")
+
+      private val sparkConf = new SparkConf().setAppName("Longitudinal")
+      sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
+      private val sc = new SparkContext(sparkConf)
+      sc.setLogLevel("WARN")
+      private val sqlContext = new SQLContext(sc)
+      val rows = sqlContext.read.load(filename).collect()
+      val row =  rows(0)
+      sc.stop()
     }
   }
 
-  "Records" can "be serialized" in {
-    ParquetFile.serialize(List(fixture.record).toIterator, fixture.schema)
-  }
-
-  "payload.threadHangStats" must "be converted correctly" in {
-    val activity = fixture.record.get("thread_hang_activity").asInstanceOf[Array[java.util.Map[String, GenericData.Record]]].toList
-    assert(activity.length == fixture.payloads.length)
-    activity.foreach{ x =>
-      val histogram = x.get("Gecko").get("values")
-      assert(histogram.asInstanceOf[Array[Int]].toList == List(1, 0, 0, 0, 0))
-    }
-
-    val hangs = fixture.record.get("thread_hang_stacks").asInstanceOf[Array[java.util.Map[String, java.util.Map[String, GenericData.Record]]]].toList
-    assert(hangs.length == fixture.payloads.length)
-    hangs.foreach{ x =>
-      val histogram = x.get("Gecko").get("A\nB\nC").get("values")
-      assert(histogram.asInstanceOf[Array[Int]].toList == List(1, 0, 0, 0, 0))
-    }
-  }
-
-  "top level fields" must "be converted correctly" in {
-    val fieldValues = Array(
+  "Scalar fields" must "be converted correctly" in {
+    val stringFields = Array(
       "submission_date"       -> "2016-01-28T00:00:00.000Z",
-      "sample_id"             -> 42.0,
-      "size"                  -> 93691.0,
       "geo_country"           -> "US",
       "geo_city"              -> "New York",
       "dnt_header"            -> "1",
@@ -207,198 +176,174 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
       "profile_creation_date" -> "2014-02-21T00:00:00.000Z",
       "profile_reset_date"    -> "2014-03-03T00:00:00.000Z"
     )
-    for ((key, value) <- fieldValues) {
-      val records = fixture.record.get(key).asInstanceOf[Array[Any]].toList
-      assert(records.length == fixture.payloads.length)
-      records.foreach{ x =>
-        assert(x == value)
+
+    val floatFields = Array(
+      "sample_id"             -> 42.0,
+      "size"                  -> 93691.0
+    )
+
+    def compareFields[T](fields: Array[(String, T)]) {
+      for ((key, reference) <- fields) {
+        val records = fixture.row.getList[T](fixture.row.fieldIndex(key))
+        assert(records.size == fixture.payloads.size)
+        records.foreach(x => assert(x == reference))
       }
     }
+
+    assert(fixture.rows.size == 1)
+    compareFields(stringFields)
+    compareFields(floatFields)
+  }
+
+  "Top-level measurements" must "be converted correctly" in {
+    assert(fixture.row.getAs[String]("client_id") == fixture.payloads(0)("clientId"))
+    assert(fixture.row.getAs[String]("os") == fixture.payloads(0)("os"))
+    assert(fixture.row.getAs[String]("normalized_channel") == fixture.payloads(0)("normalizedChannel"))
   }
 
   "payload.info" must "be converted correctly" in {
-    val flashRecords = fixture.record.get("flash_version").asInstanceOf[Array[Any]].toList
+    val flashRecords = fixture.row.getList[String](fixture.row.fieldIndex("flash_version"))
     assert(flashRecords.length == fixture.payloads.length)
-    flashRecords.foreach{ x =>
-      val record = x.asInstanceOf[String]
-      assert(record == "19.0.0.226")
-    }
+    flashRecords.foreach(x => assert(x == "19.0.0.226"))
 
-    val reasonRecords = fixture.record.get("reason").asInstanceOf[Array[Any]].toList
+    val reasonRecords = fixture.row.getList[String](fixture.row.fieldIndex("reason"))
     assert(reasonRecords.length == fixture.payloads.length)
-    reasonRecords.foreach{ x =>
-      val record = x.asInstanceOf[String]
-      assert(record == "shutdown")
-    }
+    reasonRecords.foreach(x => assert(x == "shutdown"))
   }
 
   "environment.build" must "be converted correctly" in {
-    val records = fixture.record.get("build").asInstanceOf[Array[Any]].toList
+    val records = fixture.row.getList[Row](fixture.row.fieldIndex("build"))
     assert(records.length == fixture.payloads.length)
-    records.foreach{ x =>
-      val record = x.asInstanceOf[Record]
-      assert(record.get("build_id") == "20160101001100")
-    }
+    records.foreach(x => assert(x.getAs[String]("build_id") == "20160101001100"))
   }
 
   "environment.partner" must "be converted correctly" in {
-    val records = fixture.record.get("partner").asInstanceOf[Array[Any]].toList
+    val records = fixture.row.getList[Row](fixture.row.fieldIndex("partner"))
     assert(records.length == fixture.payloads.length)
     records.foreach{ x =>
-      val record = x.asInstanceOf[Record]
-      assert(record.get("partner_names").asInstanceOf[Array[Any]].toList == List("A", "B", "C"))
+      val partner_names = x.getList[String](x.fieldIndex("partner_names"))
+      assert(partner_names.toList == List("A", "B", "C"))
     }
   }
 
   "environment.system" must "be converted correctly" in {
-    val records = fixture.record.get("system").asInstanceOf[Array[Any]].toList
+    val records = fixture.row.getList[Row](fixture.row.fieldIndex("system"))
     assert(records.length == fixture.payloads.length)
-    records.foreach{ x =>
-      val record = x.asInstanceOf[Record]
-      assert(record.get("memory_mb") == 2048)
-    }
+    records.foreach(x => assert(x.getAs[Int]("memory_mb") == 2048))
   }
 
   "environment.system/cpu" must "be converted correctly" in {
-    val records = fixture.record.get("system_cpu").asInstanceOf[Array[Any]].toList
+    val records = fixture.row.getList[Row](fixture.row.fieldIndex("system_cpu"))
     assert(records.length == fixture.payloads.length)
-    records.foreach{ x =>
-      val record = x.asInstanceOf[Record]
-      assert(record.get("count") == 4)
-    }
+    records.foreach(x => assert(x.getAs[Int]("count") == 4))
   }
 
   "environment.system/device" must "be converted correctly" in {
-    val records = fixture.record.get("system_device").asInstanceOf[Array[Any]].toList
+    val records = fixture.row.getList[Row](fixture.row.fieldIndex("system_device"))
     assert(records.length == fixture.payloads.length)
-    records.foreach{ x =>
-      val record = x.asInstanceOf[Record]
-      assert(record.get("model") == "SHARP")
-    }
+    records.foreach(x => assert(x.getAs[String]("model") == "SHARP"))
   }
 
   "environment.system/os" must "be converted correctly" in {
-    val records = fixture.record.get("system_os").asInstanceOf[Array[Any]].toList
+    val records = fixture.row.getList[Row](fixture.row.fieldIndex("system_os"))
     assert(records.length == fixture.payloads.length)
-    records.foreach{ x =>
-      val record = x.asInstanceOf[Record]
-      assert(record.get("name") == "Windows_NT")
-    }
+    records.foreach(x => assert(x.getAs[String]("name") == "Windows_NT"))
   }
 
   "environment.system/hdd" must "be converted correctly" in {
-    val records = fixture.record.get("system_hdd").asInstanceOf[Array[Any]].toList
+    val records = fixture.row.getList[Row](fixture.row.fieldIndex("system_hdd"))
     assert(records.length == fixture.payloads.length)
-    records.foreach{ x =>
-      val record = x.asInstanceOf[Record]
-      assert(record.get("profile").asInstanceOf[Record].get("revision") == "12345")
+    records.foreach { x =>
+      val p = x.getAs[Row]("profile")
+      assert(p.getAs[String]("revision") == "12345")
     }
   }
 
   "environment.system/gfx" must "be converted correctly" in {
-    val records = fixture.record.get("system_gfx").asInstanceOf[Array[Any]].toList
+    val records = fixture.row.getList[Row](fixture.row.fieldIndex("system_gfx"))
     assert(records.length == fixture.payloads.length)
     records.foreach{ x =>
-      val record = x.asInstanceOf[Record].get("adapters").asInstanceOf[Array[Any]](0).asInstanceOf[Record]
-      assert(record.get("ram") == 1024)
+      val a = x.getList[Row](x.fieldIndex("adapters"))(0)
+      assert(a.getAs[Int]("ram") == 1024)
     }
   }
 
   "environment.settings" must "be converted correctly" in {
-    val records = fixture.record.get("settings").asInstanceOf[Array[Any]].toList
+    val records = fixture.row.getList[Row](fixture.row.fieldIndex("settings"))
     assert(records.length == fixture.payloads.length)
-    records.foreach{ x =>
-      val record = x.asInstanceOf[Record]
-      assert(record.get("e10s_enabled") == true)
-    }
+    records.foreach(x => assert(x.getAs[Boolean]("e10s_enabled") == true))
   }
 
   "environment.addons.activeAddons" must "be converted correctly" in {
-    val records = fixture.record.get("active_addons").asInstanceOf[Array[Any]].toList
+    val records = fixture.row.getList[Map[String, Row]](fixture.row.fieldIndex("active_addons"))
     assert(records.length == fixture.payloads.length)
     records.foreach{ x =>
-      val record = x.asInstanceOf[java.util.Map[String, Any]]
-      assert(record.get("jid0-edalmuivkozlouyij0lpdx548bc@jetpack").asInstanceOf[Record].get("name") == "geckoprofiler")
+      val addon = x.get("jid0-edalmuivkozlouyij0lpdx548bc@jetpack").get
+      assert(addon.getAs[String]("name") == "geckoprofiler")
     }
   }
 
   "environment.addons.theme" must "be converted correctly" in {
-    val records = fixture.record.get("theme").asInstanceOf[Array[Any]].toList
+    val records = fixture.row.getList[Row](fixture.row.fieldIndex("theme"))
     assert(records.length == fixture.payloads.length)
-    records.foreach{ x =>
-      val record = x.asInstanceOf[Record]
-      assert(record.get("description") == "The default theme.")
-    }
+    records.foreach(x => assert(x.getAs[String]("description") == "The default theme."))
   }
 
   "environment.addons.activePlugins" must "be converted correctly" in {
-    val records = fixture.record.get("active_plugins").asInstanceOf[Array[Any]].toList
+    val records = fixture.row.getList[WrappedArray[Row]](fixture.row.fieldIndex("active_plugins"))
     assert(records.length == fixture.payloads.length)
     records.foreach{ x =>
-      val record = x.asInstanceOf[Array[Any]](0).asInstanceOf[Record]
-      assert(record.get("blocklisted") == false)
+      assert(x(0).getAs[Boolean]("blocklisted") == false)
     }
   }
 
   "environment.addons.activeGMPlugins" must "be converted correctly" in {
-    val records = fixture.record.get("active_gmp_plugins").asInstanceOf[Array[Any]].toList
+    val records = fixture.row.getList[Map[String, Row]](fixture.row.fieldIndex("active_gmp_plugins"))
     assert(records.length == fixture.payloads.length)
     records.foreach{ x =>
-      val record = x.asInstanceOf[java.util.Map[String, Any]]
-      assert(record.get("gmp-eme-adobe").asInstanceOf[Record].get("apply_background_updates") == 1)
+      val plugin = x.get("gmp-eme-adobe").get
+      assert(plugin.getAs[Int]("apply_background_updates") == 1)
     }
   }
 
   "environment.addons.activeExperiment" must "be converted correctly" in {
-    val records = fixture.record.get("active_experiment").asInstanceOf[Array[Any]].toList
+    val records = fixture.row.getList[Row](fixture.row.fieldIndex("active_experiment"))
     assert(records.length == fixture.payloads.length)
-    records.foreach{ x =>
-      val record = x.asInstanceOf[Record]
-      assert(record.get("id") == "A")
-    }
-  }
-
-   "Top-level measurements" must "be converted correctly" in {
-    assert(fixture.record.get("client_id") == fixture.payloads(0)("clientId"))
-    assert(fixture.record.get("os") == fixture.payloads(0)("os"))
-    assert(fixture.record.get("normalized_channel") == fixture.payloads(0)("normalizedChannel"))
+    records.foreach(x => assert(x.getAs[String]("id") == "A"))
   }
 
   "payload.simpleMeasurements" must "be converted correctly" in {
-    val records = fixture.record.get("simple_measurements").asInstanceOf[Array[Any]].toList
+    val records = fixture.row.getList[Row](fixture.row.fieldIndex("simple_measurements"))
     assert(records.length == fixture.payloads.length)
-    records.foreach{ x =>
-      val record = x.asInstanceOf[Record]
-      assert(record.get("uptime").asInstanceOf[Long] == 18)
-    }
+    records.foreach(x => assert(x.getAs[Long]("uptime") == 18))
   }
 
   "Flag histograms" must "be converted correctly" in {
-    val histograms = fixture.record.get("telemetry_test_flag").asInstanceOf[Array[Any]].toList
+    val histograms = fixture.row.getList[Boolean](fixture.row.fieldIndex("telemetry_test_flag"))
     assert(histograms.length == fixture.payloads.length)
-    histograms.zip(Stream.continually(true)).foreach{case (x, y) => assert(x == y)}
+    histograms.foreach(x => assert(x))
   }
 
   "Boolean histograms" must "be converted correctly" in {
-    val histograms = fixture.record.get("devtools_webide_connection_result").asInstanceOf[Array[Any]].toList
+    val histograms = fixture.row.getList[WrappedArray[Long]](fixture.row.fieldIndex("devtools_webide_connection_result"))
     assert(histograms.length == fixture.payloads.length)
-    histograms.foreach(h => assert(h.asInstanceOf[Array[Int]].toList == List(42, 0)))
+    histograms.foreach(x => assert(x.toList == List(42, 0)))
   }
 
   "Count histograms" must "be converted correctly" in {
-    val histograms = fixture.record.get("update_check_no_update_external").asInstanceOf[Array[Any]].toList
+    val histograms = fixture.row.getList[Int](fixture.row.fieldIndex("update_check_no_update_external"))
     assert(histograms.length == fixture.payloads.length)
-    histograms.zip(Stream.continually(42)).foreach{case (x, y) => assert(x== y)}
+    histograms.foreach(x => assert(x == 42))
   }
 
   "Enumerated histograms" must "be converted correctly" in {
-    val histograms = fixture.record.get("places_backups_daysfromlast").asInstanceOf[Array[Any]]
+    val histograms = fixture.row.getList[WrappedArray[Int]](fixture.row.fieldIndex("places_backups_daysfromlast"))
     assert(histograms.length == fixture.payloads.length)
-    for(h <- histograms) {
-      val histogram = h.asInstanceOf[Array[Int]]
-      assert(histogram.length == 16)
 
-      for((value, key) <- histogram.zipWithIndex) {
+    for (h <- histograms) {
+      assert(h.length == 16)
+
+      for ((value, key) <- h.zipWithIndex) {
         if (key == 1)
           assert(value == 42)
         else
@@ -408,41 +353,37 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
   }
 
   "Linear histograms" must "be converted correctly" in {
-    val records = fixture.record.get("gc_budget_ms").asInstanceOf[Array[Any]].toList
-    assert(records.length == fixture.payloads.length)
+    val histograms = fixture.row.getList[Row](fixture.row.fieldIndex("gc_budget_ms"))
+    assert(histograms.length == fixture.payloads.length)
 
-    val reference = Array(0, 42, 0, 0, 0, 0, 0, 0, 0, 0)
-    records.foreach{ x =>
-      val tmp = x.asInstanceOf[Record]
-      assert(tmp.get("sum") == 42L)
-      assert(tmp.get("values").asInstanceOf[Array[Int]].toList == reference.toList)
+    val reference = List(0, 42, 0, 0, 0, 0, 0, 0, 0, 0)
+    histograms.foreach{ x =>
+      assert(x.getAs[Long]("sum") == 42L)
+      assert(x.getList[Int](x.fieldIndex("values")).toList == reference)
     }
   }
 
   "Exponential histograms" must "be converted correctly" in {
-    val records = fixture.record.get("gc_ms").asInstanceOf[Array[Any]].toList
-    assert(records.length == fixture.payloads.length)
+    val histograms = fixture.row.getList[Row](fixture.row.fieldIndex("gc_ms"))
+    assert(histograms.length == fixture.payloads.length)
 
     val reference = Array.fill(50){0}
     reference(1) = 42
 
-    records.foreach{ x =>
-      val tmp = x.asInstanceOf[Record]
-      assert(tmp.get("sum") == 42L)
-      assert(tmp.get("values").asInstanceOf[Array[Int]].toList == reference.toList)
+    histograms.foreach{ x =>
+      assert(x.getAs[Long]("sum") == 42L)
+      assert(x.getList[Int](x.fieldIndex("values")).toList == reference.toList)
     }
   }
 
   "Keyed enumerated histograms" must "be converted correctly" in {
-    // Keyed boolean histograms follow a similar structure
-    val records = fixture.record.get("addon_shim_usage").asInstanceOf[java.util.Map[String, Array[Any]]].asScala
-    assert(records.size == 1)
+    val entries = fixture.row.getMap[String, WrappedArray[WrappedArray[Int]]](fixture.row.fieldIndex("addon_shim_usage"))
+    assert(entries.size == 1)
 
-    for(h <- records("foo")) {
-      val histogram = h.asInstanceOf[Array[Int]]
-      assert(histogram.length == 16)
+    for (h <- entries("foo")) {
+      assert(h.length == 16)
 
-      for((value, key) <- histogram.zipWithIndex) {
+      for ((value, key) <- h.zipWithIndex) {
         if (key == 1)
           assert(value == 42)
         else
@@ -452,29 +393,25 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester{
   }
 
   "Keyed count histograms" must "be converted correctly" in {
-    // Keyed flag histograms follow a similar structure
-    val searchCounts = fixture.record.get("search_counts").asInstanceOf[java.util.Map[String, Array[Any]]].asScala
-    assert(searchCounts.size == 1)
-
-    val histograms = searchCounts("foo")
-    assert(histograms.length == fixture.payloads.length)
-
-    histograms.zip(Stream.continually(42)).foreach{case (x, y) => assert(x== y)}
+    val entries = fixture.row.getMap[String, WrappedArray[Int]](fixture.row.fieldIndex("search_counts"))
+    assert(entries.size == 1)
+    assert(entries("foo").size == fixture.payloads.length)
+    entries("foo").foreach(x => assert(x == 42))
   }
 
   "Keyed exponential histograms" must "be converted correctly" in {
-    // Keyed linear histograms follow a similar structure
-    val records = fixture.record.get("devtools_perftools_selected_view_ms").asInstanceOf[java.util.Map[String, Array[Any]]].asScala
-    assert(records.size == 1)
+    val entries = fixture.row.getMap[String, WrappedArray[Row]](fixture.row.fieldIndex("devtools_perftools_selected_view_ms"))
+    assert(entries.size == 1)
 
-    val histograms = records("foo")
+    val histograms = entries("foo")
+    assert(histograms.length == fixture.payloads.length)
+
     val reference = Array.fill(20){0}
     reference(1) = 42
 
     histograms.foreach{ x =>
-      val tmp = x.asInstanceOf[Record]
-      assert(tmp.get("sum") == 42L)
-      assert(tmp.get("values").asInstanceOf[Array[Int]].toList == reference.toList)
+      assert(x.getAs[Long]("sum") == 42L)
+      assert(x.getList[Int](x.fieldIndex("values")).toList == reference.toList)
     }
   }
 }
