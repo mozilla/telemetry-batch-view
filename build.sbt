@@ -1,5 +1,7 @@
 javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint")
 
+resolvers += "Spark Packages Repo" at "https://dl.bintray.com/spark-packages/maven/"
+
 lazy val root = (project in file(".")).
   settings(
     name := "telemetry-batch-view",
