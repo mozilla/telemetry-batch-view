@@ -82,9 +82,8 @@ object Utils{
   }
 
   def temporaryFileName(): Path = {
-    val tmpDir = System.getProperty("java.io.tmpdir")
     val vmid = new VMID().toString().replaceAll(":|-", "")
-    val uri = URI.create(s"file:///$tmpDir/$vmid.tmp")
-    return new Path(uri)
+    val fileURI = java.nio.file.Paths.get(System.getProperty("java.io.tmpdir"), s"$vmid.tmp").toUri
+    new Path(fileURI)
   }
 }
