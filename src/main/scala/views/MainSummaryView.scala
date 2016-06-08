@@ -8,9 +8,9 @@ import org.joda.time.{DateTime, Days, format}
 import org.json4s.JsonAST.{JBool, JInt, JString, JValue}
 import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._
-import telemetry.heka.{HekaFrame, Message}
+import telemetry.heka.{Dataset, HekaFrame, Message}
 import telemetry.streams.main_summary.Utils
-import telemetry.utils.Telemetry
+import telemetry.utils.S3Store
 
 object MainSummaryView {
   def streamVersion: String = "v3"
@@ -21,7 +21,7 @@ object MainSummaryView {
     val from = opt[String]("from", descr = "From submission date", required = false)
     val to = opt[String]("to", descr = "To submission date", required = false)
     val bucket = opt[String]("bucket", descr = "Destination bucket for parquet data", required = false)
-    val filter = opt[String]("filter", descr = "S3 filter for source data", required = false)
+    val limit = opt[Int]("limit", descr = "Maximum number of files to read from S3", required = false)
     verify()
   }
 
@@ -46,17 +46,10 @@ object MainSummaryView {
       case _ => appConf.getString("app.parquetBucket")
     }
 
-    // Use the supplied S3 filter path, or default to all main
-    // pings from Firefox.
-    val s3filter = conf.filter.get match {
-      case Some(f) => f
-      case _ => "telemetry/4/main/Firefox"
-    }
-
     // Set up Spark
     val sparkConf = new SparkConf().setAppName(jobName)
     sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
-    val sc = new SparkContext(sparkConf)
+    implicit val sc = new SparkContext(sparkConf)
     val sqlContext = new SQLContext(sc)
     val hadoopConf = sc.hadoopConfiguration
     hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
@@ -78,7 +71,19 @@ object MainSummaryView {
       val schema = buildSchema
       val ignoredCount = sc.accumulator(0, "Number of Records Ignored")
       val processedCount = sc.accumulator(0, "Number of Records Processed")
-      val messages = Telemetry.getMessages(sc, currentDate, s3filter.split('/').toList)
+      val messages = Dataset("telemetry")
+        .where("sourceName") {
+          case "telemetry" => true
+        }.where("sourceVersion") {
+          case "4" => true
+        }.where("docType") {
+          case "main" => true
+        }.where("appName") {
+          case "Firefox" => true
+        }.where("submissionDate") {
+          case date if date == currentDate.toString("yyyyMMdd") => true
+        }.records(conf.limit.get)
+
       val rowRDD = messages.flatMap(m => {
         messageToRow(m) match {
           case None =>
