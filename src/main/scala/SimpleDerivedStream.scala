@@ -23,7 +23,7 @@ abstract class SimpleDerivedStream extends DerivedStream {
   override def transform(sc: SparkContext, bucket: Bucket, input: RDD[ObjectSummary], from: String, to: String) {
     val tasks = input
       .groupBy(summary => prefixGroup(summary.key))
-      .flatMap(x => DerivedStream.groupBySize(x._2.toIterator).toIterator.zip(Iterator.continually{x._1}))
+      .flatMap(x => ObjectSummary.groupBySize(x._2.toIterator).toIterator.zip(Iterator.continually{x._1}))
       .filter{ case (_, prefix) =>
         val partitionedPrefix = partitioning.partitionPrefix(prefix, version)
         if (!isS3PrefixEmpty(partitionedPrefix)) {
