@@ -90,17 +90,19 @@ object Utils{
 
   private val searchKeyPattern = "^(.+)\\.(.+)$".r
 
-  def searchHistogramToRow(name: String, hist: JValue): Option[Row] = {
+  def searchHistogramToRow(name: String, hist: JValue): Row = {
     // Split name into engine and source, then insert count from histogram.
+    // If the name does not match the expected pattern, use 'null' for engine
+    // and source. If the histogram sum is not a number, use 'null' for count.
+    val count = hist \ "sum" match {
+      case JInt(x) => x.toLong
+      case _ => null
+    }
     try {
       val searchKeyPattern(engine, source) = name
-      val count = (hist \ "sum") match {
-        case JInt(x) => x.toLong
-        case _ => -1
-      }
-      Some(Row(engine, source, count))
+      Row(engine, source, count)
     } catch {
-      case e: scala.MatchError => None
+      case e: scala.MatchError => Row(null, null, count)
     }
   }
 
@@ -109,9 +111,7 @@ object Utils{
       case JObject(x) => {
         val buf = scala.collection.mutable.ListBuffer.empty[Row]
         for ((k, v) <- x) {
-          for (c <- searchHistogramToRow(k, v)) {
-            buf.append(c)
-          }
+          buf.append(searchHistogramToRow(k, v))
         }
         if (buf.isEmpty) None
         else Some(buf.toList)
@@ -120,6 +120,41 @@ object Utils{
     }
   }
 
+  // Return a row with the bucket values for the given set of keys as fields.
+  def enumHistogramToRow(histogram: JValue, keys: IndexedSeq[String]): Option[Row] = {
+    histogram \ "values" match {
+      case JNothing => None
+      case v => {
+        val values = keys.map(key => v \ key match {
+          case JInt(n) => n.toInt
+          case _ => 0
+        })
+        Some(Row.fromSeq(values))
+      }
+    }
+  }
+
+  // Return a map of histogram keys to rows with the bucket values for the given set of keys as fields.
+  def keyedEnumHistogramToMap(histogram: JValue, keys: IndexedSeq[String]): Option[Map[String,Row]] = {
+    histogram match {
+      case JObject(x) => {
+        val pns = scala.collection.mutable.HashMap.empty[String,Row]
+        for ((k, v) <- x) {
+          val values = keys.map(_.toString).map(key => v \ "values" \ key match {
+            case JInt(n) => n.toInt
+            case _ => 0
+          })
+          pns(k) = Row.fromSeq(values)
+        }
+
+        if (pns.isEmpty)
+          None
+        else
+          Some(pns.toMap)
+      }
+      case _ => None
+    }
+  }
 
   // Find the largest numeric bucket that contains a value greater than zero.
   def enumHistogramToCount(h: JValue): Option[Int] = {
@@ -141,6 +176,27 @@ object Utils{
       case _ => {
         None
       }
+    }
+  }
+
+  // Given histogram h, return floor(mean) of the measurements in the bucket.
+  // That is, the histogram sum divided by the number of measurements taken.
+  def histogramToMean(h: JValue): Option[Int] = {
+    h \ "sum" match {
+      case JInt(sum) => {
+        if (sum < 0) None
+        else if (sum == 0) Some(0)
+        else {
+          val counts = for {
+            JObject(values) <- h \ "values"
+            JField(bucket, JInt(count)) <- values
+          } yield count
+          val totalCount = counts.sum
+          if (totalCount == 0) None
+          else Some((sum / counts.sum).toInt)
+        }
+      }
+      case _ => None
     }
   }
 

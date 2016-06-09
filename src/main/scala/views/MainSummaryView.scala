@@ -324,12 +324,25 @@ object MainSummaryView {
         case JString(x) => x
         case _ => null
       },
-      hval(histograms \ "LOOP_ACTIVITY_COUNTER", "0"),
-      hval(histograms \ "LOOP_ACTIVITY_COUNTER", "1"),
-      hval(histograms \ "LOOP_ACTIVITY_COUNTER", "2"),
-      hval(histograms \ "LOOP_ACTIVITY_COUNTER", "3"),
-      hval(histograms \ "LOOP_ACTIVITY_COUNTER", "4"),
+      settings \ "defaultSearchEngine" match {
+        case JString(x) => x
+        case _ => null
+      },
+      Utils.enumHistogramToRow(histograms \ "LOOP_ACTIVITY_COUNTER", (0 to 4).map(_.toString)).orNull,
       hsum(histograms \ "DEVTOOLS_TOOLBOX_OPENED_COUNT"),
+      fields.getOrElse("Date", None) match {
+        case x: String => x
+        case _ => null
+      },
+      Utils.histogramToMean(histograms \ "PLACES_BOOKMARKS_COUNT").orNull,
+      Utils.histogramToMean(histograms \ "PLACES_PAGES_COUNT").orNull,
+      hsum(histograms \ "PUSH_API_NOTIFICATION_RECEIVED"),
+      hsum(histograms \ "WEB_NOTIFICATION_SHOWN"),
+
+      // Messy list of known enum values.
+      Utils.keyedEnumHistogramToMap(keyedHistograms \ "POPUP_NOTIFICATION_STATS",
+        (0 to 8).union(10 to 11).union(20 to 28).union(30 to 31).map(_.toString)).orNull,
+
       Utils.getSearchCounts(keyedHistograms \ "SEARCH_COUNTS").orNull
     )
     Some(row)
@@ -340,7 +353,43 @@ object MainSummaryView {
     val searchCountsType = StructType(List(
       StructField("engine", StringType, true), // Name of the search engine
       StructField("source", StringType, true), // Source of the search (urlbar, etc)
-      StructField("count", LongType, true) // Number of searches
+      StructField("count",  LongType,   true)  // Number of searches
+    ))
+
+    // Enumerated buckets from LOOP_ACTIVITY_COUNTER histogram
+    val loopActivityCounterType = StructType(List(
+      StructField("open_panel",        IntegerType, true), // bucket 0
+      StructField("open_conversation", IntegerType, true), // bucket 1
+      StructField("room_open",         IntegerType, true), // bucket 2
+      StructField("room_share",        IntegerType, true), // bucket 3
+      StructField("room_delete",       IntegerType, true)  // bucket 4
+    ))
+
+    // Enumerated buckets from POPUP_NOTIFICATION_STATS keyed histogram
+    // Field names based on toolkit/modules/PopupNotifications.jsm
+    val popupNotificationStatsType = StructType(List(
+      StructField("offered",                   IntegerType, true), // bucket 0
+      StructField("action_1",                  IntegerType, true), // bucket 1
+      StructField("action_2",                  IntegerType, true), // bucket 2
+      StructField("action_3",                  IntegerType, true), // bucket 3
+      StructField("action_last",               IntegerType, true), // bucket 4
+      StructField("dismissal_click_elsewhere", IntegerType, true), // bucket 5
+      StructField("dismissal_leave_page",      IntegerType, true), // bucket 6
+      StructField("dismissal_close_button",    IntegerType, true), // bucket 7
+      StructField("dismissal_not_now",         IntegerType, true), // bucket 8
+      StructField("open_submenu",              IntegerType, true), // bucket 10
+      StructField("learn_more",                IntegerType, true), // bucket 11
+      StructField("reopen_offered",                   IntegerType, true), // bucket 20
+      StructField("reopen_action_1",                  IntegerType, true), // bucket 21
+      StructField("reopen_action_2",                  IntegerType, true), // bucket 22
+      StructField("reopen_action_3",                  IntegerType, true), // bucket 23
+      StructField("reopen_action_last",               IntegerType, true), // bucket 24
+      StructField("reopen_dismissal_click_elsewhere", IntegerType, true), // bucket 25
+      StructField("reopen_dismissal_leave_page",      IntegerType, true), // bucket 26
+      StructField("reopen_dismissal_close_button",    IntegerType, true), // bucket 27
+      StructField("reopen_dismissal_not_now",         IntegerType, true), // bucket 28
+      StructField("reopen_open_submenu",              IntegerType, true), // bucket 30
+      StructField("reopen_learn_more",                IntegerType, true) // bucket 31
     ))
 
     StructType(List(
@@ -409,16 +458,42 @@ object MainSummaryView {
       StructField("vendor", StringType, true), // application/vendor
       StructField("is_default_browser", BooleanType, true), // environment/settings/isDefaultBrowser
       StructField("default_search_engine_data_name", StringType, true), // environment/settings/defaultSearchEngineData/name
+      StructField("default_search_engine", StringType, true), // environment/settings/defaultSearchEngine
 
-      // Loop activity counters per bug 1261829
-      StructField("loop_activity_open_panel", IntegerType, true), // LOOP_ACTIVITY_COUNTER bucket 0
-      StructField("loop_activity_open_conversation", IntegerType, true), // LOOP_ACTIVITY_COUNTER bucket 1
-      StructField("loop_activity_room_open", IntegerType, true), // LOOP_ACTIVITY_COUNTER bucket 2
-      StructField("loop_activity_room_share", IntegerType, true), // LOOP_ACTIVITY_COUNTER bucket 3
-      StructField("loop_activity_room_delete", IntegerType, true), // LOOP_ACTIVITY_COUNTER bucket 4
+      // LOOP_ACTIVITY_COUNTER histogram per bug 1261829
+      StructField("loop_activity_counter", loopActivityCounterType, true),
 
       // DevTools usage per bug 1262478
       StructField("devtools_toolbox_opened_count", IntegerType, true), // DEVTOOLS_TOOLBOX_OPENED_COUNT
+
+      // client date per bug 1270505
+      StructField("client_submission_date", StringType, true), // Fields[Date], the HTTP Date header sent by the client
+
+      // TODO: use median instead of mean of an exponential like:
+      // {
+      //    "range": [
+      //      1000,
+      //      150000
+      //    ],
+      //    "bucket_count": 20,
+      //    "histogram_type": 0,
+      //    "values": {
+      //      "65074": 0,
+      //      "85961": 10,
+      //      "113552": 0
+      //    },
+      //    "sum": 1048490
+      //  }
+      // See https://github.com/mozilla/python_moztelemetry/blob/master/moztelemetry/histogram.py#L168
+      StructField("places_bookmarks_count", IntegerType, true), // mean of PLACES_BOOKMARKS_COUNT
+      StructField("places_pages_count", IntegerType, true), // mean of PLACES_PAGES_COUNT
+
+      // Push metrics per bug 1270482
+      StructField("push_api_notification_received", IntegerType, true), // PUSH_API_NOTIFICATION_RECEIVED
+      StructField("web_notification_shown", IntegerType, true), // WEB_NOTIFICATION_SHOWN
+
+      // Info from POPUP_NOTIFICATION_STATS keyed histogram
+      StructField("popup_notification_stats", MapType(StringType, popupNotificationStatsType), true),
 
       // Search counts
       StructField("search_counts", ArrayType(searchCountsType, false), true) // split up and organize the SEARCH_COUNTS keyed histogram

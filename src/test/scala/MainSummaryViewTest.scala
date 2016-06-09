@@ -275,7 +275,25 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       |    "sum_squares_lo": 78,
       |    "sum_squares_hi": 0
       |  },
-      |  "toast": {
+      |  "toast1": {
+      |    "range": [1, 2],
+      |    "bucket_count": 3,
+      |    "histogram_type": 4,
+      |    "values": {"0": 100, "1": 0},
+      |    "sum": "toast",
+      |    "sum_squares_lo": 100,
+      |    "sum_squares_hi": 0
+      |  },
+      |  "toast2": {
+      |    "range": [1, 2],
+      |    "bucket_count": 3,
+      |    "histogram_type": 4,
+      |    "values": {"0": 10, "1": 0},
+      |    "sum": 10,
+      |    "sum_squares_lo": 10,
+      |    "sum_squares_hi": 0
+      |  },
+      |  "toast3.badcount": {
       |    "range": [1, 2],
       |    "bucket_count": 3,
       |    "histogram_type": 4,
@@ -292,19 +310,29 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     for ((k, e, s, c) <- List(
       ("google.abouthome", "google", "abouthome", 1l),
       ("google.urlbar",    "google", "urlbar",    67l),
-      ("yahoo.urlbar",     "yahoo",  "urlbar",    78l))) {
-      val m = Utils.searchHistogramToRow(k, exampleSearches \ k).get
+      ("yahoo.urlbar",     "yahoo",  "urlbar",    78l),
+      ("toast1",           null,     null,        null),
+      ("toast2",           null,     null,        10l),
+      ("toast3.badcount",  "toast3", "badcount",  null))) {
+      val m = Utils.searchHistogramToRow(k, exampleSearches \ k)
       m(0) shouldBe e
       m(1) shouldBe s
       m(2) shouldBe c
-      expected = expected + c
+      expected = expected + (c match {
+        case x: Long => x
+        case _ => 0
+      })
     }
 
-    Utils.searchHistogramToRow("toast", exampleSearches \ "toast") should be (None)
+    Utils.searchHistogramToRow("toast1", exampleSearches \ "toast1") should be (Row(null, null, null))
 
     var actual = 0l
     for (search <- Utils.getSearchCounts(exampleSearches).get) {
-      actual = actual + search.getLong(2)
+
+      actual = actual + (search.get(2) match {
+        case x: Long => x
+        case _ => 0
+      })
     }
     actual should be (expected)
 
@@ -314,6 +342,143 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       payloadCount = payloadCount + search.getLong(2)
     }
     payloadCount should be (88l)
+  }
+
+  "Histogram means" can "be computed" in {
+    val example = parse("""{
+      |  "H1": {
+      |    "bucket_count": 20,
+      |    "histogram_type": 0,
+      |    "log_sum": 0,
+      |    "log_sum_squares": 0,
+      |    "range": [1000, 150000],
+      |    "sum": 30798,
+      |    "values": {
+      |      "21371": 0,
+      |      "28231": 1,
+      |      "37292": 0
+      |    }
+      |  },
+      |  "H2": {
+      |    "bucket_count": 20,
+      |    "histogram_type": 0,
+      |    "log_sum": 0,
+      |    "log_sum_squares": 0,
+      |    "range": [1000, 150000],
+      |    "sum": 30798,
+      |    "values": {
+      |      "21371": 0,
+      |      "28231": 2,
+      |      "37292": 0
+      |    }
+      |  },
+      |  "H3": {
+      |    "bucket_count": 20,
+      |    "histogram_type": 0,
+      |    "log_sum": 0,
+      |    "log_sum_squares": 0,
+      |    "range": [1000, 150000],
+      |    "sum": 30798,
+      |    "values": {
+      |      "21371": 1,
+      |      "28231": 2,
+      |      "37292": 0
+      |    }
+      |  },
+      |  "H4": {
+      |    "bucket_count": 20,
+      |    "histogram_type": 0,
+      |    "log_sum": 0,
+      |    "log_sum_squares": 0,
+      |    "range": [1000, 150000],
+      |    "sum": 30798,
+      |    "values": {
+      |      "21371": 1,
+      |      "28231": 2,
+      |      "37292": 1
+      |    }
+      |  },
+      |  "H5": {
+      |    "bucket_count": 20,
+      |    "histogram_type": 0,
+      |    "log_sum": 0,
+      |    "log_sum_squares": 0,
+      |    "range": [1000, 150000],
+      |    "sum": 0,
+      |    "values": {
+      |      "21371": 1,
+      |      "28231": 2,
+      |      "37292": 1
+      |    }
+      |  },
+      |  "H6": {
+      |    "bucket_count": 20,
+      |    "histogram_type": 0,
+      |    "log_sum": 0,
+      |    "log_sum_squares": 0,
+      |    "range": [1000, 150000],
+      |    "sum": 10,
+      |    "values": {
+      |      "21371": 0,
+      |      "28231": 0,
+      |      "37292": 0
+      |    }
+      |  }
+      |}""".stripMargin)
+    Utils.histogramToMean(example \ "H1").get should be (30798)
+    Utils.histogramToMean(example \ "H2").get should be (15399)
+    Utils.histogramToMean(example \ "H3").get should be (10266)
+    Utils.histogramToMean(example \ "H4").get should be (7699)
+    Utils.histogramToMean(example \ "H5").get should be (0) // Sum is zero
+    Utils.histogramToMean(example \ "H6") should be (None) // bucket counts sum to zero
+    Utils.histogramToMean(example \ "H0") should be (None) // Missing
+  }
+
+  "Enum Histograms" can "be converted to Rows" in {
+    val example = parse("""{
+      |  "H1": {
+      |    "bucket_count": 5,
+      |    "histogram_type": 1,
+      |    "sum": 30798,
+      |    "values": {
+      |      "0": 1,
+      |      "1": 2,
+      |      "3": 4
+      |    }
+      |  }
+      |}""".stripMargin)
+    Utils.enumHistogramToRow(example \ "H1", (0 to 3).map(_.toString)).get should be (Row(1, 2, 0, 4))
+  }
+
+  "Keyed Enum Histograms" can "be converted to Maps of Rows" in {
+    val example = parse("""{
+      |  "H1": {
+      |    "foo": {
+      |      "bucket_count": 5,
+      |      "histogram_type": 1,
+      |      "sum": 30798,
+      |      "values": {
+      |        "0": 1,
+      |        "2": 2
+      |      }
+      |    },
+      |    "bar": {
+      |      "bucket_count": 5,
+      |      "histogram_type": 1,
+      |      "sum": 30798,
+      |      "values": {
+      |        "0": 5,
+      |        "1": 1,
+      |        "2": 3
+      |      }
+      |    }
+      |  }
+      |}""".stripMargin)
+    val expected = Map[String,Row](
+      "foo" -> Row(1,0,2),
+      "bar" -> Row(5,1,3)
+    )
+    Utils.keyedEnumHistogramToMap(example \ "H1", (0 to 2).map(_.toString)).get should be (expected)
   }
 
   "MainSummary records" can "be serialized" in {
@@ -433,12 +598,13 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           "vendor"                          -> "Mozilla",
           "is_default_browser"              -> true,
           "default_search_engine_data_name" -> "Google",
-          "loop_activity_open_panel"        -> null,
-          "loop_activity_open_conversation" -> null,
-          "loop_activity_room_open"         -> null,
-          "loop_activity_room_share"        -> null,
-          "loop_activity_room_delete"       -> null,
-          "devtools_toolbox_opened_count"   -> 3
+          "default_search_engine"           -> "google",
+          "devtools_toolbox_opened_count"   -> 3,
+          "client_submission_date"          -> null,
+          "push_api_notification_received"  -> null,
+          "web_notification_shown"          -> null,
+          "places_pages_count"              -> 104849,
+          "places_bookmarks_count"          -> 183
         )
 
         val actual = r.getValuesMap(expected.keys.toList)
@@ -453,6 +619,16 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           sW.getLong(sW.fieldIndex("count"))
         }).sum
         searchCounter should be (65l)
+
+        r.getStruct(r.fieldIndex("loop_activity_counter")) should be (null)
+        val popup = r.getMap[String,Row](r.fieldIndex("popup_notification_stats"))
+        val expectedPopup = Map[String,Row](
+          "(all)"             -> Row(8,2,0,0,0,1,0,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0),
+          "geolocation"       -> Row(1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0),
+          "password"          -> Row(5,0,0,0,0,1,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0),
+          "web-notifications" -> Row(2,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0))
+        popup should be (expectedPopup)
+
         count += 1
       }
     }
