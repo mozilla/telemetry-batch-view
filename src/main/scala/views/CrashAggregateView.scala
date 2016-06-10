@@ -1,23 +1,16 @@
 package telemetry.views
 
-import awscala.s3._
 import com.typesafe.config._
-import org.apache.spark.sql.{Row, SQLContext, SaveMode}
-import org.apache.spark.sql.types._
-import org.apache.spark.{SparkConf, SparkContext, Accumulator}
 import org.apache.spark.rdd.RDD
-import scala.io.Source
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.{Row, SQLContext, SaveMode}
+import org.apache.spark.{Accumulator, SparkConf, SparkContext}
+import org.joda.time._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
-import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
-import scala.math.{max, abs}
-import telemetry.heka.{HekaFrame, Message}
-import telemetry.ObjectSummary
-import telemetry.utils.Utils
-import telemetry.utils.Telemetry
-import org.joda.time._
 import org.rogach.scallop._
+import scala.collection.JavaConversions._
+import telemetry.heka.{Dataset, HekaFrame}
 
 object CrashAggregateView {
   class Conf(args: Array[String]) extends ScallopConf(args) {
@@ -42,7 +35,7 @@ object CrashAggregateView {
     // set up Spark
     val sparkConf = new SparkConf().setAppName("CrashAggregateVie")
     sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
-    val sc = new SparkContext(sparkConf)
+    implicit val sc = new SparkContext(sparkConf)
     val sqlContext = new SQLContext(sc)
     val hadoopConf = sc.hadoopConfiguration
     hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
@@ -53,10 +46,18 @@ object CrashAggregateView {
       val currentDate = from.plusDays(offset)
       val currentDateString = currentDate.toString("yyyy-MM-dd")
 
-      // obtain the crash aggregates from telemetry ping data
-      val messages = Telemetry.getMessages(sc, currentDate, List("telemetry", "4", "crash"))
-        .union(Telemetry.getMessages(sc, currentDate, List("telemetry", "4", "main")))
+      val messages = Dataset("telemetry")
+        .where("sourceName") {
+          case "telemetry" => true
+        }.where("sourceVersion") {
+          case "4" => true
+        }.where("docType") {
+          case doc if List("main", "crash") contains doc => true
+        }.where("submissionDate") {
+          case date if date == currentDate.toString("yyyyMMdd") => true
+        }.records()
         .map(message => HekaFrame.fields(message) + ("payload" -> message.payload.getOrElse("")))
+
       val (rowRDD, main_processed, main_ignored, crash_processed, crash_ignored) = compareCrashes(sc, messages)
 
       // create a dataframe containing all the crash aggregates
