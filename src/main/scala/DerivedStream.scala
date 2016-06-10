@@ -21,6 +21,23 @@ import telemetry.utils.Utils
 // key is the S3 filename, size is the object size in bytes.
 case class ObjectSummary(key: String, size: Long) // S3ObjectSummary can't be serialized
 
+object ObjectSummary {
+  def groupBySize(keys: Iterator[ObjectSummary]): List[List[ObjectSummary]] = {
+    val threshold = 1L << 31
+    keys.foldRight((0L, List[List[ObjectSummary]]()))(
+      (x, acc) => {
+        acc match {
+          case (size, head :: tail) if size + x.size < threshold =>
+            (size + x.size, (x :: head) :: tail)
+          case (size, res) if size + x.size < threshold =>
+            (size + x.size, List(x) :: res)
+          case (_, res) =>
+            (x.size, List(x) :: res)
+        }
+      })._2
+  }
+}
+
 abstract class DerivedStream extends java.io.Serializable{
   private val appConf = ConfigFactory.load()
   private val parquetBucket = Bucket(appConf.getString("app.parquetBucket"))
@@ -141,21 +158,6 @@ object DerivedStream {
                    .map(summary => ObjectSummary(summary.getKey(), summary.getSize()))})
 
     converter.transform(sc, bucket, summaries, from, to)
-  }
-
-  def groupBySize(keys: Iterator[ObjectSummary]): List[List[ObjectSummary]] = {
-    val threshold = 1L << 31
-    keys.foldRight((0L, List[List[ObjectSummary]]()))(
-      (x, acc) => {
-        acc match {
-          case (size, head :: tail) if size + x.size < threshold =>
-            (size + x.size, (x :: head) :: tail)
-          case (size, res) if size + x.size < threshold =>
-            (size + x.size, List(x) :: res)
-          case (_, res) =>
-            (x.size, List(x) :: res)
-        }
-      })._2
   }
 
   def main(args: Array[String]) {

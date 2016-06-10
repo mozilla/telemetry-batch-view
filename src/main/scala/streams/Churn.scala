@@ -122,7 +122,7 @@ case class Churn(prefix: String) extends DerivedStream{
       val summaries = sc.parallelize(s3.objectSummaries(bucket, s"$dataPrefix/$currentDay/$filterPrefix")
                         .map(summary => ObjectSummary(summary.getKey(), summary.getSize())))
 
-      val groups = DerivedStream.groupBySize(summaries.collect().toIterator)
+      val groups = ObjectSummary.groupBySize(summaries.collect().toIterator)
       val churnMessages = sc.parallelize(groups, groups.size)
         .flatMap(x => x)
         .flatMap{ case obj =>

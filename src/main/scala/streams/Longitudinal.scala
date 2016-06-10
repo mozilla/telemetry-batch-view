@@ -93,7 +93,7 @@ case class Longitudinal() extends DerivedStream {
 
     // Sort submissions in descending order
     implicit val ordering = Ordering[Tuple3[String, String, Int]].reverse
-    val groups = DerivedStream.groupBySize(summaries.collect().toIterator)
+    val groups = ObjectSummary.groupBySize(summaries.collect().toIterator)
     val clientMessages = sc.parallelize(groups, groups.size)
       .flatMap(x => x)
       .flatMap{ case obj =>
