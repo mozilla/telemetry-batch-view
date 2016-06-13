@@ -3,7 +3,7 @@ package telemetry.avro
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericData
 import org.json4s._
-import telemetry.utils.Utils
+import telemetry.utils._
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
@@ -12,7 +12,7 @@ object JSON2Avro{
     val record = new GenericData.Record(schema)
 
     for (field <- schema.getFields) {
-      val parsed = parse(field.schema, json \ Utils.camelize(field.name))
+      val parsed = parse(field.schema, json \ camelize(field.name))
       parsed match {
         case Some(value) =>
           record.put(field.name, value)

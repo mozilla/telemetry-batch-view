@@ -500,7 +500,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       // Serialize this one row as Parquet
       val sqlContext = new SQLContext(sc)
       val dataframe = sqlContext.createDataFrame(sc.parallelize(rows.toSeq), schema)
-      val tempFile = telemetry.utils.Utils.temporaryFileName()
+      val tempFile = telemetry.utils.temporaryFileName()
       dataframe.write.parquet(tempFile.toString)
 
       // Then read it back

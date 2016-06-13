@@ -16,7 +16,7 @@ import org.json4s.jackson.JsonMethods._
 import scala.collection.JavaConverters._
 import scala.io.Source
 import telemetry.streams.{E10sExperiment, ExecutiveStream, Churn, Longitudinal}
-import telemetry.utils.Utils
+import telemetry.utils._
 
 // key is the S3 filename, size is the object size in bytes.
 case class ObjectSummary(key: String, size: Long) // S3ObjectSummary can't be serialized
@@ -51,7 +51,7 @@ abstract class DerivedStream extends java.io.Serializable{
     metaPrefix
   }
   
-  protected val clsName = Utils.uncamelize(this.getClass.getSimpleName.replace("$", ""))  // Use classname as stream prefix on S3
+  protected val clsName = uncamelize(this.getClass.getSimpleName.replace("$", ""))  // Use classname as stream prefix on S3
   protected lazy val partitioning = {
     val Some(schemaObj) = metaBucket.get(s"$metaPrefix/schema.json")
     val schema = Source.fromInputStream(schemaObj.getObjectContent()).getLines().mkString("\n")

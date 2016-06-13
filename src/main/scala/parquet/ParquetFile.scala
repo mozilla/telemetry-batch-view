@@ -1,10 +1,7 @@
 package telemetry.parquet
 
-import com.typesafe.config._
-import java.net.URI
-import java.rmi.dgc.VMID
 import java.util.logging.Logger
-import org.apache.avro
+import com.typesafe.config._
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
 import org.apache.hadoop.conf.Configuration
@@ -12,7 +9,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.parquet.avro.{AvroParquetReader, AvroParquetWriter}
 import org.apache.parquet.hadoop.ParquetWriter
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
-import scala.collection.JavaConverters._
 
 object ParquetFile {
   private val conf = ConfigFactory.load()
@@ -25,7 +21,7 @@ object ParquetFile {
     val blockSize = blockSizeMultiplier*ParquetWriter.DEFAULT_BLOCK_SIZE
     val pageSize = ParquetWriter.DEFAULT_PAGE_SIZE
     val enableDict = ParquetWriter.DEFAULT_IS_DICTIONARY_ENABLED
-    val parquetFile = telemetry.utils.Utils.temporaryFileName()
+    val parquetFile = telemetry.utils.temporaryFileName()
     val parquetWriter = new AvroParquetWriter[GenericRecord](parquetFile, schema, CompressionCodecName.SNAPPY, blockSize, pageSize, enableDict, hadoopConf)
 
     // Disable Parquet logging

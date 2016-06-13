@@ -1,6 +1,5 @@
 package telemetry.streams
 
-import awscala._
 import awscala.s3._
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericData, GenericRecord, GenericRecordBuilder}
@@ -19,7 +18,7 @@ import telemetry.avro
 import telemetry.heka.{HekaFrame, Message}
 import telemetry.histograms._
 import telemetry.parquet.ParquetFile
-import telemetry.utils.Utils
+import telemetry.utils._
 
 private class ClientIdPartitioner(size: Int) extends Partitioner{
   def numPartitions: Int = size
@@ -640,7 +639,7 @@ case class Longitudinal() extends DerivedStream {
     val fieldValues = payloads.map{ case (x) =>
       parse(x.getOrElse("payload.info", return).asInstanceOf[String]) \ "subsessionStartDate" match {
         case JString(value) =>
-          Utils.normalizeISOTimestamp(value)
+          normalizeISOTimestamp(value)
         case _ =>
           return
       }
@@ -654,7 +653,7 @@ case class Longitudinal() extends DerivedStream {
 
     val creationValues = payloads.map{ case (x) =>
       parse(x.getOrElse("environment.profile", return).asInstanceOf[String]) \ "creationDate" match {
-        case JInt(value) => Utils.normalizeEpochTimestamp(value)
+        case JInt(value) => normalizeEpochTimestamp(value)
         case _ => ""
       }
     }
@@ -662,7 +661,7 @@ case class Longitudinal() extends DerivedStream {
 
     val resetValues = payloads.map{ case (x) =>
       parse(x.getOrElse("environment.profile", return).asInstanceOf[String]) \ "resetDate" match {
-        case JInt(value) => Utils.normalizeEpochTimestamp(value)
+        case JInt(value) => normalizeEpochTimestamp(value)
         case _ => ""
       }
     }
@@ -713,7 +712,7 @@ case class Longitudinal() extends DerivedStream {
       value2Avro("geoCountry",     "geo_country",     "", x => x, sorted, root, schema)
       value2Avro("geoCity",        "geo_city",        "", x => x, sorted, root, schema)
       value2Avro("DNT",            "dnt_header",      "", x => x, sorted, root, schema)
-      value2Avro("submissionDate", "submission_date", "", x => Utils.normalizeYYYYMMDDTimestamp(x.asInstanceOf[String]), sorted, root, schema)
+      value2Avro("submissionDate", "submission_date", "", x => normalizeYYYYMMDDTimestamp(x.asInstanceOf[String]), sorted, root, schema)
       JSON2Avro("environment.build",          List[String](),                   "build", sorted, root, schema)
       JSON2Avro("environment.partner",        List[String](),                   "partner", sorted, root, schema)
       JSON2Avro("environment.settings",       List[String](),                   "settings", sorted, root, schema)

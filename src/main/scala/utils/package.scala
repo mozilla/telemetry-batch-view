@@ -1,46 +1,44 @@
-package telemetry.utils
+package telemetry
+package object utils{
+  import java.rmi.dgc.VMID
+  import org.apache.hadoop.fs.Path
+  import org.joda.time._
 
-import java.net.URI
-import java.rmi.dgc.VMID
-
-import org.apache.hadoop.fs.Path
-import org.joda.time._
-
-object Utils{
-  val dict = Map("submission_url" -> "submissionURL",
-                 "memory_mb" -> "memoryMB",
-                 "virtual_max_mb" -> "virtualMaxMB",
-                 "l2cache_kb" -> "l2cacheKB",
-                 "l3cache_kb" -> "l3cacheKB",
-                 "speed_mhz" -> "speedMHz",
-                 "d2d_enabled" -> "D2DEnabled",
-                 "d_write_enabled" -> "DWriteEnabled",
-                 "vendor_id" -> "vendorID",
-                 "device_id" -> "deviceID",
-                 "subsys_id" -> "subsysID",
-                 "ram" -> "RAM",
-                 "gpu_active" -> "GPUActive",
-                 "first_load_uri" -> "firstLoadURI",
-                 "" -> "")
+  private val specialCases = Map(
+    "submission_url" -> "submissionURL",
+    "memory_mb" -> "memoryMB",
+    "virtual_max_mb" -> "virtualMaxMB",
+    "l2cache_kb" -> "l2cacheKB",
+    "l3cache_kb" -> "l3cacheKB",
+    "speed_mhz" -> "speedMHz",
+    "d2d_enabled" -> "D2DEnabled",
+    "d_write_enabled" -> "DWriteEnabled",
+    "vendor_id" -> "vendorID",
+    "device_id" -> "deviceID",
+    "subsys_id" -> "subsysID",
+    "ram" -> "RAM",
+    "gpu_active" -> "GPUActive",
+    "first_load_uri" -> "firstLoadURI",
+    "" -> "")
 
   def camelize(name: String) = {
-    dict.getOrElse(name, {
-                     val split = name.split("_")
-                     val rest = split.drop(1).map(_.capitalize).mkString
-                     split(0).mkString + rest
-                   }
-    )
+    specialCases.getOrElse(name, {
+      val split = name.split("_")
+      val rest = split.drop(1).map(_.capitalize).mkString
+      split(0).mkString + rest
+    })
   }
 
   def uncamelize(name: String) = {
     val pattern = java.util.regex.Pattern.compile("(^[^A-Z]+|[A-Z][^A-Z]+)")
-    val matcher = pattern.matcher(name);
+    val matcher = pattern.matcher(name)
     val output = new StringBuilder
 
     while (matcher.find()) {
-      if (output.length > 0)
-        output.append("_");
-      output.append(matcher.group().toLowerCase);
+      if (output.length > 0) {
+        output.append("_")
+      }
+      output.append(matcher.group().toLowerCase)
     }
 
     output.toString()
@@ -58,9 +56,9 @@ object Utils{
     val timezoneOffsetHours = date.getZone().getOffset(date).toDouble / millisPerHour
     val timezone = if (timezoneOffsetHours < -12.0) {
       org.joda.time.DateTimeZone.forOffsetMillis(((timezoneOffsetHours + 12 * Math.floor(timezoneOffsetHours / -12).toInt) * millisPerHour).toInt)
-    } else if (timezoneOffsetHours > 14.0) (
+    } else if (timezoneOffsetHours > 14.0) {
       org.joda.time.DateTimeZone.forOffsetMillis(((timezoneOffsetHours - 12 * Math.floor(timezoneOffsetHours / 12).toInt) * millisPerHour).toInt)
-    ) else {
+    } else {
       date.getZone()
     }
     dateFormatter.withZone(timezone).print(date)
@@ -70,9 +68,8 @@ object Utils{
     val formatISO = org.joda.time.format.ISODateTimeFormat.dateTime()
     formatISO.withZone(org.joda.time.DateTimeZone.UTC).print(
       format.DateTimeFormat.forPattern("yyyyMMdd")
-                           .withZone(org.joda.time.DateTimeZone.UTC)
-                           .parseDateTime(YYYYMMDD.asInstanceOf[String])
-    )
+        .withZone(org.joda.time.DateTimeZone.UTC)
+        .parseDateTime(YYYYMMDD.asInstanceOf[String]))
   }
 
   def normalizeEpochTimestamp(timestamp: BigInt) = {
