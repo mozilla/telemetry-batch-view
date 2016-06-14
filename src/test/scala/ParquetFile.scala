@@ -78,13 +78,13 @@ class ParquetSpec extends FlatSpec with Matchers{
     messages.length should be (nMessages)
 
     val referenceBlob = new String(Resources.datumJSON)
-    val jsonBlobs = HekaFrame.payloads(messages.toList)
+    val jsonBlobs = messages.map(_.payload).flatten.toList
     for (blob <- jsonBlobs) blob should be (referenceBlob)
   }
 
   "A list of Avro records" can "be serialized to a Parquet file" in {
     val messages = HekaFrame.parse(new ByteArrayInputStream(Resources.hekaFile(nMessages)))
-    val jsonBlobs = HekaFrame.payloads(messages.toList)
+    val jsonBlobs = messages.map(_.payload).flatten.toList
     val data = readData(jsonBlobs, Resources.schema)
     val filePath = ParquetFile.serialize(data.toIterator, Resources.schema)
     data should be (ParquetFile.deserialize(filePath.toString()))

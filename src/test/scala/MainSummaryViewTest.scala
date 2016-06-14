@@ -495,7 +495,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       val hekaFileName = "/test_main.snappy.heka"
       val hekaURL = getClass.getResource(hekaFileName)
       val input = hekaURL.openStream()
-      val rows = HekaFrame.parse(input, hekaFileName).flatMap(MainSummaryView.messageToRow)
+      val rows = HekaFrame.parse(input).flatMap(MainSummaryView.messageToRow)
 
       // Serialize this one row as Parquet
       val sqlContext = new SQLContext(sc)
@@ -534,7 +534,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     }
 
     var count = 0
-    for (message <- HekaFrame.parse(input, hekaFileName)) {
+    for (message <- HekaFrame.parse(input)) {
       message.timestamp should be (1460036116829920000l)
       message.`type`.get should be ("telemetry")
       message.logger.get should be ("telemetry")

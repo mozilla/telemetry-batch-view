@@ -52,7 +52,7 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
       .flatMap(x => x)
       .flatMap{ case obj =>
         val hekaFile = bucket.getObject(obj.key).getOrElse(throw new Exception("File missing on S3"))
-        for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey()))  yield message }
+        for (message <- HekaFrame.parse(hekaFile.getObjectContent)) yield message }
       .flatMap{ case message =>
         val fields = HekaFrame.fields(message)
         val clientId = fields.get("clientId")

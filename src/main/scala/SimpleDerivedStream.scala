@@ -48,7 +48,7 @@ abstract class SimpleDerivedStream extends DerivedStream {
       hekaFile = bucket
       .getObject(key.key)
       .getOrElse(throw new Exception("File missing on S3"))
-      message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey())
+      message <- HekaFrame.parse(hekaFile.getObjectContent)
       record <- buildRecord(message, schema)
     } yield record
 

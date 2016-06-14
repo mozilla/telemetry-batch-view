@@ -15,6 +15,10 @@ class Dataset private (bucket: String,
                        schema: Schema, prefix: String,
                        clauses: Map[String, PartialFunction[String, Boolean]],
                        s3Store: => AbstractS3Store) extends java.io.Serializable {
+  private object Logger extends Serializable {
+    @transient lazy val log = org.apache.log4j.Logger.getLogger(Dataset.getClass.getName)
+  }
+
   def where(dimension: String)(clause: PartialFunction[String, Boolean]): Dataset = {
     if (clauses.contains(dimension))
       throw new Exception(s"There should be only one clause for ${dimension}")
@@ -55,8 +59,7 @@ class Dataset private (bucket: String,
     // Partition the files into groups of approximately-equal size
     val groups = ObjectSummary.groupBySize(summaries(fileLimit).toIterator)
     sc.parallelize(groups, groups.size).flatMap(x => x).flatMap(o => {
-      val hekaFile = s3Store.getKey(bucket, o.key)
-      for (message <- HekaFrame.parse(hekaFile, o.key)) yield message
+      HekaFrame.parse(s3Store.getKey(bucket, o.key), ex => Logger.log.warn(s"Failure to read file ${o.key}: ${ex.getMessage}"))
     })
   }
 }

@@ -3,7 +3,6 @@ package telemetry.heka
 import java.io.DataInputStream
 import java.io.InputStream
 import org.xerial.snappy.Snappy
-import scala.util.{Try, Success, Failure}
 
 object HekaFrame{
   private object Logger extends Serializable {
@@ -26,13 +25,24 @@ object HekaFrame{
     Map(fields.map(_.name).zip(fields.map(field)): _*)
   }
 
-  def payloads(l: List[Message]): List[String] = l.map(_.payload).flatten
-
   // See https://hekad.readthedocs.org/en/latest/message/index.html
-  def parse(i: InputStream, origin: String = ""): Iterator[Message] = {
-    val is = new DataInputStream(i)
+  def parse(i: => InputStream, fail: Throwable => Unit = ex => throw ex): Iterator[Message] = {
+    var is: DataInputStream = null
+    var offset = 0L
 
     def next: Option[Message] = {
+      if (is == null) {
+        is = new DataInputStream(i)
+
+        // See https://stackoverflow.com/questions/14057720/robust-skipping-of-data-in-a-java-io-inputstream-and-its-subtypes
+        // for why I am not using skip or skipBytes. This is slow but acceptable as it's a rare operation.
+        for (i <- 0L until offset) {
+          if (is.read() == -1) {
+            throw new Exception("Failure to skip bytes")
+          }
+        }
+      }
+
       val cursor = is.read()
 
       if (cursor == -1)
@@ -63,20 +73,41 @@ object HekaFrame{
         Message.parseFrom(uncompressedMessage, 0, uncompressedLength)
       } catch {
         case ex: Throwable =>
-          Logger.log.warn(s"Failure to read compressed record of file $origin: ${ex.getMessage}")
           Message.parseFrom(messageBuffer)
       }
 
+      // 3 -> one byte for the record separator, one for the header length and one for the unit separator
+      offset += 3 + headerLength + header.messageLength
       Some(message)
     }
 
+    @annotation.tailrec
+    def retry[T](n: Int)(fn: => T): T = {
+      import scala.util.{Failure, Success, Try}
+
+      Try { fn } match {
+        case Success(x) =>
+          x
+        case _ if n > 1 =>
+          is = null
+          retry(n - 1)(fn)
+        case Failure(e) =>
+          throw e
+      }
+    }
+
     Iterator
-      .continually(Try(next))
-      .takeWhile{ case Success(Some(x)) => true
-                  case Failure(x) =>
-                    Logger.log.warn(s"Failure to read remainder of file $origin: ${x.getMessage}")
-                    false
-                  case _ => false }
-      .map(_.get.get)
+      .continually {
+        try retry(3){
+          next
+        } catch {
+          case ex: Throwable =>
+            fail(ex)
+            None
+        }
+      }.takeWhile {
+        case Some(x) => true
+        case _ => false
+      }.flatten
   }
 }

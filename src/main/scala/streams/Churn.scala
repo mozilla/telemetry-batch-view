@@ -127,7 +127,7 @@ case class Churn(prefix: String) extends DerivedStream{
         .flatMap(x => x)
         .flatMap{ case obj =>
           val hekaFile = bucket.getObject(obj.key).getOrElse(throw new Exception("File missing on S3: " + obj.key))
-          for (message <- HekaFrame.parse(hekaFile.getObjectContent(), hekaFile.getKey()))  yield message }
+          for (message <- HekaFrame.parse(hekaFile.getObjectContent()))  yield message }
         .flatMap{ case message => messageToMap(message) }
         .repartition(100) // TODO: partition by sampleId
         .foreachPartition{ case partitionIterator =>
