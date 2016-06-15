@@ -6,6 +6,10 @@ import org.xerial.snappy.Snappy
 import scala.util.{Try, Success, Failure}
 
 object HekaFrame{
+  private object Logger extends Serializable {
+    @transient lazy val log = org.apache.log4j.Logger.getLogger(HekaFrame.getClass.getName)
+  }
+
   private def field(f: Field): Any = {
     // I am assuming there is only one value
     f.valueType match {
@@ -53,12 +57,14 @@ object HekaFrame{
       is.readFully(messageBuffer, 0, header.messageLength)
 
       val message = try {
-        val uncompressedLenght = Snappy.uncompressedLength(messageBuffer)
-        val uncompressedMessage = new Array[Byte](uncompressedLenght)
+        val uncompressedLength = Snappy.uncompressedLength(messageBuffer)
+        val uncompressedMessage = new Array[Byte](uncompressedLength)
         Snappy.uncompress(messageBuffer, 0, header.messageLength, uncompressedMessage, 0)
-        Message.parseFrom(uncompressedMessage, 0, uncompressedLenght)
+        Message.parseFrom(uncompressedMessage, 0, uncompressedLength)
       } catch {
-        case _: Throwable => Message.parseFrom(messageBuffer)
+        case ex: Throwable =>
+          Logger.log.warn(s"Failure to read compressed record of file $origin: ${ex.getMessage}")
+          Message.parseFrom(messageBuffer)
       }
 
       Some(message)
@@ -67,9 +73,8 @@ object HekaFrame{
     Iterator
       .continually(Try(next))
       .takeWhile{ case Success(Some(x)) => true
-                  case Failure(x) => 
-                    println(s"Failure to read remainder of file $origin")
-                    println(x.getMessage())
+                  case Failure(x) =>
+                    Logger.log.warn(s"Failure to read remainder of file $origin: ${x.getMessage}")
                     false
                   case _ => false }
       .map(_.get.get)
