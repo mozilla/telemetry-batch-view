@@ -7,9 +7,9 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{FlatSpec, Matchers}
 import telemetry.heka.HekaFrame
-import telemetry.streams.main_summary.Utils
 import telemetry.views.MainSummaryView
 import org.apache.spark.sql.types.{ArrayType, StructType}
+import telemetry.utils.MainPing
 
 class MainSummaryViewTest extends FlatSpec with Matchers{
   val testPayload = """
@@ -136,7 +136,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   "A json object's keys" can "be counted" in {
     val json = parse(testPayload)
 
-    val countKeys = Utils.countKeys _
+    val countKeys = MainPing.countKeys _
     countKeys(json \ "environment" \ "addons" \ "activeAddons").get should be (3)
     countKeys(json).get should be (2)
     countKeys(json \ "payload").get should be (2)
@@ -147,7 +147,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   "Latest flash version" can "be extracted" in {
     // Valid data
     val json = parse(testPayload)
-    val getFlash = Utils.getFlashVersion _
+    val getFlash = MainPing.getFlashVersion _
     getFlash(json \ "environment" \ "addons").get should be ("19.0.0.226")
     getFlash(json \ "environment") should be (None)
     getFlash(json \ "foo") should be (None)
@@ -228,7 +228,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   }
 
   "Flash versions" can "be compared" in {
-    val cmpFlash = Utils.compareFlashVersions _
+    val cmpFlash = MainPing.compareFlashVersions _
     cmpFlash(Some("1.2.3.4"), Some("1.2.3.4")).get should be (0)
     cmpFlash(Some("1.2.3.5"), Some("1.2.3.4")).get should be (1)
     cmpFlash(Some("1.2.3.4"), Some("1.2.3.5")).get should be (-1)
@@ -314,7 +314,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       ("toast1",           null,     null,        null),
       ("toast2",           null,     null,        10l),
       ("toast3.badcount",  "toast3", "badcount",  null))) {
-      val m = Utils.searchHistogramToRow(k, exampleSearches \ k)
+      val m = MainPing.searchHistogramToRow(k, exampleSearches \ k)
       m(0) shouldBe e
       m(1) shouldBe s
       m(2) shouldBe c
@@ -324,10 +324,10 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       })
     }
 
-    Utils.searchHistogramToRow("toast1", exampleSearches \ "toast1") should be (Row(null, null, null))
+    MainPing.searchHistogramToRow("toast1", exampleSearches \ "toast1") should be (Row(null, null, null))
 
     var actual = 0l
-    for (search <- Utils.getSearchCounts(exampleSearches).get) {
+    for (search <- MainPing.getSearchCounts(exampleSearches).get) {
 
       actual = actual + (search.get(2) match {
         case x: Long => x
@@ -338,7 +338,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val json = parse(testPayload)
     var payloadCount = 0l
-    for (search <- Utils.getSearchCounts(json \ "payload" \ "keyedHistograms" \ "SEARCH_COUNTS").get) {
+    for (search <- MainPing.getSearchCounts(json \ "payload" \ "keyedHistograms" \ "SEARCH_COUNTS").get) {
       payloadCount = payloadCount + search.getLong(2)
     }
     payloadCount should be (88l)
@@ -425,13 +425,13 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       |    }
       |  }
       |}""".stripMargin)
-    Utils.histogramToMean(example \ "H1").get should be (30798)
-    Utils.histogramToMean(example \ "H2").get should be (15399)
-    Utils.histogramToMean(example \ "H3").get should be (10266)
-    Utils.histogramToMean(example \ "H4").get should be (7699)
-    Utils.histogramToMean(example \ "H5").get should be (0) // Sum is zero
-    Utils.histogramToMean(example \ "H6") should be (None) // bucket counts sum to zero
-    Utils.histogramToMean(example \ "H0") should be (None) // Missing
+    MainPing.histogramToMean(example \ "H1").get should be (30798)
+    MainPing.histogramToMean(example \ "H2").get should be (15399)
+    MainPing.histogramToMean(example \ "H3").get should be (10266)
+    MainPing.histogramToMean(example \ "H4").get should be (7699)
+    MainPing.histogramToMean(example \ "H5").get should be (0) // Sum is zero
+    MainPing.histogramToMean(example \ "H6") should be (None) // bucket counts sum to zero
+    MainPing.histogramToMean(example \ "H0") should be (None) // Missing
   }
 
   "Enum Histograms" can "be converted to Rows" in {
@@ -447,7 +447,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       |    }
       |  }
       |}""".stripMargin)
-    Utils.enumHistogramToRow(example \ "H1", (0 to 3).map(_.toString)).get should be (Row(1, 2, 0, 4))
+    MainPing.enumHistogramToRow(example \ "H1", (0 to 3).map(_.toString)) should be (Row(1, 2, 0, 4))
   }
 
   "Keyed Enum Histograms" can "be converted to Maps of Rows" in {
@@ -478,7 +478,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "foo" -> Row(1,0,2),
       "bar" -> Row(5,1,3)
     )
-    Utils.keyedEnumHistogramToMap(example \ "H1", (0 to 2).map(_.toString)).get should be (expected)
+    MainPing.keyedEnumHistogramToMap(example \ "H1", (0 to 2).map(_.toString)).get should be (expected)
   }
 
   "MainSummary records" can "be serialized" in {
@@ -501,15 +501,13 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       val sqlContext = new SQLContext(sc)
       val dataframe = sqlContext.createDataFrame(sc.parallelize(rows.toSeq), schema)
       val tempFile = telemetry.utils.Utils.temporaryFileName()
-      // TODO: re-enable this test code when we resolve the "parquet-avro"
-      //       incompatibility between 1.7.0 and 1.8.1
-//      dataframe.write.parquet(tempFile.toString)
-//
-//      // Then read it back
-//      val data = sqlContext.read.parquet(tempFile.toString)
-//
-//      data.count() should be (1)
-//      data.filter(data("document_id") === "foo").count() should be (1)
+      dataframe.write.parquet(tempFile.toString)
+
+      // Then read it back
+      val data = sqlContext.read.parquet(tempFile.toString)
+
+      data.count() should be (1)
+      data.filter(data("document_id") === "foo").count() should be (1)
     } finally {
       sc.stop()
     }

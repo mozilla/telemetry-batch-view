@@ -1,16 +1,14 @@
-package telemetry.streams.main_summary
+package telemetry.utils
 
 import org.apache.spark.sql.Row
 import org.json4s.JsonAST._
 
-object Utils{
+object MainPing{
   // Count the number of keys inside a JSON Object
   def countKeys(o: JValue): Option[Long] = {
     o match {
       case JObject(x) => Some(x.length)
-      case _ => {
-        None
-      }
+      case _ => None
     }
   }
 
@@ -106,76 +104,60 @@ object Utils{
     }
   }
 
-  def getSearchCounts(searchCounts: JValue): Option[List[Row]] = {
-    searchCounts match {
-      case JObject(x) => {
-        val buf = scala.collection.mutable.ListBuffer.empty[Row]
-        for ((k, v) <- x) {
-          buf.append(searchHistogramToRow(k, v))
-        }
-        if (buf.isEmpty) None
-        else Some(buf.toList)
+  def getSearchCounts(searchCounts: JValue): Option[List[Row]] = searchCounts match {
+    case JObject(x) =>
+      val buf = scala.collection.mutable.ListBuffer.empty[Row]
+      for ((k, v) <- x) {
+        buf.append(searchHistogramToRow(k, v))
       }
-      case _ => None
-    }
+      if (buf.isEmpty) None
+      else Some(buf.toList)
+    case _ => None
   }
 
   // Return a row with the bucket values for the given set of keys as fields.
-  def enumHistogramToRow(histogram: JValue, keys: IndexedSeq[String]): Option[Row] = {
-    histogram \ "values" match {
-      case JNothing => None
-      case v => {
-        val values = keys.map(key => v \ key match {
-          case JInt(n) => n.toInt
-          case _ => 0
-        })
-        Some(Row.fromSeq(values))
-      }
+  def enumHistogramToRow(histogram: JValue, keys: IndexedSeq[String]): Row = histogram \ "values" match {
+    case JNothing => null
+    case v => {
+      val values = keys.map(key => v \ key match {
+        case JInt(n) => n.toInt
+        case _ => 0
+      })
+      Row.fromSeq(values)
     }
   }
 
   // Return a map of histogram keys to rows with the bucket values for the given set of keys as fields.
   def keyedEnumHistogramToMap(histogram: JValue, keys: IndexedSeq[String]): Option[Map[String,Row]] = {
-    histogram match {
-      case JObject(x) => {
-        val pns = scala.collection.mutable.HashMap.empty[String,Row]
-        for ((k, v) <- x) {
-          val values = keys.map(_.toString).map(key => v \ "values" \ key match {
-            case JInt(n) => n.toInt
-            case _ => 0
-          })
-          pns(k) = Row.fromSeq(values)
-        }
+    val enums = Map[String, Row]() ++ (for {
+      JObject(x) <- histogram
+      (enumKey, enumHistogram) <- x
+    } yield (enumKey, enumHistogramToRow(enumHistogram, keys))).filter(a => a._2 != null)
 
-        if (pns.isEmpty)
-          None
-        else
-          Some(pns.toMap)
-      }
-      case _ => None
-    }
+    if (enums.isEmpty)
+      None
+    else
+      Some(enums)
   }
 
   // Find the largest numeric bucket that contains a value greater than zero.
-  def enumHistogramToCount(h: JValue): Option[Int] = {
-    (h \ "values") match {
-      case JNothing => None
-      case JObject(x) => {
-        var topBucket = -1
-        for {
-          (k, v) <- x
-          b <- toInt(k) if b > topBucket && gtZero(v)
-        } topBucket = b
+  def enumHistogramToCount(h: JValue): Option[Int] = h \ "values" match {
+    case JNothing => None
+    case JObject(x) => {
+      var topBucket = -1
+      for {
+        (k, v) <- x
+        b <- toInt(k) if b > topBucket && gtZero(v)
+      } topBucket = b
 
-        if (topBucket >= 0) {
-          Some(topBucket)
-        } else {
-          None
-        }
-      }
-      case _ => {
+      if (topBucket >= 0) {
+        Some(topBucket)
+      } else {
         None
       }
+    }
+    case _ => {
+      None
     }
   }
 
@@ -183,18 +165,15 @@ object Utils{
   // That is, the histogram sum divided by the number of measurements taken.
   def histogramToMean(h: JValue): Option[Int] = {
     h \ "sum" match {
+      case JInt(sum) if sum < 0 => None
+      case JInt(sum) if sum == 0 => Some(0)
       case JInt(sum) => {
-        if (sum < 0) None
-        else if (sum == 0) Some(0)
-        else {
-          val counts = for {
-            JObject(values) <- h \ "values"
-            JField(bucket, JInt(count)) <- values
-          } yield count
-          val totalCount = counts.sum
-          if (totalCount == 0) None
-          else Some((sum / counts.sum).toInt)
-        }
+        val totalCount = (for {
+          JObject(values) <- h \ "values"
+          JField(bucket, JInt(count)) <- values
+        } yield count).sum
+        if (totalCount == 0) None
+        else Some((sum / totalCount).toInt)
       }
       case _ => None
     }
@@ -211,11 +190,9 @@ object Utils{
   }
 
   // Check if a json value contains a number greater than zero.
-  private def gtZero(v: JValue): Boolean = {
-    v match {
-      case JInt(x) => x > 0
-      case _ => false
-    }
+  private def gtZero(v: JValue): Boolean = v match {
+    case JInt(x) => x > 0
+    case _ => false
   }
 
   private def toInt(s: String): Option[Int] = {
