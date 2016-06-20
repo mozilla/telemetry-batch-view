@@ -7,13 +7,13 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.joda.time.Days
 import org.joda.time.format.DateTimeFormat
-import org.json4s.JsonAST.{JInt, JNothing, JObject, JString, JValue, JBool}
+import org.json4s.JsonAST.{JBool, JInt, JNothing, JObject, JString, JValue}
 import org.json4s.jackson.JsonMethods.parse
 import telemetry.{DerivedStream, ObjectSummary}
 import telemetry.DerivedStream.s3
 import telemetry.heka.{HekaFrame, Message}
 import telemetry.parquet.ParquetFile
-import telemetry.streams.main_summary.Utils
+import telemetry.utils.MainPing
 
 case class Churn(prefix: String) extends DerivedStream{
   override def filterPrefix: String = prefix
@@ -32,9 +32,9 @@ case class Churn(prefix: String) extends DerivedStream{
     lazy val info = parse(fields.getOrElse("payload.info", "{}").asInstanceOf[String])
     lazy val histograms = parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
 
-    lazy val weaveConfigured = Utils.booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
-    lazy val weaveDesktop = Utils.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
-    lazy val weaveMobile = Utils.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
+    lazy val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
+    lazy val weaveDesktop = MainPing.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
+    lazy val weaveMobile = MainPing.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
 
     val map = Map[String, Any](
         "clientId" -> (fields.getOrElse("clientId", None) match {
