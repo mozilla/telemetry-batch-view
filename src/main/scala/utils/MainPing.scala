@@ -12,8 +12,8 @@ object MainPing{
     }
   }
 
-  def compareFlashVersions(a: Option[String], b: Option[String]): Option[Int] = {
-    (a, b) match {
+  def compareFlashVersions(x: Option[String], y: Option[String]): Option[Int] = {
+    (x, y) match {
       case (Some(a), None) => Some(1)
       case (None, Some(b)) => Some(-1)
       case (Some(a), Some(b)) => {
@@ -56,7 +56,7 @@ object MainPing{
         }
 
         // They're the same.
-        return Some(0)
+        Some(0)
       }
       case _ => None
     }
@@ -118,13 +118,12 @@ object MainPing{
   // Return a row with the bucket values for the given set of keys as fields.
   def enumHistogramToRow(histogram: JValue, keys: IndexedSeq[String]): Row = histogram \ "values" match {
     case JNothing => null
-    case v => {
+    case v =>
       val values = keys.map(key => v \ key match {
         case JInt(n) => n.toInt
         case _ => 0
       })
       Row.fromSeq(values)
-    }
   }
 
   // Return a map of histogram keys to rows with the bucket values for the given set of keys as fields.
@@ -132,7 +131,9 @@ object MainPing{
     val enums = Map[String, Row]() ++ (for {
       JObject(x) <- histogram
       (enumKey, enumHistogram) <- x
-    } yield (enumKey, enumHistogramToRow(enumHistogram, keys))).filter(a => a._2 != null)
+      enumRow = enumHistogramToRow(enumHistogram, keys)
+      if enumRow != null
+    } yield (enumKey, enumRow))
 
     if (enums.isEmpty)
       None
@@ -141,23 +142,17 @@ object MainPing{
   }
 
   // Find the largest numeric bucket that contains a value greater than zero.
-  def enumHistogramToCount(h: JValue): Option[Int] = h \ "values" match {
-    case JNothing => None
-    case JObject(x) => {
-      var topBucket = -1
-      for {
-        (k, v) <- x
-        b <- toInt(k) if b > topBucket && gtZero(v)
-      } topBucket = b
+  def enumHistogramToCount(h: JValue): Option[Int] = {
+    val buckets = for {
+      JObject(x) <- h \ "values"
+      (bucket, JInt(count)) <- x
+      if count > 0
+      b <- toInt(bucket)
+    } yield b
 
-      if (topBucket >= 0) {
-        Some(topBucket)
-      } else {
-        None
-      }
-    }
-    case _ => {
-      None
+    buckets match {
+      case x if x.nonEmpty => Some(x.max)
+      case _ => None
     }
   }
 
