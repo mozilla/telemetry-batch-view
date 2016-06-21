@@ -55,7 +55,7 @@ object CrashAggregateView {
           case doc if List("main", "crash") contains doc => true
         }.where("submissionDate") {
           case date if date == currentDate.toString("yyyyMMdd") => true
-        }.map(message => HekaFrame.fields(message) + ("payload" -> message.payload.getOrElse("")))
+        }.map(message => message.fieldsAsMap + ("payload" -> message.payload.getOrElse("")))
 
       val (rowRDD, main_processed, main_ignored, crash_processed, crash_ignored) = compareCrashes(sc, messages)
 

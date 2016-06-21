@@ -7,7 +7,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.joda.time.Days
 import org.joda.time.format.DateTimeFormat
-import org.json4s.JsonAST.{JBool, JInt, JNothing, JObject, JString, JValue}
+import org.json4s.JsonAST.{JBool, JInt, JString}
 import org.json4s.jackson.JsonMethods.parse
 import com.mozilla.telemetry.parquet.ParquetFile
 import com.mozilla.telemetry.DerivedStream.s3
@@ -22,7 +22,7 @@ case class Churn(prefix: String) extends DerivedStream{
 
   // Convert the given Heka message to a map containing just the fields we're interested in.
   def messageToMap(message: Message): Option[Map[String,Any]] = {
-    val fields = HekaFrame.fields(message)
+    val fields = message.fieldsAsMap
 
     // Don't compute the expensive stuff until we need it. We may skip a record
     // due to missing simple fields.

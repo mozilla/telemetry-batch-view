@@ -9,22 +9,6 @@ object HekaFrame{
     @transient lazy val log = org.apache.log4j.Logger.getLogger(HekaFrame.getClass.getName)
   }
 
-  private def field(f: Field): Any = {
-    // I am assuming there is only one value
-    f.valueType match {
-      case Some(Field.ValueType.STRING) => f.valueString(0)
-      case Some(Field.ValueType.BOOL) => f.valueBool(0)
-      case Some(Field.ValueType.DOUBLE) => f.valueDouble(0)
-      case Some(Field.ValueType.INTEGER) => f.valueInteger(0)
-      case _ => ""
-    }
-  }
-
-  def fields(m: Message): Map[String, Any] = {
-    val fields = m.fields
-    Map(fields.map(_.name).zip(fields.map(field)): _*)
-  }
-
   // See https://hekad.readthedocs.org/en/latest/message/index.html
   def parse(i: => InputStream, fail: Throwable => Unit = ex => throw ex): Iterator[Message] = {
     var is: DataInputStream = null

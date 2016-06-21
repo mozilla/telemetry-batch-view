@@ -82,7 +82,7 @@ object E10sExperiment {
 
     messages
       .flatMap { message =>
-        val fields = HekaFrame.fields(message)
+        val fields = message.fieldsAsMap
         val clientId = fields.get("clientId")
         val sampleId = fields.get("sampleId")
         val settings = parse(fields.getOrElse("environment.settings", "{}").asInstanceOf[String])

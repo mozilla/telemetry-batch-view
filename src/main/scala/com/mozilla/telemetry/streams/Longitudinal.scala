@@ -99,7 +99,7 @@ case class Longitudinal() extends DerivedStream {
         val hekaFile = bucket.getObject(obj.key).getOrElse(throw new Exception("File missing on S3: %s".format(obj.key)))
         for (message <- HekaFrame.parse(hekaFile.getObjectContent())) yield message }
       .flatMap{ case message =>
-        val fields = HekaFrame.fields(message)
+        val fields = message.fieldsAsMap
         for {
           clientId <- fields.get("clientId").asInstanceOf[Option[String]]
           json <- fields.get("payload.info").asInstanceOf[Option[String]]
