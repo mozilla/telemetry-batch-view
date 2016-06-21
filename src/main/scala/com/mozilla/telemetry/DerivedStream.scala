@@ -3,7 +3,7 @@ package com.mozilla.telemetry
 import java.io.File
 import java.util.UUID
 import awscala.s3._
-import com.mozilla.telemetry.streams.{Churn, E10sExperiment, ExecutiveStream, Longitudinal}
+import com.mozilla.telemetry.streams.{Churn, E10sExperiment, Longitudinal}
 import com.mozilla.telemetry.utils._
 import com.mozilla.telemetry.DerivedStream.s3
 import com.typesafe.config._
@@ -178,9 +178,6 @@ object DerivedStream {
         case "Longitudinal" =>
           val longitudinal = Longitudinal()
           Some(options.getOrElse('fromDate, to), longitudinal)
-
-        case "ExecutiveStream" =>
-          Some(options.getOrElse('fromDate, to), ExecutiveStream)
 
         case "Churn" =>
           val churn = Churn("telemetry/4/main/Firefox")
