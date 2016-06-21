@@ -99,7 +99,7 @@ class DatasetTest extends FlatSpec with Matchers{
           case "20160606" => true
         }.where("docType") {
         case "main" => true
-      }.records()
+      }
 
       records.count() should be (42)
     } finally {
@@ -118,7 +118,7 @@ class DatasetTest extends FlatSpec with Matchers{
           case "20160606" => true
         }.where("docType") {
         case "error" => true
-      }.records()
+      }
 
       records.count() should be (84)
     } finally {

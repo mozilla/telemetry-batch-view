@@ -67,7 +67,7 @@ object E10sExperiment {
         case x if x == channel => true
       }.where("appVersion") {
         case x if x == version => true
-      }.records()
+      }
 
     run(opts, messages)
   }
