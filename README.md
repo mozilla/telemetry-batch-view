@@ -33,13 +33,13 @@ See the [documentation for specific streams](https://github.com/mozilla/telemetr
 
 To generate a `DerivedStream`-based dataset `MyStream` for October 28, 2015 to October 29, 2015:
 ```bash
-sbt "run-main telemetry.DerivedStream --from-date 20151028 --to-date 20151029 MyStream"
+sbt "run-main com.mozilla.telemetry.DerivedStream --from-date 20151028 --to-date 20151029 MyStream"
 ```
 
 For distributed execution, we pack all of the classes together into a single JAR, and then submit it to be run with Spark:
 ```bash
 sbt assembly
-spark-submit --master yarn-client --class telemetry.DerivedStream target/scala-2.10/telemetry-batch-view-*.jar --from-date 20151028 --to-date 20151029 MyStream
+spark-submit --master yarn-client --class com.mozilla.telemetry.DerivedStream target/scala-2.10/telemetry-batch-view-*.jar --from-date 20151028 --to-date 20151029 MyStream
 ```
 
 ### Caveats
