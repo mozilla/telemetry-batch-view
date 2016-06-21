@@ -122,8 +122,8 @@ object E10sExperiment {
           record <- buildRecord(fields, schema)
         } yield record
 
-        while(!records.isEmpty) {
-          val localFile = new java.io.File(ParquetFile.serialize(records, schema).toUri())
+        while(records.nonEmpty) {
+          val localFile = new java.io.File(ParquetFile.serialize(records, schema).toUri)
           uploadLocalFileToS3(localFile, outputBucket, prefix)
           localFile.delete()
         }

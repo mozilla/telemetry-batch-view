@@ -39,17 +39,17 @@ object Histograms {
       } yield {
         val value = try {
           (k, v) match {
-            case ("low", JString(v)) => Some(v.toInt)
-            case ("low", JInt(v)) => Some(v.toInt)
-            case ("high", JString(v)) => Some(v.toInt)
-            case ("high", JInt(v)) => Some(v.toInt)
-            case ("n_buckets", JString(v)) => Some(v.toInt)
-            case ("n_buckets", JInt(v)) => Some(v.toInt)
-            case ("n_values", JString(v)) => Some(v.toInt)
-            case ("n_values", JInt(v)) => Some(v.toInt)
-            case ("kind", JString(v)) => Some(v)
-            case ("keyed", JBool(v)) => Some(v)
-            case ("keyed", JString(v)) => v match {
+            case ("low", JString(x)) => Some(x.toInt)
+            case ("low", JInt(x)) => Some(x.toInt)
+            case ("high", JString(x)) => Some(x.toInt)
+            case ("high", JInt(x)) => Some(x.toInt)
+            case ("n_buckets", JString(x)) => Some(x.toInt)
+            case ("n_buckets", JInt(x)) => Some(x.toInt)
+            case ("n_values", JString(x)) => Some(x.toInt)
+            case ("n_values", JInt(x)) => Some(x.toInt)
+            case ("kind", JString(x)) => Some(x)
+            case ("keyed", JBool(x)) => Some(x)
+            case ("keyed", JString(x)) => x match {
               case "true" => Some(true)
               case _ => Some(false)
             }
@@ -84,12 +84,12 @@ object Histograms {
             Some((k, BooleanHistogram(keyed)))
           case ("count", _, _, _) =>
             Some((k, CountHistogram(keyed)))
-          case ("enumerated", Some(nValues), _, _) =>
-            Some((k, EnumeratedHistogram(keyed, nValues)))
-          case ("linear", _, Some(high), Some(nBuckets)) =>
-            Some((k, LinearHistogram(keyed, low, high, nBuckets)))
-          case ("exponential", _, Some(high), Some(nBuckets)) =>
-            Some((k, ExponentialHistogram(keyed, low, high, nBuckets)))
+          case ("enumerated", Some(x), _, _) =>
+            Some((k, EnumeratedHistogram(keyed, x)))
+          case ("linear", _, Some(h), Some(n)) =>
+            Some((k, LinearHistogram(keyed, low, h, n)))
+          case ("exponential", _, Some(h), Some(n)) =>
+            Some((k, ExponentialHistogram(keyed, low, h, n)))
           case _ =>
             None
         }
@@ -99,12 +99,12 @@ object Histograms {
     }
 
     // Histograms are considered to be immutable so it's OK to merge their definitions
-    parsed.flatMap(_._2).toMap
+    parsed.flatMap(_._2)
   }
 
   def linearBuckets(min: Float, max: Float, nBuckets: Int): Array[Int] = {
     lazy val buckets = {
-      var values = Array.fill(nBuckets){0}
+      val values = Array.fill(nBuckets){0}
 
       for(i <- 1 until nBuckets) {
         val linearRange = (min * (nBuckets - 1 - i) + max * (i - 1)) / (nBuckets - 2)
@@ -120,11 +120,10 @@ object Histograms {
   def exponentialBuckets(min: Float, max: Float, nBuckets: Int): Array[Int] = {
     lazy val buckets = {
       val logMax = math.log(max)
-      val bucketIndex = 2
       val retArray = Array.fill(nBuckets){0}
       var current = min.toInt
 
-      retArray(1) = current.toInt
+      retArray(1) = current
       for (bucketIndex <- 2 until nBuckets) {
         val logCurrent = math.log(current)
         val logRatio = (logMax - logCurrent) / (nBuckets - bucketIndex)
@@ -144,6 +143,6 @@ object Histograms {
     memoExponentialBuckets.getOrElseUpdate((min, max, nBuckets), buckets)
   }
 
-  private val memoLinearBuckets = MMap[Tuple3[Float, Float, Int], Array[Int]]()
-  private val memoExponentialBuckets = MMap[Tuple3[Float, Float, Int], Array[Int]]()
+  private val memoLinearBuckets = MMap[(Float, Float, Int), Array[Int]]()
+  private val memoExponentialBuckets = MMap[(Float, Float, Int), Array[Int]]()
 }

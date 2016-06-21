@@ -11,8 +11,7 @@ import scala.io.Source
 case class Schema(dimensions: List[Dimension])
 case class Dimension(fieldName: String)
 
-class Dataset private (bucket: String,
-                       schema: Schema, prefix: String,
+class Dataset private (bucket: String, schema: Schema, prefix: String,
                        clauses: Map[String, PartialFunction[String, Boolean]],
                        s3Store: => AbstractS3Store) extends java.io.Serializable {
   private object Logger extends Serializable {
@@ -21,10 +20,10 @@ class Dataset private (bucket: String,
 
   def where(dimension: String)(clause: PartialFunction[String, Boolean]): Dataset = {
     if (clauses.contains(dimension))
-      throw new Exception(s"There should be only one clause for ${dimension}")
+      throw new Exception(s"There should be only one clause for $dimension")
 
     if (!schema.dimensions.contains(Dimension(dimension)))
-      throw new Exception(s"The dimension ${dimension} doesn't exists")
+      throw new Exception(s"The dimension $dimension doesn't exists")
 
     new Dataset(bucket, schema, prefix, clauses + (dimension -> clause), s3Store)
   }
@@ -46,7 +45,7 @@ class Dataset private (bucket: String,
       }
     }
 
-    val keys = scan(schema.dimensions, Stream(s"${prefix}/"))
+    val keys = scan(schema.dimensions, Stream(s"$prefix/"))
       .flatMap(s3Store.listKeys(bucket, _))
 
     fileLimit match {
@@ -74,7 +73,7 @@ object Dataset {
     val metaSources = parse(Source.fromInputStream(s3Store.getKey(metaBucket, "sources.json")).mkString)
     val JString(prefix) = metaSources \\ dataset \\ "prefix"
     val JString(bucketName) = metaSources \\ dataset \\ "bucket"
-    val schema = parse(Source.fromInputStream(s3Store.getKey(metaBucket, s"${prefix}/schema.json")).mkString)
+    val schema = parse(Source.fromInputStream(s3Store.getKey(metaBucket, s"$prefix/schema.json")).mkString)
       .camelizeKeys
       .extract[Schema]
 

@@ -88,9 +88,9 @@ class ClientCountViewTest extends FlatSpec with Matchers{
       val dimensions = Set(ClientCountView.dimensions: _*) -- Set("client_id")
       (Set(aggregates.columns: _*) -- Set("client_id", "hll", "sum")) should be (dimensions)
 
-      var estimates = aggregates.select(expr("hll_cardinality(hll)")).collect()
+      val estimates = aggregates.select(expr("hll_cardinality(hll)")).collect()
       estimates.foreach { x =>
-        x(0) should be (Submission.dimensions("client_id").filter(x => x != null).size)
+        x(0) should be (Submission.dimensions("client_id").count(x => x != null))
       }
 
       val hllMerge = new HyperLogLogMerge
@@ -99,8 +99,8 @@ class ClientCountViewTest extends FlatSpec with Matchers{
         .agg(hllMerge(col("hll")).as("hll"))
         .select(expr("hll_cardinality(hll)")).collect()
 
-      count.size should be (1)
-      count(0)(0) should be (Submission.dimensions("client_id").filter(x => x != null).size)
+      count.length should be (1)
+      count(0)(0) should be (Submission.dimensions("client_id").count(x => x != null))
     } finally {
       sc.stop()
     }

@@ -27,7 +27,7 @@ object JSON2Avro{
   def parseArray(schema : Schema, json: JValue): Option[java.util.Collection[Any]] = json match {
     case JArray(elems) =>
       val parsed = for { elem <- elems } yield {
-        parse(schema.getElementType(), elem)
+        parse(schema.getElementType, elem)
       }
       Some(parsed.flatten.asJava)
     case _ =>
@@ -35,9 +35,9 @@ object JSON2Avro{
   }
 
   def parseMap(schema : Schema, json: JValue): Option[java.util.Map[String, Any]] = json match {
-    case JObject(json) =>
-      val parsed = for { (k, v) <- json } yield {
-        val result = parse(schema.getValueType(), v)
+    case JObject(o) =>
+      val parsed = for { (k, v) <- o } yield {
+        val result = parse(schema.getValueType, v)
         result match {
           case Some(value) =>
             Some(k -> value)
@@ -85,7 +85,7 @@ object JSON2Avro{
       None
   }
 
-  def parse(schema: Schema, json: JValue): Option[Any] = schema.getType() match{
+  def parse(schema: Schema, json: JValue): Option[Any] = schema.getType match{
     case Schema.Type.RECORD =>
       parseRecord(schema, json)
 
