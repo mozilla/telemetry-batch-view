@@ -1,25 +1,16 @@
-package com.mozilla.telemetry.streams
+package com.mozilla.telemetry.views
 
-import awscala.s3._
-import com.mozilla.telemetry.DerivedStream.s3
-import com.mozilla.telemetry.heka.HekaFrame
+import com.mozilla.telemetry.heka.{Dataset, HekaFrame, Message}
 import com.mozilla.telemetry.parquet.ParquetFile
-import com.mozilla.telemetry.{DerivedStream, ObjectSummary}
+import com.mozilla.telemetry.utils._
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.{Partitioner, SparkContext}
+import org.apache.spark.{Partitioner, SparkConf, SparkContext}
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
+import org.rogach.scallop._
 import scala.util.Random
-
-private class SampleIdPartitioner extends Partitioner{
-  def numPartitions: Int = 100
-  def getPartition(key: Any): Int = key match {
-    case (_, sampleId: Int) => sampleId
-    case _ => throw new Exception("Invalid key")
-  }
-}
 
 /*
 Useful links re: e10sCohort experiment design and structure:
@@ -30,28 +21,68 @@ Useful links re: e10sCohort experiment design and structure:
 * A later addition to the schema: https://bugzilla.mozilla.org/show_bug.cgi?id=1255013
 */
 
-case class E10sExperiment(experimentId: String, prefix: String) extends DerivedStream {
-  override def streamName: String = "telemetry"
+private class SampleIdPartitioner extends Partitioner {
+  def numPartitions: Int = 100
 
-  override def filterPrefix: String = prefix
+  def getPartition(key: Any): Int = key match {
+    case (_, sampleId: Int) => sampleId % numPartitions
+    case _ => throw new Exception("Invalid key")
+  }
+}
 
-  override def transform(sc: SparkContext, bucket: Bucket, summaries: RDD[ObjectSummary], from: String, to: String) {
-    val tmp = experimentId.replaceAll("-", "_")
-    val prefix = s"$tmp/v$to"
+private class Opts(args: Array[String]) extends ScallopConf(args) {
+  val from = opt[String]("from", descr = "From submission date", required = true)
+  val to = opt[String]("to", descr = "To submission date", required = true)
+  val channel = opt[String]("channel", descr = "channel", required = true)
+  val version = opt[String]("version", descr = "version", required = true)
+  val experimentId = opt[String]("experiment", descr = "experiment", required = true)
+  val outputBucket = opt[String]("bucket", descr = "bucket", required = true)
+  verify()
+}
 
-    if (!isS3PrefixEmpty(prefix)) {
-      println(s"Warning: prefix $prefix already exists on S3!")
-      return
-    }
+object E10sExperiment {
+  def main(args: Array[String]): Unit = {
+    val opts = new Opts(args)
+    val from = opts.from()
+    val to = opts.to()
+    val channel = opts.channel()
+    val version = opts.version()
 
-    val groups = ObjectSummary.groupBySize(summaries.collect().toIterator)
-    val clientMessages = sc.parallelize(groups, groups.size)
-      .flatMap(x => x)
-      .flatMap{ case obj =>
-        val hekaFile = bucket.getObject(obj.key).getOrElse(throw new Exception("File missing on S3"))
-        for (message <- HekaFrame.parse(hekaFile.getObjectContent)) yield message }
-      .flatMap{ case message =>
-        val fields = HekaFrame.fields(message)
+    val sparkConf = new SparkConf().setAppName("E10sExperiment")
+    sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
+    implicit val sc = new SparkContext(sparkConf)
+
+    val messages = Dataset("telemetry")
+      .where("sourceName") {
+        case "telemetry" => true
+      }.where("sourceVersion") {
+        case "4" => true
+      }.where("docType") {
+        case "saved_session" => true
+      }.where("appName") {
+        case "Firefox" => true
+      }.where("submissionDate") {
+        case date if date <= to && date >= from => true
+      }.where("appUpdateChannel") {
+        case x if x == channel => true
+      }.where("appVersion") {
+        case x if x == version => true
+      }
+
+    run(opts, messages)
+  }
+
+  private def run(opts: Opts, messages: RDD[Message]) {
+    val experimentId = opts.experimentId().replaceAll("-", "_")
+    val clsName = uncamelize(this.getClass.getSimpleName.replace("$", ""))
+    val prefix = s"${clsName}/${experimentId}/v${opts.from()}_${opts.to()}"
+    val outputBucket = opts.outputBucket()
+
+    require(isS3PrefixEmpty(outputBucket, prefix), s"s3://${outputBucket}/${prefix} already exists!")
+
+    messages
+      .flatMap { message =>
+        val fields = message.fieldsAsMap
         val clientId = fields.get("clientId")
         val sampleId = fields.get("sampleId")
         val settings = parse(fields.getOrElse("environment.settings", "{}").asInstanceOf[String])
@@ -66,36 +97,35 @@ case class E10sExperiment(experimentId: String, prefix: String) extends DerivedS
         // the suggested solution is to check the value of environment/settings/e10sEnabled, and exclude those pings from consideration
         val JBool(e10sEnabled) = settings \ "e10sEnabled"
         val pingShouldBeExcluded = (cohort == "test" && !e10sEnabled) || // should have e10s enabled, but doesn't
-                                   (cohort == "control" && e10sEnabled) // shouldn't have e10s enabled, but does
+          (cohort == "control" && e10sEnabled) // shouldn't have e10s enabled, but does
 
         (clientId, sampleId) match {
           case (Some(client: String), Some(sample: Double)) if !pingShouldBeExcluded =>
-            List(((client, sample.toInt), fields))
-          case _ => Nil
+            Some(((client, sample.toInt), fields))
+          case _ => None
         }
       }
-
-    val representativeSubmissions = clientMessages
-      .mapValues{case x => (x, 1)}
+      .mapValues(x => (x, 1))
       .reduceByKey{ case ((p1, n1), (p2, n2)) =>
         // Every submission should have the same probability of being chosen
         val n = n1 + n2
         val rnd = new Random().nextFloat()
         if (n * rnd < n1) (p1, n) else (p2, n)
       }
-      .mapValues{case x => x._1}
+      .mapValues(x => x._1)
       .partitionBy(new SampleIdPartitioner())
       .values
-      .foreachPartition{ case fieldsIterator =>
+      .foreachPartition{ fieldsIterator =>
         val schema = buildSchema
         val records = for {
           fields <- fieldsIterator
           record <- buildRecord(fields, schema)
-          } yield record
+        } yield record
 
         while(!records.isEmpty) {
-          val localFile = ParquetFile.serialize(records, schema)
-          uploadLocalFileToS3(localFile, prefix)
+          val localFile = new java.io.File(ParquetFile.serialize(records, schema).toUri())
+          uploadLocalFileToS3(localFile, outputBucket, prefix)
+          localFile.delete()
         }
       }
   }

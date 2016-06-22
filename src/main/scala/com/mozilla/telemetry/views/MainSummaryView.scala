@@ -127,7 +127,7 @@ object MainSummaryView {
   // Convert the given Heka message containing a "main" ping
   // to a map containing just the fields we're interested in.
   def messageToRow(message: Message): Option[Row] = {
-    val fields = HekaFrame.fields(message)
+    val fields = message.fieldsAsMap
 
     // Don't compute the expensive stuff until we need it. We may skip a record
     // due to missing required fields.

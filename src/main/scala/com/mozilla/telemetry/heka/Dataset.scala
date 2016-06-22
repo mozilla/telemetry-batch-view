@@ -80,4 +80,8 @@ object Dataset {
 
     new Dataset(bucketName, schema, prefix, Map(), s3Store)
   }
+
+  implicit def datasetToRDD(dataset: Dataset)(implicit sc: SparkContext): RDD[Message] = {
+    dataset.records()
+  }
 }
