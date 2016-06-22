@@ -3,7 +3,6 @@ package com.mozilla.telemetry
 import java.io.File
 import java.util.UUID
 import awscala.s3._
-import com.mozilla.telemetry.streams.Longitudinal
 import com.mozilla.telemetry.utils._
 import com.mozilla.telemetry.DerivedStream.s3
 import com.typesafe.config._
@@ -159,34 +158,4 @@ object DerivedStream {
     converter.transform(sc, bucket, summaries, from, to)
   }
 
-  def main(args: Array[String]) {
-    val usage = "converter --from-date YYYYMMDD --to-date YYYYMMDD stream_name"
-    val options = parseOptions(args)
-
-    val res = for {
-      stream <- options.get('stream)
-
-      to = options.get('toDate) match {
-        case Some(date) => date
-        case None =>
-          val formatter = DateTimeFormat.forPattern("yyyyMMdd")
-          // Default to processing "yesterday" to ensure we process a complete day.
-          formatter.print(DateTime.now().minusDays(1))
-      }
-
-      (from, ds) <- stream match {
-        case "Longitudinal" =>
-          val longitudinal = Longitudinal()
-          Some(options.getOrElse('fromDate, to), longitudinal)
-
-        case _ =>
-          None
-      }
-
-      res = convert(ds, from, to)
-    } yield res
-
-    if (res.isEmpty)
-      println(usage)
-  }
 }

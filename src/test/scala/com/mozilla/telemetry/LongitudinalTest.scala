@@ -1,7 +1,7 @@
 package com.mozilla.telemetry
 
 import com.mozilla.telemetry.parquet.ParquetFile
-import com.mozilla.telemetry.streams.Longitudinal
+import com.mozilla.telemetry.views.LongitudinalView
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
 import org.apache.spark.sql.{Row, SQLContext}
@@ -144,14 +144,13 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     }
 
     new {
-      private val view = Longitudinal()
       private val buildSchema = PrivateMethod[Schema]('buildSchema)
       private val buildRecord = PrivateMethod[Option[GenericRecord]]('buildRecord)
 
-      private val schema = view invokePrivate buildSchema()
+      private val schema = LongitudinalView invokePrivate buildSchema()
       val payloads = for (i <- 1 to 10) yield createPayload(i)
       private val dupes = for (i <- 1 to 10) yield createPayload(1)
-      private val record = (view invokePrivate buildRecord(payloads ++ dupes, schema)).get
+      private val record = (LongitudinalView  invokePrivate buildRecord(payloads ++ dupes, schema)).get
       private val path = ParquetFile.serialize(List(record).toIterator, schema)
       private val filename = path.toString.replace("file:", "")
 
