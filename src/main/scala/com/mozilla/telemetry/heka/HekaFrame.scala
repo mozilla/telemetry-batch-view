@@ -5,10 +5,6 @@ import java.io.InputStream
 import org.xerial.snappy.Snappy
 
 object HekaFrame{
-  private object Logger extends Serializable {
-    @transient lazy val log = org.apache.log4j.Logger.getLogger(HekaFrame.getClass.getName)
-  }
-
   // See https://hekad.readthedocs.org/en/latest/message/index.html
   def parse(i: => InputStream, fail: Throwable => Unit = ex => throw ex): Iterator[Message] = {
     var is: DataInputStream = null

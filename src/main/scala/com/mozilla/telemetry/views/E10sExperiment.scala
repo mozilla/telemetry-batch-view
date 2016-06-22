@@ -1,6 +1,6 @@
 package com.mozilla.telemetry.views
 
-import com.mozilla.telemetry.heka.{Dataset, HekaFrame, Message}
+import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.parquet.ParquetFile
 import com.mozilla.telemetry.utils._
 import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
@@ -21,26 +21,26 @@ Useful links re: e10sCohort experiment design and structure:
 * A later addition to the schema: https://bugzilla.mozilla.org/show_bug.cgi?id=1255013
 */
 
-private class SampleIdPartitioner extends Partitioner {
-  def numPartitions: Int = 100
-
-  def getPartition(key: Any): Int = key match {
-    case (_, sampleId: Int) => sampleId % numPartitions
-    case _ => throw new Exception("Invalid key")
-  }
-}
-
-private class Opts(args: Array[String]) extends ScallopConf(args) {
-  val from = opt[String]("from", descr = "From submission date", required = true)
-  val to = opt[String]("to", descr = "To submission date", required = true)
-  val channel = opt[String]("channel", descr = "channel", required = true)
-  val version = opt[String]("version", descr = "version", required = true)
-  val experimentId = opt[String]("experiment", descr = "experiment", required = true)
-  val outputBucket = opt[String]("bucket", descr = "bucket", required = true)
-  verify()
-}
-
 object E10sExperiment {
+  private class SampleIdPartitioner extends Partitioner {
+    def numPartitions: Int = 100
+
+    def getPartition(key: Any): Int = key match {
+      case (_, sampleId: Int) => sampleId % numPartitions
+      case _ => throw new Exception("Invalid key")
+    }
+  }
+
+  private class Opts(args: Array[String]) extends ScallopConf(args) {
+    val from = opt[String]("from", descr = "From submission date", required = true)
+    val to = opt[String]("to", descr = "To submission date", required = true)
+    val channel = opt[String]("channel", descr = "channel", required = true)
+    val version = opt[String]("version", descr = "version", required = true)
+    val experimentId = opt[String]("experiment", descr = "experiment", required = true)
+    val outputBucket = opt[String]("bucket", descr = "bucket", required = true)
+    verify()
+  }
+
   def main(args: Array[String]): Unit = {
     val opts = new Opts(args)
     val from = opts.from()

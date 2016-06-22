@@ -13,7 +13,7 @@ import scala.collection.JavaConversions._
 import com.mozilla.telemetry.heka.{Dataset, HekaFrame}
 
 object CrashAggregateView {
-  class Conf(args: Array[String]) extends ScallopConf(args) {
+  private class Conf(args: Array[String]) extends ScallopConf(args) {
     val from = opt[String]("from", descr = "From submission date", required = false)
     val to = opt[String]("to", descr = "To submission date", required = false)
     verify()

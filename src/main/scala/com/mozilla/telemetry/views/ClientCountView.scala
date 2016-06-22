@@ -10,13 +10,13 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.SQLContext
 import org.rogach.scallop._
 
-class Conf(args: Array[String]) extends ScallopConf(args) {
-  val from = opt[String]("from", descr = "From submission date", required = false)
-  val to = opt[String]("to", descr = "To submission date", required = false)
-  verify()
-}
-
 object ClientCountView {
+  private class Conf(args: Array[String]) extends ScallopConf(args) {
+    val from = opt[String]("from", descr = "From submission date", required = false)
+    val to = opt[String]("to", descr = "To submission date", required = false)
+    verify()
+  }
+
   private val hllMerge = new HyperLogLogMerge
 
   private val base = List(
