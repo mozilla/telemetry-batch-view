@@ -21,7 +21,7 @@ Useful links re: e10sCohort experiment design and structure:
 * A later addition to the schema: https://bugzilla.mozilla.org/show_bug.cgi?id=1255013
 */
 
-object E10sExperiment {
+object E10sExperimentView {
   private class SampleIdPartitioner extends Partitioner {
     def numPartitions: Int = 100
 
