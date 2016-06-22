@@ -1,6 +1,6 @@
 # telemetry-batch-view
 
-This is a Scala "framework" to build derived datasets, also known as [batch views](http://robertovitillo.com/2016/01/06/batch-views/), of [Telemetry](https://wiki.mozilla.org/Telemetry) data.
+This is a Scala application to build derived datasets, also known as [batch views](http://robertovitillo.com/2016/01/06/batch-views/), of [Telemetry](https://wiki.mozilla.org/Telemetry) data.
 
 [![Build Status](https://travis-ci.org/mozilla/telemetry-batch-view.svg?branch=master)](https://travis-ci.org/mozilla/telemetry-batch-view)
 [![codecov.io](https://codecov.io/github/mozilla/telemetry-batch-view/coverage.svg?branch=master)](https://codecov.io/github/mozilla/telemetry-batch-view?branch=master)
@@ -13,11 +13,9 @@ The converted datasets are stored in the bucket specified in [*application.conf*
 
 ### Adding a new derived dataset
 
-See the [streams](https://github.com/mozilla/telemetry-batch-view/tree/master/src/main/scala/streams) folder for `DerivedStream`-based datasets.
+See the [views](https://github.com/mozilla/telemetry-batch-view/tree/master/src/main/scala/views) folder for examples of jobs that create derived datasets.
 
-See the [views](https://github.com/mozilla/telemetry-batch-view/tree/master/src/main/scala/views) folder for view-based datasets.
-
-See the [docs](https://github.com/mozilla/telemetry-batch-view/tree/master/docs) folder for more information about the derived datasets.
+See the [docs](https://github.com/mozilla/telemetry-batch-view/tree/master/docs) folder for more information about the individual derived datasets.
 
 ### Development
 Before importing the project in IntelliJ IDEA, apply the following changes to `Preferences` -> `Languages & Frameworks` -> `Scala Compile Server`:
@@ -29,17 +27,17 @@ Note that the first time the project is opened it takes some time to download al
 
 ### Generating Datasets
 
-See the [documentation for specific streams](https://github.com/mozilla/telemetry-batch-view/tree/master/docs) for details about running/generating them.
+See the [documentation for specific views](https://github.com/mozilla/telemetry-batch-view/tree/master/docs) for details about running/generating them.
 
-To generate a `DerivedStream`-based dataset `MyStream` for October 28, 2015 to October 29, 2015:
+For example, to create a longitudinal view locally:
 ```bash
-sbt "run-main com.mozilla.telemetry.DerivedStream --from-date 20151028 --to-date 20151029 MyStream"
+sbt "run-main com.mozilla.telemetry.views.LongitudinalView --from 20160101 --to 20160701 --bucket telemetry-test-bucket"
 ```
 
-For distributed execution, we pack all of the classes together into a single JAR, and then submit it to be run with Spark:
+For distributed execution we pack all of the classes together into a single JAR and submit it to the cluster:
 ```bash
 sbt assembly
-spark-submit --master yarn-client --class com.mozilla.telemetry.DerivedStream target/scala-2.10/telemetry-batch-view-*.jar --from-date 20151028 --to-date 20151029 MyStream
+spark-submit --master yarn-client --class com.mozilla.telemetry.views.LongitudinalView target/scala-2.10/telemetry-batch-view-*.jar --from 20160101 --to 20160701 --bucket telemetry-test-bucket
 ```
 
 ### Caveats

@@ -2,7 +2,7 @@ package com.mozilla.telemetry
 
 import java.io.{ByteArrayInputStream, InputStream}
 import com.mozilla.telemetry.heka.Dataset
-import com.mozilla.telemetry.utils.AbstractS3Store
+import com.mozilla.telemetry.utils.{ObjectSummary, AbstractS3Store}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{FlatSpec, Matchers}
 
