@@ -13,7 +13,7 @@ import com.mozilla.telemetry.parquet.ParquetFile
 import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.utils._
 
-object Churn {
+object ChurnView {
   private class Opts(args: Array[String]) extends ScallopConf(args) {
     val from = opt[String]("from", descr = "From submission date", required = true)
     val to = opt[String]("to", descr = "To submission date", required = true)
