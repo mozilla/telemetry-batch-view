@@ -1,117 +1,139 @@
-package com.mozilla.telemetry.streams
+package com.mozilla.telemetry.views
 
-import awscala.s3._
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericData, GenericRecord, GenericRecordBuilder}
-import org.apache.spark.{Partitioner, SparkContext}
+import org.apache.spark.{Partitioner, SparkContext, SparkConf}
 import org.apache.spark.rdd.RDD
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
+import org.rogach.scallop._
+import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scala.math.abs
 import scala.reflect.ClassTag
 import com.mozilla.telemetry.parquet.ParquetFile
 import com.mozilla.telemetry.avro
-import com.mozilla.telemetry.heka.HekaFrame
+import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.histograms._
 import com.mozilla.telemetry.utils._
-import com.mozilla.telemetry.{DerivedStream, ObjectSummary}
-import com.mozilla.telemetry.DerivedStream.s3
 
-private class ClientIdPartitioner(size: Int) extends Partitioner{
-  def numPartitions: Int = size
-  def getPartition(key: Any): Int = key match {
-    case (clientId: String, startDate: String, counter: Int) => abs(clientId.hashCode) % size
-    case _ => throw new Exception("Invalid key")
-  }
-}
+object LongitudinalView {
+  private class ClientIdPartitioner(size: Int) extends Partitioner {
+    def numPartitions: Int = size
 
-class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHistorySize: Int = 1000) extends Iterator[List[Map[String, Any]]]{
-  // Less than 1% of clients in a sampled dataset over a 3 months period has more than 1000 fragments.
-  var buffer = ListBuffer[Map[String, Any]]()
-  var currentKey =
-    if (it.hasNext) {
-      val (key, value) = it.next()
-      buffer += value
-      key
-    } else {
-      null
+    def getPartition(key: Any): Int = key match {
+      case (clientId: String, startDate: String, counter: Int) => abs(clientId.hashCode) % size
+      case _ => throw new Exception("Invalid key")
     }
+  }
+
+  private class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHistorySize: Int = 1000) extends Iterator[List[Map[String, Any]]] {
+    // Less than 1% of clients in a sampled dataset over a 3 months period has more than 1000 fragments.
+    var buffer = ListBuffer[Map[String, Any]]()
+    var currentKey =
+      if (it.hasNext) {
+        val (key, value) = it.next()
+        buffer += value
+        key
+      } else {
+        null
+      }
 
   override def hasNext() = buffer.nonEmpty
 
-  override def next(): List[Map[String, Any]] = {
-    while (it.hasNext) {
-      val (key, value) = it.next()
+    override def next(): List[Map[String, Any]] = {
+      while (it.hasNext) {
+        val (key, value) = it.next()
 
-      if (key == currentKey && buffer.size == maxHistorySize) {
-        // Trim long histories
-        val result = buffer.toList
-        buffer.clear
+        if (key == currentKey && buffer.size == maxHistorySize) {
+          // Trim long histories
+          val result = buffer.toList
+          buffer.clear
 
-        // Fast forward to next client
-        while (it.hasNext) {
-          val (k, _) = it.next()
-          if (k != currentKey) {
-            buffer += value
-            return result
+          // Fast forward to next client
+          while (it.hasNext) {
+            val (k, _) = it.next()
+            if (k != currentKey) {
+              buffer += value
+              return result
+            }
           }
+
+          return result
+        } else if (key == currentKey) {
+          buffer += value
+        } else {
+          val result = buffer.toList
+          buffer.clear
+          buffer += value
+          currentKey = key
+          return result
         }
-
-        return result
-      } else if (key == currentKey){
-        buffer += value
-      } else {
-        val result = buffer.toList
-        buffer.clear
-        buffer += value
-        currentKey = key
-        return result
       }
-    }
 
-    val result = buffer.toList
-    buffer.clear
-    result
+      val result = buffer.toList
+      buffer.clear
+      result
+    }
   }
-}
 
-case class Longitudinal() extends DerivedStream {
-  override def streamName: String = "telemetry-sample"
-  override def filterPrefix: String = "telemetry/4/main/*/*/*/42/"
+  private class Opts(args: Array[String]) extends ScallopConf(args) {
+    val from = opt[String]("from", descr = "From submission date", required = true)
+    val to = opt[String]("to", descr = "To submission date", required = true)
+    val outputBucket = opt[String]("bucket", descr = "bucket", required = true)
+    verify()
+  }
 
-  override def transform(sc: SparkContext, bucket: Bucket, summaries: RDD[ObjectSummary], from: String, to: String) {
-    val prefix = s"v$to"
+  def main(args: Array[String]): Unit = {
+    val opts = new Opts(args)
+    val from = opts.from()
+    val to = opts.to()
 
-    if (!isS3PrefixEmpty(prefix)) {
-      println(s"Warning: prefix $prefix already exists on S3!")
-      return
+    val sparkConf = new SparkConf().setAppName("E10sExperiment")
+    sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
+    implicit val sc = new SparkContext(sparkConf)
+
+    val messages = Dataset("telemetry-sample")
+      .where("sourceName") {
+        case "telemetry" => true
+      }.where("sourceVersion") {
+      case "4" => true
+    }.where("docType") {
+      case "main" => true
+    }.where("submissionDate") {
+      case date if date <= to && date >= from => true
+    }.where("sampleId") {
+      case "42" => true
     }
+
+    run(opts: Opts, messages)
+  }
+
+  private def run(opts: Opts, messages: RDD[Message]): Unit = {
+    val clsName = "longitudinal" // Needed for retro-compatibility with existing data
+    val prefix = s"${clsName}/v${opts.to()}"
+    val outputBucket = opts.outputBucket()
+
+    require(isS3PrefixEmpty(outputBucket, prefix), s"s3://${outputBucket}/${prefix} already exists!")
 
     // Sort submissions in descending order
     implicit val ordering = Ordering[(String, String, Int)].reverse
-    val groups = ObjectSummary.groupBySize(summaries.collect().toIterator)
-    val clientMessages = sc.parallelize(groups, groups.size)
-      .flatMap(x => x)
-      .flatMap{ case obj =>
-        val hekaFile = bucket.getObject(obj.key).getOrElse(throw new Exception("File missing on S3: %s".format(obj.key)))
-        for (message <- HekaFrame.parse(hekaFile.getObjectContent)) yield message }
-      .flatMap{ case message =>
-        val fields = message.fieldsAsMap
-        for {
-          clientId <- fields.get("clientId").asInstanceOf[Option[String]]
-          json <- fields.get("payload.info").asInstanceOf[Option[String]]
-          info = parse(json)
-          tmp = for {
-            JString(startDate) <- info \ "subsessionStartDate"
-            JInt(counter) <- info \ "profileSubsessionCounter"
-          } yield (startDate, counter)
-          (startDate, counter) <- tmp.headOption
-        } yield ((clientId, startDate, counter.toInt), fields)
+    val clientMessages = messages
+      .flatMap {
+        (message) =>
+          val fields = message.fieldsAsMap
+          for {
+            clientId <- fields.get("clientId").asInstanceOf[Option[String]]
+            json <- fields.get("payload.info").asInstanceOf[Option[String]]
+
+            info = parse(json)
+            JString(startDate) = info \ "subsessionStartDate"
+            JInt(counter) = info \ "profileSubsessionCounter"
+          } yield ((clientId, startDate, counter.toInt), fields)
       }
       .repartitionAndSortWithinPartitions(new ClientIdPartitioner(480))
-      .map{case (key, value) => (key._1, value)}
+      .map { case (key, value) => (key._1, value) }
 
     /* One file per partition is generated at the end of the job. We want to have
        few big files but at the same time we need a high enough degree of parallelism
@@ -131,23 +153,24 @@ case class Longitudinal() extends DerivedStream {
         var ignoredCount = 0
         var processedCount = 0
         val records = allRecords.map(r => r match {
-                                       case Some(record) =>
-                                         processedCount += 1
-                                         r
-                                       case None =>
-                                         ignoredCount += 1
-                                         r
-                                     }).flatten
+          case Some(record) =>
+            processedCount += 1
+            r
+          case None =>
+            ignoredCount += 1
+            r
+        }).flatten
 
         while(records.nonEmpty) {
           // Block size has to be increased to pack more than a couple hundred profiles
           // within the same row group.
-          val localFile = ParquetFile.serialize(records, schema, 8)
-          uploadLocalFileToS3(localFile, prefix)
+          val localFile = new java.io.File(ParquetFile.serialize(records, schema, 8).toUri())
+          uploadLocalFileToS3(localFile, outputBucket, prefix)
+          localFile.delete()
         }
 
         List((processedCount + ignoredCount, ignoredCount)).toIterator
-    }
+      }
 
     val counts = partitionCounts.reduce( (x, y) => (x._1 + y._1, x._2 + y._2))
     println("Clients seen: %d".format(counts._1))
@@ -164,260 +187,260 @@ case class Longitudinal() extends DerivedStream {
     // the dataset to be read from Presto.
     val buildType = SchemaBuilder
       .record("build").fields()
-        .name("application_id").`type`().optional().stringType()
-        .name("application_name").`type`().optional().stringType()
-        .name("architecture").`type`().optional().stringType()
-        .name("architectures_in_binary").`type`().optional().stringType()
-        .name("build_id").`type`().optional().stringType()
-        .name("version").`type`().optional().stringType()
-        .name("vendor").`type`().optional().stringType()
-        .name("platform_version").`type`().optional().stringType()
-        .name("xpcom_abi").`type`().optional().stringType()
-        .name("hotfix_version").`type`().optional().stringType()
+      .name("application_id").`type`().optional().stringType()
+      .name("application_name").`type`().optional().stringType()
+      .name("architecture").`type`().optional().stringType()
+      .name("architectures_in_binary").`type`().optional().stringType()
+      .name("build_id").`type`().optional().stringType()
+      .name("version").`type`().optional().stringType()
+      .name("vendor").`type`().optional().stringType()
+      .name("platform_version").`type`().optional().stringType()
+      .name("xpcom_abi").`type`().optional().stringType()
+      .name("hotfix_version").`type`().optional().stringType()
       .endRecord()
     val settingsType = SchemaBuilder
       .record("settings").fields()
-        .name("addon_compatibility_check_enabled").`type`().optional().booleanType()
-        .name("blocklist_enabled").`type`().optional().booleanType()
-        .name("is_default_browser").`type`().optional().booleanType()
-        .name("default_search_engine").`type`().optional().stringType()
-        .name("default_search_engine_data").`type`().optional().record("default_search_engine_data").fields()
-          .name("name").`type`().optional().stringType()
-          .name("load_path").`type`().optional().stringType()
-          .name("submission_url").`type`().optional().stringType()
-        .endRecord()
-        .name("search_cohort").`type`().optional().stringType()
-        .name("e10s_enabled").`type`().optional().booleanType()
-        .name("telemetry_enabled").`type`().optional().booleanType()
-        .name("locale").`type`().optional().stringType()
-        .name("update").`type`().optional().record("update").fields()
-          .name("channel").`type`().optional().stringType()
-          .name("enabled").`type`().optional().booleanType()
-          .name("auto_download").`type`().optional().booleanType()
-        .endRecord()
-        .name("user_prefs").`type`().optional().map().values().stringType()
+      .name("addon_compatibility_check_enabled").`type`().optional().booleanType()
+      .name("blocklist_enabled").`type`().optional().booleanType()
+      .name("is_default_browser").`type`().optional().booleanType()
+      .name("default_search_engine").`type`().optional().stringType()
+      .name("default_search_engine_data").`type`().optional().record("default_search_engine_data").fields()
+      .name("name").`type`().optional().stringType()
+      .name("load_path").`type`().optional().stringType()
+      .name("submission_url").`type`().optional().stringType()
+      .endRecord()
+      .name("search_cohort").`type`().optional().stringType()
+      .name("e10s_enabled").`type`().optional().booleanType()
+      .name("telemetry_enabled").`type`().optional().booleanType()
+      .name("locale").`type`().optional().stringType()
+      .name("update").`type`().optional().record("update").fields()
+      .name("channel").`type`().optional().stringType()
+      .name("enabled").`type`().optional().booleanType()
+      .name("auto_download").`type`().optional().booleanType()
+      .endRecord()
+      .name("user_prefs").`type`().optional().map().values().stringType()
       .endRecord()
     val partnerType = SchemaBuilder
       .record("partner").fields()
-        .name("distribution_id").`type`().optional().stringType()
-        .name("distribution_version").`type`().optional().stringType()
-        .name("partner_id").`type`().optional().stringType()
-        .name("distributor").`type`().optional().stringType()
-        .name("distributor_channel").`type`().optional().stringType()
-        .name("partner_names").`type`().optional().array().items().stringType()
+      .name("distribution_id").`type`().optional().stringType()
+      .name("distribution_version").`type`().optional().stringType()
+      .name("partner_id").`type`().optional().stringType()
+      .name("distributor").`type`().optional().stringType()
+      .name("distributor_channel").`type`().optional().stringType()
+      .name("partner_names").`type`().optional().array().items().stringType()
       .endRecord()
     val systemType = SchemaBuilder
       .record("system").fields()
-        .name("memory_mb").`type`().optional().intType()
-        .name("virtual_max_mb").`type`().optional().stringType()
-        .name("is_wow64").`type`().optional().booleanType()
+      .name("memory_mb").`type`().optional().intType()
+      .name("virtual_max_mb").`type`().optional().stringType()
+      .name("is_wow64").`type`().optional().booleanType()
       .endRecord()
     val systemCpuType = SchemaBuilder
       .record("system_cpu").fields()
-        .name("cores").`type`().optional().intType()
-        .name("count").`type`().optional().intType()
-        .name("vendor").`type`().optional().stringType()
-        .name("family").`type`().optional().intType()
-        .name("model").`type`().optional().intType()
-        .name("stepping").`type`().optional().intType()
-        .name("l2cache_kb").`type`().optional().intType()
-        .name("l3cache_kb").`type`().optional().intType()
-        .name("extensions").`type`().optional().array().items().stringType()
-        .name("speed_mhz").`type`().optional().intType()
+      .name("cores").`type`().optional().intType()
+      .name("count").`type`().optional().intType()
+      .name("vendor").`type`().optional().stringType()
+      .name("family").`type`().optional().intType()
+      .name("model").`type`().optional().intType()
+      .name("stepping").`type`().optional().intType()
+      .name("l2cache_kb").`type`().optional().intType()
+      .name("l3cache_kb").`type`().optional().intType()
+      .name("extensions").`type`().optional().array().items().stringType()
+      .name("speed_mhz").`type`().optional().intType()
       .endRecord()
     val systemDeviceType = SchemaBuilder
       .record("system_device").fields()
-        .name("model").`type`().optional().stringType()
-        .name("manufacturer").`type`().optional().stringType()
-        .name("hardware").`type`().optional().stringType()
-        .name("is_tablet").`type`().optional().booleanType()
+      .name("model").`type`().optional().stringType()
+      .name("manufacturer").`type`().optional().stringType()
+      .name("hardware").`type`().optional().stringType()
+      .name("is_tablet").`type`().optional().booleanType()
       .endRecord()
     val systemOsType = SchemaBuilder
       .record("system_os").fields()
-        .name("name").`type`().optional().stringType()
-        .name("version").`type`().optional().stringType()
-        .name("kernel_version").`type`().optional().stringType()
-        .name("service_pack_major").`type`().optional().intType()
-        .name("service_pack_minor").`type`().optional().intType()
-        .name("locale").`type`().optional().stringType()
+      .name("name").`type`().optional().stringType()
+      .name("version").`type`().optional().stringType()
+      .name("kernel_version").`type`().optional().stringType()
+      .name("service_pack_major").`type`().optional().intType()
+      .name("service_pack_minor").`type`().optional().intType()
+      .name("locale").`type`().optional().stringType()
       .endRecord()
     val systemHddType = SchemaBuilder
       .record("system_hdd").fields()
-        .name("profile").`type`().optional().record("hdd_profile").fields()
-          .name("model").`type`().optional().stringType()
-          .name("revision").`type`().optional().stringType()
-        .endRecord()
-        .name("binary").`type`().optional().record("binary").fields()
-          .name("model").`type`().optional().stringType()
-          .name("revision").`type`().optional().stringType()
-        .endRecord()
-        .name("system").`type`().optional().record("hdd_system").fields()
-          .name("model").`type`().optional().stringType()
-          .name("revision").`type`().optional().stringType()
-        .endRecord()
+      .name("profile").`type`().optional().record("hdd_profile").fields()
+      .name("model").`type`().optional().stringType()
+      .name("revision").`type`().optional().stringType()
+      .endRecord()
+      .name("binary").`type`().optional().record("binary").fields()
+      .name("model").`type`().optional().stringType()
+      .name("revision").`type`().optional().stringType()
+      .endRecord()
+      .name("system").`type`().optional().record("hdd_system").fields()
+      .name("model").`type`().optional().stringType()
+      .name("revision").`type`().optional().stringType()
+      .endRecord()
       .endRecord()
     val systemGfxType = SchemaBuilder
       .record("system_gfx").fields()
-        .name("d2d_enabled").`type`().optional().booleanType()
-        .name("d_write_enabled").`type`().optional().booleanType()
-        .name("adapters").`type`().optional().array().items().record("adapter").fields()
-          .name("description").`type`().optional().stringType()
-          .name("vendor_id").`type`().optional().stringType()
-          .name("device_id").`type`().optional().stringType()
-          .name("subsys_id").`type`().optional().stringType()
-          .name("ram").`type`().optional().intType()
-          .name("driver").`type`().optional().stringType()
-          .name("driver_version").`type`().optional().stringType()
-          .name("driver_date").`type`().optional().stringType()
-          .name("gpu_active").`type`().optional().booleanType()
-        .endRecord()
-        .name("monitors").`type`().optional().array().items().record("monitor").fields()
-          .name("screen_width").`type`().optional().intType()
-          .name("screen_height").`type`().optional().intType()
-          .name("refresh_rate").`type`().optional().stringType()
-          .name("pseudo_display").`type`().optional().booleanType()
-          .name("scale").`type`().optional().doubleType()
-        .endRecord()
+      .name("d2d_enabled").`type`().optional().booleanType()
+      .name("d_write_enabled").`type`().optional().booleanType()
+      .name("adapters").`type`().optional().array().items().record("adapter").fields()
+      .name("description").`type`().optional().stringType()
+      .name("vendor_id").`type`().optional().stringType()
+      .name("device_id").`type`().optional().stringType()
+      .name("subsys_id").`type`().optional().stringType()
+      .name("ram").`type`().optional().intType()
+      .name("driver").`type`().optional().stringType()
+      .name("driver_version").`type`().optional().stringType()
+      .name("driver_date").`type`().optional().stringType()
+      .name("gpu_active").`type`().optional().booleanType()
+      .endRecord()
+      .name("monitors").`type`().optional().array().items().record("monitor").fields()
+      .name("screen_width").`type`().optional().intType()
+      .name("screen_height").`type`().optional().intType()
+      .name("refresh_rate").`type`().optional().stringType()
+      .name("pseudo_display").`type`().optional().booleanType()
+      .name("scale").`type`().optional().doubleType()
+      .endRecord()
       .endRecord()
 
     val activeAddonsType = SchemaBuilder
       .map().values().record("active_addon").fields()
-        .name("blocklisted").`type`().optional().booleanType()
-        .name("description").`type`().optional().stringType()
-        .name("name").`type`().optional().stringType()
-        .name("user_disabled").`type`().optional().booleanType()
-        .name("app_disabled").`type`().optional().booleanType()
-        .name("version").`type`().optional().stringType()
-        .name("scope").`type`().optional().intType()
-        .name("type").`type`().optional().stringType()
-        .name("foreign_install").`type`().optional().booleanType()
-        .name("has_binary_components").`type`().optional().booleanType()
-        .name("install_day").`type`().optional().longType()
-        .name("update_day").`type`().optional().longType()
-        .name("signed_state").`type`().optional().intType()
+      .name("blocklisted").`type`().optional().booleanType()
+      .name("description").`type`().optional().stringType()
+      .name("name").`type`().optional().stringType()
+      .name("user_disabled").`type`().optional().booleanType()
+      .name("app_disabled").`type`().optional().booleanType()
+      .name("version").`type`().optional().stringType()
+      .name("scope").`type`().optional().intType()
+      .name("type").`type`().optional().stringType()
+      .name("foreign_install").`type`().optional().booleanType()
+      .name("has_binary_components").`type`().optional().booleanType()
+      .name("install_day").`type`().optional().longType()
+      .name("update_day").`type`().optional().longType()
+      .name("signed_state").`type`().optional().intType()
       .endRecord()
     val themeType = SchemaBuilder
       .record("theme").fields()
-        .name("id").`type`().optional().stringType()
-        .name("blocklisted").`type`().optional().booleanType()
-        .name("description").`type`().optional().stringType()
-        .name("name").`type`().optional().stringType()
-        .name("user_disabled").`type`().optional().booleanType()
-        .name("app_disabled").`type`().optional().booleanType()
-        .name("version").`type`().optional().stringType()
-        .name("scope").`type`().optional().intType()
-        .name("foreign_install").`type`().optional().booleanType()
-        .name("has_binary_components").`type`().optional().booleanType()
-        .name("install_day").`type`().optional().longType()
-        .name("update_day").`type`().optional().longType()
+      .name("id").`type`().optional().stringType()
+      .name("blocklisted").`type`().optional().booleanType()
+      .name("description").`type`().optional().stringType()
+      .name("name").`type`().optional().stringType()
+      .name("user_disabled").`type`().optional().booleanType()
+      .name("app_disabled").`type`().optional().booleanType()
+      .name("version").`type`().optional().stringType()
+      .name("scope").`type`().optional().intType()
+      .name("foreign_install").`type`().optional().booleanType()
+      .name("has_binary_components").`type`().optional().booleanType()
+      .name("install_day").`type`().optional().longType()
+      .name("update_day").`type`().optional().longType()
       .endRecord()
     val activePluginsType = SchemaBuilder
       .array().items().record("active_plugin").fields()
-        .name("name").`type`().optional().stringType()
-        .name("version").`type`().optional().stringType()
-        .name("description").`type`().optional().stringType()
-        .name("blocklisted").`type`().optional().booleanType()
-        .name("disabled").`type`().optional().booleanType()
-        .name("clicktoplay").`type`().optional().booleanType()
-        .name("mime_types").`type`().optional().array().items().stringType()
-        .name("update_day").`type`().optional().longType()
+      .name("name").`type`().optional().stringType()
+      .name("version").`type`().optional().stringType()
+      .name("description").`type`().optional().stringType()
+      .name("blocklisted").`type`().optional().booleanType()
+      .name("disabled").`type`().optional().booleanType()
+      .name("clicktoplay").`type`().optional().booleanType()
+      .name("mime_types").`type`().optional().array().items().stringType()
+      .name("update_day").`type`().optional().longType()
       .endRecord()
     val activeGMPluginsType = SchemaBuilder
       .map().values().record("active_gmp_plugins").fields()
-        .name("version").`type`().optional().stringType()
-        .name("user_disabled").`type`().optional().booleanType()
-        .name("apply_background_updates").`type`().optional().intType()
+      .name("version").`type`().optional().stringType()
+      .name("user_disabled").`type`().optional().booleanType()
+      .name("apply_background_updates").`type`().optional().intType()
       .endRecord()
     val activeExperimentType = SchemaBuilder
       .record("active_experiment").fields()
-        .name("id").`type`().optional().stringType()
-        .name("branch").`type`().optional().stringType()
+      .name("id").`type`().optional().stringType()
+      .name("branch").`type`().optional().stringType()
       .endRecord()
 
     val simpleMeasurementsType = SchemaBuilder
       .record("simple_measurements").fields()
-        .name("active_ticks").`type`().optional().longType()
-        .name("profile_before_change").`type`().optional().longType()
-        .name("select_profile").`type`().optional().longType()
-        .name("session_restore_init").`type`().optional().longType()
-        .name("first_load_uri").`type`().optional().longType()
-        .name("uptime").`type`().optional().longType()
-        .name("total_time").`type`().optional().longType()
-        .name("saved_pings").`type`().optional().longType()
-        .name("start").`type`().optional().longType()
-        .name("startup_session_restore_read_bytes").`type`().optional().longType()
-        .name("pings_overdue").`type`().optional().longType()
-        .name("first_paint").`type`().optional().longType()
-        .name("shutdown_duration").`type`().optional().longType()
-        .name("session_restored").`type`().optional().longType()
-        .name("startup_window_visible_write_bytes").`type`().optional().longType()
-        .name("startup_crash_detection_end").`type`().optional().longType()
-        .name("startup_session_restore_write_bytes").`type`().optional().longType()
-        .name("startup_crash_detection_begin").`type`().optional().longType()
-        .name("startup_interrupted").`type`().optional().longType()
-        .name("after_profile_locked").`type`().optional().longType()
-        .name("delayed_startup_started").`type`().optional().longType()
-        .name("main").`type`().optional().longType()
-        .name("create_top_level_window").`type`().optional().longType()
-        .name("session_restore_initialized").`type`().optional().longType()
-        .name("maximal_number_of_concurrent_threads").`type`().optional().longType()
-        .name("startup_window_visible_read_bytes").`type`().optional().longType()
+      .name("active_ticks").`type`().optional().longType()
+      .name("profile_before_change").`type`().optional().longType()
+      .name("select_profile").`type`().optional().longType()
+      .name("session_restore_init").`type`().optional().longType()
+      .name("first_load_uri").`type`().optional().longType()
+      .name("uptime").`type`().optional().longType()
+      .name("total_time").`type`().optional().longType()
+      .name("saved_pings").`type`().optional().longType()
+      .name("start").`type`().optional().longType()
+      .name("startup_session_restore_read_bytes").`type`().optional().longType()
+      .name("pings_overdue").`type`().optional().longType()
+      .name("first_paint").`type`().optional().longType()
+      .name("shutdown_duration").`type`().optional().longType()
+      .name("session_restored").`type`().optional().longType()
+      .name("startup_window_visible_write_bytes").`type`().optional().longType()
+      .name("startup_crash_detection_end").`type`().optional().longType()
+      .name("startup_session_restore_write_bytes").`type`().optional().longType()
+      .name("startup_crash_detection_begin").`type`().optional().longType()
+      .name("startup_interrupted").`type`().optional().longType()
+      .name("after_profile_locked").`type`().optional().longType()
+      .name("delayed_startup_started").`type`().optional().longType()
+      .name("main").`type`().optional().longType()
+      .name("create_top_level_window").`type`().optional().longType()
+      .name("session_restore_initialized").`type`().optional().longType()
+      .name("maximal_number_of_concurrent_threads").`type`().optional().longType()
+      .name("startup_window_visible_read_bytes").`type`().optional().longType()
       .endRecord()
 
     val histogramType = SchemaBuilder
       .record("histogram").fields()
-        .name("values").`type`().array().items().intType().noDefault()
-        .name("sum").`type`().longType().noDefault()
+      .name("values").`type`().array().items().intType().noDefault()
+      .name("sum").`type`().longType().noDefault()
       .endRecord()
 
     val builder = SchemaBuilder
       .record("Submission").fields()
-        .name("client_id").`type`().stringType().noDefault()
-        .name("os").`type`().stringType().noDefault()
-        .name("normalized_channel").`type`().stringType().noDefault()
-        .name("submission_date").`type`().optional().array().items().stringType()
-        .name("sample_id").`type`().optional().array().items().doubleType()
-        .name("size").`type`().optional().array().items().doubleType()
-        .name("geo_country").`type`().optional().array().items().stringType()
-        .name("geo_city").`type`().optional().array().items().stringType()
-        .name("dnt_header").`type`().optional().array().items().stringType()
-        .name("addons").`type`().optional().array().items().stringType()
-        .name("async_plugin_init").`type`().optional().array().items().booleanType()
-        .name("flash_version").`type`().optional().array().items().stringType()
-        .name("previous_build_id").`type`().optional().array().items().stringType()
-        .name("previous_session_id").`type`().optional().array().items().stringType()
-        .name("previous_subsession_id").`type`().optional().array().items().stringType()
-        .name("profile_subsession_counter").`type`().optional().array().items().intType()
-        .name("profile_creation_date").`type`().optional().array().items().stringType()
-        .name("profile_reset_date").`type`().optional().array().items().stringType()
-        .name("reason").`type`().optional().array().items().stringType()
-        .name("revision").`type`().optional().array().items().stringType()
-        .name("session_id").`type`().optional().array().items().stringType()
-        .name("session_length").`type`().optional().array().items().longType()
-        .name("session_start_date").`type`().optional().array().items().stringType()
-        .name("subsession_counter").`type`().optional().array().items().intType()
-        .name("subsession_id").`type`().optional().array().items().stringType()
-        .name("subsession_length").`type`().optional().array().items().longType()
-        .name("subsession_start_date").`type`().optional().array().items().stringType()
-        .name("timezone_offset").`type`().optional().array().items().intType()
-        .name("build").`type`().optional().array().items(buildType)
-        .name("partner").`type`().optional().array().items(partnerType)
-        .name("settings").`type`().optional().array().items(settingsType)
-        .name("system").`type`().optional().array().items(systemType)
-        .name("system_cpu").`type`().optional().array().items(systemCpuType)
-        .name("system_device").`type`().optional().array().items(systemDeviceType)
-        .name("system_os").`type`().optional().array().items(systemOsType)
-        .name("system_hdd").`type`().optional().array().items(systemHddType)
-        .name("system_gfx").`type`().optional().array().items(systemGfxType)
-        .name("active_addons").`type`().optional().array().items(activeAddonsType)
-        .name("theme").`type`().optional().array().items(themeType)
-        .name("active_plugins").`type`().optional().array().items(activePluginsType)
-        .name("active_gmp_plugins").`type`().optional().array().items(activeGMPluginsType)
-        .name("active_experiment").`type`().optional().array().items(activeExperimentType)
-        .name("persona").`type`().optional().array().items().stringType()
-        .name("thread_hang_activity").`type`().optional().array().items().map().values(histogramType)
-        .name("thread_hang_stacks").`type`().optional().array().items().map().values().map().values(histogramType)
-        .name("simple_measurements").`type`().optional().array().items(simpleMeasurementsType)
+      .name("client_id").`type`().stringType().noDefault()
+      .name("os").`type`().stringType().noDefault()
+      .name("normalized_channel").`type`().stringType().noDefault()
+      .name("submission_date").`type`().optional().array().items().stringType()
+      .name("sample_id").`type`().optional().array().items().doubleType()
+      .name("size").`type`().optional().array().items().doubleType()
+      .name("geo_country").`type`().optional().array().items().stringType()
+      .name("geo_city").`type`().optional().array().items().stringType()
+      .name("dnt_header").`type`().optional().array().items().stringType()
+      .name("addons").`type`().optional().array().items().stringType()
+      .name("async_plugin_init").`type`().optional().array().items().booleanType()
+      .name("flash_version").`type`().optional().array().items().stringType()
+      .name("previous_build_id").`type`().optional().array().items().stringType()
+      .name("previous_session_id").`type`().optional().array().items().stringType()
+      .name("previous_subsession_id").`type`().optional().array().items().stringType()
+      .name("profile_subsession_counter").`type`().optional().array().items().intType()
+      .name("profile_creation_date").`type`().optional().array().items().stringType()
+      .name("profile_reset_date").`type`().optional().array().items().stringType()
+      .name("reason").`type`().optional().array().items().stringType()
+      .name("revision").`type`().optional().array().items().stringType()
+      .name("session_id").`type`().optional().array().items().stringType()
+      .name("session_length").`type`().optional().array().items().longType()
+      .name("session_start_date").`type`().optional().array().items().stringType()
+      .name("subsession_counter").`type`().optional().array().items().intType()
+      .name("subsession_id").`type`().optional().array().items().stringType()
+      .name("subsession_length").`type`().optional().array().items().longType()
+      .name("subsession_start_date").`type`().optional().array().items().stringType()
+      .name("timezone_offset").`type`().optional().array().items().intType()
+      .name("build").`type`().optional().array().items(buildType)
+      .name("partner").`type`().optional().array().items(partnerType)
+      .name("settings").`type`().optional().array().items(settingsType)
+      .name("system").`type`().optional().array().items(systemType)
+      .name("system_cpu").`type`().optional().array().items(systemCpuType)
+      .name("system_device").`type`().optional().array().items(systemDeviceType)
+      .name("system_os").`type`().optional().array().items(systemOsType)
+      .name("system_hdd").`type`().optional().array().items(systemHddType)
+      .name("system_gfx").`type`().optional().array().items(systemGfxType)
+      .name("active_addons").`type`().optional().array().items(activeAddonsType)
+      .name("theme").`type`().optional().array().items(themeType)
+      .name("active_plugins").`type`().optional().array().items(activePluginsType)
+      .name("active_gmp_plugins").`type`().optional().array().items(activeGMPluginsType)
+      .name("active_experiment").`type`().optional().array().items(activeExperimentType)
+      .name("persona").`type`().optional().array().items().stringType()
+      .name("thread_hang_activity").`type`().optional().array().items().map().values(histogramType)
+      .name("thread_hang_stacks").`type`().optional().array().items().map().values().map().values(histogramType)
+      .name("simple_measurements").`type`().optional().array().items(simpleMeasurementsType)
 
     Histograms.definitions.foreach{ case (k, value) =>
       val key = k.toLowerCase
