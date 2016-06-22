@@ -5,7 +5,7 @@ import org.apache.spark.rdd.RDD
 import org.json4s._
 import org.json4s.jackson.JsonMethods.parse
 import com.mozilla.telemetry.utils.{AbstractS3Store, S3Store}
-import com.mozilla.telemetry.ObjectSummary
+import com.mozilla.telemetry.utils.ObjectSummary
 import scala.io.Source
 
 case class Schema(dimensions: List[Dimension])
