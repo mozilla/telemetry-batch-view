@@ -765,7 +765,6 @@ object LongitudinalView {
       JSON2Avro("environment.addons",         List("persona"),                  "persona", sorted, root, schema)
       JSON2Avro("payload.simpleMeasurements", List[String](),                   "simple_measurements", sorted, root, schema)
       JSON2Avro("payload.info",               List("asyncPluginInit"),          "async_plugin_init", sorted, root, schema)
-      JSON2Avro("payload.info",               List("flashVersion"),             "flash_version", sorted, root, schema)
       JSON2Avro("payload.info",               List("previousBuildId"),          "previous_build_id", sorted, root, schema)
       JSON2Avro("payload.info",               List("previousSessionId"),        "previous_session_id", sorted, root, schema)
       JSON2Avro("payload.info",               List("previousSubsessionId"),     "previous_subsession_id", sorted, root, schema)
