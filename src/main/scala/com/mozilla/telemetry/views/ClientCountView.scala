@@ -22,6 +22,7 @@ object ClientCountView {
   private val base = List(
     "normalized_channel",
     "country",
+    "locale",
     "app_name",
     "app_version",
     "e10s_enabled",
