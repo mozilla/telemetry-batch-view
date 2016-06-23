@@ -354,141 +354,141 @@ object MainSummaryView {
   def buildSchema: StructType = {
     // Type for encapsulating search counts
     val searchCountsType = StructType(List(
-      StructField("engine", StringType, true), // Name of the search engine
-      StructField("source", StringType, true), // Source of the search (urlbar, etc)
-      StructField("count",  LongType,   true)  // Number of searches
+      StructField("engine", StringType, nullable = true), // Name of the search engine
+      StructField("source", StringType, nullable = true), // Source of the search (urlbar, etc)
+      StructField("count",  LongType,   nullable = true)  // Number of searches
     ))
 
     // Enumerated buckets from LOOP_ACTIVITY_COUNTER histogram
     val loopActivityCounterType = StructType(List(
-      StructField("open_panel",        IntegerType, true), // bucket 0
-      StructField("open_conversation", IntegerType, true), // bucket 1
-      StructField("room_open",         IntegerType, true), // bucket 2
-      StructField("room_share",        IntegerType, true), // bucket 3
-      StructField("room_delete",       IntegerType, true)  // bucket 4
+      StructField("open_panel",        IntegerType, nullable = true), // bucket 0
+      StructField("open_conversation", IntegerType, nullable = true), // bucket 1
+      StructField("room_open",         IntegerType, nullable = true), // bucket 2
+      StructField("room_share",        IntegerType, nullable = true), // bucket 3
+      StructField("room_delete",       IntegerType, nullable = true)  // bucket 4
     ))
 
     // Enumerated buckets from POPUP_NOTIFICATION_STATS keyed histogram
     // Field names based on toolkit/modules/PopupNotifications.jsm
     val popupNotificationStatsType = StructType(List(
-      StructField("offered",                          IntegerType, true), // bucket 0
-      StructField("action_1",                         IntegerType, true), // bucket 1
-      StructField("action_2",                         IntegerType, true), // bucket 2
-      StructField("action_3",                         IntegerType, true), // bucket 3
-      StructField("action_last",                      IntegerType, true), // bucket 4
-      StructField("dismissal_click_elsewhere",        IntegerType, true), // bucket 5
-      StructField("dismissal_leave_page",             IntegerType, true), // bucket 6
-      StructField("dismissal_close_button",           IntegerType, true), // bucket 7
-      StructField("dismissal_not_now",                IntegerType, true), // bucket 8
-      StructField("open_submenu",                     IntegerType, true), // bucket 10
-      StructField("learn_more",                       IntegerType, true), // bucket 11
-      StructField("reopen_offered",                   IntegerType, true), // bucket 20
-      StructField("reopen_action_1",                  IntegerType, true), // bucket 21
-      StructField("reopen_action_2",                  IntegerType, true), // bucket 22
-      StructField("reopen_action_3",                  IntegerType, true), // bucket 23
-      StructField("reopen_action_last",               IntegerType, true), // bucket 24
-      StructField("reopen_dismissal_click_elsewhere", IntegerType, true), // bucket 25
-      StructField("reopen_dismissal_leave_page",      IntegerType, true), // bucket 26
-      StructField("reopen_dismissal_close_button",    IntegerType, true), // bucket 27
-      StructField("reopen_dismissal_not_now",         IntegerType, true), // bucket 28
-      StructField("reopen_open_submenu",              IntegerType, true), // bucket 30
-      StructField("reopen_learn_more",                IntegerType, true)  // bucket 31
+      StructField("offered",                          IntegerType, nullable = true), // bucket 0
+      StructField("action_1",                         IntegerType, nullable = true), // bucket 1
+      StructField("action_2",                         IntegerType, nullable = true), // bucket 2
+      StructField("action_3",                         IntegerType, nullable = true), // bucket 3
+      StructField("action_last",                      IntegerType, nullable = true), // bucket 4
+      StructField("dismissal_click_elsewhere",        IntegerType, nullable = true), // bucket 5
+      StructField("dismissal_leave_page",             IntegerType, nullable = true), // bucket 6
+      StructField("dismissal_close_button",           IntegerType, nullable = true), // bucket 7
+      StructField("dismissal_not_now",                IntegerType, nullable = true), // bucket 8
+      StructField("open_submenu",                     IntegerType, nullable = true), // bucket 10
+      StructField("learn_more",                       IntegerType, nullable = true), // bucket 11
+      StructField("reopen_offered",                   IntegerType, nullable = true), // bucket 20
+      StructField("reopen_action_1",                  IntegerType, nullable = true), // bucket 21
+      StructField("reopen_action_2",                  IntegerType, nullable = true), // bucket 22
+      StructField("reopen_action_3",                  IntegerType, nullable = true), // bucket 23
+      StructField("reopen_action_last",               IntegerType, nullable = true), // bucket 24
+      StructField("reopen_dismissal_click_elsewhere", IntegerType, nullable = true), // bucket 25
+      StructField("reopen_dismissal_leave_page",      IntegerType, nullable = true), // bucket 26
+      StructField("reopen_dismissal_close_button",    IntegerType, nullable = true), // bucket 27
+      StructField("reopen_dismissal_not_now",         IntegerType, nullable = true), // bucket 28
+      StructField("reopen_open_submenu",              IntegerType, nullable = true), // bucket 30
+      StructField("reopen_learn_more",                IntegerType, nullable = true)  // bucket 31
     ))
 
     StructType(List(
-      StructField("document_id", StringType, false), // id
-      StructField("client_id", StringType, true), // clientId
-      StructField("sample_id", LongType, true), // Fields[sampleId]
-      StructField("channel", StringType, true), // appUpdateChannel
-      StructField("normalized_channel", StringType, true), // normalizedChannel
-      StructField("country", StringType, true), // geoCountry
-      StructField("city", StringType, true), // geoCity
-      StructField("os", StringType, true), // environment/system/os/name
-      StructField("os_version", StringType, true), // environment/system/os/version
-      StructField("os_service_pack_major", StringType, true), // environment/system/os/servicePackMajor
-      StructField("os_service_pack_minor", StringType, true), // environment/system/os/servicePackMinor
+      StructField("document_id", StringType, nullable = false), // id
+      StructField("client_id", StringType, nullable = true), // clientId
+      StructField("sample_id", LongType, nullable = true), // Fields[sampleId]
+      StructField("channel", StringType, nullable = true), // appUpdateChannel
+      StructField("normalized_channel", StringType, nullable = true), // normalizedChannel
+      StructField("country", StringType, nullable = true), // geoCountry
+      StructField("city", StringType, nullable = true), // geoCity
+      StructField("os", StringType, nullable = true), // environment/system/os/name
+      StructField("os_version", StringType, nullable = true), // environment/system/os/version
+      StructField("os_service_pack_major", StringType, nullable = true), // environment/system/os/servicePackMajor
+      StructField("os_service_pack_minor", StringType, nullable = true), // environment/system/os/servicePackMinor
 
       // TODO: use proper 'date' type for date columns.
-      StructField("profile_creation_date", LongType, true), // environment/profile/creationDate
-      StructField("subsession_start_date", StringType, true), // info/subsessionStartDate
-      StructField("subsession_length", LongType, true), // info/subsessionLength
-      StructField("distribution_id", StringType, true), // environment/partner/distributionId
-      StructField("submission_date", StringType, false), // YYYYMMDD version of 'timestamp'
+      StructField("profile_creation_date", LongType, nullable = true), // environment/profile/creationDate
+      StructField("subsession_start_date", StringType, nullable = true), // info/subsessionStartDate
+      StructField("subsession_length", LongType, nullable = true), // info/subsessionLength
+      StructField("distribution_id", StringType, nullable = true), // environment/partner/distributionId
+      StructField("submission_date", StringType, nullable = false), // YYYYMMDD version of 'timestamp'
       // See bug 1232050
-      StructField("sync_configured", BooleanType, true), // WEAVE_CONFIGURED
-      StructField("sync_count_desktop", IntegerType, true), // WEAVE_DEVICE_COUNT_DESKTOP
-      StructField("sync_count_mobile", IntegerType, true), // WEAVE_DEVICE_COUNT_MOBILE
-      StructField("app_build_id", StringType, true), // application/buildId
-      StructField("app_display_version", StringType, true), // application/displayVersion
-      StructField("app_name", StringType, true), // application/name
-      StructField("app_version", StringType, true), // application/version
-      StructField("timestamp", LongType, false), // server-assigned timestamp when record was received
+      StructField("sync_configured", BooleanType, nullable = true), // WEAVE_CONFIGURED
+      StructField("sync_count_desktop", IntegerType, nullable = true), // WEAVE_DEVICE_COUNT_DESKTOP
+      StructField("sync_count_mobile", IntegerType, nullable = true), // WEAVE_DEVICE_COUNT_MOBILE
+      StructField("app_build_id", StringType, nullable = true), // application/buildId
+      StructField("app_display_version", StringType, nullable = true), // application/displayVersion
+      StructField("app_name", StringType, nullable = true), // application/name
+      StructField("app_version", StringType, nullable = true), // application/version
+      StructField("timestamp", LongType, nullable = false), // server-assigned timestamp when record was received
 
-      StructField("env_build_id", StringType, true), // environment/build/buildId
-      StructField("env_build_version", StringType, true), // environment/build/version
-      StructField("env_build_arch", StringType, true), // environment/build/architecture
+      StructField("env_build_id", StringType, nullable = true), // environment/build/buildId
+      StructField("env_build_version", StringType, nullable = true), // environment/build/version
+      StructField("env_build_arch", StringType, nullable = true), // environment/build/architecture
 
       // See bug 1251259
-      StructField("e10s_enabled", BooleanType, true), // environment/settings/e10sEnabled
-      StructField("e10s_cohort", StringType, true), // environment/settings/e10sCohort
-      StructField("locale", StringType, true), // environment/settings/locale
+      StructField("e10s_enabled", BooleanType, nullable = true), // environment/settings/e10sEnabled
+      StructField("e10s_cohort", StringType, nullable = true), // environment/settings/e10sCohort
+      StructField("locale", StringType, nullable = true), // environment/settings/locale
 
-      StructField("active_experiment_id", StringType, true), // environment/addons/activeExperiment/id
-      StructField("active_experiment_branch", StringType, true), // environment/addons/activeExperiment/branch
-      StructField("reason", StringType, true), // info/reason
+      StructField("active_experiment_id", StringType, nullable = true), // environment/addons/activeExperiment/id
+      StructField("active_experiment_branch", StringType, nullable = true), // environment/addons/activeExperiment/branch
+      StructField("reason", StringType, nullable = true), // info/reason
 
-      StructField("timezone_offset", IntegerType, true), // info/timezoneOffset
+      StructField("timezone_offset", IntegerType, nullable = true), // info/timezoneOffset
 
       // Different types of crashes / hangs:
-      StructField("plugin_hangs", IntegerType, true), // SUBPROCESS_CRASHES_WITH_DUMP / pluginhang
-      StructField("aborts_plugin", IntegerType, true), // SUBPROCESS_ABNORMAL_ABORT / plugin
-      StructField("aborts_content", IntegerType, true), // SUBPROCESS_ABNORMAL_ABORT / content
-      StructField("aborts_gmplugin", IntegerType, true), // SUBPROCESS_ABNORMAL_ABORT / gmplugin
-      StructField("crashes_detected_plugin", IntegerType, true), // SUBPROCESS_CRASHES_WITH_DUMP / plugin
-      StructField("crashes_detected_content", IntegerType, true), // SUBPROCESS_CRASHES_WITH_DUMP / content
-      StructField("crashes_detected_gmplugin", IntegerType, true), // SUBPROCESS_CRASHES_WITH_DUMP / gmplugin
-      StructField("crash_submit_attempt_main", IntegerType, true), // PROCESS_CRASH_SUBMIT_ATTEMPT / main-crash
-      StructField("crash_submit_attempt_content", IntegerType, true), // PROCESS_CRASH_SUBMIT_ATTEMPT / content-crash
-      StructField("crash_submit_attempt_plugin", IntegerType, true), // PROCESS_CRASH_SUBMIT_ATTEMPT / plugin-crash
-      StructField("crash_submit_success_main", IntegerType, true), // PROCESS_CRASH_SUBMIT_SUCCESS / main-crash
-      StructField("crash_submit_success_content", IntegerType, true), // PROCESS_CRASH_SUBMIT_SUCCESS / content-crash
-      StructField("crash_submit_success_plugin", IntegerType, true), // PROCESS_CRASH_SUBMIT_SUCCESS / plugin-crash
+      StructField("plugin_hangs", IntegerType, nullable = true), // SUBPROCESS_CRASHES_WITH_DUMP / pluginhang
+      StructField("aborts_plugin", IntegerType, nullable = true), // SUBPROCESS_ABNORMAL_ABORT / plugin
+      StructField("aborts_content", IntegerType, nullable = true), // SUBPROCESS_ABNORMAL_ABORT / content
+      StructField("aborts_gmplugin", IntegerType, nullable = true), // SUBPROCESS_ABNORMAL_ABORT / gmplugin
+      StructField("crashes_detected_plugin", IntegerType, nullable = true), // SUBPROCESS_CRASHES_WITH_DUMP / plugin
+      StructField("crashes_detected_content", IntegerType, nullable = true), // SUBPROCESS_CRASHES_WITH_DUMP / content
+      StructField("crashes_detected_gmplugin", IntegerType, nullable = true), // SUBPROCESS_CRASHES_WITH_DUMP / gmplugin
+      StructField("crash_submit_attempt_main", IntegerType, nullable = true), // PROCESS_CRASH_SUBMIT_ATTEMPT / main-crash
+      StructField("crash_submit_attempt_content", IntegerType, nullable = true), // PROCESS_CRASH_SUBMIT_ATTEMPT / content-crash
+      StructField("crash_submit_attempt_plugin", IntegerType, nullable = true), // PROCESS_CRASH_SUBMIT_ATTEMPT / plugin-crash
+      StructField("crash_submit_success_main", IntegerType, nullable = true), // PROCESS_CRASH_SUBMIT_SUCCESS / main-crash
+      StructField("crash_submit_success_content", IntegerType, nullable = true), // PROCESS_CRASH_SUBMIT_SUCCESS / content-crash
+      StructField("crash_submit_success_plugin", IntegerType, nullable = true), // PROCESS_CRASH_SUBMIT_SUCCESS / plugin-crash
 
-      StructField("active_addons_count", LongType, true), // number of keys in environment/addons/activeAddons
+      StructField("active_addons_count", LongType, nullable = true), // number of keys in environment/addons/activeAddons
 
       // See https://github.com/mozilla-services/data-pipeline/blob/master/hindsight/modules/fx/ping.lua#L82
-      StructField("flash_version", StringType, true), // latest installable version of flash plugin.
-      StructField("vendor", StringType, true), // application/vendor
-      StructField("is_default_browser", BooleanType, true), // environment/settings/isDefaultBrowser
-      StructField("default_search_engine_data_name", StringType, true), // environment/settings/defaultSearchEngineData/name
-      StructField("default_search_engine", StringType, true), // environment/settings/defaultSearchEngine
+      StructField("flash_version", StringType, nullable = true), // latest installable version of flash plugin.
+      StructField("vendor", StringType, nullable = true), // application/vendor
+      StructField("is_default_browser", BooleanType, nullable = true), // environment/settings/isDefaultBrowser
+      StructField("default_search_engine_data_name", StringType, nullable = true), // environment/settings/defaultSearchEngineData/name
+      StructField("default_search_engine", StringType, nullable = true), // environment/settings/defaultSearchEngine
 
       // LOOP_ACTIVITY_COUNTER histogram per bug 1261829
-      StructField("loop_activity_counter", loopActivityCounterType, true),
+      StructField("loop_activity_counter", loopActivityCounterType, nullable = true),
 
       // DevTools usage per bug 1262478
-      StructField("devtools_toolbox_opened_count", IntegerType, true), // DEVTOOLS_TOOLBOX_OPENED_COUNT
+      StructField("devtools_toolbox_opened_count", IntegerType, nullable = true), // DEVTOOLS_TOOLBOX_OPENED_COUNT
 
       // client date per bug 1270505
-      StructField("client_submission_date", StringType, true), // Fields[Date], the HTTP Date header sent by the client
+      StructField("client_submission_date", StringType, nullable = true), // Fields[Date], the HTTP Date header sent by the client
 
       // We use the mean for bookmarks and pages because we do not expect them to be
       // heavily skewed during the lifetime of a subsession. Using the median for a
       // histogram would probably be better in general, but the granularity of the
       // buckets for these particular histograms is not fine enough for the median
       // to give a more accurate value than the mean.
-      StructField("places_bookmarks_count", IntegerType, true), // mean of PLACES_BOOKMARKS_COUNT
-      StructField("places_pages_count", IntegerType, true), // mean of PLACES_PAGES_COUNT
+      StructField("places_bookmarks_count", IntegerType, nullable = true), // mean of PLACES_BOOKMARKS_COUNT
+      StructField("places_pages_count", IntegerType, nullable = true), // mean of PLACES_PAGES_COUNT
 
       // Push metrics per bug 1270482
-      StructField("push_api_notification_received", IntegerType, true), // PUSH_API_NOTIFICATION_RECEIVED
-      StructField("web_notification_shown", IntegerType, true), // WEB_NOTIFICATION_SHOWN
+      StructField("push_api_notification_received", IntegerType, nullable = true), // PUSH_API_NOTIFICATION_RECEIVED
+      StructField("web_notification_shown", IntegerType, nullable = true), // WEB_NOTIFICATION_SHOWN
 
       // Info from POPUP_NOTIFICATION_STATS keyed histogram
-      StructField("popup_notification_stats", MapType(StringType, popupNotificationStatsType), true),
+      StructField("popup_notification_stats", MapType(StringType, popupNotificationStatsType), nullable = true),
 
       // Search counts
-      StructField("search_counts", ArrayType(searchCountsType, false), true) // split up and organize the SEARCH_COUNTS keyed histogram
+      StructField("search_counts", ArrayType(searchCountsType, containsNull = false), nullable = true) // split up and organize the SEARCH_COUNTS keyed histogram
     ))
   }
 }

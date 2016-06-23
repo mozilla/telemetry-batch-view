@@ -15,7 +15,7 @@ object S3Store extends AbstractS3Store {
   protected implicit lazy val s3: S3 = S3()
 
   def getKey(bucket: String, key: String): InputStream = {
-    Bucket(bucket).getObject(key).getOrElse(throw new Exception(s"File missing on S3: ${key}")).getObjectContent
+    Bucket(bucket).getObject(key).getOrElse(throw new Exception(s"File missing on S3: $key")).getObjectContent
   }
 
   def listKeys(bucket: String, prefix: String): Stream[ObjectSummary] = {

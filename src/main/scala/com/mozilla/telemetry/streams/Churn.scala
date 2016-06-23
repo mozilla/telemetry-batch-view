@@ -69,30 +69,30 @@ case class Churn(prefix: String) extends DerivedStream{
           case x: String => x
           case _ => ""
         }),
-        "profileCreationDate" -> ((profile \ "creationDate") match {
+        "profileCreationDate" -> (profile \ "creationDate" match {
           case x: JInt => x.num.toLong
           case _ => null
         }),
-        "syncConfigured" -> weaveConfigured.getOrElse(null),
-        "syncCountDesktop" -> weaveDesktop.getOrElse(null),
-        "syncCountMobile" -> weaveMobile.getOrElse(null),
-        "subsessionStartDate" -> ((info \ "subsessionStartDate") match {
+        "syncConfigured" -> weaveConfigured.orNull,
+        "syncCountDesktop" -> weaveDesktop.orNull,
+        "syncCountMobile" -> weaveMobile.orNull,
+        "subsessionStartDate" -> (info \ "subsessionStartDate" match {
           case JString(x) => x
           case _ => null
         }),
-        "subsessionLength" -> ((info \ "subsessionLength") match {
+        "subsessionLength" -> (info \ "subsessionLength" match {
           case x: JInt => x.num.toLong
           case _ => null
         }),
-        "distributionId" -> ((partner \ "distributionId") match {
+        "distributionId" -> (partner \ "distributionId" match {
           case JString(x) => x
           case _ => null
         }),
-        "e10sEnabled" -> ((settings \ "e10sEnabled") match {
+        "e10sEnabled" -> (settings \ "e10sEnabled" match {
           case JBool(x) => x
           case _ => null
         }),
-        "e10sCohort" -> ((settings \ "e10sCohort") match {
+        "e10sCohort" -> (settings \ "e10sCohort" match {
           case JString(x) => x
           case _ => null
         })
@@ -105,7 +105,7 @@ case class Churn(prefix: String) extends DerivedStream{
     val formatter = DateTimeFormat.forPattern("yyyyMMdd")
     val fromDate = formatter.parseDateTime(from)
     val toDate = formatter.parseDateTime(to)
-    val daysCount = Days.daysBetween(fromDate, toDate).getDays()
+    val daysCount = Days.daysBetween(fromDate, toDate).getDays
     val bucket = {
       val JString(bucketName) = metaSources \\ streamName \\ "bucket"
       Bucket(bucketName)
@@ -120,14 +120,14 @@ case class Churn(prefix: String) extends DerivedStream{
       val currentDay = fromDate.plusDays(i).toString("yyyyMMdd")
       println("Processing day: " + currentDay)
       val summaries = sc.parallelize(s3.objectSummaries(bucket, s"$dataPrefix/$currentDay/$filterPrefix")
-                        .map(summary => ObjectSummary(summary.getKey(), summary.getSize())))
+                        .map(summary => ObjectSummary(summary.getKey, summary.getSize)))
 
       val groups = ObjectSummary.groupBySize(summaries.collect().toIterator)
       val churnMessages = sc.parallelize(groups, groups.size)
         .flatMap(x => x)
         .flatMap{ case obj =>
           val hekaFile = bucket.getObject(obj.key).getOrElse(throw new Exception("File missing on S3: " + obj.key))
-          for (message <- HekaFrame.parse(hekaFile.getObjectContent()))  yield message }
+          for (message <- HekaFrame.parse(hekaFile.getObjectContent))  yield message }
         .flatMap{ case message => messageToMap(message) }
         .repartition(100) // TODO: partition by sampleId
         .foreachPartition{ case partitionIterator =>
@@ -137,7 +137,7 @@ case class Churn(prefix: String) extends DerivedStream{
             saveable <- buildRecord(record, schema)
           } yield saveable
 
-          while(!records.isEmpty) {
+          while(records.nonEmpty) {
             val localFile = ParquetFile.serialize(records, schema)
             uploadLocalFileToS3(localFile, s"$streamVersion/submission_date_s3=$currentDay")
           }
@@ -153,7 +153,6 @@ case class Churn(prefix: String) extends DerivedStream{
       .name("channel").`type`().stringType().noDefault() // appUpdateChannel
       .name("normalizedChannel").`type`().stringType().noDefault() // normalizedChannel
       .name("country").`type`().stringType().noDefault() // geoCountry
-      // TODO: use proper 'date' type for date columns.
       .name("profileCreationDate").`type`().nullable().intType().noDefault() // environment/profile/creationDate
       .name("subsessionStartDate").`type`().nullable().stringType().noDefault() // info/subsessionStartDate
       .name("subsessionLength").`type`().nullable().intType().noDefault() // info/subsessionLength
@@ -174,7 +173,7 @@ case class Churn(prefix: String) extends DerivedStream{
       .endRecord
   }
 
-  def buildRecord(fields: Map[String,Any], schema: Schema): Option[GenericRecord] ={
+  def buildRecord(fields: Map[String,Any], schema: Schema): Option[GenericRecord] = {
     val root = new GenericRecordBuilder(schema)
     for ((k, v) <- fields) root.set(k, v)
     Some(root.build)

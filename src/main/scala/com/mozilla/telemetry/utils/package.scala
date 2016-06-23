@@ -27,6 +27,11 @@ package object utils{
     "first_load_uri" -> "firstLoadURI",
     "" -> "")
 
+  private val millisPerHour = 60 * 60 * 1000
+  private val millisPerDay = millisPerHour * 24
+  private val dateFormatter = org.joda.time.format.ISODateTimeFormat.dateTime()
+  private val uncamelPattern = java.util.regex.Pattern.compile("(^[^A-Z]+|[A-Z][^A-Z]+)")
+
   def camelize(name: String) = {
     specialCases.getOrElse(name, {
       val split = name.split("_")
@@ -36,12 +41,11 @@ package object utils{
   }
 
   def uncamelize(name: String) = {
-    val pattern = java.util.regex.Pattern.compile("(^[^A-Z]+|[A-Z][^A-Z]+)")
-    val matcher = pattern.matcher(name)
+    val matcher = uncamelPattern.matcher(name)
     val output = new StringBuilder
 
     while (matcher.find()) {
-      if (output.length > 0) {
+      if (output.nonEmpty) {
         output.append("_")
       }
       output.append(matcher.group().toLowerCase)
@@ -56,36 +60,32 @@ package object utils{
     // for these time zones, we're going to use some hacky arithmetic to bring them into range;
     // they will still represent the same moment in time, just with a correct time zone
     // we're going to use the relatively lenient joda-time parser and output it in standard ISO format
-    val dateFormatter = org.joda.time.format.ISODateTimeFormat.dateTime()
     val date = dateFormatter.withOffsetParsed().parseDateTime(timestamp)
-    val millisPerHour = 60 * 60 * 1000;
-    val timezoneOffsetHours = date.getZone().getOffset(date).toDouble / millisPerHour
+    val timezoneOffsetHours = date.getZone.getOffset(date).toDouble / millisPerHour
+    def fixTimezone(i: Int) = org.joda.time.DateTimeZone.forOffsetMillis(((timezoneOffsetHours + (i * 12) * Math.floor(timezoneOffsetHours / (-i * 12)).toInt) * millisPerHour).toInt)
     val timezone = if (timezoneOffsetHours < -12.0) {
-      org.joda.time.DateTimeZone.forOffsetMillis(((timezoneOffsetHours + 12 * Math.floor(timezoneOffsetHours / -12).toInt) * millisPerHour).toInt)
+      fixTimezone(1)
     } else if (timezoneOffsetHours > 14.0) {
-      org.joda.time.DateTimeZone.forOffsetMillis(((timezoneOffsetHours - 12 * Math.floor(timezoneOffsetHours / 12).toInt) * millisPerHour).toInt)
+      fixTimezone(-1)
     } else {
-      date.getZone()
+      date.getZone
     }
     dateFormatter.withZone(timezone).print(date)
   }
 
   def normalizeYYYYMMDDTimestamp(YYYYMMDD: String) = {
-    val formatISO = org.joda.time.format.ISODateTimeFormat.dateTime()
-    formatISO.withZone(org.joda.time.DateTimeZone.UTC).print(
+    dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(
       format.DateTimeFormat.forPattern("yyyyMMdd")
         .withZone(org.joda.time.DateTimeZone.UTC)
         .parseDateTime(YYYYMMDD.asInstanceOf[String]))
   }
 
   def normalizeEpochTimestamp(timestamp: BigInt) = {
-    val dateFormatter = org.joda.time.format.ISODateTimeFormat.dateTime()
-    val millisecondsPerDay = 1000 * 60 * 60 * 24
-    dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(new DateTime(timestamp.toLong * millisecondsPerDay))
+    dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(new DateTime(timestamp.toLong * millisPerDay))
   }
 
   def temporaryFileName(): Path = {
-    val vmid = new VMID().toString().replaceAll(":|-", "")
+    val vmid = new VMID().toString.replaceAll(":|-", "")
     val fileURI = java.nio.file.Paths.get(System.getProperty("java.io.tmpdir"), s"$vmid.tmp").toUri
     new Path(fileURI)
   }

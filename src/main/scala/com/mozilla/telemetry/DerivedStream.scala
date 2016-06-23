@@ -43,7 +43,7 @@ abstract class DerivedStream extends java.io.Serializable{
   private val metaBucket = Bucket("net-mozaws-prod-us-west-2-pipeline-metadata")
   protected lazy val metaSources = {
     val Some(sourcesObj) = metaBucket.get(s"sources.json")
-    parse(Source.fromInputStream(sourcesObj.getObjectContent()).getLines().mkString("\n"))
+    parse(Source.fromInputStream(sourcesObj.getObjectContent).getLines.mkString("\n"))
   }
   private lazy val metaPrefix = {
     val JString(metaPrefix) = metaSources \\ streamName \\ "metadata_prefix"
@@ -53,7 +53,7 @@ abstract class DerivedStream extends java.io.Serializable{
   protected val clsName = uncamelize(this.getClass.getSimpleName.replace("$", ""))  // Use classname as stream prefix on S3
   protected lazy val partitioning = {
     val Some(schemaObj) = metaBucket.get(s"$metaPrefix/schema.json")
-    val schema = Source.fromInputStream(schemaObj.getObjectContent()).getLines().mkString("\n")
+    val schema = Source.fromInputStream(schemaObj.getObjectContent).getLines.mkString("\n")
     Partitioning(schema)
   }
 
@@ -64,7 +64,7 @@ abstract class DerivedStream extends java.io.Serializable{
   protected def uploadLocalFileToS3(path: Path, prefix: String) {
     val uuid = UUID.randomUUID.toString
     val key = s"$clsName/$prefix/$uuid"
-    val file = new File(path.toUri())
+    val file = new File(path.toUri)
     val bucketName = parquetBucket.name
     println(s"Uploading Parquet file to $bucketName/$key")
     s3.putObject(bucketName, key, file)
@@ -84,7 +84,7 @@ object DerivedStream {
 
   private def parseOptions(args: Array[String]): OptionMap = {
     def nextOption(map : OptionMap, list: List[String]) : OptionMap = {
-      def isSwitch(s : String) = (s(0) == '-')
+      def isSwitch(s : String) = s(0) == '-'
       list match {
         case Nil => map
         case "--from-date" :: value :: tail =>
@@ -103,7 +103,7 @@ object DerivedStream {
 
   private def S3Prefix(logical: String): String = {
     val Some(sourcesObj) = metadataBucket.get(s"sources.json")
-    val sources = parse(Source.fromInputStream(sourcesObj.getObjectContent()).getLines().mkString("\n"))
+    val sources = parse(Source.fromInputStream(sourcesObj.getObjectContent).getLines().mkString("\n"))
     val JString(prefix) = sources \\ logical \\ "prefix"
     prefix
   }
@@ -128,7 +128,7 @@ object DerivedStream {
     } else {
       val matching = prefixes
         .flatMap(prefix => S3ls(bucket, prefix))
-        .filter(prefix => (pattern.head == "*" || prefix.endsWith(pattern.head + "/")))
+        .filter(prefix => pattern.head == "*" || prefix.endsWith(pattern.head + "/"))
       matchingPrefixes(bucket, matching, pattern.tail)
     }
   }
@@ -137,7 +137,7 @@ object DerivedStream {
     val formatter = DateTimeFormat.forPattern("yyyyMMdd")
     val fromDate = formatter.parseDateTime(from)
     val toDate = formatter.parseDateTime(to)
-    val daysCount = Days.daysBetween(fromDate, toDate).getDays()
+    val daysCount = Days.daysBetween(fromDate, toDate).getDays
     val bucket = Bucket("net-mozaws-prod-us-west-2-pipeline-data")
     val prefix = S3Prefix(converter.streamName)
     val filterPrefix = converter.filterPrefix
@@ -154,7 +154,7 @@ object DerivedStream {
                  val bucket = Bucket("net-mozaws-prod-us-west-2-pipeline-data")
                  matchingPrefixes(bucket, List("").toStream, s"$prefix/$date/$filterPrefix".split("/").toList)
                    .flatMap(prefix => s3.objectSummaries(bucket, prefix))
-                   .map(summary => ObjectSummary(summary.getKey(), summary.getSize()))})
+                   .map(summary => ObjectSummary(summary.getKey, summary.getSize))})
 
     converter.transform(sc, bucket, summaries, from, to)
   }

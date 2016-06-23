@@ -1,7 +1,6 @@
 package com.mozilla.telemetry.parquet
 
 import java.util.logging.Logger
-import com.typesafe.config._
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
 import org.apache.hadoop.conf.Configuration
@@ -11,7 +10,6 @@ import org.apache.parquet.hadoop.ParquetWriter
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 
 object ParquetFile {
-  private val conf = ConfigFactory.load()
   private val parquetLogger = Logger.getLogger("org.apache.parquet")
   private val hadoopConf = new Configuration()
 
@@ -31,7 +29,7 @@ object ParquetFile {
       parquetWriter.write(d)
     }
 
-    parquetWriter.close
+    parquetWriter.close()
     parquetFile
   }
 

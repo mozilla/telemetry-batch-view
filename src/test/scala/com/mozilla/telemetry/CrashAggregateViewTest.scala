@@ -93,16 +93,15 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
           )
         )
 
-      val isMain = (dimensions("doc_type") == "main")
+      val isMain = dimensions("doc_type") == "main"
       val info = if (isMain)
         ("subsessionLength" -> JInt(SCALAR_VALUE)) ~
         ("subsessionStartDate" -> JString(dimensions("activity_date").asInstanceOf[String]))
       else JObject()
       val system =
-        ("os" ->
+        "os" ->
           ("name" -> dimensions("os_name").asInstanceOf[String]) ~
           ("version" -> dimensions("os_version").asInstanceOf[String])
-        )
       val settings =
         ("e10sEnabled" -> dimensions("e10s").asInstanceOf[Boolean]) ~
         ("e10sCohort" -> dimensions("e10s_cohort").asInstanceOf[String])
@@ -111,15 +110,14 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
         ("buildId" -> dimensions("build_id").asInstanceOf[String]) ~
         ("architecture" -> dimensions("architecture").asInstanceOf[String])
       val addons =
-        ("activeExperiment" ->
+        "activeExperiment" ->
           ("id" -> dimensions("experiment_id").asInstanceOf[String]) ~
           ("branch" -> dimensions("experiment_branch").asInstanceOf[String])
-        )
       val payload = if (isMain) None else {
         compact(render(
-          ("payload" ->
+          "payload" ->
             ("crashDate" -> dimensions("activity_date").asInstanceOf[String].substring(0, 10))
-          )))
+          ))
       }
 
       implicit val formats = DefaultFormats

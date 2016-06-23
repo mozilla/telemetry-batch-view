@@ -7,7 +7,6 @@ import org.apache.spark.{Partitioner, SparkContext}
 import org.apache.spark.rdd.RDD
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
-import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scala.math.abs
@@ -28,7 +27,7 @@ private class ClientIdPartitioner(size: Int) extends Partitioner{
   }
 }
 
-class ClientIterator(it: Iterator[Tuple2[String, Map[String, Any]]], maxHistorySize: Int = 1000) extends Iterator[List[Map[String, Any]]]{
+class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHistorySize: Int = 1000) extends Iterator[List[Map[String, Any]]]{
   // Less than 1% of clients in a sampled dataset over a 3 months period has more than 1000 fragments.
   var buffer = ListBuffer[Map[String, Any]]()
   var currentKey =
@@ -40,7 +39,7 @@ class ClientIterator(it: Iterator[Tuple2[String, Map[String, Any]]], maxHistoryS
       null
     }
 
-  override def hasNext() = !buffer.isEmpty
+  override def hasNext() = buffer.nonEmpty
 
   override def next(): List[Map[String, Any]] = {
     while (it.hasNext) {
@@ -91,13 +90,13 @@ case class Longitudinal() extends DerivedStream {
     }
 
     // Sort submissions in descending order
-    implicit val ordering = Ordering[Tuple3[String, String, Int]].reverse
+    implicit val ordering = Ordering[(String, String, Int)].reverse
     val groups = ObjectSummary.groupBySize(summaries.collect().toIterator)
     val clientMessages = sc.parallelize(groups, groups.size)
       .flatMap(x => x)
       .flatMap{ case obj =>
         val hekaFile = bucket.getObject(obj.key).getOrElse(throw new Exception("File missing on S3: %s".format(obj.key)))
-        for (message <- HekaFrame.parse(hekaFile.getObjectContent())) yield message }
+        for (message <- HekaFrame.parse(hekaFile.getObjectContent)) yield message }
       .flatMap{ case message =>
         val fields = message.fieldsAsMap
         for {
@@ -140,7 +139,7 @@ case class Longitudinal() extends DerivedStream {
                                          r
                                      }).flatten
 
-        while(!records.isEmpty) {
+        while(records.nonEmpty) {
           // Block size has to be increased to pack more than a couple hundred profiles
           // within the same row group.
           val localFile = ParquetFile.serialize(records, schema, 8)
@@ -423,27 +422,27 @@ case class Longitudinal() extends DerivedStream {
     Histograms.definitions.foreach{ case (k, value) =>
       val key = k.toLowerCase
       value match {
-        case h: FlagHistogram if h.keyed == false =>
+        case h: FlagHistogram if !h.keyed =>
           builder.name(key).`type`().optional().array().items().booleanType()
         case h: FlagHistogram =>
           builder.name(key).`type`().optional().map().values().array().items().booleanType()
-        case h: CountHistogram if h.keyed == false =>
+        case h: CountHistogram if !h.keyed =>
           builder.name(key).`type`().optional().array().items().intType()
         case h: CountHistogram =>
           builder.name(key).`type`().optional().map().values().array().items().intType()
-        case h: EnumeratedHistogram if h.keyed == false =>
+        case h: EnumeratedHistogram if !h.keyed =>
           builder.name(key).`type`().optional().array().items().array().items().intType()
         case h: EnumeratedHistogram =>
           builder.name(key).`type`().optional().map().values().array().items().array().items().intType()
-        case h: BooleanHistogram if h.keyed == false =>
+        case h: BooleanHistogram if !h.keyed =>
           builder.name(key).`type`().optional().array().items().array().items().intType()
         case h: BooleanHistogram =>
           builder.name(key).`type`().optional().map().values().array().items().array().items().intType()
-        case h: LinearHistogram if h.keyed == false =>
+        case h: LinearHistogram if !h.keyed =>
           builder.name(key).`type`().optional().array().items(histogramType)
         case h: LinearHistogram =>
           builder.name(key).`type`().optional().map.values().array().items(histogramType)
-        case h: ExponentialHistogram if h.keyed == false =>
+        case h: ExponentialHistogram if !h.keyed =>
           builder.name(key).`type`().optional().array().items(histogramType)
         case h: ExponentialHistogram =>
           builder.name(key).`type`().optional().map.values().array().items(histogramType)
@@ -568,12 +567,16 @@ case class Longitudinal() extends DerivedStream {
       record
     }
 
-    val fieldSchema = schema.getField(avroField).schema().getTypes()(1).getElementType()
+    val fieldSchema = getElemType(schema, avroField)
     val fieldValues = records.map{ case (x) =>
       avro.JSON2Avro.parse(fieldSchema, x)
     }
 
     root.set(avroField, fieldValues.flatten.asJava)
+  }
+
+  def getElemType(schema: Schema, field: String): Schema = {
+    schema.getField(field).schema.getTypes.get(1).getElementType
   }
 
   private def keyedHistograms2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
@@ -591,12 +594,12 @@ case class Longitudinal() extends DerivedStream {
       definition <- Histograms.definitions.get(key)
     } yield (key, definition)
 
-    val histogramSchema = schema.getField("gc_ms").schema().getTypes()(1).getElementType()
+    val histogramSchema = getElemType(schema, "gc_ms")
 
     for ((key, definition) <- validKeys) {
       val keyedHistogramsList = histogramsList.map{x =>
         x.get(key) match {
-          case Some(x) => x
+          case Some(v) => v
           case _ => Map[String, RawHistogram]()
         }
       }
@@ -626,7 +629,7 @@ case class Longitudinal() extends DerivedStream {
       definition <- Histograms.definitions.get(key)
     } yield (key, definition)
 
-    val histogramSchema = schema.getField("gc_ms").schema().getTypes()(1).getElementType()
+    val histogramSchema = getElemType(schema, "gc_ms")
 
     for ((key, definition) <- validKeys) {
       root.set(key.toLowerCase, vectorizeHistogram(key, definition, histogramsList, histogramSchema))
@@ -702,9 +705,9 @@ case class Longitudinal() extends DerivedStream {
       })._1.reverse  // preserve ordering
 
     val root = new GenericRecordBuilder(schema)
-      .set("client_id", sorted(0)("clientId").asInstanceOf[String])
-      .set("os", sorted(0)("os").asInstanceOf[String])
-      .set("normalized_channel", sorted(0)("normalizedChannel").asInstanceOf[String])
+      .set("client_id", sorted.head("clientId").asInstanceOf[String])
+      .set("os", sorted.head("os").asInstanceOf[String])
+      .set("normalized_channel", sorted.head("normalizedChannel").asInstanceOf[String])
 
     try {
       value2Avro("sampleId",       "sample_id",       0.0, x => x, sorted, root, schema)

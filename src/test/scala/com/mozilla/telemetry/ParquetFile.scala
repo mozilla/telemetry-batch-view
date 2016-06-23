@@ -31,7 +31,7 @@ object Resources {
     val baos = new ByteArrayOutputStream
     val jsonEncoder = EncoderFactory.get.jsonEncoder(schema, baos)
     writer.write(datum, jsonEncoder)
-    jsonEncoder.flush
+    jsonEncoder.flush()
     baos.toByteArray
   }
 
@@ -40,7 +40,7 @@ object Resources {
     Message(uuid, 0, None, None, None, Some(new String(datumJSON)))
   }
 
-  val header = Header(message.toByteArray.size)
+  val header = Header(message.toByteArray.length)
 
   val hekaFrame = {
     val baos = new ByteArrayOutputStream
@@ -58,7 +58,7 @@ object Resources {
 
   def hekaFile(n: Integer = 42) = {
     val ba = new Array[Byte](n*hekaFrame.size)
-    for (i <- 0 to n - 1) System.arraycopy(hekaFrame, 0, ba, i*hekaFrame.size, hekaFrame.size)
+    for (i <- 0 until n) System.arraycopy(hekaFrame, 0, ba, i*hekaFrame.size, hekaFrame.size)
     ba
   }
 }
@@ -87,6 +87,6 @@ class ParquetSpec extends FlatSpec with Matchers{
     val jsonBlobs = messages.map(_.payload).flatten.toList
     val data = readData(jsonBlobs, Resources.schema)
     val filePath = ParquetFile.serialize(data.toIterator, Resources.schema)
-    data should be (ParquetFile.deserialize(filePath.toString()))
+    data should be (ParquetFile.deserialize(filePath.toString))
   }
 }

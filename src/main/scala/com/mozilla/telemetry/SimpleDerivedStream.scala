@@ -49,7 +49,7 @@ abstract class SimpleDerivedStream extends DerivedStream {
     } yield record
 
     val partitionedPrefix = partitioning.partitionPrefix(prefix, version)
-    while(!records.isEmpty) {
+    while(records.nonEmpty) {
       val localFile = ParquetFile.serialize(records, schema)
       uploadLocalFileToS3(localFile, s"$partitionedPrefix")
     }

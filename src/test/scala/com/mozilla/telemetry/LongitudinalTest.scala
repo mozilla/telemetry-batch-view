@@ -50,7 +50,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
             ("values" -> ("1" -> 42)) ~
             ("sum" -> 42)))
 
-      val simpleMeasurements = ("uptime" -> 18L)
+      val simpleMeasurements = "uptime" -> 18L
 
       val build =
         ("applicationId" -> "{ec8030f7-c20a-464f-9b0e-13a3a9e97384}") ~
@@ -62,7 +62,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
         ("platformVersion" -> "46.0a2") ~
         ("xpcomAbi" -> "x86_64-gcc3")
 
-      val partner = ("partnerNames" -> List("A", "B", "C"))
+      val partner = "partnerNames" -> List("A", "B", "C")
 
       val profile =
         ("creationDate" -> 16122) ~
@@ -151,9 +151,9 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       private val schema = view invokePrivate buildSchema()
       val payloads = for (i <- 1 to 10) yield createPayload(i)
       private val dupes = for (i <- 1 to 10) yield createPayload(1)
-      private val record = (view invokePrivate buildRecord((payloads ++ dupes).toIterable, schema)).get
+      private val record = (view invokePrivate buildRecord(payloads ++ dupes, schema)).get
       private val path = ParquetFile.serialize(List(record).toIterator, schema)
-      private val filename = path.toString().replace("file:", "")
+      private val filename = path.toString.replace("file:", "")
 
       private val sparkConf = new SparkConf().setAppName("Longitudinal")
       sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
@@ -190,7 +190,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       }
     }
 
-    assert(fixture.rows.size == 1)
+    assert(fixture.rows.length == 1)
     compareFields(stringFields)
     compareFields(floatFields)
   }
@@ -271,7 +271,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
   "environment.settings" must "be converted correctly" in {
     val records = fixture.row.getList[Row](fixture.row.fieldIndex("settings"))
     assert(records.length == fixture.payloads.length)
-    records.foreach(x => assert(x.getAs[Boolean]("e10s_enabled") == true))
+    records.foreach(x => assert(x.getAs[Boolean]("e10s_enabled")))
   }
 
   "environment.addons.activeAddons" must "be converted correctly" in {
@@ -293,7 +293,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     val records = fixture.row.getList[WrappedArray[Row]](fixture.row.fieldIndex("active_plugins"))
     assert(records.length == fixture.payloads.length)
     records.foreach{ x =>
-      assert(x(0).getAs[Boolean]("blocklisted") == false)
+      assert(!x(0).getAs[Boolean]("blocklisted"))
     }
   }
 

@@ -42,7 +42,7 @@ object CrashAggregateView {
     val appConf = ConfigFactory.load()
     val parquetBucket = appConf.getString("app.parquetBucket")
 
-    for (offset <- 0 to Days.daysBetween(from, to).getDays()) {
+    for (offset <- 0 to Days.daysBetween(from, to).getDays) {
       val currentDate = from.plusDays(offset)
       val currentDateString = currentDate.toString("yyyy-MM-dd")
 
@@ -132,22 +132,20 @@ object CrashAggregateView {
     val crashIgnoredAccumulator = sc.accumulator(0, "Number of ignored crash pings")
     val crashPairs = messages.flatMap((pingFields) => {
       getCrashPair(pingFields) match {
-        case Some(crashPair) => {
+        case Some(crashPair) =>
           pingFields.get("docType") match {
             case Some("crash") => crashProcessedAccumulator += 1
             case Some("main") => mainProcessedAccumulator += 1
             case _ => null
           }
           List(crashPair)
-        }
-        case None => {
+        case None =>
           pingFields.get("docType") match {
             case Some("crash") => crashIgnoredAccumulator += 1
             case Some("main") => mainIgnoredAccumulator += 1
             case _ => null
           }
           List()
-        }
       }
     })
 
@@ -163,8 +161,8 @@ object CrashAggregateView {
       val (activityDate, dimensions) = (uniqueKey.head.asInstanceOf[String], uniqueKey.tail.asInstanceOf[List[Option[String]]])
       val dimensionsMap: Map[String, String] = (dimensionNames, dimensions).zipped.flatMap((key, value) =>
         (key, value) match { // remove dimensions that don't have values
-          case (key, Some(value)) => Some(key, value)
-          case (key, None) => None
+          case (k, Some(v)) => Some(k, v)
+          case (k, None) => None
         }
       ).toMap
       val statsMap = (statsNames, stats).zipped.toMap
@@ -208,7 +206,7 @@ object CrashAggregateView {
     }
     val activityDateRaw = if (isMainPing) {
       info \ "subsessionStartDate" match {
-        case JString(date: String) => {
+        case JString(date: String) =>
           val activityDateFormat = format.ISODateTimeFormat.dateTime()
           try {
             // only keep the date part of the timestamp
@@ -217,20 +215,17 @@ object CrashAggregateView {
             case _: Throwable =>
               return None
           }
-        }
         case _ =>
           return None
       }
     } else {
       val payload = pingFields.get("payload") match {
         case Some(value: String) => parse(value)
-        case _ => {
-          JObject()
-        }
+        case _ => JObject()
       }
 
       payload \ "payload" \ "crashDate" match {
-        case JString(date: String) => {
+        case JString(date: String) =>
           val activityDateFormat =  format.DateTimeFormat.forPattern("yyyy-MM-dd")
           try {
             activityDateFormat.withZone(org.joda.time.DateTimeZone.UTC).parseDateTime(date).withMillisOfDay(0)
@@ -238,7 +233,6 @@ object CrashAggregateView {
             case _: Throwable =>
               return None
           }
-        }
         case _ =>
           return None
       }
@@ -309,10 +303,11 @@ object CrashAggregateView {
 
   def buildSchema(): StructType = {
     StructType(
-      StructField("activity_date", StringType, false) ::
-      StructField("dimensions", MapType(StringType, StringType, true), false) ::
-      StructField("stats", MapType(StringType, DoubleType, true), false) ::
+      StructField("activity_date", StringType, nullable = false) ::
+      StructField("dimensions", MapType(StringType, StringType, valueContainsNull = true), nullable = false) ::
+      StructField("stats", MapType(StringType, DoubleType, valueContainsNull = true), nullable = false) ::
       Nil
     )
   }
 }
+
