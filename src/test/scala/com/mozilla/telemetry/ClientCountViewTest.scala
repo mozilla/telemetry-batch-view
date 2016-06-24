@@ -15,6 +15,7 @@ case class Submission(client_id: String,
                       submission_date: String,
                       subsession_start_date: String,
                       country: String,
+                      locale: String,
                       e10s_enabled: Boolean,
                       e10s_cohort: String,
                       os: String,
@@ -23,19 +24,21 @@ case class Submission(client_id: String,
                       loop_activity_open_panel: Int)
 
 object Submission{
-  val dimensions = Map("client_id" -> List("x", "y", "z", null),
-                       "app_name" -> List("Firefox", "Fennec"),
-                       "app_version" -> List("44.0"),
-                       "normalized_channel" -> List("release", "nightly"),
-                       "submission_date" -> List("20160107", "20160106"),
-                       "subsession_start_date" -> List("2016-03-13T00:00:00.0+01:00"),
-                       "country" -> List("IT", "US"),
-                       "e10s_enabled" -> List(true, false),
-                       "e10s_cohort" -> List("control", "test"),
-                       "os" -> List("Windows", "Darwin"),
-                       "os_version" -> List("1.0", "1.1"),
-                       "devtools_toolbox_opened_count" -> List(0, 42),
-                       "loop_activity_open_panel" -> List(0, 42))
+  val dimensions = Map(
+    "client_id" -> List("x", "y", "z", null),
+    "app_name" -> List("Firefox", "Fennec"),
+    "app_version" -> List("44.0"),
+    "normalized_channel" -> List("release", "nightly"),
+    "submission_date" -> List("20160107", "20160106"),
+    "subsession_start_date" -> List("2016-03-13T00:00:00.0+01:00"),
+    "country" -> List("IT", "US"),
+    "locale" -> List("en-US"),
+    "e10s_enabled" -> List(true, false),
+    "e10s_cohort" -> List("control", "test"),
+    "os" -> List("Windows", "Darwin"),
+    "os_version" -> List("1.0", "1.1"),
+    "devtools_toolbox_opened_count" -> List(0, 42),
+    "loop_activity_open_panel" -> List(0, 42))
 
   def randomList: List[Submission] = {
     for {
@@ -46,6 +49,7 @@ object Submission{
       submissionDate <- dimensions("submission_date")
       subsessionStartDate <- dimensions("subsession_start_date")
       country <- dimensions("country")
+      locale <- dimensions("locale")
       e10sEnabled <- dimensions("e10s_enabled")
       e10sCohort <- dimensions("e10s_cohort")
       os <- dimensions("os")
@@ -60,6 +64,7 @@ object Submission{
                  submissionDate.asInstanceOf[String],
                  subsessionStartDate.asInstanceOf[String],
                  country.asInstanceOf[String],
+                 locale.asInstanceOf[String],
                  e10sEnabled.asInstanceOf[Boolean],
                  e10sCohort.asInstanceOf[String],
                  os.asInstanceOf[String],

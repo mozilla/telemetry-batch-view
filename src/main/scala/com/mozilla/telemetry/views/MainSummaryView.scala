@@ -16,7 +16,7 @@ object MainSummaryView {
   def jobName: String = "main_summary"
 
   // Configuration for command line arguments
-  class Conf(args: Array[String]) extends ScallopConf(args) {
+  private class Conf(args: Array[String]) extends ScallopConf(args) {
     val from = opt[String]("from", descr = "From submission date", required = false)
     val to = opt[String]("to", descr = "To submission date", required = false)
     val bucket = opt[String]("bucket", descr = "Destination bucket for parquet data", required = false)

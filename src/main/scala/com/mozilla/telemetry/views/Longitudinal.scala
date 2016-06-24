@@ -1,117 +1,139 @@
-package com.mozilla.telemetry.streams
+package com.mozilla.telemetry.views
 
-import awscala.s3._
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericData, GenericRecord, GenericRecordBuilder}
-import org.apache.spark.{Partitioner, SparkContext}
+import org.apache.spark.{Partitioner, SparkContext, SparkConf}
 import org.apache.spark.rdd.RDD
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
+import org.rogach.scallop._
+import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scala.math.abs
 import scala.reflect.ClassTag
 import com.mozilla.telemetry.parquet.ParquetFile
 import com.mozilla.telemetry.avro
-import com.mozilla.telemetry.heka.HekaFrame
+import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.histograms._
 import com.mozilla.telemetry.utils._
-import com.mozilla.telemetry.{DerivedStream, ObjectSummary}
-import com.mozilla.telemetry.DerivedStream.s3
 
-private class ClientIdPartitioner(size: Int) extends Partitioner{
-  def numPartitions: Int = size
-  def getPartition(key: Any): Int = key match {
-    case (clientId: String, startDate: String, counter: Int) => abs(clientId.hashCode) % size
-    case _ => throw new Exception("Invalid key")
-  }
-}
+object LongitudinalView {
+  private class ClientIdPartitioner(size: Int) extends Partitioner {
+    def numPartitions: Int = size
 
-class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHistorySize: Int = 1000) extends Iterator[List[Map[String, Any]]]{
-  // Less than 1% of clients in a sampled dataset over a 3 months period has more than 1000 fragments.
-  var buffer = ListBuffer[Map[String, Any]]()
-  var currentKey =
-    if (it.hasNext) {
-      val (key, value) = it.next()
-      buffer += value
-      key
-    } else {
-      null
+    def getPartition(key: Any): Int = key match {
+      case (clientId: String, startDate: String, counter: Int) => abs(clientId.hashCode) % size
+      case _ => throw new Exception("Invalid key")
     }
+  }
+
+  private class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHistorySize: Int = 1000) extends Iterator[List[Map[String, Any]]] {
+    // Less than 1% of clients in a sampled dataset over a 3 months period has more than 1000 fragments.
+    var buffer = ListBuffer[Map[String, Any]]()
+    var currentKey =
+      if (it.hasNext) {
+        val (key, value) = it.next()
+        buffer += value
+        key
+      } else {
+        null
+      }
 
   override def hasNext() = buffer.nonEmpty
 
-  override def next(): List[Map[String, Any]] = {
-    while (it.hasNext) {
-      val (key, value) = it.next()
+    override def next(): List[Map[String, Any]] = {
+      while (it.hasNext) {
+        val (key, value) = it.next()
 
-      if (key == currentKey && buffer.size == maxHistorySize) {
-        // Trim long histories
-        val result = buffer.toList
-        buffer.clear
+        if (key == currentKey && buffer.size == maxHistorySize) {
+          // Trim long histories
+          val result = buffer.toList
+          buffer.clear
 
-        // Fast forward to next client
-        while (it.hasNext) {
-          val (k, _) = it.next()
-          if (k != currentKey) {
-            buffer += value
-            return result
+          // Fast forward to next client
+          while (it.hasNext) {
+            val (k, _) = it.next()
+            if (k != currentKey) {
+              buffer += value
+              return result
+            }
           }
+
+          return result
+        } else if (key == currentKey) {
+          buffer += value
+        } else {
+          val result = buffer.toList
+          buffer.clear
+          buffer += value
+          currentKey = key
+          return result
         }
-
-        return result
-      } else if (key == currentKey){
-        buffer += value
-      } else {
-        val result = buffer.toList
-        buffer.clear
-        buffer += value
-        currentKey = key
-        return result
       }
-    }
 
-    val result = buffer.toList
-    buffer.clear
-    result
+      val result = buffer.toList
+      buffer.clear
+      result
+    }
   }
-}
 
-case class Longitudinal() extends DerivedStream {
-  override def streamName: String = "telemetry-sample"
-  override def filterPrefix: String = "telemetry/4/main/*/*/*/42/"
+  private class Opts(args: Array[String]) extends ScallopConf(args) {
+    val from = opt[String]("from", descr = "From submission date", required = true)
+    val to = opt[String]("to", descr = "To submission date", required = true)
+    val outputBucket = opt[String]("bucket", descr = "bucket", required = true)
+    verify()
+  }
 
-  override def transform(sc: SparkContext, bucket: Bucket, summaries: RDD[ObjectSummary], from: String, to: String) {
-    val prefix = s"v$to"
+  def main(args: Array[String]): Unit = {
+    val opts = new Opts(args)
+    val from = opts.from()
+    val to = opts.to()
 
-    if (!isS3PrefixEmpty(prefix)) {
-      println(s"Warning: prefix $prefix already exists on S3!")
-      return
+    val sparkConf = new SparkConf().setAppName("Longitudinal")
+    sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
+    implicit val sc = new SparkContext(sparkConf)
+
+    val messages = Dataset("telemetry-sample")
+      .where("sourceName") {
+        case "telemetry" => true
+      }.where("sourceVersion") {
+      case "4" => true
+    }.where("docType") {
+      case "main" => true
+    }.where("submissionDate") {
+      case date if date <= to && date >= from => true
+    }.where("sampleId") {
+      case "42" => true
     }
+
+    run(opts: Opts, messages)
+  }
+
+  private def run(opts: Opts, messages: RDD[Message]): Unit = {
+    val clsName = "longitudinal" // Needed for retro-compatibility with existing data
+    val prefix = s"${clsName}/v${opts.to()}"
+    val outputBucket = opts.outputBucket()
+
+    require(isS3PrefixEmpty(outputBucket, prefix), s"s3://${outputBucket}/${prefix} already exists!")
 
     // Sort submissions in descending order
     implicit val ordering = Ordering[(String, String, Int)].reverse
-    val groups = ObjectSummary.groupBySize(summaries.collect().toIterator)
-    val clientMessages = sc.parallelize(groups, groups.size)
-      .flatMap(x => x)
-      .flatMap{ case obj =>
-        val hekaFile = bucket.getObject(obj.key).getOrElse(throw new Exception("File missing on S3: %s".format(obj.key)))
-        for (message <- HekaFrame.parse(hekaFile.getObjectContent)) yield message }
-      .flatMap{ case message =>
-        val fields = message.fieldsAsMap
-        for {
-          clientId <- fields.get("clientId").asInstanceOf[Option[String]]
-          json <- fields.get("payload.info").asInstanceOf[Option[String]]
-          info = parse(json)
-          tmp = for {
-            JString(startDate) <- info \ "subsessionStartDate"
-            JInt(counter) <- info \ "profileSubsessionCounter"
-          } yield (startDate, counter)
-          (startDate, counter) <- tmp.headOption
-        } yield ((clientId, startDate, counter.toInt), fields)
+    val clientMessages = messages
+      .flatMap {
+        (message) =>
+          val fields = message.fieldsAsMap
+          for {
+            clientId <- fields.get("clientId").asInstanceOf[Option[String]]
+            json <- fields.get("payload.info").asInstanceOf[Option[String]]
+
+            info = parse(json)
+            JString(startDate) = info \ "subsessionStartDate"
+            JInt(counter) = info \ "profileSubsessionCounter"
+          } yield ((clientId, startDate, counter.toInt), fields)
       }
       .repartitionAndSortWithinPartitions(new ClientIdPartitioner(480))
-      .map{case (key, value) => (key._1, value)}
+      .map { case (key, value) => (key._1, value) }
 
     /* One file per partition is generated at the end of the job. We want to have
        few big files but at the same time we need a high enough degree of parallelism
@@ -131,23 +153,24 @@ case class Longitudinal() extends DerivedStream {
         var ignoredCount = 0
         var processedCount = 0
         val records = allRecords.map(r => r match {
-                                       case Some(record) =>
-                                         processedCount += 1
-                                         r
-                                       case None =>
-                                         ignoredCount += 1
-                                         r
-                                     }).flatten
+          case Some(record) =>
+            processedCount += 1
+            r
+          case None =>
+            ignoredCount += 1
+            r
+        }).flatten
 
         while(records.nonEmpty) {
           // Block size has to be increased to pack more than a couple hundred profiles
           // within the same row group.
-          val localFile = ParquetFile.serialize(records, schema, 8)
-          uploadLocalFileToS3(localFile, prefix)
+          val localFile = new java.io.File(ParquetFile.serialize(records, schema, 8).toUri())
+          uploadLocalFileToS3(localFile, outputBucket, prefix)
+          localFile.delete()
         }
 
         List((processedCount + ignoredCount, ignoredCount)).toIterator
-    }
+      }
 
     val counts = partitionCounts.reduce( (x, y) => (x._1 + y._1, x._2 + y._2))
     println("Clients seen: %d".format(counts._1))
@@ -181,20 +204,22 @@ case class Longitudinal() extends DerivedStream {
         .name("blocklist_enabled").`type`().optional().booleanType()
         .name("is_default_browser").`type`().optional().booleanType()
         .name("default_search_engine").`type`().optional().stringType()
-        .name("default_search_engine_data").`type`().optional().record("default_search_engine_data").fields()
-          .name("name").`type`().optional().stringType()
-          .name("load_path").`type`().optional().stringType()
-          .name("submission_url").`type`().optional().stringType()
-        .endRecord()
+        .name("default_search_engine_data").`type`().optional()
+          .record("default_search_engine_data").fields()
+            .name("name").`type`().optional().stringType()
+            .name("load_path").`type`().optional().stringType()
+            .name("submission_url").`type`().optional().stringType()
+          .endRecord()
         .name("search_cohort").`type`().optional().stringType()
         .name("e10s_enabled").`type`().optional().booleanType()
         .name("telemetry_enabled").`type`().optional().booleanType()
         .name("locale").`type`().optional().stringType()
-        .name("update").`type`().optional().record("update").fields()
-          .name("channel").`type`().optional().stringType()
-          .name("enabled").`type`().optional().booleanType()
-          .name("auto_download").`type`().optional().booleanType()
-        .endRecord()
+        .name("update").`type`().optional()
+          .record("update").fields()
+            .name("channel").`type`().optional().stringType()
+            .name("enabled").`type`().optional().booleanType()
+            .name("auto_download").`type`().optional().booleanType()
+          .endRecord()
         .name("user_prefs").`type`().optional().map().values().stringType()
       .endRecord()
     val partnerType = SchemaBuilder
@@ -243,59 +268,65 @@ case class Longitudinal() extends DerivedStream {
       .endRecord()
     val systemHddType = SchemaBuilder
       .record("system_hdd").fields()
-        .name("profile").`type`().optional().record("hdd_profile").fields()
-          .name("model").`type`().optional().stringType()
-          .name("revision").`type`().optional().stringType()
-        .endRecord()
-        .name("binary").`type`().optional().record("binary").fields()
-          .name("model").`type`().optional().stringType()
-          .name("revision").`type`().optional().stringType()
-        .endRecord()
-        .name("system").`type`().optional().record("hdd_system").fields()
-          .name("model").`type`().optional().stringType()
-          .name("revision").`type`().optional().stringType()
-        .endRecord()
+        .name("profile").`type`().optional()
+          .record("hdd_profile").fields()
+            .name("model").`type`().optional().stringType()
+            .name("revision").`type`().optional().stringType()
+          .endRecord()
+        .name("binary").`type`().optional()
+          .record("binary").fields()
+            .name("model").`type`().optional().stringType()
+            .name("revision").`type`().optional().stringType()
+          .endRecord()
+        .name("system").`type`().optional()
+          .record("hdd_system").fields()
+            .name("model").`type`().optional().stringType()
+            .name("revision").`type`().optional().stringType()
+          .endRecord()
       .endRecord()
     val systemGfxType = SchemaBuilder
       .record("system_gfx").fields()
         .name("d2d_enabled").`type`().optional().booleanType()
         .name("d_write_enabled").`type`().optional().booleanType()
-        .name("adapters").`type`().optional().array().items().record("adapter").fields()
-          .name("description").`type`().optional().stringType()
-          .name("vendor_id").`type`().optional().stringType()
-          .name("device_id").`type`().optional().stringType()
-          .name("subsys_id").`type`().optional().stringType()
-          .name("ram").`type`().optional().intType()
-          .name("driver").`type`().optional().stringType()
-          .name("driver_version").`type`().optional().stringType()
-          .name("driver_date").`type`().optional().stringType()
-          .name("gpu_active").`type`().optional().booleanType()
-        .endRecord()
-        .name("monitors").`type`().optional().array().items().record("monitor").fields()
-          .name("screen_width").`type`().optional().intType()
-          .name("screen_height").`type`().optional().intType()
-          .name("refresh_rate").`type`().optional().stringType()
-          .name("pseudo_display").`type`().optional().booleanType()
-          .name("scale").`type`().optional().doubleType()
-        .endRecord()
+        .name("adapters").`type`().optional().array().items()
+          .record("adapter").fields()
+            .name("description").`type`().optional().stringType()
+            .name("vendor_id").`type`().optional().stringType()
+            .name("device_id").`type`().optional().stringType()
+            .name("subsys_id").`type`().optional().stringType()
+            .name("ram").`type`().optional().intType()
+            .name("driver").`type`().optional().stringType()
+            .name("driver_version").`type`().optional().stringType()
+            .name("driver_date").`type`().optional().stringType()
+            .name("gpu_active").`type`().optional().booleanType()
+         .endRecord()
+        .name("monitors").`type`().optional().array().items()
+          .record("monitor").fields()
+            .name("screen_width").`type`().optional().intType()
+            .name("screen_height").`type`().optional().intType()
+            .name("refresh_rate").`type`().optional().stringType()
+            .name("pseudo_display").`type`().optional().booleanType()
+            .name("scale").`type`().optional().doubleType()
+          .endRecord()
       .endRecord()
 
     val activeAddonsType = SchemaBuilder
-      .map().values().record("active_addon").fields()
-        .name("blocklisted").`type`().optional().booleanType()
-        .name("description").`type`().optional().stringType()
-        .name("name").`type`().optional().stringType()
-        .name("user_disabled").`type`().optional().booleanType()
-        .name("app_disabled").`type`().optional().booleanType()
-        .name("version").`type`().optional().stringType()
-        .name("scope").`type`().optional().intType()
-        .name("type").`type`().optional().stringType()
-        .name("foreign_install").`type`().optional().booleanType()
-        .name("has_binary_components").`type`().optional().booleanType()
-        .name("install_day").`type`().optional().longType()
-        .name("update_day").`type`().optional().longType()
-        .name("signed_state").`type`().optional().intType()
-      .endRecord()
+      .map().values()
+        .record("active_addon").fields()
+          .name("blocklisted").`type`().optional().booleanType()
+          .name("description").`type`().optional().stringType()
+          .name("name").`type`().optional().stringType()
+          .name("user_disabled").`type`().optional().booleanType()
+          .name("app_disabled").`type`().optional().booleanType()
+          .name("version").`type`().optional().stringType()
+          .name("scope").`type`().optional().intType()
+          .name("type").`type`().optional().stringType()
+          .name("foreign_install").`type`().optional().booleanType()
+          .name("has_binary_components").`type`().optional().booleanType()
+          .name("install_day").`type`().optional().longType()
+          .name("update_day").`type`().optional().longType()
+          .name("signed_state").`type`().optional().intType()
+        .endRecord()
     val themeType = SchemaBuilder
       .record("theme").fields()
         .name("id").`type`().optional().stringType()
@@ -312,22 +343,24 @@ case class Longitudinal() extends DerivedStream {
         .name("update_day").`type`().optional().longType()
       .endRecord()
     val activePluginsType = SchemaBuilder
-      .array().items().record("active_plugin").fields()
-        .name("name").`type`().optional().stringType()
-        .name("version").`type`().optional().stringType()
-        .name("description").`type`().optional().stringType()
-        .name("blocklisted").`type`().optional().booleanType()
-        .name("disabled").`type`().optional().booleanType()
-        .name("clicktoplay").`type`().optional().booleanType()
-        .name("mime_types").`type`().optional().array().items().stringType()
-        .name("update_day").`type`().optional().longType()
-      .endRecord()
+      .array().items()
+        .record("active_plugin").fields()
+          .name("name").`type`().optional().stringType()
+          .name("version").`type`().optional().stringType()
+          .name("description").`type`().optional().stringType()
+          .name("blocklisted").`type`().optional().booleanType()
+          .name("disabled").`type`().optional().booleanType()
+          .name("clicktoplay").`type`().optional().booleanType()
+          .name("mime_types").`type`().optional().array().items().stringType()
+          .name("update_day").`type`().optional().longType()
+        .endRecord()
     val activeGMPluginsType = SchemaBuilder
-      .map().values().record("active_gmp_plugins").fields()
-        .name("version").`type`().optional().stringType()
-        .name("user_disabled").`type`().optional().booleanType()
-        .name("apply_background_updates").`type`().optional().intType()
-      .endRecord()
+      .map().values()
+        .record("active_gmp_plugins").fields()
+          .name("version").`type`().optional().stringType()
+          .name("user_disabled").`type`().optional().booleanType()
+          .name("apply_background_updates").`type`().optional().intType()
+        .endRecord()
     val activeExperimentType = SchemaBuilder
       .record("active_experiment").fields()
         .name("id").`type`().optional().stringType()
@@ -381,7 +414,6 @@ case class Longitudinal() extends DerivedStream {
         .name("geo_country").`type`().optional().array().items().stringType()
         .name("geo_city").`type`().optional().array().items().stringType()
         .name("dnt_header").`type`().optional().array().items().stringType()
-        .name("addons").`type`().optional().array().items().stringType()
         .name("async_plugin_init").`type`().optional().array().items().booleanType()
         .name("flash_version").`type`().optional().array().items().stringType()
         .name("previous_build_id").`type`().optional().array().items().stringType()
@@ -732,9 +764,7 @@ case class Longitudinal() extends DerivedStream {
       JSON2Avro("environment.addons",         List("activeExperiment"),         "active_experiment", sorted, root, schema)
       JSON2Avro("environment.addons",         List("persona"),                  "persona", sorted, root, schema)
       JSON2Avro("payload.simpleMeasurements", List[String](),                   "simple_measurements", sorted, root, schema)
-      JSON2Avro("payload.info",               List("addons"),                   "addons", sorted, root, schema)
       JSON2Avro("payload.info",               List("asyncPluginInit"),          "async_plugin_init", sorted, root, schema)
-      JSON2Avro("payload.info",               List("flashVersion"),             "flash_version", sorted, root, schema)
       JSON2Avro("payload.info",               List("previousBuildId"),          "previous_build_id", sorted, root, schema)
       JSON2Avro("payload.info",               List("previousSessionId"),        "previous_session_id", sorted, root, schema)
       JSON2Avro("payload.info",               List("previousSubsessionId"),     "previous_subsession_id", sorted, root, schema)

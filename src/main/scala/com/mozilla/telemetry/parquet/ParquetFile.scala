@@ -15,6 +15,8 @@ object ParquetFile {
 
   hadoopConf.set("fs.file.impl", classOf[org.apache.hadoop.fs.LocalFileSystem].getName)
 
+  // Note: clients shouldn't assume that serialize consumes the entirety of the iterator as the behaviour might
+  // change in the future.
   def serialize(data: Iterator[GenericRecord], schema: Schema, blockSizeMultiplier: Int = 1): Path = {
     val blockSize = blockSizeMultiplier*ParquetWriter.DEFAULT_BLOCK_SIZE
     val pageSize = ParquetWriter.DEFAULT_PAGE_SIZE

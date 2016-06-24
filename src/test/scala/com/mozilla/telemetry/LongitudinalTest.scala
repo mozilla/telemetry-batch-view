@@ -1,7 +1,7 @@
 package com.mozilla.telemetry
 
 import com.mozilla.telemetry.parquet.ParquetFile
-import com.mozilla.telemetry.streams.Longitudinal
+import com.mozilla.telemetry.views.LongitudinalView
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
 import org.apache.spark.sql.{Row, SQLContext}
@@ -117,7 +117,6 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       val info =
         ("subsessionStartDate" -> "2015-12-09T00:00:00.0-14:00") ~
         ("profileSubsessionCounter" -> (1000 - idx)) ~
-        ("flashVersion" -> "19.0.0.226") ~
         ("reason" -> "shutdown")
 
       Map("clientId" -> "26c9d181-b95b-4af5-bb35-84ebf0da795d",
@@ -144,14 +143,13 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     }
 
     new {
-      private val view = Longitudinal()
       private val buildSchema = PrivateMethod[Schema]('buildSchema)
       private val buildRecord = PrivateMethod[Option[GenericRecord]]('buildRecord)
 
-      private val schema = view invokePrivate buildSchema()
+      private val schema = LongitudinalView invokePrivate buildSchema()
       val payloads = for (i <- 1 to 10) yield createPayload(i)
       private val dupes = for (i <- 1 to 10) yield createPayload(1)
-      private val record = (view invokePrivate buildRecord(payloads ++ dupes, schema)).get
+      private val record = (LongitudinalView  invokePrivate buildRecord(payloads ++ dupes, schema)).get
       private val path = ParquetFile.serialize(List(record).toIterator, schema)
       private val filename = path.toString.replace("file:", "")
 
@@ -202,10 +200,6 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
   }
 
   "payload.info" must "be converted correctly" in {
-    val flashRecords = fixture.row.getList[String](fixture.row.fieldIndex("flash_version"))
-    assert(flashRecords.length == fixture.payloads.length)
-    flashRecords.foreach(x => assert(x == "19.0.0.226"))
-
     val reasonRecords = fixture.row.getList[String](fixture.row.fieldIndex("reason"))
     assert(reasonRecords.length == fixture.payloads.length)
     reasonRecords.foreach(x => assert(x == "shutdown"))

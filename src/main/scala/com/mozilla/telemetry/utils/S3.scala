@@ -2,8 +2,27 @@ package com.mozilla.telemetry.utils
 
 import java.io.InputStream
 import awscala.s3.{Bucket, S3}
-import com.mozilla.telemetry.ObjectSummary
 import scala.collection.JavaConverters._
+
+// key is the S3 filename, size is the object size in bytes.
+case class ObjectSummary(key: String, size: Long) // S3ObjectSummary can't be serialized
+
+object ObjectSummary {
+  def groupBySize(keys: Iterator[ObjectSummary]): List[List[ObjectSummary]] = {
+    val threshold = 1L << 31
+    keys.foldRight((0L, List[List[ObjectSummary]]()))(
+      (x, acc) => {
+        acc match {
+          case (size, head :: tail) if size + x.size < threshold =>
+            (size + x.size, (x :: head) :: tail)
+          case (size, res) if size + x.size < threshold =>
+            (size + x.size, List(x) :: res)
+          case (_, res) =>
+            (x.size, List(x) :: res)
+        }
+      })._2
+  }
+}
 
 abstract class AbstractS3Store {
   def listKeys(bucket: String, prefix: String): Stream[ObjectSummary]
