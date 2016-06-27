@@ -37,7 +37,7 @@ object E10sExperimentView {
     val channel = opt[String]("channel", descr = "channel", required = true)
     val version = opt[String]("version", descr = "version", required = true)
     val experimentId = opt[String]("experiment", descr = "experiment", required = true)
-    val outputBucket = opt[String]("bucket", descr = "bucket", required = true)
+    val outputBucket = opt[String]("bucket", descr = "Destination bucket for parquet data", required = true)
     verify()
   }
 

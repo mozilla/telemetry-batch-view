@@ -1,6 +1,5 @@
 package com.mozilla.telemetry.views
 
-import com.typesafe.config._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Row, SQLContext, SaveMode}
@@ -16,6 +15,7 @@ object CrashAggregateView {
   private class Conf(args: Array[String]) extends ScallopConf(args) {
     val from = opt[String]("from", descr = "From submission date", required = false)
     val to = opt[String]("to", descr = "To submission date", required = false)
+    val outputBucket = opt[String]("bucket", descr = "Destination bucket for parquet data", required = true)
     verify()
   }
 
@@ -39,8 +39,6 @@ object CrashAggregateView {
     val sqlContext = new SQLContext(sc)
     val hadoopConf = sc.hadoopConfiguration
     hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
-    val appConf = ConfigFactory.load()
-    val parquetBucket = appConf.getString("app.parquetBucket")
 
     for (offset <- 0 to Days.daysBetween(from, to).getDays) {
       val currentDate = from.plusDays(offset)
@@ -64,7 +62,7 @@ object CrashAggregateView {
       val records = sqlContext.createDataFrame(rowRDD.coalesce(1), schema)
 
       // upload the resulting aggregate Spark records to S3
-      records.write.mode(SaveMode.Overwrite).parquet(s"s3://$parquetBucket/crash_aggregates/v1/submission_date=$currentDateString")
+      records.write.mode(SaveMode.Overwrite).parquet(s"s3://${conf.outputBucket()}/crash_aggregates/v1/submission_date=$currentDateString")
 
       println("=======================================================================================")
       println(s"JOB COMPLETED SUCCESSFULLY FOR $currentDate")
