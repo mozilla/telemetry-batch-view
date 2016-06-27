@@ -28,8 +28,10 @@ class Dataset private (bucket: String, schema: Schema, prefix: String,
     new Dataset(bucket, schema, prefix, clauses + (dimension -> clause), s3Store)
   }
 
-  def summaries(fileLimit: Option[Int] = None): Stream[ObjectSummary] = {
-    def scan(dimensions: List[Dimension], prefixes: Stream[String]): Stream[String] = {
+  def summaries(fileLimit: Option[Int] = None): Seq[ObjectSummary] = {
+    import scala.collection.GenSeq
+
+    def scan(dimensions: List[Dimension], prefixes: GenSeq[String]): GenSeq[String] = {
       if (dimensions.isEmpty) {
         prefixes
       } else {
@@ -45,12 +47,16 @@ class Dataset private (bucket: String, schema: Schema, prefix: String,
       }
     }
 
-    val keys = scan(schema.dimensions, Stream(s"$prefix/"))
-      .flatMap(s3Store.listKeys(bucket, _))
-
     fileLimit match {
-      case Some(x) => keys.take(x)
-      case _ => keys
+      case Some(x) =>
+        scan(schema.dimensions, Stream(s"$prefix/"))
+          .flatMap(s3Store.listKeys(bucket, _))
+          .take(x)
+          .seq
+      case _ =>
+        scan(schema.dimensions, Stream(s"$prefix/").par)
+          .flatMap(s3Store.listKeys(bucket, _))
+          .seq
     }
   }
 
