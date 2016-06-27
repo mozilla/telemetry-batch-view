@@ -115,7 +115,7 @@ object LongitudinalView {
     val prefix = s"${clsName}/v${opts.to()}"
     val outputBucket = opts.outputBucket()
 
-    require(isS3PrefixEmpty(outputBucket, prefix), s"s3://${outputBucket}/${prefix} already exists!")
+    require(S3Store.isPrefixEmpty(outputBucket, prefix), s"s3://${outputBucket}/${prefix} already exists!")
 
     // Sort submissions in descending order
     implicit val ordering = Ordering[(String, String, Int)].reverse
@@ -165,7 +165,7 @@ object LongitudinalView {
           // Block size has to be increased to pack more than a couple hundred profiles
           // within the same row group.
           val localFile = new java.io.File(ParquetFile.serialize(records, schema, 8).toUri())
-          uploadLocalFileToS3(localFile, outputBucket, prefix)
+          S3Store.uploadFile(localFile, outputBucket, prefix)
           localFile.delete()
         }
 

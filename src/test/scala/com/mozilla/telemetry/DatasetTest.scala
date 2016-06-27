@@ -55,6 +55,7 @@ object MockS3Store extends AbstractS3Store {
       case "Error/" => Stream(ObjectSummary("error", 1), ObjectSummary("missing", 1))
     }
   }
+
   def listFolders(bucket: String, prefix: String, delimiter: String): Stream[String] = prefix match {
     case "telemetry/" => Stream("20160606/", "20160607/")
     case "20160606/" => Stream("main/", "crash/", "error/")
@@ -63,6 +64,10 @@ object MockS3Store extends AbstractS3Store {
     case "crash/" => Stream("Fennec/")
     case "error/" => Stream("Error/")
   }
+
+  def uploadFile(file: java.io.File, bucket: String, prefix: String, name: String) = ???
+
+  def isPrefixEmpty(bucket: String, prefix: String): Boolean = ???
 }
 
 class DatasetTest extends FlatSpec with Matchers{

@@ -61,7 +61,7 @@ object ChurnView {
     val clsName = uncamelize(this.getClass.getSimpleName.replace("$", ""))
     val prefix = s"${clsName}/v1/submission_date_s3=${currentDay}"
 
-    require(isS3PrefixEmpty(outputBucket, prefix), s"s3://${outputBucket}/${prefix} already exists!")
+    require(S3Store.isPrefixEmpty(outputBucket, prefix), s"s3://${outputBucket}/${prefix} already exists!")
 
     messages
       .flatMap(messageToMap)
@@ -75,7 +75,7 @@ object ChurnView {
 
         while(records.nonEmpty) {
           val localFile = new java.io.File(ParquetFile.serialize(records, schema).toUri)
-          uploadLocalFileToS3(localFile, outputBucket, prefix)
+          S3Store.uploadFile(localFile, outputBucket, prefix)
           localFile.delete()
         }
     }

@@ -1,14 +1,8 @@
 package com.mozilla.telemetry
 package object utils{
-  import awscala.s3._
-  import java.util.UUID
   import java.rmi.dgc.VMID
   import org.apache.hadoop.fs.Path
   import org.joda.time._
-  import org.apache.log4j.Logger
-
-  @transient private lazy val s3: S3 = S3()
-  @transient private lazy val logger = Logger.getLogger("Utils")
 
   private val specialCases = Map(
     "submission_url" -> "submissionURL",
@@ -90,15 +84,11 @@ package object utils{
     new Path(fileURI)
   }
 
-  def isS3PrefixEmpty(bucket: String, prefix: String): Boolean = {
-    import awscala.s3._
-    val s3: S3 = S3()
-    s3.objectSummaries(Bucket(bucket), prefix).isEmpty
-  }
-
-  def uploadLocalFileToS3(file: java.io.File, bucket: String, prefix: String, name: String = UUID.randomUUID.toString) {
-    val key = s"$prefix/$name"
-    logger.info(s"Uploading Parquet file to $bucket/$key")
-    s3.putObject(bucket, key, file)
+  def time[R](block: => R): R = {
+    val t0 = System.nanoTime()
+    val result = block  // call-by-name
+    val t1 = System.nanoTime()
+    println(s"Elapsed time: ${(t1 - t0)/1000000000.0} s")
+    result
   }
 }
