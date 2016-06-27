@@ -74,6 +74,11 @@ object S3Store extends AbstractS3Store {
     s3.putObject(bucket, key, file)
   }
 
+  def deleteKey(bucket: String, key: String) {
+    logger.info(s"Deleting file s3://$bucket/$key")
+    s3.deleteObject(bucket, key)
+  }
+
   def isPrefixEmpty(bucket: String, prefix: String): Boolean = {
     s3.objectSummaries(Bucket(bucket), prefix).isEmpty
   }
