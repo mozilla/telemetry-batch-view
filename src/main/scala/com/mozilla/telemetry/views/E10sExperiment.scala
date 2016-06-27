@@ -78,7 +78,7 @@ object E10sExperimentView {
     val prefix = s"${clsName}/${experimentId}/v${opts.from()}_${opts.to()}"
     val outputBucket = opts.outputBucket()
 
-    require(isS3PrefixEmpty(outputBucket, prefix), s"s3://${outputBucket}/${prefix} already exists!")
+    require(S3Store.isPrefixEmpty(outputBucket, prefix), s"s3://${outputBucket}/${prefix} already exists!")
 
     messages
       .flatMap { message =>
@@ -124,7 +124,7 @@ object E10sExperimentView {
 
         while(records.nonEmpty) {
           val localFile = new java.io.File(ParquetFile.serialize(records, schema).toUri)
-          uploadLocalFileToS3(localFile, outputBucket, prefix)
+          S3Store.uploadFile(localFile, outputBucket, prefix)
           localFile.delete()
         }
       }
