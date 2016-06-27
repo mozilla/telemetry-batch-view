@@ -7,8 +7,8 @@ import org.joda.time.{DateTime, Days, format}
 import org.json4s.JsonAST.{JBool, JInt, JString, JValue}
 import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._
-import com.mozilla.telemetry.heka.{Dataset, HekaFrame, Message}
-import com.mozilla.telemetry.utils.MainPing
+import com.mozilla.telemetry.heka.{Dataset, Message}
+import com.mozilla.telemetry.utils.{MainPing, S3Store}
 
 object MainSummaryView {
   def streamVersion: String = "v3"
@@ -49,6 +49,12 @@ object MainSummaryView {
     hadoopConf.setInt("dfs.blocksize", parquetSize)
     // Don't write temp files to S3 while building parquet files.
     hadoopConf.set("spark.sql.parquet.output.committer.class", "org.apache.spark.sql.parquet.DirectParquetOutputCommitter")
+    // Don't write metadata files, because they screw up partition discovery.
+    // This is fixed in Spark 2.0, see:
+    //   https://issues.apache.org/jira/browse/SPARK-13207
+    //   https://issues.apache.org/jira/browse/SPARK-15454
+    //   https://issues.apache.org/jira/browse/SPARK-15895
+    hadoopConf.set("parquet.enable.summary-metadata", "false")
 
     for (offset <- 0 to Days.daysBetween(from, to).getDays) {
       val currentDate = from.plusDays(offset)
@@ -97,7 +103,8 @@ object MainSummaryView {
       //    loaded, so we can't do single day incremental updates.
       //  - "ignore" causes new data not to be saved.
       // So we manually add the "submission_date_s3" parameter to the s3path.
-      val s3path = s"s3://${conf.outputBucket()}/$jobName/$streamVersion/submission_date_s3=$currentDateString"
+      val s3prefix = s"$jobName/$streamVersion/submission_date_s3=$currentDateString"
+      val s3path = s"s3://${conf.outputBucket()}/$s3prefix"
 
       // Repartition the dataframe by sample_id before saving.
       val partitioned = records.repartition(100, records.col("sample_id"))
@@ -106,6 +113,9 @@ object MainSummaryView {
       // data already exists for the target day, cowardly refuse to run. In
       // that case, go delete the data from S3 and try again.
       partitioned.write.partitionBy("sample_id").mode("error").parquet(s3path)
+
+      // Then remove the _SUCCESS file so we don't break Spark partition discovery.
+      S3Store.deleteKey(conf.outputBucket(), s"$s3prefix/_SUCCESS")
 
       println(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
       println("     RECORDS SEEN:    %d".format(ignoredCount.value + processedCount.value))
@@ -117,7 +127,7 @@ object MainSummaryView {
   // Convert the given Heka message containing a "main" ping
   // to a map containing just the fields we're interested in.
   def messageToRow(message: Message): Option[Row] = {
-    val fields = message.fieldsAsMap
+    val fields = message.fieldsAsMap()
 
     // Don't compute the expensive stuff until we need it. We may skip a record
     // due to missing required fields.
