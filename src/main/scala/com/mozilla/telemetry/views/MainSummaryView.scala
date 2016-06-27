@@ -9,7 +9,6 @@ import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._
 import com.mozilla.telemetry.heka.{Dataset, HekaFrame, Message}
 import com.mozilla.telemetry.utils.MainPing
-import com.typesafe.config.ConfigFactory
 
 object MainSummaryView {
   def streamVersion: String = "v3"
@@ -19,7 +18,7 @@ object MainSummaryView {
   private class Conf(args: Array[String]) extends ScallopConf(args) {
     val from = opt[String]("from", descr = "From submission date", required = false)
     val to = opt[String]("to", descr = "To submission date", required = false)
-    val bucket = opt[String]("bucket", descr = "Destination bucket for parquet data", required = false)
+    val outputBucket = opt[String]("bucket", descr = "Destination bucket for parquet data", required = true)
     val limit = opt[Int]("limit", descr = "Maximum number of files to read from S3", required = false)
     verify()
   }
@@ -34,15 +33,6 @@ object MainSummaryView {
     val from = conf.from.get match {
       case Some(f) => fmt.parseDateTime(f)
       case _ => DateTime.now.minusDays(1)
-    }
-
-    val appConf = ConfigFactory.load()
-
-    // Use the 'bucket' parameter if supplied, else default to
-    // what's in the config.
-    val parquetBucket = conf.bucket.get match {
-      case Some(b) => b
-      case _ => appConf.getString("app.parquetBucket")
     }
 
     // Set up Spark
@@ -107,7 +97,8 @@ object MainSummaryView {
       //    loaded, so we can't do single day incremental updates.
       //  - "ignore" causes new data not to be saved.
       // So we manually add the "submission_date_s3" parameter to the s3path.
-      val s3path = s"s3://$parquetBucket/$jobName/$streamVersion/submission_date_s3=$currentDateString"
+      val bucket = conf.outputBucket
+      val s3path = s"s3://$bucket/$jobName/$streamVersion/submission_date_s3=$currentDateString"
 
       // Repartition the dataframe by sample_id before saving.
       val partitioned = records.repartition(100, records.col("sample_id"))

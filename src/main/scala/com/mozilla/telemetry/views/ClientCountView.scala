@@ -1,7 +1,6 @@
 package com.mozilla.telemetry.views
 
 import com.github.nscala_time.time.Imports._
-import com.typesafe.config._
 import com.mozilla.spark.sql.hyperloglog.aggregates._
 import com.mozilla.spark.sql.hyperloglog.functions._
 import org.apache.spark.{SparkConf, SparkContext}
@@ -14,6 +13,7 @@ object ClientCountView {
   private class Conf(args: Array[String]) extends ScallopConf(args) {
     val from = opt[String]("from", descr = "From submission date", required = false)
     val to = opt[String]("to", descr = "To submission date", required = false)
+    val outputBucket = opt[String]("bucket", descr = "Destination bucket for parquet data", required = true)
     verify()
   }
 
@@ -75,8 +75,7 @@ object ClientCountView {
     val subset = df.where(s"submission_date_s3 >= $from and submission_date_s3 <= $to")
     val aggregates = aggregate(subset).coalesce(32)
 
-    val appConf = ConfigFactory.load()
-    val parquetBucket = appConf.getString("app.parquetBucket")
-    aggregates.write.parquet(s"s3://$parquetBucket/client_count/v$from$to")
+    val bucket = conf.outputBucket
+    aggregates.write.parquet(s"s3://$bucket/client_count/v$from$to")
   }
 }
