@@ -128,8 +128,8 @@ object LongitudinalView {
             json <- fields.get("payload.info").asInstanceOf[Option[String]]
 
             info = parse(json)
-            JString(startDate) = info \ "subsessionStartDate"
-            JInt(counter) = info \ "profileSubsessionCounter"
+            JString(startDate) <- (info \ "subsessionStartDate").toOption
+            JInt(counter) <- (info \ "profileSubsessionCounter").toOption
           } yield ((clientId, startDate, counter.toInt), fields)
       }
       .repartitionAndSortWithinPartitions(new ClientIdPartitioner(480))
