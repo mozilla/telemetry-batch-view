@@ -67,6 +67,8 @@ object MockS3Store extends AbstractS3Store {
 
   def uploadFile(file: java.io.File, bucket: String, prefix: String, name: String) = ???
 
+  def deleteKey(bucket: String, key: String) = ???
+
   def isPrefixEmpty(bucket: String, prefix: String): Boolean = ???
 }
 

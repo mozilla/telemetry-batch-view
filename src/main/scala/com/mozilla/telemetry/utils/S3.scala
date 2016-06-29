@@ -31,6 +31,7 @@ abstract class AbstractS3Store {
   def listFolders(bucket: String, prefix: String, delimiter: String = "/"): Stream[String]
   def getKey(bucket: String, key: String): InputStream
   def uploadFile(file: File, bucket: String, prefix: String, name: String)
+  def deleteKey(bucket: String, key: String)
   def isPrefixEmpty(bucket: String, prefix: String): Boolean
 }
 
@@ -72,6 +73,11 @@ object S3Store extends AbstractS3Store {
     val key = s"$prefix/$name"
     logger.info(s"Uploading file to $bucket/$key")
     s3.putObject(bucket, key, file)
+  }
+
+  def deleteKey(bucket: String, key: String) {
+    logger.info(s"Deleting file s3://$bucket/$key")
+    s3.deleteObject(bucket, key)
   }
 
   def isPrefixEmpty(bucket: String, prefix: String): Boolean = {
