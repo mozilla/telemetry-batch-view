@@ -1,5 +1,6 @@
 package com.mozilla.telemetry.views
 
+import com.github.nscala_time.time.Imports._
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericData, GenericRecord, GenericRecordBuilder}
 import org.apache.spark.{Partitioner, SparkContext, SparkConf}
@@ -79,7 +80,7 @@ object LongitudinalView {
   }
 
   private class Opts(args: Array[String]) extends ScallopConf(args) {
-    val from = opt[String]("from", descr = "From submission date", required = true)
+    val from = opt[String]("from", descr = "From submission date", required = false)
     val to = opt[String]("to", descr = "To submission date", required = true)
     val outputBucket = opt[String]("bucket", descr = "bucket", required = true)
     verify()
@@ -87,8 +88,13 @@ object LongitudinalView {
 
   def main(args: Array[String]): Unit = {
     val opts = new Opts(args)
-    val from = opts.from()
+    val fmt = DateTimeFormat.forPattern("yyyyMMdd")
+
     val to = opts.to()
+    val from = opts.from.get match {
+      case Some(f) => f
+      case _ => fmt.print(fmt.parseDateTime(to).minusMonths(6))
+    }
 
     val sparkConf = new SparkConf().setAppName("Longitudinal")
     sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
