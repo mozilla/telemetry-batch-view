@@ -69,9 +69,15 @@ object HekaFrame{
         case Success(x) =>
           x
         case _ if n > 1 =>
+          if (is != null) {
+            is.close()
+          }
           is = null
           retry(n - 1)(fn)
         case Failure(e) =>
+          if (is != null) {
+            is.close()
+          }
           throw e
       }
     }
@@ -86,8 +92,14 @@ object HekaFrame{
             None
         }
       }.takeWhile {
-        case Some(x) => true
-        case _ => false
+        case Some(x) =>
+          true
+
+        case _ =>
+          if (is != null) {
+            is.close()
+          }
+          false
       }.flatten
   }
 }
