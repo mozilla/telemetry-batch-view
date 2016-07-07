@@ -5,6 +5,22 @@ import com.mozilla.telemetry.heka.Dataset
 import com.mozilla.telemetry.utils.{ObjectSummary, AbstractS3Store}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{FlatSpec, Matchers}
+import scala.collection.mutable.ListBuffer
+
+class ClosableByteArrayInputStream(buf: Array[Byte]) extends ByteArrayInputStream(buf) {
+  var isClosed = false
+
+  ClosableByteArrayInputStream.inputStreams += this
+
+  override def close: Unit = {
+    isClosed = true
+    super.close()
+  }
+}
+
+object ClosableByteArrayInputStream {
+  val inputStreams: ListBuffer[ClosableByteArrayInputStream] = ListBuffer()
+}
 
 object MockS3Store extends AbstractS3Store {
   private var retry = 0
@@ -34,34 +50,39 @@ object MockS3Store extends AbstractS3Store {
       new ByteArrayInputStream(text.getBytes)
 
     case "x" =>
-      new ByteArrayInputStream(Resources.hekaFile(42))
+      new ClosableByteArrayInputStream(Resources.hekaFile(42))
 
-    case "error" =>
+    case "retry" =>
       retry += 1
       if (retry == 3) {
-        new ByteArrayInputStream(Resources.hekaFile(84))
+        new ClosableByteArrayInputStream(Resources.hekaFile(84))
       } else {
-        new ByteArrayInputStream(Resources.hekaFile(42) ++ Array(0.toByte))
+        new ClosableByteArrayInputStream(Resources.hekaFile(42) ++ Array(0.toByte))
       }
 
-    case _ =>
-      throw new Exception("File missing")
+    case "corrupt" =>
+      new ClosableByteArrayInputStream("foobar".getBytes)
+
+    case other =>
+      throw new Exception(s"File $other is missing")
   }
 
   def listKeys(bucket: String, prefix: String): Stream[ObjectSummary] = {
     prefix match {
       case "Firefox/" => Stream(ObjectSummary("x", 1))
       case "Fennec/" => Stream(ObjectSummary("a", 1))
-      case "Error/" => Stream(ObjectSummary("error", 1), ObjectSummary("missing", 1))
+      case "Retry/" => Stream(ObjectSummary("retry", 1))
+      case "Error/" => Stream(ObjectSummary("missing", 1), ObjectSummary("corrupt", 1))
     }
   }
 
   def listFolders(bucket: String, prefix: String, delimiter: String): Stream[String] = prefix match {
     case "telemetry/" => Stream("20160606/", "20160607/")
-    case "20160606/" => Stream("main/", "crash/", "error/")
+    case "20160606/" => Stream("main/", "crash/", "retry/", "error/")
     case "20160607/" => Stream("other/")
     case "main/" => Stream("Firefox/")
     case "crash/" => Stream("Fennec/")
+    case "retry/" => Stream("Retry/")
     case "error/" => Stream("Error/")
   }
 
@@ -89,8 +110,8 @@ class DatasetTest extends FlatSpec with Matchers{
       .where("submissionDate") {
         case "20160606" => true
       }.where("docType") {
-      case "main" => true
-    }.summaries(Some(1)).toList
+        case "main" => true
+      }.summaries(Some(1)).toList
 
     files should be (List(ObjectSummary("x", 1)))
   }
@@ -105,8 +126,8 @@ class DatasetTest extends FlatSpec with Matchers{
         .where("submissionDate") {
           case "20160606" => true
         }.where("docType") {
-        case "main" => true
-      }
+          case "main" => true
+        }
 
       records.count() should be (42)
     } finally {
@@ -124,12 +145,35 @@ class DatasetTest extends FlatSpec with Matchers{
         .where("submissionDate") {
           case "20160606" => true
         }.where("docType") {
-        case "error" => true
-      }
+          case "retry" => true
+        }
 
       records.count() should be (84)
     } finally {
       sc.stop()
     }
+  }
+
+  "Reads from S3" can "fail silently" in {
+    val sparkConf = new SparkConf().setAppName("DatasetTest")
+    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
+    implicit val sc = new SparkContext(sparkConf)
+
+    try {
+      val records = Dataset("telemetry", MockS3Store)
+        .where("submissionDate") {
+          case "20160606" => true
+        }.where("docType") {
+          case "error" => true
+        }
+
+      records.count() should be (0)
+    } finally {
+      sc.stop()
+    }
+  }
+
+  "Reads from S3" should "not leave streams open" in {
+    ClosableByteArrayInputStream.inputStreams.foreach(x => x.isClosed shouldBe(true))
   }
 }
