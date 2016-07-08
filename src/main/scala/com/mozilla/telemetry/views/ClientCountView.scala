@@ -53,13 +53,13 @@ object ClientCountView {
     val fmt = DateTimeFormat.forPattern("yyyyMMdd")
 
     val to = conf.to.get match {
-      case Some(t) => fmt.print(fmt.parseDateTime(t))
+      case Some(t) => t
       case _ => fmt.print(DateTime.now.minusDays(1))
     }
 
     val from = conf.from.get match {
-      case Some(f) => fmt.print(fmt.parseDateTime(f))
-      case _ => fmt.print(DateTime.now.minusDays(180))
+      case Some(t) => t
+      case _ => fmt.print(fmt.parseDateTime(to).minusMonths(6))
     }
 
     val sparkConf = new SparkConf().setAppName("ClientCountView")
