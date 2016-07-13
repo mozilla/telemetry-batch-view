@@ -208,11 +208,23 @@ object MainSummaryView {
         case _ => null
       },
       system \ "os" \ "servicePackMajor" match {
-        case JString(x) => x
+        case JInt(x) => x.toLong
         case _ => null
       },
       system \ "os" \ "servicePackMinor" match {
-        case JString(x) => x
+        case JInt(x) => x.toLong
+        case _ => null
+      },
+      system \ "os" \ "windowsBuildNumber" match {
+        case JInt(x) => x.toLong
+        case _ => null
+      },
+      system \ "os" \ "windowsUBR" match {
+        case JInt(x) => x.toLong
+        case _ => null
+      },
+      system \ "os" \ "installYear" match {
+        case JInt(x) => x.toLong
         case _ => null
       },
       profile \ "creationDate" match {
@@ -405,8 +417,13 @@ object MainSummaryView {
       StructField("city", StringType, nullable = true), // geoCity
       StructField("os", StringType, nullable = true), // environment/system/os/name
       StructField("os_version", StringType, nullable = true), // environment/system/os/version
-      StructField("os_service_pack_major", StringType, nullable = true), // environment/system/os/servicePackMajor
-      StructField("os_service_pack_minor", StringType, nullable = true), // environment/system/os/servicePackMinor
+      StructField("os_service_pack_major", LongType, nullable = true), // environment/system/os/servicePackMajor
+      StructField("os_service_pack_minor", LongType, nullable = true), // environment/system/os/servicePackMinor
+      StructField("windows_build_number", LongType, nullable = true), // environment/system/os/windowsBuildNumber
+      StructField("windows_ubr", LongType, nullable = true), // environment/system/os/windowsUBR
+
+      // Note: Windows only!
+      StructField("install_year", LongType, nullable = true), // environment/system/os/installYear
 
       // TODO: use proper 'date' type for date columns.
       StructField("profile_creation_date", LongType, nullable = true), // environment/profile/creationDate
