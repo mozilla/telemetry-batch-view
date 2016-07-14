@@ -20,6 +20,8 @@ object MainSummaryView {
     val to = opt[String]("to", descr = "To submission date", required = false)
     val outputBucket = opt[String]("bucket", descr = "Destination bucket for parquet data", required = true)
     val limit = opt[Int]("limit", descr = "Maximum number of files to read from S3", required = false)
+    val channel = opt[String]("channel", descr = "Only process data from the given channel", required = false)
+    val appVersion = opt[String]("version", descr = "Only process data from the given app version", required = false)
     verify()
   }
 
@@ -59,9 +61,15 @@ object MainSummaryView {
     for (offset <- 0 to Days.daysBetween(from, to).getDays) {
       val currentDate = from.plusDays(offset)
       val currentDateString = currentDate.toString("yyyyMMdd")
+      val filterChannel = conf.channel.get
+      val filterVersion = conf.appVersion.get
 
       println("=======================================================================================")
       println(s"BEGINNING JOB $jobName FOR $currentDateString")
+      if (filterChannel.nonEmpty)
+        println(s" Filtering for channel = '${filterChannel.get}'")
+      if (filterVersion.nonEmpty)
+        println(s" Filtering for version = '${filterVersion.get}'")
 
       val schema = buildSchema
       val ignoredCount = sc.accumulator(0, "Number of Records Ignored")
@@ -77,6 +85,10 @@ object MainSummaryView {
           case "Firefox" => true
         }.where("submissionDate") {
           case date if date == currentDate.toString("yyyyMMdd") => true
+        }.where("appUpdateChannel") {
+          case channel => filterChannel.isEmpty || channel == filterChannel.get
+        }.where("appVersion") {
+          case v => filterVersion.isEmpty || v == filterVersion.get
         }.records(conf.limit.get)
 
       val rowRDD = messages.flatMap(m => {
