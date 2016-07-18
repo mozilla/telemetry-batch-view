@@ -140,7 +140,7 @@ object AddonRecommender {
           addonType <- meta.`type`
           if !blocklisted && (addonType != "extension" || signedState == 2) && !userDisabled && !appDisabled
         } yield {
-          (clientId, addonName, hash(clientId), hash(addonName))
+          (clientId, addonName, hash(clientId), hash(addonId))
         }
       }
 
@@ -180,9 +180,8 @@ object AddonRecommender {
 
     // Serialize add-on mapping
     val addonMapping = clientAddons
-      .map(_._2)
+      .map{ case (_, addonName, _, hashedAddonId) => (hashedAddonId, addonName)}
       .distinct
-      .map(addon => (hash(addon), addon))
       .cache()
       .collect()
       .toMap
