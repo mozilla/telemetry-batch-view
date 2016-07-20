@@ -270,6 +270,9 @@ object LongitudinalView {
         .name("kernel_version").`type`().optional().stringType()
         .name("service_pack_major").`type`().optional().intType()
         .name("service_pack_minor").`type`().optional().intType()
+        .name("windows_build_number").`type`().optional().intType()
+        .name("windows_ubr").`type`().optional().intType()
+        .name("install_year").`type`().optional().intType()
         .name("locale").`type`().optional().stringType()
       .endRecord()
     val systemHddType = SchemaBuilder
