@@ -8,7 +8,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.spark.ml.evaluation.NaNRegressionEvaluator
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{SparkConf, SparkContext}
 import org.json4s.JsonDSL._
 import org.json4s._
@@ -121,10 +121,10 @@ object AddonRecommender {
     val sparkConf = new SparkConf().setAppName(this.getClass.getName)
     sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
     val sc = new SparkContext(sparkConf)
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
+    val hiveContext = new HiveContext(sc)
+    import hiveContext.implicits._
 
-    val clientAddons = sqlContext.sql("select * from longitudinal")
+    val clientAddons = hiveContext.sql("select * from longitudinal")
       .where("active_addons is not null")
       .selectExpr("client_id", "active_addons[0] as active_addons")
       .as[Addons]
