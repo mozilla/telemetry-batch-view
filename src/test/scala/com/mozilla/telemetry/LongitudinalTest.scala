@@ -81,6 +81,8 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
         ("os" ->
           ("name" -> "Windows_NT") ~
           ("locale" -> "en_US") ~
+          ("windowsBuildNumber" -> 10586) ~
+          ("windowsUBR" -> 446) ~
           ("version" -> "6.1")) ~
         ("hdd" ->
           ("profile" ->
@@ -242,6 +244,13 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     val records = fixture.row.getList[Row](fixture.row.fieldIndex("system_os"))
     assert(records.length == fixture.payloads.length)
     records.foreach(x => assert(x.getAs[String]("name") == "Windows_NT"))
+  }
+
+  "environment.system/os windows fields" must "be converted correctly" in {
+    val records = fixture.row.getList[Row](fixture.row.fieldIndex("system_os"))
+    assert(records.length == fixture.payloads.length)
+    records.foreach(x => assert(x.getAs[Int]("windowsBuildNumber") == 10586))
+    records.foreach(x => assert(x.getAs[Int]("windowsUBR") == 446))
   }
 
   "environment.system/hdd" must "be converted correctly" in {
