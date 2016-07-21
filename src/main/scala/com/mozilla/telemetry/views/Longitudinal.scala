@@ -270,7 +270,7 @@ object LongitudinalView {
         .name("kernel_version").`type`().optional().stringType()
         .name("service_pack_major").`type`().optional().intType()
         .name("service_pack_minor").`type`().optional().intType()
-        .name("windowsBuildNumber").`type`().optional().intType()
+        .name("windows_build_number").`type`().optional().intType()
         .name("windowsUBR").`type`().optional().intType()
         .name("locale").`type`().optional().stringType()
       .endRecord()
