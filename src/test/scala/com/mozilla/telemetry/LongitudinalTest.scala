@@ -82,7 +82,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
           ("name" -> "Windows_NT") ~
           ("locale" -> "en_US") ~
           ("windowsBuildNumber" -> 10586) ~
-          ("windowsUBR" -> 446) ~
+          ("windowsUbr" -> 446) ~
           ("version" -> "6.1")) ~
         ("hdd" ->
           ("profile" ->
@@ -251,7 +251,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     records.foreach(x=> println(x))
     assert(records.length == fixture.payloads.length)
     records.foreach(x => assert(x.getAs[Int]("windows_build_number") == 10586))
-    records.foreach(x => assert(x.getAs[Int]("windowsUBR") == 446))
+    records.foreach(x => assert(x.getAs[Int]("windows_ubr") == 446))
   }
 
   "environment.system/hdd" must "be converted correctly" in {
