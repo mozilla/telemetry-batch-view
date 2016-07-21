@@ -16,6 +16,7 @@ import org.json4s.jackson.JsonMethods._
 import org.json4s.jackson.Serialization
 import org.json4s.jackson.Serialization.write
 import org.rogach.scallop._
+import scalaj.http._
 
 import scala.collection.Map
 import scala.io.Source
@@ -37,6 +38,8 @@ private case class Addon(blocklisted: Option[Boolean],
                          signed_state: Option[Int])
 
 private case class ItemFactors(id: Int, features: Array[Float])
+
+private case class AMOAddonInfo(guid: String, default_locale: String, name: Map[String,String])
 
 object AddonRecommender {
   implicit val formats = Serialization.formats(NoTypeHints)
@@ -86,6 +89,58 @@ object AddonRecommender {
     new DenseMatrix(itemFactors(0).features.length, itemFactors.length, itemMatrixValues)
   }
 
+  private def fetchAddonsDatabase(): Map[String, AMOAddonInfo] = {
+    // This API URI will fetch all the public addons for Firefox, sorting them by creation date.
+    var amoRequestURI = "https://addons.mozilla.org/api/v3/addons/search/?app=firefox&sort=created&type=extension"
+
+    case class AMOAddonPage(previous: String, next: String, results: List[AMOAddonInfo])
+
+    var completeAddonsMap:Map[String, AMOAddonInfo] = Map()
+
+    // We query the addon /search API endpoint to get all the addons with fewer requests. Each result "page"
+    // contains a link to the next batch of results.
+    do {
+      println(s"Fetching $amoRequestURI")
+
+      // Fetch the JSON results for this "page" and parse it using json4s.
+      val responseBody = Http(amoRequestURI).asString.body
+      val parsedObj = parse(responseBody)
+
+      // We're only interested in a few fields for each addon (e.g. locale).
+      // De-serialize the JSON data into classes and then build the GUID -> Addon map.
+      val data = parsedObj.extract[AMOAddonPage]
+      val partialMap = data.results.map(addon => addon.guid -> addon).toMap
+
+      // Merge the map containing the addon info from this page to the complete map.
+      completeAddonsMap = completeAddonsMap ++ partialMap
+
+      // Keep going until we have an URI for the next page.
+      amoRequestURI = (parsedObj \ "next").toOption match {
+        case Some(x) => x.extract[String]
+        case None => ""
+      }
+    } while (!amoRequestURI.isEmpty())
+
+    return completeAddonsMap
+  }
+
+  private def getAddonsDatabase(outputDir: String): Map[String, AMOAddonInfo] = {
+    // If we have a cached copy of the request handy, use that.
+    val dbPath = Paths.get(s"$outputDir/addons_database.json")
+    if (Files.exists(dbPath)) {
+      println(s"Hitting addon database cache at $dbPath")
+      val cachedMap = parse(Source.fromFile(dbPath.toString()).mkString).extract[Map[String, AMOAddonInfo]]
+      return cachedMap
+    }
+
+    // Otherwise fetch it from addons.mozilla.org (might take some time..) and cache it.
+    val fetchedAddonsMap = fetchAddonsDatabase()
+    val serializedItemFactors = write(fetchedAddonsMap)
+    Files.write(dbPath, serializedItemFactors.getBytes(StandardCharsets.UTF_8))
+
+    return fetchedAddonsMap
+  }
+
   private def recommend(inputDir: String, addons: Set[String]) = {
     val mapping: List[(Int, String)] = for {
       JObject(a) <- parse(Source.fromFile(s"$inputDir/addon_mapping.json").mkString)
@@ -124,6 +179,9 @@ object AddonRecommender {
     val hiveContext = new HiveContext(sc)
     import hiveContext.implicits._
 
+    // Load the addons DB, as we'll need that to prune unpublished and unreviewed addons.
+    val addonsDatabase = getAddonsDatabase(outputDir)
+
     val clientAddons = hiveContext.sql("select * from longitudinal")
       .where("active_addons is not null")
       .selectExpr("client_id", "active_addons[0] as active_addons")
@@ -131,7 +189,8 @@ object AddonRecommender {
       .flatMap{ case Addons(Some(clientId), Some(addons)) =>
         for {
           (addonId, meta) <- addons
-          if !List("loop@mozilla.org","firefox@getpocket.com", "e10srollout@mozilla.org", "firefox-hotfix@mozilla.org").contains(addonId)
+          if !List("loop@mozilla.org","firefox@getpocket.com", "e10srollout@mozilla.org", "firefox-hotfix@mozilla.org").contains(addonId) &&
+             addonsDatabase.exists(_._1 == addonId)
           addonName <- meta.name
           blocklisted <- meta.blocklisted
           signedState <- meta.signed_state
@@ -140,12 +199,12 @@ object AddonRecommender {
           addonType <- meta.`type`
           if !blocklisted && (addonType != "extension" || signedState == 2) && !userDisabled && !appDisabled
         } yield {
-          (clientId, addonName, hash(clientId), hash(addonId))
+          (clientId, addonId, hash(clientId), hash(addonId))
         }
       }
 
     val ratings = clientAddons
-      .map{ case (_, _, clientId, addon) => Rating(clientId, addon, 1.0f)}
+      .map{ case (_, _, hashedClientId, hashedAddonId) => Rating(hashedClientId, hashedAddonId, 1.0f)}
       .repartition(sc.defaultParallelism)
       .toDF
       .cache
@@ -180,7 +239,10 @@ object AddonRecommender {
 
     // Serialize add-on mapping
     val addonMapping = clientAddons
-      .map{ case (_, addonName, _, hashedAddonId) => (hashedAddonId, addonName)}
+      .map{ case (_, addonId, _, hashedAddonId) => (hashedAddonId, addonsDatabase.get(addonId) match {
+        case Some(addonInfo) => addonInfo.name.getOrElse(addonInfo.default_locale, s"Name for default locale not found $addonInfo.default_locale")
+        case None => s"GUID not in DB: $addonId"
+      })}
       .distinct
       .cache()
       .collect()
