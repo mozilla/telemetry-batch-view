@@ -40,6 +40,7 @@ private case class ItemFactors(id: Int, features: Array[Float])
 
 object AddonRecommender {
   implicit val formats = Serialization.formats(NoTypeHints)
+  private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
 
   private class Conf(args: Array[String]) extends ScallopConf(args) {
     val train = new Subcommand("train") {
@@ -131,7 +132,8 @@ object AddonRecommender {
       .flatMap{ case Addons(Some(clientId), Some(addons)) =>
         for {
           (addonId, meta) <- addons
-          if !List("loop@mozilla.org","firefox@getpocket.com", "e10srollout@mozilla.org", "firefox-hotfix@mozilla.org").contains(addonId)
+          if !List("loop@mozilla.org","firefox@getpocket.com", "e10srollout@mozilla.org", "firefox-hotfix@mozilla.org").contains(addonId) &&
+             AMODatabase.contains(addonId)
           addonName <- meta.name
           blocklisted <- meta.blocklisted
           signedState <- meta.signed_state
@@ -140,12 +142,12 @@ object AddonRecommender {
           addonType <- meta.`type`
           if !blocklisted && (addonType != "extension" || signedState == 2) && !userDisabled && !appDisabled
         } yield {
-          (clientId, addonName, hash(clientId), hash(addonId))
+          (clientId, addonId, hash(clientId), hash(addonId))
         }
       }
 
     val ratings = clientAddons
-      .map{ case (_, _, clientId, addon) => Rating(clientId, addon, 1.0f)}
+      .map{ case (_, _, hashedClientId, hashedAddonId) => Rating(hashedClientId, hashedAddonId, 1.0f)}
       .repartition(sc.defaultParallelism)
       .toDF
       .cache
@@ -180,7 +182,7 @@ object AddonRecommender {
 
     // Serialize add-on mapping
     val addonMapping = clientAddons
-      .map{ case (_, addonName, _, hashedAddonId) => (hashedAddonId, addonName)}
+      .map{ case (_, addonId, _, hashedAddonId) => (hashedAddonId, AMODatabase.getAddonNameById(addonId))}
       .distinct
       .cache()
       .collect()
@@ -197,10 +199,10 @@ object AddonRecommender {
     // Serialize model
     model.write.overwrite().save(s"file://$outputDir/als.model")
 
-    println("Cross validation statistics:")
+    logger.info("Cross validation statistics:")
     model.getEstimatorParamMaps
       .zip(model.avgMetrics)
-      .foreach(println)
+      .foreach(logger.info)
   }
 
   def main(args: Array[String]) {
