@@ -7,6 +7,7 @@ package object utils{
   private val specialCases = Map(
     "submission_url" -> "submissionURL",
     "memory_mb" -> "memoryMB",
+    "windows_ubr" -> "windowsUBR",
     "virtual_max_mb" -> "virtualMaxMB",
     "l2cache_kb" -> "l2cacheKB",
     "l3cache_kb" -> "l3cacheKB",
