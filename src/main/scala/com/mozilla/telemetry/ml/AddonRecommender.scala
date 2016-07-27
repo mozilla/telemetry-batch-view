@@ -16,7 +16,6 @@ import org.json4s.jackson.JsonMethods._
 import org.json4s.jackson.Serialization
 import org.json4s.jackson.Serialization.write
 import org.rogach.scallop._
-import scalaj.http._
 
 import scala.collection.Map
 import scala.io.Source
@@ -40,10 +39,9 @@ private case class Addon(blocklisted: Option[Boolean],
 
 private case class ItemFactors(id: Int, features: Array[Float])
 
-private case class AMOAddonInfo(guid: String, default_locale: String, name: Map[String,String])
-
 object AddonRecommender {
   implicit val formats = Serialization.formats(NoTypeHints)
+  private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
 
   private class Conf(args: Array[String]) extends ScallopConf(args) {
     val train = new Subcommand("train") {
@@ -90,58 +88,6 @@ object AddonRecommender {
     new DenseMatrix(itemFactors(0).features.length, itemFactors.length, itemMatrixValues)
   }
 
-  private def fetchAddonsDatabase(): Map[String, AMOAddonInfo] = {
-    // This API URI will fetch all the public addons for Firefox, sorting them by creation date.
-    var amoRequestURI = "https://addons.mozilla.org/api/v3/addons/search/?app=firefox&sort=created&type=extension"
-
-    case class AMOAddonPage(previous: String, next: String, results: List[AMOAddonInfo])
-
-    var completeAddonsMap:Map[String, AMOAddonInfo] = Map()
-
-    // We query the addon /search API endpoint to get all the addons with fewer requests. Each result "page"
-    // contains a link to the next batch of results.
-    do {
-      println(s"Fetching $amoRequestURI")
-
-      // Fetch the JSON results for this "page" and parse it using json4s.
-      val responseBody = Http(amoRequestURI).asString.body
-      val parsedObj = parse(responseBody)
-
-      // We're only interested in a few fields for each addon (e.g. locale).
-      // De-serialize the JSON data into classes and then build the GUID -> Addon map.
-      val data = parsedObj.extract[AMOAddonPage]
-      val partialMap = data.results.map(addon => addon.guid -> addon).toMap
-
-      // Merge the map containing the addon info from this page to the complete map.
-      completeAddonsMap = completeAddonsMap ++ partialMap
-
-      // Keep going until we have an URI for the next page.
-      amoRequestURI = (parsedObj \ "next").toOption match {
-        case Some(x) => x.extract[String]
-        case None => ""
-      }
-    } while (!amoRequestURI.isEmpty())
-
-    return completeAddonsMap
-  }
-
-  private def getAddonsDatabase(outputDir: String): Map[String, AMOAddonInfo] = {
-    // If we have a cached copy of the request handy, use that.
-    val dbPath = Paths.get(s"$outputDir/addons_database.json")
-    if (Files.exists(dbPath)) {
-      println(s"Hitting addon database cache at $dbPath")
-      val cachedMap = parse(Source.fromFile(dbPath.toString()).mkString).extract[Map[String, AMOAddonInfo]]
-      return cachedMap
-    }
-
-    // Otherwise fetch it from addons.mozilla.org (might take some time..) and cache it.
-    val fetchedAddonsMap = fetchAddonsDatabase()
-    val serializedItemFactors = write(fetchedAddonsMap)
-    Files.write(dbPath, serializedItemFactors.getBytes(StandardCharsets.UTF_8))
-
-    return fetchedAddonsMap
-  }
-
   private def recommend(inputDir: String, addons: Set[String]) = {
     val mapping: List[(Int, String)] = for {
       JObject(a) <- parse(Source.fromFile(s"$inputDir/addon_mapping.json").mkString)
@@ -181,7 +127,7 @@ object AddonRecommender {
     import hiveContext.implicits._
 
     // Load the addons DB, as we'll need that to prune unpublished and unreviewed addons.
-    val addonsDatabase = getAddonsDatabase(outputDir)
+    val addonsDatabase = AMODatabase.get(outputDir)
 
     val clientAddons = hiveContext.sql("select * from longitudinal")
       .where("active_addons is not null")
@@ -191,7 +137,7 @@ object AddonRecommender {
         for {
           (addonId, meta) <- addons
           if !List("loop@mozilla.org","firefox@getpocket.com", "e10srollout@mozilla.org", "firefox-hotfix@mozilla.org").contains(addonId) &&
-             addonsDatabase.exists(_._1 == addonId)
+             addonsDatabase.contains(addonId)
           addonName <- meta.name
           blocklisted <- meta.blocklisted
           signedState <- meta.signed_state
@@ -240,10 +186,7 @@ object AddonRecommender {
 
     // Serialize add-on mapping
     val addonMapping = clientAddons
-      .map{ case (_, addonId, _, hashedAddonId) => (hashedAddonId, addonsDatabase.get(addonId) match {
-        case Some(addonInfo) => addonInfo.name.getOrElse(addonInfo.default_locale, s"Name for default locale not found $addonInfo.default_locale")
-        case None => s"GUID not in DB: $addonId"
-      })}
+      .map{ case (_, addonId, _, hashedAddonId) => (hashedAddonId, AMODatabase.getAddonNameById(addonsDatabase, addonId))}
       .distinct
       .cache()
       .collect()
@@ -257,19 +200,24 @@ object AddonRecommender {
     val serializedItemFactors = write(itemFactors)
     Files.write(Paths.get(s"$outputDir/item_matrix.json"), serializedItemFactors.getBytes(StandardCharsets.UTF_8))
 
-    // Serialize model to HDFS and then copy it to the local machine.
+    // Serialize model to HDFS and then copy it to the local machine. We need to do this
+    // instead of simply saving to file:// due to permission issues.
     try {
       model.write.overwrite().save(s"$outputDir/als.model")
+      // Run the copy as a shell command: unfortunately, FileSystem.copyToLocalFile
+      // triggers the same permission issues that we experience when saving to file://.
       val copyCmdOutput = s"hdfs dfs -get $outputDir/als.model $outputDir/".!!
-      println("Command output " + copyCmdOutput)
+      logger.debug("Command output " + copyCmdOutput)
     } catch {
-      case e: Exception => println("H: " + e.getMessage)
+      // We failed to write the model to HDFS or there was a permission issue with the
+      // copy command.
+      case e: Exception => logger.error("Failed to write the model: " + e.getMessage)
     }
 
-    println("Cross validation statistics:")
+    logger.info("Cross validation statistics:")
     model.getEstimatorParamMaps
       .zip(model.avgMetrics)
-      .foreach(println)
+      .foreach(logger.info)
   }
 
   def main(args: Array[String]) {
