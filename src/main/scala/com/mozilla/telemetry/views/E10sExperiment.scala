@@ -149,6 +149,7 @@ object E10sExperimentView {
       .name("histograms").`type`().stringType().noDefault()
       .name("keyedHistograms").`type`().stringType().noDefault()
       .name("childPayloads").`type`().stringType().noDefault()
+      .name("processes").`type`().stringType().noDefault()
       .endRecord
   }
 
@@ -176,6 +177,7 @@ object E10sExperimentView {
       .set("histograms", fields.getOrElse("payload.histograms", ""))
       .set("keyedHistograms", fields.getOrElse("payload.keyedHistograms", ""))
       .set("childPayloads", fields.getOrElse("payload.childPayloads", "{}"))
+      .set("processes", fields.getOrElse("payload.processes", "{}"))
       .build
 
     Some(root)
