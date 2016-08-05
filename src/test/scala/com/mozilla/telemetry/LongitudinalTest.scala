@@ -98,7 +98,8 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
         ("activeAddons" -> Map(
           "jid0-edalmuivkozlouyij0lpdx548bc@jetpack" ->
             ("name" -> "geckoprofiler") ~
-            ("version" -> "1.16.14"))) ~
+            ("version" -> "1.16.14") ~
+            ("isSystem" -> true))) ~
         ("theme" ->
           ("id" -> "{972ce4c6-7e08-4474-a285-3208198ce6fd}") ~
           ("description" -> "The default theme.")) ~
@@ -285,6 +286,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     records.foreach{ x =>
       val addon = x.get("jid0-edalmuivkozlouyij0lpdx548bc@jetpack").get
       assert(addon.getAs[String]("name") == "geckoprofiler")
+      assert(addon.getAs[Boolean]("is_system"))
     }
   }
 
