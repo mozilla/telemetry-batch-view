@@ -335,6 +335,7 @@ object LongitudinalView {
           .name("install_day").`type`().optional().longType()
           .name("update_day").`type`().optional().longType()
           .name("signed_state").`type`().optional().intType()
+          .name("is_system").`type`().optional().booleanType()
         .endRecord()
     val themeType = SchemaBuilder
       .record("theme").fields()
