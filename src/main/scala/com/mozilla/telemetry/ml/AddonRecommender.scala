@@ -19,6 +19,7 @@ import org.rogach.scallop._
 
 import scala.collection.Map
 import scala.io.Source
+import scala.sys.process._
 
 private case class Rating(clientId: Int, addonId: Int, rating: Float)
 private case class Addons(client_id: Option[String], active_addons: Option[Map[String, Addon]])
@@ -196,8 +197,19 @@ object AddonRecommender {
     val serializedItemFactors = write(itemFactors)
     Files.write(Paths.get(s"$outputDir/item_matrix.json"), serializedItemFactors.getBytes(StandardCharsets.UTF_8))
 
-    // Serialize model
-    model.write.overwrite().save(s"file://$outputDir/als.model")
+    // Serialize model to HDFS and then copy it to the local machine. We need to do this
+    // instead of simply saving to file:// due to permission issues.
+    try {
+      model.write.overwrite().save(s"$outputDir/als.model")
+      // Run the copy as a shell command: unfortunately, FileSystem.copyToLocalFile
+      // triggers the same permission issues that we experience when saving to file://.
+      val copyCmdOutput = s"hdfs dfs -get $outputDir/als.model $outputDir/".!!
+      logger.debug("Command output " + copyCmdOutput)
+    } catch {
+      // We failed to write the model to HDFS or there was a permission issue with the
+      // copy command.
+      case e: Exception => logger.error("Failed to write the model: " + e.getMessage)
+    }
 
     logger.info("Cross validation statistics:")
     model.getEstimatorParamMaps
