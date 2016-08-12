@@ -8,7 +8,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.spark.ml.evaluation.NaNRegressionEvaluator
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{SparkConf, SparkContext}
 import org.json4s.JsonDSL._
 import org.json4s._
@@ -19,6 +19,7 @@ import org.rogach.scallop._
 
 import scala.collection.Map
 import scala.io.Source
+import scala.sys.process._
 
 private case class Rating(clientId: Int, addonId: Int, rating: Float)
 private case class Addons(client_id: Option[String], active_addons: Option[Map[String, Addon]])
@@ -40,6 +41,7 @@ private case class ItemFactors(id: Int, features: Array[Float])
 
 object AddonRecommender {
   implicit val formats = Serialization.formats(NoTypeHints)
+  private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
 
   private class Conf(args: Array[String]) extends ScallopConf(args) {
     val train = new Subcommand("train") {
@@ -121,17 +123,18 @@ object AddonRecommender {
     val sparkConf = new SparkConf().setAppName(this.getClass.getName)
     sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
     val sc = new SparkContext(sparkConf)
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
+    val hiveContext = new HiveContext(sc)
+    import hiveContext.implicits._
 
-    val clientAddons = sqlContext.sql("select * from longitudinal")
+    val clientAddons = hiveContext.sql("select * from longitudinal")
       .where("active_addons is not null")
       .selectExpr("client_id", "active_addons[0] as active_addons")
       .as[Addons]
       .flatMap{ case Addons(Some(clientId), Some(addons)) =>
         for {
           (addonId, meta) <- addons
-          if !List("loop@mozilla.org","firefox@getpocket.com", "e10srollout@mozilla.org", "firefox-hotfix@mozilla.org").contains(addonId)
+          if !List("loop@mozilla.org","firefox@getpocket.com", "e10srollout@mozilla.org", "firefox-hotfix@mozilla.org").contains(addonId) &&
+             AMODatabase.contains(addonId)
           addonName <- meta.name
           blocklisted <- meta.blocklisted
           signedState <- meta.signed_state
@@ -140,12 +143,12 @@ object AddonRecommender {
           addonType <- meta.`type`
           if !blocklisted && (addonType != "extension" || signedState == 2) && !userDisabled && !appDisabled
         } yield {
-          (clientId, addonName, hash(clientId), hash(addonName))
+          (clientId, addonId, hash(clientId), hash(addonId))
         }
       }
 
     val ratings = clientAddons
-      .map{ case (_, _, clientId, addon) => Rating(clientId, addon, 1.0f)}
+      .map{ case (_, _, hashedClientId, hashedAddonId) => Rating(hashedClientId, hashedAddonId, 1.0f)}
       .repartition(sc.defaultParallelism)
       .toDF
       .cache
@@ -180,9 +183,8 @@ object AddonRecommender {
 
     // Serialize add-on mapping
     val addonMapping = clientAddons
-      .map(_._2)
+      .map{ case (_, addonId, _, hashedAddonId) => (hashedAddonId, AMODatabase.getAddonNameById(addonId))}
       .distinct
-      .map(addon => (hash(addon), addon))
       .cache()
       .collect()
       .toMap
@@ -195,13 +197,24 @@ object AddonRecommender {
     val serializedItemFactors = write(itemFactors)
     Files.write(Paths.get(s"$outputDir/item_matrix.json"), serializedItemFactors.getBytes(StandardCharsets.UTF_8))
 
-    // Serialize model
-    model.write.overwrite().save(s"file://$outputDir/als.model")
+    // Serialize model to HDFS and then copy it to the local machine. We need to do this
+    // instead of simply saving to file:// due to permission issues.
+    try {
+      model.write.overwrite().save(s"$outputDir/als.model")
+      // Run the copy as a shell command: unfortunately, FileSystem.copyToLocalFile
+      // triggers the same permission issues that we experience when saving to file://.
+      val copyCmdOutput = s"hdfs dfs -get $outputDir/als.model $outputDir/".!!
+      logger.debug("Command output " + copyCmdOutput)
+    } catch {
+      // We failed to write the model to HDFS or there was a permission issue with the
+      // copy command.
+      case e: Exception => logger.error("Failed to write the model: " + e.getMessage)
+    }
 
-    println("Cross validation statistics:")
+    logger.info("Cross validation statistics:")
     model.getEstimatorParamMaps
       .zip(model.avgMetrics)
-      .foreach(println)
+      .foreach(logger.info)
   }
 
   def main(args: Array[String]) {
