@@ -5,11 +5,13 @@ import java.nio.file.{Files, Paths}
 
 import breeze.linalg.{DenseMatrix, DenseVector}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
+import com.mozilla.telemetry.utils.S3Store
 import org.apache.spark.ml.evaluation.NaNRegressionEvaluator
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{SparkConf, SparkContext}
+import org.joda.time.{DateTime, format}
 import org.json4s.JsonDSL._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -35,7 +37,8 @@ private case class Addon(blocklisted: Option[Boolean],
                          has_binary_components: Option[Boolean],
                          install_day: Option[Long],
                          update_day: Option[Long],
-                         signed_state: Option[Int])
+                         signed_state: Option[Int],
+                         is_system: Option[Boolean])
 
 private case class ItemFactors(id: Int, features: Array[Float])
 
@@ -46,6 +49,8 @@ object AddonRecommender {
   private class Conf(args: Array[String]) extends ScallopConf(args) {
     val train = new Subcommand("train") {
       val output = opt[String]("output", descr = "Output path", required = true, default = Some("."))
+      val runDate = opt[String]("runDate", descr = "The execution date", required = false)
+      val outputBucket = opt[String]("bucket", descr = "Destination bucket for the model data", required = true)
     }
 
     val recommend = new Subcommand("recommend") {
@@ -119,12 +124,24 @@ object AddonRecommender {
     }.sortWith((x, y) => x._2 > y._2)
   }
 
-  private def train(outputDir: String) = {
+  private def train(localOutputDir: String, runDate: Option[String], outputBucket: String) = {
     val sparkConf = new SparkConf().setAppName(this.getClass.getName)
     sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
     val sc = new SparkContext(sparkConf)
     val hiveContext = new HiveContext(sc)
     import hiveContext.implicits._
+
+    val hadoopConf = sc.hadoopConfiguration
+    hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
+
+    val fmt = format.DateTimeFormat.forPattern("yyyyMMdd")
+    val date = runDate match {
+      case Some(f) => f
+      case _ => fmt.print(DateTime.now)
+    }
+
+    val s3prefix = s"telemetry-ml/addon_recommender/${date}"
+    require(S3Store.isPrefixEmpty(outputBucket, s3prefix), s"s3://${outputBucket}/${s3prefix} already exists!")
 
     val clientAddons = hiveContext.sql("select * from longitudinal")
       .where("active_addons is not null")
@@ -190,21 +207,27 @@ object AddonRecommender {
       .toMap
 
     val serializedMapping = pretty(render(addonMapping.map {case (k, v) => (k.toString, v)}))
-    Files.write(Paths.get(s"$outputDir/addon_mapping.json"), serializedMapping.getBytes(StandardCharsets.UTF_8))
+    val addonMappingPath = Paths.get(s"$localOutputDir/addon_mapping.json")
+    Files.write(addonMappingPath, serializedMapping.getBytes(StandardCharsets.UTF_8))
+    S3Store.uploadFile(addonMappingPath.toFile, outputBucket, s3prefix, addonMappingPath.getFileName.toString)
 
     // Serialize item matrix
     val itemFactors = model.bestModel.asInstanceOf[ALSModel].itemFactors.as[ItemFactors].collect()
     val serializedItemFactors = write(itemFactors)
-    Files.write(Paths.get(s"$outputDir/item_matrix.json"), serializedItemFactors.getBytes(StandardCharsets.UTF_8))
+    val itemMatrixPath = Paths.get(s"$localOutputDir/item_matrix.json")
+    Files.write(itemMatrixPath, serializedItemFactors.getBytes(StandardCharsets.UTF_8))
+    S3Store.uploadFile(itemMatrixPath.toFile, outputBucket, s3prefix, itemMatrixPath.getFileName.toString)
 
     // Serialize model to HDFS and then copy it to the local machine. We need to do this
     // instead of simply saving to file:// due to permission issues.
     try {
-      model.write.overwrite().save(s"$outputDir/als.model")
+      model.write.overwrite().save(s"$localOutputDir/als.model")
       // Run the copy as a shell command: unfortunately, FileSystem.copyToLocalFile
       // triggers the same permission issues that we experience when saving to file://.
-      val copyCmdOutput = s"hdfs dfs -get $outputDir/als.model $outputDir/".!!
+      val copyCmdOutput = s"hdfs dfs -get $localOutputDir/als.model $localOutputDir/".!!
       logger.debug("Command output " + copyCmdOutput)
+      // Save the model to S3 as well.
+      model.write.overwrite().save(s"s3://$outputBucket/$s3prefix/als.model")
     } catch {
       // We failed to write the model to HDFS or there was a permission issue with the
       // copy command.
@@ -231,7 +254,7 @@ object AddonRecommender {
         val output = conf.train.output()
         val cwd = new java.io.File(".").getCanonicalPath
         val outputDir = new java.io.File(cwd, output)
-        train(outputDir.getCanonicalPath)
+        train(outputDir.getCanonicalPath, conf.train.runDate.get, conf.train.outputBucket())
 
       case None =>
         conf.printHelp()
