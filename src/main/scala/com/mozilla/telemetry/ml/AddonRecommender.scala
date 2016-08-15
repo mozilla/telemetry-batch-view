@@ -5,11 +5,13 @@ import java.nio.file.{Files, Paths}
 
 import breeze.linalg.{DenseMatrix, DenseVector}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
+import com.mozilla.telemetry.utils.S3Store
 import org.apache.spark.ml.evaluation.NaNRegressionEvaluator
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{SparkConf, SparkContext}
+import org.joda.time.{DateTime, format}
 import org.json4s.JsonDSL._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -35,7 +37,8 @@ private case class Addon(blocklisted: Option[Boolean],
                          has_binary_components: Option[Boolean],
                          install_day: Option[Long],
                          update_day: Option[Long],
-                         signed_state: Option[Int])
+                         signed_state: Option[Int],
+                         is_system: Option[Boolean])
 
 private case class ItemFactors(id: Int, features: Array[Float])
 
@@ -46,6 +49,9 @@ object AddonRecommender {
   private class Conf(args: Array[String]) extends ScallopConf(args) {
     val train = new Subcommand("train") {
       val output = opt[String]("output", descr = "Output path", required = true, default = Some("."))
+      val runDate = opt[String]("runDate", descr = "The execution date", required = false)
+      val privateBucket = opt[String]("privateBucket", descr = "Destination bucket for archiving the model data", required = true)
+      val publicBucket = opt[String]("publicBucket", descr = "Destination bucket for the latest public model", required = true)
     }
 
     val recommend = new Subcommand("recommend") {
@@ -119,7 +125,7 @@ object AddonRecommender {
     }.sortWith((x, y) => x._2 > y._2)
   }
 
-  private def train(outputDir: String) = {
+  private def train(localOutputDir: String, runDate: String, privateBucket: String, publicBucket: String) = {
     val sparkConf = new SparkConf().setAppName(this.getClass.getName)
     sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
     val sc = new SparkContext(sparkConf)
@@ -190,21 +196,34 @@ object AddonRecommender {
       .toMap
 
     val serializedMapping = pretty(render(addonMapping.map {case (k, v) => (k.toString, v)}))
-    Files.write(Paths.get(s"$outputDir/addon_mapping.json"), serializedMapping.getBytes(StandardCharsets.UTF_8))
+    val addonMappingPath = Paths.get(s"$localOutputDir/addon_mapping.json")
+    val privateS3prefix = s"telemetry-ml/addon_recommender/${runDate}"
+    val publicS3prefix = "telemetry-ml/addon_recommender"
+    Files.write(addonMappingPath, serializedMapping.getBytes(StandardCharsets.UTF_8))
+    // We upload the generated data in a private bucket to have an history of all the
+    // generated models. Also push the latest version on the public bucket, so that
+    // AMO can access it over HTTP.
+    S3Store.uploadFile(addonMappingPath.toFile, privateBucket, privateS3prefix, addonMappingPath.getFileName.toString)
+    S3Store.uploadFile(addonMappingPath.toFile, publicBucket, publicS3prefix, addonMappingPath.getFileName.toString)
 
     // Serialize item matrix
     val itemFactors = model.bestModel.asInstanceOf[ALSModel].itemFactors.as[ItemFactors].collect()
     val serializedItemFactors = write(itemFactors)
-    Files.write(Paths.get(s"$outputDir/item_matrix.json"), serializedItemFactors.getBytes(StandardCharsets.UTF_8))
+    val itemMatrixPath = Paths.get(s"$localOutputDir/item_matrix.json")
+    Files.write(itemMatrixPath, serializedItemFactors.getBytes(StandardCharsets.UTF_8))
+    S3Store.uploadFile(itemMatrixPath.toFile, privateBucket, privateS3prefix, itemMatrixPath.getFileName.toString)
+    S3Store.uploadFile(itemMatrixPath.toFile, publicBucket, publicS3prefix, itemMatrixPath.getFileName.toString)
 
     // Serialize model to HDFS and then copy it to the local machine. We need to do this
     // instead of simply saving to file:// due to permission issues.
     try {
-      model.write.overwrite().save(s"$outputDir/als.model")
+      model.write.overwrite().save(s"$localOutputDir/als.model")
       // Run the copy as a shell command: unfortunately, FileSystem.copyToLocalFile
       // triggers the same permission issues that we experience when saving to file://.
-      val copyCmdOutput = s"hdfs dfs -get $outputDir/als.model $outputDir/".!!
+      val copyCmdOutput = s"hdfs dfs -get $localOutputDir/als.model $localOutputDir/".!!
       logger.debug("Command output " + copyCmdOutput)
+      // Save the model to S3 as well. We don't need to upload that in the public bucket.
+      model.write.overwrite().save(s"s3://$privateBucket/$privateS3prefix/als.model")
     } catch {
       // We failed to write the model to HDFS or there was a permission issue with the
       // copy command.
@@ -231,7 +250,14 @@ object AddonRecommender {
         val output = conf.train.output()
         val cwd = new java.io.File(".").getCanonicalPath
         val outputDir = new java.io.File(cwd, output)
-        train(outputDir.getCanonicalPath)
+
+        val fmt = format.DateTimeFormat.forPattern("yyyyMMdd")
+        val date = conf.train.runDate.get match {
+          case Some(f) => f
+          case _ => fmt.print(DateTime.now)
+        }
+
+        train(outputDir.getCanonicalPath, date, conf.train.privateBucket(), conf.train.publicBucket())
 
       case None =>
         conf.printHelp()
