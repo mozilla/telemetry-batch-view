@@ -613,9 +613,12 @@ object LongitudinalView {
     val fieldSchema = getElemType(schema, avroField)
     val fieldValues = records.map{ case (x) =>
       avro.JSON2Avro.parse(fieldSchema, x)
+    }.map {
+      case Some(x) => x
+      case None => null
     }
 
-    root.set(avroField, fieldValues.flatten.asJava)
+    root.set(avroField, fieldValues.asJava)
   }
 
   def getElemType(schema: Schema, field: String): Schema = {
