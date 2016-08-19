@@ -134,6 +134,7 @@ object AddonRecommender {
 
     val clientAddons = hiveContext.sql("select * from longitudinal")
       .where("active_addons is not null")
+      .where("build is not null and build[0].application_name = 'Firefox'")
       .selectExpr("client_id", "active_addons[0] as active_addons")
       .as[Addons]
       .flatMap{ case Addons(Some(clientId), Some(addons)) =>
