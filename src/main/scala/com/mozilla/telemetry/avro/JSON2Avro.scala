@@ -8,19 +8,23 @@ import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
 object JSON2Avro{
-  def parseRecord(schema: Schema, json: JValue): Option[GenericData.Record] = {
-    val record = new GenericData.Record(schema)
+  def parseRecord(schema: Schema, json: JValue): Option[GenericData.Record] = json match {
+      case JObject(o) =>
+        val record = new GenericData.Record(schema)
 
-    for (field <- schema.getFields) {
-      val parsed = parse(field.schema, json \ camelize(field.name))
-      parsed match {
-        case Some(value) =>
-          record.put(field.name, value)
-        case _ =>
-      }
-    }
+        for (field <- schema.getFields) {
+          val parsed = parse(field.schema, json \ camelize(field.name))
+          parsed match {
+            case Some(value) =>
+              record.put(field.name, value)
+            case _ =>
+          }
+        }
 
-    Some(record)
+        Some(record)
+
+      case _ =>
+        None
   }
 
   // Note that java.util.Collection is used for compatibility with parquet-avro

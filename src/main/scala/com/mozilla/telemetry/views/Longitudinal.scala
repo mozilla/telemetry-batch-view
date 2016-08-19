@@ -615,9 +615,10 @@ object LongitudinalView {
       avro.JSON2Avro.parse(fieldSchema, x)
     }.map {
       case Some(x) => x
-      case None => null
+      case None => return
     }
 
+    assert(payloads.length == fieldValues.length)
     root.set(avroField, fieldValues.asJava)
   }
 
