@@ -25,8 +25,11 @@ lazy val root = (project in file(".")).
     libraryDependencies += "org.apache.spark" %% "spark-core" % "1.6.1",
     libraryDependencies += "org.apache.spark" %% "spark-sql" % "1.6.1",
     libraryDependencies += "org.apache.spark" %% "spark-mllib" % "1.6.1",
-    libraryDependencies += "vitillo" % "spark-hyperloglog" % "1.0.2"
+    libraryDependencies += "org.apache.spark" %% "spark-hive" % "1.6.1", 
+    libraryDependencies += "vitillo" % "spark-hyperloglog" % "1.0.2", 
+    libraryDependencies +=  "org.scalaj" %% "scalaj-http" % "2.3.0" 
   )
+
 
 run in Compile <<= Defaults.runTask(fullClasspath in Compile, mainClass in (Compile, run), runner in (Compile, run))
 assemblyJarName in assembly := s"telemetry-batch-view-${version.value}.jar"
