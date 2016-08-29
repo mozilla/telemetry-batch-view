@@ -4,6 +4,7 @@ import org.rogach.scallop._
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.SQLContext
+import com.mozilla.telemetry.utils.S3Store
 
 case class Longitudinal (
     client_id: String
@@ -22,7 +23,7 @@ object CrossSectionalView {
       "outputBucket",
       descr = "Bucket in which to save data",
       required = false,
-      default=Some("telemetry-test-bucket/harter"))
+      default=Some("telemetry-test-bucket"))
     val localTable = opt[String](
       "localTable",
       descr = "Optional path to a local Parquet file with longitudinal data",
@@ -67,26 +68,37 @@ object CrossSectionalView {
     sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
     val sc = new SparkContext(sparkConf)
 
-    val sqlContext = new SQLContext(sc)
-
     val hiveContext = new HiveContext(sc)
     import hiveContext.implicits._
 
     val opts = new Opts(args)
 
+    // Read local parquet data, if supplied
     if(opts.localTable.isSupplied) {
       val localTable = opts.localTable()
-      val data = sqlContext.read.parquet(localTable)
+      val data = hiveContext.read.parquet(localTable)
       data.registerTempTable("longitudinal")
     }
 
+    // Calculate CrossSectional dataset
     val ds = hiveContext
       .sql("SELECT * FROM longitudinal")
       .selectExpr("client_id", "geo_country", "session_length")
       .as[Longitudinal]
     val output = ds.map(Aggregation.generateCrossSectional)
 
-    val prefix = s"s3://${opts.outputBucket()}/CrossSectional/${opts.outName}"
+    // Save to S3
+    val prefix = s"harter/CrossSectional/${opts.outName()}"
+    val outputBucket = opts.outputBucket()
+
+
+    require(S3Store.isPrefixEmpty(outputBucket, prefix),
+      s"s3://${outputBucket}/${prefix} already exists!")
+
+    output.toDF().write.parquet("s3://telemetry-test-bucket/harter/cross_sectional/test")
+
+    // Force the computation, debugging purposes only
+    // TODO(harterrt): Remove this
     println("="*80 + "\n" + output.count + "\n" + "="*80)
   }
 }
