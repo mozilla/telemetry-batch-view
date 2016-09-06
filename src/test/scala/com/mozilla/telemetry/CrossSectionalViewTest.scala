@@ -23,21 +23,21 @@ class CrossSectionalViewTest extends FlatSpec {
     import sqlContext.implicits._
 
     val longitudinalDataset = Seq(
-      Longitudinal("a", Option(Seq("DE", "DE", "IT")), Option(Seq(2, 3, 4))),
-      Longitudinal("b", Option(Seq("EG", "EG", "DE")), Option(Seq(1, 1, 2)))
+      new Longitudinal("a", Option(Seq("DE", "DE", "IT")), Option(Seq(2, 3, 4))),
+      new Longitudinal("b", Option(Seq("EG", "EG", "DE")), Option(Seq(1, 1, 2)))
     ).toDS
 
-    val actual = longitudinalDataset.map(generateCrossSectional)
+    val actual = longitudinalDataset.map(new CrossSectional(_))
     val expected = Seq(
-      CrossSectional("a", Option("DE")),
-      CrossSectional("b", Option("EG"))).toDS
+      new CrossSectional("a", Option("DE")),
+      new CrossSectional("b", Option("EG"))).toDS
 
     assert(compareDS(actual, expected))
     sc.stop()
   }
 
   "Modes" must "combine repeated keys" in {
-    val ll = Longitudinal(
+    val ll = new Longitudinal(
       "id",
       Option(Seq("DE", "IT", "DE")),
       Option(Seq(3, 6, 4)))
@@ -46,11 +46,27 @@ class CrossSectionalViewTest extends FlatSpec {
   }
 
   it must "respect session weight" in {
-    val ll = Longitudinal(
+    val ll = new Longitudinal(
       "id",
       Option(Seq("DE", "IT", "IT")),
       Option(Seq(3, 1, 1)))
     val country = modalCountry(ll)
     assert(country == Some("DE"))
+  }
+
+  "DataSetRows" must "distinguish between unequal rows" in {
+    val l1 = new Longitudinal("id", Some(Seq("DE")), Some(Seq(1)))
+    val l2 = new Longitudinal("other_id", Some(Seq("DE")), Some(Seq(1)))
+
+    assert(l1 != l2)
+  }
+
+  it must "acknowledge equal rows" in {
+    val l1 = new Longitudinal("id", Some(Seq("DE")), Some(Seq(1)))
+    val l2 = new Longitudinal("id", Some(Seq("DE")), Some(Seq(1)))
+
+    println(l1.valSeq.hashCode)
+    println(l2.valSeq.hashCode)
+    assert(l1 == l2)
   }
 }
