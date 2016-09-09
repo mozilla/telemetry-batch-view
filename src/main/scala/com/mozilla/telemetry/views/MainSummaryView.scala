@@ -336,6 +336,10 @@ object MainSummaryView {
         case Some(x) => x
         case _ => null
       },
+      addons \ "activeAddons" \ "@testpilot-addon" match {
+        case JString(x) => true
+        case _ => false
+      },
       MainPing.getFlashVersion(addons) match {
         case Some(x) => x
         case _ => null
@@ -484,6 +488,7 @@ object MainSummaryView {
       StructField("crash_submit_success_plugin", IntegerType, nullable = true), // PROCESS_CRASH_SUBMIT_SUCCESS / plugin-crash
 
       StructField("active_addons_count", LongType, nullable = true), // number of keys in environment/addons/activeAddons
+      StructField("has_active_testpilot_addon", BooleanType, nullable = true), // whether testpilot is listed in environment/addons/activeAddons
 
       // See https://github.com/mozilla-services/data-pipeline/blob/master/hindsight/modules/fx/ping.lua#L82
       StructField("flash_version", StringType, nullable = true), // latest installable version of flash plugin.
