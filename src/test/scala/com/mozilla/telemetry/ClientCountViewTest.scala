@@ -8,6 +8,12 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{FlatSpec, Matchers}
 
+case class LoopActivity(open_panel: Int,
+                        open_conversation: Int,
+                        room_open: Int,
+                        room_share: Int,
+                        room_delete: Int)
+
 case class Submission(client_id: String,
                       app_name: String,
                       app_version: String,
@@ -21,7 +27,7 @@ case class Submission(client_id: String,
                       os: String,
                       os_version: String,
                       devtools_toolbox_opened_count: Int,
-                      loop_activity_open_panel: Int)
+                      loop_activity_counter: LoopActivity)
 
 object Submission{
   val dimensions = Map(
@@ -38,7 +44,9 @@ object Submission{
     "os" -> List("Windows", "Darwin"),
     "os_version" -> List("1.0", "1.1"),
     "devtools_toolbox_opened_count" -> List(0, 42),
-    "loop_activity_open_panel" -> List(0, 42))
+    "loop_activity_counter" -> List(
+      LoopActivity(0, 0, 0, 0, 0),
+      LoopActivity(42, 0, 0, 0, 0)))
 
   def randomList: List[Submission] = {
     for {
@@ -55,7 +63,7 @@ object Submission{
       os <- dimensions("os")
       osVersion <- dimensions("os_version")
       devtoolsToolboxOpenedCount <- dimensions("devtools_toolbox_opened_count")
-      loopActivityOpenPanel <- dimensions("loop_activity_open_panel")
+      loopActivity <- dimensions("loop_activity_counter")
     } yield {
       Submission(clientId.asInstanceOf[String],
                  appName.asInstanceOf[String],
@@ -70,7 +78,7 @@ object Submission{
                  os.asInstanceOf[String],
                  osVersion.asInstanceOf[String],
                  devtoolsToolboxOpenedCount.asInstanceOf[Int],
-                 loopActivityOpenPanel.asInstanceOf[Int])
+                 loopActivity.asInstanceOf[LoopActivity])
     }
   }
 }
