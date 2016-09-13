@@ -35,7 +35,7 @@ object ClientCountView {
     "hll_create(client_id, 12) as hll" ::
     "substr(subsession_start_date, 0, 10) as activity_date" ::
     "devtools_toolbox_opened_count > 0 as devtools_toolbox_opened" ::
-    "loop_activity_open_panel > 0 as loop_activity_open_panel" ::
+    "loop_activity_counter.open_panel > 0 as loop_activity_open_panel" ::
     base
 
   val dimensions = "activity_date" :: "devtools_toolbox_opened" :: "loop_activity_open_panel" :: base
@@ -71,7 +71,7 @@ object ClientCountView {
     hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
     sqlContext.udf.register("hll_create", hllCreate _)
 
-    val df = sqlContext.read.load("s3://telemetry-parquet/main_summary/v2")
+    val df = sqlContext.read.load("s3://telemetry-parquet/main_summary/v3")
     val subset = df.where(s"submission_date_s3 >= $from and submission_date_s3 <= $to")
     val aggregates = aggregate(subset).coalesce(32)
 
