@@ -3,13 +3,13 @@ package com.mozilla.telemetry.views
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Row, SQLContext, SaveMode}
-import org.apache.spark.{Accumulator, SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.util.LongAccumulator
 import org.joda.time._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.rogach.scallop._
-import scala.collection.JavaConversions._
-import com.mozilla.telemetry.heka.{Dataset, HekaFrame}
+import com.mozilla.telemetry.heka.{Dataset}
 
 object CrashAggregateView {
   private class Conf(args: Array[String]) extends ScallopConf(args) {
@@ -122,25 +122,25 @@ object CrashAggregateView {
     } catch { case _: Throwable => 0 }
   }
 
-  def compareCrashes(sc: SparkContext, messages: RDD[Map[String, Any]]): (RDD[Row], Accumulator[Int], Accumulator[Int], Accumulator[Int], Accumulator[Int]) = {
+  def compareCrashes(sc: SparkContext, messages: RDD[Map[String, Any]]): (RDD[Row], LongAccumulator, LongAccumulator, LongAccumulator, LongAccumulator) = {
     // get the crash pairs for all of the pings, keeping track of how many we see
-    val mainProcessedAccumulator = sc.accumulator(0, "Number of processed main pings")
-    val mainIgnoredAccumulator = sc.accumulator(0, "Number of ignored main pings")
-    val crashProcessedAccumulator = sc.accumulator(0, "Number of processed crash pings")
-    val crashIgnoredAccumulator = sc.accumulator(0, "Number of ignored crash pings")
+    val mainProcessedAccumulator = sc.longAccumulator("Number of processed main pings")
+    val mainIgnoredAccumulator = sc.longAccumulator("Number of ignored main pings")
+    val crashProcessedAccumulator = sc.longAccumulator("Number of processed crash pings")
+    val crashIgnoredAccumulator = sc.longAccumulator("Number of ignored crash pings")
     val crashPairs = messages.flatMap((pingFields) => {
       getCrashPair(pingFields) match {
         case Some(crashPair) =>
           pingFields.get("docType") match {
-            case Some("crash") => crashProcessedAccumulator += 1
-            case Some("main") => mainProcessedAccumulator += 1
+            case Some("crash") => crashProcessedAccumulator.add(1)
+            case Some("main") => mainProcessedAccumulator.add(1)
             case _ => null
           }
           List(crashPair)
         case None =>
           pingFields.get("docType") match {
-            case Some("crash") => crashIgnoredAccumulator += 1
-            case Some("main") => mainIgnoredAccumulator += 1
+            case Some("crash") => crashIgnoredAccumulator.add(1)
+            case Some("main") => mainIgnoredAccumulator.add(1)
             case _ => null
           }
           List()
@@ -165,7 +165,7 @@ object CrashAggregateView {
       ).toMap
       val statsMap = (statsNames, stats).zipped.toMap
 
-      Row(activityDate, mapAsJavaMap(dimensionsMap), mapAsJavaMap(statsMap))
+      Row(activityDate, dimensionsMap, statsMap)
     })
 
     (records, mainProcessedAccumulator, mainIgnoredAccumulator, crashProcessedAccumulator, crashIgnoredAccumulator)
