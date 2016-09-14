@@ -235,6 +235,8 @@ object AddonRecommender {
     model.getEstimatorParamMaps
       .zip(model.avgMetrics)
       .foreach(logger.info)
+
+    sc.stop()
   }
 
   def main(args: Array[String]) {

@@ -54,6 +54,7 @@ object ChurnView {
         }
 
       run(messages, opts.outputBucket(), currentDay)
+      sc.stop()
     }
   }
 

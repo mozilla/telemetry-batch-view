@@ -133,6 +133,8 @@ object MainSummaryView {
       println("     RECORDS SEEN:    %d".format(ignoredCount.value + processedCount.value))
       println("     RECORDS IGNORED: %d".format(ignoredCount.value))
       println("=======================================================================================")
+
+      sc.stop()
     }
   }
 
