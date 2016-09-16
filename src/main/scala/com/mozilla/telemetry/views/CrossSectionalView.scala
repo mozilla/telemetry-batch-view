@@ -127,5 +127,7 @@ object CrossSectionalView {
     // Force the computation, debugging purposes only
     // TODO(harterrt): Remove this
     println("="*80 + "\n" + output.count + "\n" + "="*80)
+
+    sc.stop()
   }
 }

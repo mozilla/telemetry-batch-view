@@ -5,7 +5,6 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import com.google.protobuf._
 import com.mozilla.telemetry.heka.{Header, HekaFrame, Message}
 import com.mozilla.telemetry.parquet.ParquetFile
-import com.typesafe.config._
 import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, GenericRecord, GenericRecordBuilder}
 import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 import org.apache.avro.{Schema, SchemaBuilder}
@@ -65,7 +64,6 @@ object Resources {
 
 class ParquetSpec extends FlatSpec with Matchers{
   val nMessages = 42
-  val conf = ConfigFactory.load()
 
   private def readData(jsonBlobs: Seq[String], schema: Schema) : Seq[GenericRecord] = {
     val reader = new GenericDatumReader[GenericRecord](schema)

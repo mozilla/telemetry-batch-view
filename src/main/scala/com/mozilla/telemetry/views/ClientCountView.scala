@@ -76,5 +76,6 @@ object ClientCountView {
     val aggregates = aggregate(subset).coalesce(32)
 
     aggregates.write.parquet(s"s3://${conf.outputBucket()}/client_count/v$from$to")
+    sc.stop()
   }
 }

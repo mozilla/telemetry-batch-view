@@ -114,6 +114,7 @@ object LongitudinalView {
     }
 
     run(opts: Opts, messages)
+    sc.stop()
   }
 
   private def run(opts: Opts, messages: RDD[Message]): Unit = {

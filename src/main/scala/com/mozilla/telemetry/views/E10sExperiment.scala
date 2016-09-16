@@ -70,6 +70,7 @@ object E10sExperimentView {
       }
 
     run(opts, messages)
+    sc.stop()
   }
 
   private def run(opts: Opts, messages: RDD[Message]) {
