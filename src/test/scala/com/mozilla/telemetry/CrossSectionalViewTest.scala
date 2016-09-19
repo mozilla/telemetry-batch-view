@@ -4,7 +4,6 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.SQLContext
 import com.mozilla.telemetry.views._
 import CrossSectionalView._
-import Aggregation._
 import org.scalatest.FlatSpec
 import org.apache.spark.sql.Dataset
 
@@ -35,24 +34,6 @@ class CrossSectionalViewTest extends FlatSpec {
 
     assert(compareDS(actual, expected))
     sc.stop()
-  }
-
-  "Modes" must "combine repeated keys" in {
-    val ll = new Longitudinal(
-      "id",
-      Option(Seq("DE", "IT", "DE")),
-      Option(Seq(3, 6, 4)))
-    val country = modalCountry(ll)
-    assert(country == Some("DE"))
-  }
-
-  it must "respect session weight" in {
-    val ll = new Longitudinal(
-      "id",
-      Option(Seq("DE", "IT", "IT")),
-      Option(Seq(3, 1, 1)))
-    val country = modalCountry(ll)
-    assert(country == Some("DE"))
   }
 
   "DataSetRows" must "distinguish between unequal rows" in {

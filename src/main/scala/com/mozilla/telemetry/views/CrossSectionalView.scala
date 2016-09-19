@@ -5,6 +5,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.SQLContext
 import com.mozilla.telemetry.utils.S3Store
+import com.mozilla.telemetry.utils.aggregation
 
 abstract class DataSetRow() extends Product {
   // This class is a work around the 22 field limit in case classes. The 22
@@ -32,6 +33,13 @@ class Longitudinal (
   , val session_length: Option[Seq[Long]]
 ) extends DataSetRow {
   override val valSeq = Array[Any](client_id, geo_country, session_length)
+
+  def sessionWeightedMode(values: Option[Seq[String]]) = {
+    (values, this.session_length) match {
+      case (Some(gc), Some(sl)) => Some(aggregation.weightedMode(gc, sl))
+      case _ => None
+    }
+  }
 }
 
 class CrossSectional (
@@ -40,10 +48,10 @@ class CrossSectional (
 ) extends DataSetRow {
   override val valSeq = Array[Any](client_id, modal_country)
 
-  def this(ll: Longitudinal) {
+  def this(base: Longitudinal) = {
     this(
-      ll.client_id,
-      CrossSectionalView.Aggregation.modalCountry(ll)
+      client_id = base.client_id,
+      modal_country = base.sessionWeightedMode(base.geo_country)
     )
   }
 }
@@ -66,30 +74,8 @@ object CrossSectionalView {
     verify()
   }
 
-  private[telemetry] object Aggregation {
-    // Spark triggers a strange error during distributed computation if these
-    // functions are in the same scope as the main function. This appears to
-    // only be an issue with Spark 1.6. 
-    // TODO(harter): debug this error and remove this object if possible.
-    def weightedMode(values: Seq[String], weights: Seq[Long]): Option[String] = {
-      if (values.size > 0 && values.size == weights.size) {
-        val pairs = values zip weights
-        val agg = pairs.groupBy(_._1).map(kv => (kv._1, kv._2.map(_._2).sum))
-        Some(agg.maxBy(_._2)._1)
-      } else {
-        None
-      }
-    }
-
-    def modalCountry(row: Longitudinal): Option[String] = {
-      (row.geo_country, row.session_length) match {
-        case (Some(gc), Some(sl)) => weightedMode(gc, sl)
-        case _ => None
-      }
-    } 
-  }
-
   def main(args: Array[String]): Unit = {
+    // Setup spark contexts
     val sparkConf = new SparkConf().setAppName(this.getClass.getName)
     sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
     val sc = new SparkContext(sparkConf)
@@ -97,6 +83,7 @@ object CrossSectionalView {
     val hiveContext = new HiveContext(sc)
     import hiveContext.implicits._
 
+    // Parse command line options
     val opts = new Opts(args)
 
     // Read local parquet data, if supplied
@@ -106,7 +93,7 @@ object CrossSectionalView {
       data.registerTempTable("longitudinal")
     }
 
-    // Calculate CrossSectional dataset
+    // Generate and save the view
     val ds = hiveContext
       .sql("SELECT * FROM longitudinal")
       .selectExpr("client_id", "geo_country", "session_length")
