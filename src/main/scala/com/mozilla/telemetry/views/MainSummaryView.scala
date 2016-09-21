@@ -49,8 +49,6 @@ object MainSummaryView {
     val parquetSize = 512 * 1024 * 1024
     hadoopConf.setInt("parquet.block.size", parquetSize)
     hadoopConf.setInt("dfs.blocksize", parquetSize)
-    // Don't write temp files to S3 while building parquet files.
-    hadoopConf.set("spark.sql.parquet.output.committer.class", "org.apache.spark.sql.parquet.DirectParquetOutputCommitter")
     // Don't write metadata files, because they screw up partition discovery.
     // This is fixed in Spark 2.0, see:
     //   https://issues.apache.org/jira/browse/SPARK-13207
