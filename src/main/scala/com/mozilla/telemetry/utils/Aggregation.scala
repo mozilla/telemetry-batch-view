@@ -1,6 +1,14 @@
 package com.mozilla.telemetry.utils
 
 package object aggregation {
+  def mean(values: Seq[Int]) = {
+    if (values.length > 0) {
+      Some(values.sum.toDouble / values.length)
+    } else {
+      None
+    }
+  }
+
   def weightedMode[A](values: Seq[A], weights: Seq[Long]): A = {
     if (values.size != weights.size) {
       throw new IllegalArgumentException("Args to weighted mode must have the same length.")
