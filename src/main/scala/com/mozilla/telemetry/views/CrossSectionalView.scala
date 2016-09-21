@@ -7,53 +7,10 @@ import org.apache.spark.sql.SQLContext
 import com.mozilla.telemetry.utils.S3Store
 import com.mozilla.telemetry.utils.aggregation
 
-abstract class DataSetRow() extends Product {
-  // This class is a work around the 22 field limit in case classes. The 22
-  // field limit is removed in scala 2.11, but until we upgrade our spark
-  // clusters, we have to work with 2.10.
-  // Spark only includes encoders for primitive types and objects implementing
-  // the Product interface.
-  val valSeq: Array[Any]
-
-  def productArity() = valSeq.length
-  def productElement(n: Int) = valSeq(n)
-
-  //TODO(harter): restrict equality to a data type
-  def canEqual(that: Any) = true
-
-  override def equals(that: Any) = {
-    that match {
-      case that: DataSetRow => this.canEqual(that) && this.valSeq.deep == that.valSeq.deep
-      case _ => false
-    }
-  }
-  
-  def compare(that: Any, epsilon: Double = 1E-7) = {
-    //This is like equal, but with fuzzy match for doubles.
-    //It's better not to override equality because this functions will not
-    //necessarily preserve transitivity.
-
-    def compareElement(pair: (Any, Any)) = {
-      pair match {
-        case (Some(first: Double), Some(second: Double)) => Math.abs(first - second) < epsilon
-        case (first: Any, second: Any) => first == second
-        case _ => false
-      }
-    }
-
-    that match {
-      case that: DataSetRow => {this.canEqual(that) &&
-        this.valSeq.zip(that.valSeq).foldLeft(true)((getter, pair) => getter && compareElement(pair))
-      }
-      case _ => false
-    }
-  }
-}
-
 object Longitudinal {
 }
 
-class Longitudinal (
+case class Longitudinal (
     val client_id: String
   , val normalized_channel: String
   , val submission_date: Option[Seq[String]]
@@ -63,9 +20,7 @@ class Longitudinal (
   , val default_search_engine: Option[Seq[Option[String]]]
   , val locale: Option[Seq[Option[String]]]
   , val architecture: Option[Seq[Option[String]]]
-) extends DataSetRow {
-  override val valSeq = Array[Any](client_id, geo_country, session_length)
-
+) {
   def weightedMode[A](values: Option[Seq[A]]): Option[A] = {
     (values, this.session_length) match {
       case (Some(v), Some(sl)) => Some(aggregation.weightedMode(v, sl))
@@ -84,7 +39,7 @@ class Longitudinal (
   }
 }
 
-class CrossSectional (
+case class CrossSectional (
     val client_id: String
   , val normalized_channel: String
   , val active_hours_total: Double
@@ -99,12 +54,7 @@ class CrossSectional (
   , val geo_Cfgs: Long
   , val architecture_Mode: Option[String]
   , val ffLocale_Mode: Option[String]
-) extends DataSetRow {
-  override val valSeq = Array[Any](client_id, normalized_channel,
-    active_hours_total, active_hours_sun, active_hours_mon, active_hours_tue,
-    active_hours_wed, active_hours_thu, active_hours_fri, active_hours_sat,
-    geo_Mode, architecture_Mode, ffLocale_Mode)
-
+) {
   def this(base: Longitudinal) = {
     this(
       client_id = base.client_id,

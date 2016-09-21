@@ -9,9 +9,36 @@ import org.apache.spark.sql.Dataset
 
 class CrossSectionalViewTest extends FlatSpec {
   def compareDS(actual: Dataset[CrossSectional], expected: Dataset[CrossSectional]) = {
+    // Performs fuzzy comparison of two datasets containing Products (usually
+    // case classes)
+    //
+    // Fuzzy matching handles floating point comparison properly.
+    // It's better not to override equality because this functions will not
+    // necessarily preserve transitivity.
+    def compareRow(base: Product, test: Product, epsilon: Double = 1E-7) = {
+      def compareElement(pair: (Any, Any)) = {
+        pair match {
+          case (Some(first: Double), Some(second: Double)) => Math.abs(first - second) < epsilon
+          case (first: Any, second: Any) => first == second
+          case _ => false
+        }
+      }
+
+      def productToSeq(prod: Product): Seq[Any] = {
+        // Creates a Seq containing the fields of an object extending the 
+        // Product trait
+        (0 until prod.productArity).map(prod.productElement(_))
+      }
+
+      base.productArity == test.productArity && 
+        (productToSeq(base) zip productToSeq(test))
+          .foldLeft(true)((acc, pair) => acc && compareElement(pair)
+      )
+    }
+
+    // Do the comparison
     actual.collect.zip(expected.collect)
-      .map(x=> x._1.compare(x._2))
-      .reduce(_ && _)
+      .foldLeft(true)((acc, pair) => acc && compareRow(pair._1, pair._2))
   }
 
   def getExampleLongitudinal(client_id: String) = {
@@ -67,21 +94,5 @@ class CrossSectionalViewTest extends FlatSpec {
 
     assert(compareDS(actual, expected))
     sc.stop()
-  }
-
-  "DataSetRows" must "distinguish between unequal rows" in {
-    val l1 = getExampleLongitudinal("id")
-    val l2 = getExampleLongitudinal("other_id")
-
-    assert(l1 != l2)
-  }
-
-  it must "acknowledge equal rows" in {
-    val l1 = getExampleLongitudinal("id")
-    val l2 = getExampleLongitudinal("id")
-
-    println(l1.valSeq.hashCode)
-    println(l2.valSeq.hashCode)
-    assert(l1 == l2)
   }
 }
