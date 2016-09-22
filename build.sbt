@@ -27,7 +27,8 @@ lazy val root = (project in file(".")).
     libraryDependencies += "org.apache.spark" %% "spark-mllib" % "2.0.0",
     libraryDependencies += "org.apache.spark" %% "spark-hive" % "2.0.0",
     libraryDependencies += "vitillo" % "spark-hyperloglog" % "1.1.1",
-    libraryDependencies +=  "org.scalaj" %% "scalaj-http" % "2.3.0"
+    libraryDependencies +=  "org.scalaj" %% "scalaj-http" % "2.3.0",
+    libraryDependencies +=  "org.yaml" % "snakeyaml" % "1.17"
   )
 
 run in Compile <<= Defaults.runTask(fullClasspath in Compile, mainClass in (Compile, run), runner in (Compile, run))
