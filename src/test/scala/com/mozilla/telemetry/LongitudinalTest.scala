@@ -1,6 +1,8 @@
 package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.parquet.ParquetFile
+import com.mozilla.telemetry.scalars._
+import com.mozilla.telemetry.views.LongitudinalView
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
 import org.apache.spark.sql.{Row, SQLContext}
@@ -48,6 +50,23 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
           ("foo" ->
             ("values" -> ("1" -> 42)) ~
             ("sum" -> 42)))
+
+      val scalars =
+        ("telemetry.test.unsigned_int_kind" -> 37 ) ~
+        ("mock.scalar.uint" -> 3) ~
+        ("mock.scalar.bool" -> true) ~
+        ("mock.scalar.string" -> "a nice string scalar")
+
+      val keyedScalars =
+        ("mock.keyed.scalar.uint" ->
+          ("a_key" -> 37) ~
+          ("second_key" -> 42)) ~
+        ("mock.keyed.scalar.bool" ->
+          ("foo" -> true) ~
+          ("bar" -> false)) ~
+        ("mock.keyed.scalar.string" ->
+          ("fizz" -> "buzz") ~
+          ("other" -> "some"))
 
       val simpleMeasurements = "uptime" -> 18L
 
@@ -137,6 +156,8 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
         "payload.simpleMeasurements" -> compact(render(simpleMeasurements)),
         "payload.histograms" -> compact(render(histograms)),
         "payload.keyedHistograms" -> compact(render(keyedHistograms)),
+        "payload.processes.parent.scalars" -> compact(render(scalars)),
+        "payload.processes.parent.keyedScalars" -> compact(render(keyedScalars)),
         "environment.build" -> compact(render(build)),
         "environment.partner" -> compact(render(partner)),
         "environment.profile" -> compact(render(profile)),
@@ -146,13 +167,25 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     }
 
     new {
+      // Mock the scalars definitions to ease testing.
+      object MockedScalarsDefs extends ScalarsDefinitionApi {
+        val definitions =  Map(
+            ("mock.scalar.uint", UintScalar(false)),
+            ("mock.scalar.bool", BooleanScalar(false)),
+            ("mock.scalar.string", StringScalar(false)),
+            ("mock.keyed.scalar.uint", UintScalar(true)),
+            ("mock.keyed.scalar.bool", BooleanScalar(true)),
+            ("mock.keyed.scalar.string", StringScalar(true))
+          )
+      }
+
       private val buildSchema = PrivateMethod[Schema]('buildSchema)
       private val buildRecord = PrivateMethod[Option[GenericRecord]]('buildRecord)
 
-      private val schema = LongitudinalView invokePrivate buildSchema()
+      private val schema = LongitudinalView invokePrivate buildSchema(MockedScalarsDefs)
       val payloads = for (i <- 1 to 10) yield createPayload(i)
       private val dupes = for (i <- 1 to 10) yield createPayload(1)
-      private val record = (LongitudinalView  invokePrivate buildRecord(payloads ++ dupes, schema)).get
+      private val record = (LongitudinalView  invokePrivate buildRecord(payloads ++ dupes, schema, MockedScalarsDefs)).get
       private val path = ParquetFile.serialize(List(record).toIterator, schema)
       private val filename = path.toString.replace("file:", "")
 
@@ -444,5 +477,59 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     val split_history = new ClientIterator(history.iterator).toList
     assert(split_history.length == 2)
     split_history.map(x => assert(x.length == 1000))
+  }
+
+  "Unsigned scalars" must "be converted correctly" in {
+    val scalars = fixture.row.getList[Long](fixture.row.fieldIndex("scalar_mock_scalar_uint"))
+    assert(scalars.length == fixture.payloads.length)
+    scalars.foreach(x => assert(x == 3))
+  }
+
+  "Boolean scalars" must "be converted correctly" in {
+    val scalars = fixture.row.getList[Boolean](fixture.row.fieldIndex("scalar_mock_scalar_bool"))
+    assert(scalars.length == fixture.payloads.length)
+    scalars.foreach(x => assert(x == true))
+  }
+
+  "String scalars" must "be converted correctly" in {
+    val scalars = fixture.row.getList[String](fixture.row.fieldIndex("scalar_mock_scalar_string"))
+    assert(scalars.length == fixture.payloads.length)
+    scalars.foreach(x => assert(x == "a nice string scalar"))
+  }
+
+  "Keyed unsigned scalars" must "be converted correctly" in {
+    val entries =
+      fixture.row.getMap[String, WrappedArray[Long]](fixture.row.fieldIndex("scalar_mock_keyed_scalar_uint"))
+    assert(entries.size == 2)
+    assert(entries("a_key").size == fixture.payloads.length)
+    entries("a_key").foreach(x => assert(x == 37))
+    assert(entries("second_key").size == fixture.payloads.length)
+    entries("second_key").foreach(x => assert(x == 42))
+  }
+
+  "Keyed boolean scalars" must "be converted correctly" in {
+    val entries =
+      fixture.row.getMap[String, WrappedArray[Boolean]](fixture.row.fieldIndex("scalar_mock_keyed_scalar_bool"))
+    assert(entries.size == 2)
+    assert(entries("foo").size == fixture.payloads.length)
+    entries("foo").foreach(x => assert(x == true))
+    assert(entries("bar").size == fixture.payloads.length)
+    entries("bar").foreach(x => assert(x == false))
+  }
+
+  "Keyed string scalars" must "be converted correctly" in {
+    val entries =
+      fixture.row.getMap[String, WrappedArray[String]](fixture.row.fieldIndex("scalar_mock_keyed_scalar_string"))
+    assert(entries.size == 2)
+    assert(entries("fizz").size == fixture.payloads.length)
+    entries("fizz").foreach(x => assert(x == "buzz"))
+    assert(entries("other").size == fixture.payloads.length)
+    entries("other").foreach(x => assert(x == "some"))
+  }
+
+  "Test scalars" must "not be adedd to the dataset" in {
+    intercept[IllegalArgumentException] {
+      fixture.row.fieldIndex("scalar_telemetry_test_unsigned_int_kind")
+    }
   }
 }

@@ -16,6 +16,7 @@ import com.mozilla.telemetry.parquet.ParquetFile
 import com.mozilla.telemetry.avro
 import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.histograms._
+import com.mozilla.telemetry.scalars._
 import com.mozilla.telemetry.utils._
 
 protected class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHistorySize: Int = 1000) extends Iterator[List[Map[String, Any]]] {
@@ -70,6 +71,10 @@ protected class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHist
 }
 
 object LongitudinalView {
+  // Column name prefix used to prevent name clashing between scalars and other
+  // columns.
+  private val ScalarColumnNamePrefix = "scalar_"
+
   private class ClientIdPartitioner(size: Int) extends Partitioner {
     def numPartitions: Int = size
 
@@ -150,7 +155,7 @@ object LongitudinalView {
     val partitionCounts = clientMessages
       .mapPartitions{ case it =>
         val clientIterator = new ClientIterator(it)
-        val schema = buildSchema
+        val schema = buildSchema()
 
         val allRecords = for {
           client <- clientIterator
@@ -184,7 +189,7 @@ object LongitudinalView {
     println("Clients ignored: %d".format(counts._2))
   }
 
-  private def buildSchema: Schema = {
+  private def buildSchema(scalarDefs:ScalarsDefinitionApi = Scalars): Schema = {
     // The $PROJECT_ROOT/scripts/generate-ping-schema.py script can be used to
     // generate these SchemaBuilder definitions, and the output of that script is
     // combined with data from http://gecko.readthedocs.org/en/latest/toolkit/components/telemetry/telemetry
@@ -495,6 +500,26 @@ object LongitudinalView {
       }
     }
 
+    scalarDefs.definitions.foreach{ case (k, value) =>
+      val key = getParquetFriendlyScalarName(k.toLowerCase)
+      value match {
+        case s: UintScalar if !s.keyed =>
+          builder.name(key).`type`().optional().array().items().longType()
+        case s: UintScalar =>
+          builder.name(key).`type`().optional().map().values().array().items().longType()
+        case s: BooleanScalar if !s.keyed =>
+          builder.name(key).`type`().optional().array().items().booleanType()
+        case s: BooleanScalar =>
+          builder.name(key).`type`().optional().map().values().array().items().booleanType()
+        case s: StringScalar if !s.keyed =>
+          builder.name(key).`type`().optional().array().items().stringType()
+        case s: StringScalar =>
+          builder.name(key).`type`().optional().map().values().array().items().stringType()
+        case _ =>
+          throw new Exception("Unrecognized scalar type")
+      }
+    }
+
     builder.endRecord()
   }
 
@@ -684,6 +709,105 @@ object LongitudinalView {
     }
   }
 
+  private def vectorizeScalar_[T:ClassTag](name: String,
+                                              payloads: List[Map[String, AnyVal]],
+                                              flatten: AnyVal => T,
+                                              default: T): java.util.Collection[T] = {
+    val buffer = ListBuffer[T]()
+    for (scalars <- payloads) {
+      scalars.get(name) match {
+        case Some(scalar) =>
+          buffer += flatten(scalar)
+        case None =>
+          buffer += default
+      }
+    }
+    buffer.asJava
+  }
+
+  private def vectorizeScalar[T:ClassTag](name: String,
+                                            definition: ScalarDefinition,
+                                            payloads: List[Map[String, AnyVal]]): java.util.Collection[Any] = {
+    definition match {
+      case _: UintScalar =>
+        vectorizeScalar_(name, payloads, s => s.asInstanceOf[BigInt], 0)
+
+      case _: BooleanScalar =>
+        vectorizeScalar_(name, payloads, s => s.asInstanceOf[Boolean], false)
+
+      case _: StringScalar =>
+        vectorizeScalar_(name, payloads, s => s.asInstanceOf[String], "")
+    }
+  }
+
+  private def getParquetFriendlyScalarName(scalarName: String): String = {
+    // Scalar group and probe names can contain dots ('.'). But we don't
+    // want them to get into the Parquet column names, so replace them with
+    // underscores ('_'). Additionally, to prevent name clashing, we prefix
+    // all scalars.
+    ScalarColumnNamePrefix + scalarName.replace('.', '_')
+  }
+  private def scalars2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder,
+                           scalarDefs:ScalarsDefinitionApi) {
+    implicit val formats = DefaultFormats
+
+    // Get a list of the scalars in the ping.
+    val scalarList = payloads.map{ case (x) =>
+      val json = x.getOrElse("payload.processes.parent.scalars", return).asInstanceOf[String]
+      // We can have both string and numerical scalars. Use AnyVal as a placeholder.
+      parse(json).extract[Map[String, AnyVal]]
+    }
+
+    // Make sure there are no duplicates...
+    val uniqueKeys = scalarList.flatMap(x => x.keys).distinct.toSet
+
+    // ... and that the keys (scalar names) are valid.
+    val validKeys = for {
+      key <- uniqueKeys
+      definition <- scalarDefs.definitions.get(key)
+    } yield (key, definition)
+
+    for ((key, definition) <- validKeys) {
+      val prefixedKeyName = getParquetFriendlyScalarName(key.toLowerCase)
+      root.set(prefixedKeyName, vectorizeScalar(key, definition, scalarList))
+    }
+  }
+
+  private def keyedScalars2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder,
+                                scalarDefs:ScalarsDefinitionApi) {
+    implicit val formats = DefaultFormats
+
+    val scalarsList = payloads.map{ case (x) =>
+      val json = x.getOrElse("payload.processes.parent.keyedScalars", return).asInstanceOf[String]
+      parse(json).extract[Map[String, Map[String, AnyVal]]]
+    }
+
+    val uniqueKeys = scalarsList.flatMap(x => x.keys).distinct.toSet
+
+    val validKeys = for {
+      key <- uniqueKeys
+      definition <- scalarDefs.definitions.get(key)
+    } yield (key, definition)
+
+    for ((key, definition) <- validKeys) {
+      val keyedScalarsList = scalarsList.map{x =>
+        x.get(key) match {
+          case Some(v) => v
+          case _ => Map[String, AnyVal]()
+        }
+      }
+
+      val uniqueLabels = keyedScalarsList.flatMap(x => x.keys).distinct.toSet
+      val vectorized = for {
+        label <- uniqueLabels
+        vector = vectorizeScalar(label, definition, keyedScalarsList)
+      } yield (label, vector)
+
+      val prefixedKeyName = getParquetFriendlyScalarName(key.toLowerCase)
+      root.set(prefixedKeyName, vectorized.toMap.asJava)
+    }
+  }
+
   private def subsessionStartDate2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
     implicit val formats = DefaultFormats
 
@@ -737,7 +861,8 @@ object LongitudinalView {
     }
   }
 
-  private def buildRecord(history: Iterable[Map[String, Any]], schema: Schema): Option[GenericRecord] = {
+  private def buildRecord(history: Iterable[Map[String, Any]], schema: Schema,
+                          scalarDefs:ScalarsDefinitionApi = Scalars): Option[GenericRecord] = {
     // De-dupe records
     val sorted = history.foldLeft((List[Map[String, Any]](), Set[String]()))(
       { case ((submissions, seen), current) =>
@@ -795,6 +920,8 @@ object LongitudinalView {
       JSON2Avro("payload.info",               List("timezoneOffset"),           "timezone_offset", sorted, root, schema)
       histograms2Avro(sorted, root, schema)
       keyedHistograms2Avro(sorted, root, schema)
+      scalars2Avro(sorted, root, scalarDefs)
+      keyedScalars2Avro(sorted, root, scalarDefs)
       subsessionStartDate2Avro(sorted, root, schema)
       profileDates2Avro(sorted, root, schema)
     } catch {

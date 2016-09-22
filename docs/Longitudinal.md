@@ -13,5 +13,6 @@ The resulting dataset can be retrieved as a [DataFrame](https://spark.apache.org
 * Most values in the map are themselves arrays, where elements are the values of that field in the payloads sent by that client.
   * For example, the `geo_country` field will be an array of string country codes, representing the `geoCountry` top-level field in each of the pings sent by that client.
   * Certain fields, like `client_id` (representing `clientId` in the original pings) are not arrays, because they are always the same for a given client.
+* The dots `.` in the [scalar](https://gecko.readthedocs.io/en/latest/toolkit/components/telemetry/telemetry/collection/scalars.html) probe names are replaced with underscores `_`. Moreover, to prevent name collisions between scalars and histograms, scalars are prefixed with `scalar_`. For example, the `test.group.probe_name` scalar probe can be looked up as `scalar_test_group_probe_name`.
 
 Note that the pings seen by the code are not exactly the raw pings you see in the [Gecko docs](https://gecko.readthedocs.io/en/latest/toolkit/components/telemetry/telemetry/data/main-ping.html). Instead, they're the output of the [data pipeline](https://github.com/mozilla-services/data-pipeline). An example of one of these pings can be found [here](https://gist.github.com/Uberi/686fb2b475ed5924c40b).
