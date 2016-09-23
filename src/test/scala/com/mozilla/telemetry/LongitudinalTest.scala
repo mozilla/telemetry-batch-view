@@ -1,7 +1,6 @@
-package com.mozilla.telemetry
+package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.parquet.ParquetFile
-import com.mozilla.telemetry.views.LongitudinalView
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
 import org.apache.spark.sql.{Row, SQLContext}
@@ -420,5 +419,30 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       assert(x.getAs[Long]("sum") == 42L)
       assert(x.getList[Int](x.fieldIndex("values")).toList == reference.toList)
     }
+  }
+
+  "ClientIterator" should "not trim histories of size < 1000" in {
+    val template = ("foo", Map("client" -> "foo"))
+    val history = List.fill(42)(template)
+    val split_history = new ClientIterator(history.iterator).toList
+    assert(split_history.length == 1)
+    split_history(0).length === 42
+  }
+
+  it should "not trim histories of size 1000" in {
+    val template = ("foo", Map("client" -> "foo"))
+    val history = List.fill(1000)(template)
+    val split_history = new ClientIterator(history.iterator).toList
+    assert(split_history.length == 1)
+    split_history(0).length === 1000
+  }
+
+  it should "trim histories of size > 1000" in {
+    val template1 = ("foo", Map("client" -> "foo"))
+    val template2 = ("bar", Map("client" -> "bar"))
+    val history = List.fill(2000)(template1) ++ List.fill(2000)(template2)
+    val split_history = new ClientIterator(history.iterator).toList
+    assert(split_history.length == 2)
+    split_history.map(x => assert(x.length == 1000))
   }
 }
