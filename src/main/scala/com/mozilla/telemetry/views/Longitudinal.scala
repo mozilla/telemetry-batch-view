@@ -8,7 +8,6 @@ import org.apache.spark.rdd.RDD
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.rogach.scallop._
-import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scala.math.abs
@@ -19,6 +18,57 @@ import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.histograms._
 import com.mozilla.telemetry.utils._
 
+protected class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHistorySize: Int = 1000) extends Iterator[List[Map[String, Any]]] {
+  // Less than 1% of clients in a sampled dataset over a 3 months period has more than 1000 fragments.
+  var buffer = ListBuffer[Map[String, Any]]()
+  var currentKey =
+    if (it.hasNext) {
+      val (key, value) = it.next()
+      buffer += value
+      key
+    } else {
+      null
+    }
+
+  override def hasNext() = buffer.nonEmpty
+
+  override def next(): List[Map[String, Any]] = {
+    while (it.hasNext) {
+      val (key, value) = it.next()
+
+      if (key == currentKey && buffer.size == maxHistorySize) {
+        // Trim long histories
+        val result = buffer.toList
+        buffer.clear
+
+        // Fast forward to next client
+        while (it.hasNext) {
+          val (k, v) = it.next()
+          if (k != currentKey) {
+            buffer += v
+            currentKey = k
+            return result
+          }
+        }
+
+        return result
+      } else if (key == currentKey) {
+        buffer += value
+      } else {
+        val result = buffer.toList
+        buffer.clear
+        buffer += value
+        currentKey = key
+        return result
+      }
+    }
+
+    val result = buffer.toList
+    buffer.clear
+    result
+  }
+}
+
 object LongitudinalView {
   private class ClientIdPartitioner(size: Int) extends Partitioner {
     def numPartitions: Int = size
@@ -26,56 +76,6 @@ object LongitudinalView {
     def getPartition(key: Any): Int = key match {
       case (clientId: String, startDate: String, counter: Int) => abs(clientId.hashCode) % size
       case _ => throw new Exception("Invalid key")
-    }
-  }
-
-  private class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHistorySize: Int = 1000) extends Iterator[List[Map[String, Any]]] {
-    // Less than 1% of clients in a sampled dataset over a 3 months period has more than 1000 fragments.
-    var buffer = ListBuffer[Map[String, Any]]()
-    var currentKey =
-      if (it.hasNext) {
-        val (key, value) = it.next()
-        buffer += value
-        key
-      } else {
-        null
-      }
-
-  override def hasNext() = buffer.nonEmpty
-
-    override def next(): List[Map[String, Any]] = {
-      while (it.hasNext) {
-        val (key, value) = it.next()
-
-        if (key == currentKey && buffer.size == maxHistorySize) {
-          // Trim long histories
-          val result = buffer.toList
-          buffer.clear
-
-          // Fast forward to next client
-          while (it.hasNext) {
-            val (k, _) = it.next()
-            if (k != currentKey) {
-              buffer += value
-              return result
-            }
-          }
-
-          return result
-        } else if (key == currentKey) {
-          buffer += value
-        } else {
-          val result = buffer.toList
-          buffer.clear
-          buffer += value
-          currentKey = key
-          return result
-        }
-      }
-
-      val result = buffer.toList
-      buffer.clear
-      result
     }
   }
 
