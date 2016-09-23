@@ -8,7 +8,7 @@ To create a derived dataset for running analyses like
 1. Fire up a 20-node Spark cluster [here](https://analysis.telemetry.mozilla.org/).
 2. `cd /mnt && git clone https://github.com/mozilla/telemetry-batch-view.git && cd telemetry-batch-view`
 3. `sbt assembly` (this might take a while)
-4. `spark-submit --master yarn-client --class com.mozilla.telemetry.views.E10sExperimentView target/scala-2.10/telemetry-batch-view-1.1.jar --from 20160608 --to 20160609 --channel beta --version 48.0 --experiment e10s-beta48-cohorts --bucket telemetry-test-bucket` (this _definitely_ will take a while. You can watch some of its progress by `tail -f /mnt/var/log/spark/spark.log`)
+4. `spark-submit --master yarn-client --class com.mozilla.telemetry.views.E10sExperimentView target/scala-2.11/telemetry-batch-view-1.1.jar --from 20160608 --to 20160609 --channel beta --version 48.0 --experiment e10s-beta48-cohorts --bucket telemetry-test-bucket` (this _definitely_ will take a while. You can watch some of its progress by `tail -f /mnt/var/log/spark/spark.log`)
 
 Testing
 -------
