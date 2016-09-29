@@ -5,7 +5,6 @@ import com.mozilla.spark.sql.hyperloglog.functions._
 import com.mozilla.telemetry.views.ClientCountView
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.StructField
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{FlatSpec, Matchers}
 
