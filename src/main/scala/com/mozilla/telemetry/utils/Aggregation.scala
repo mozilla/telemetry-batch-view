@@ -1,6 +1,14 @@
 package com.mozilla.telemetry.utils
 
 package object aggregation {
+  def mean(values: Seq[Long]): Option[Double] = {
+    if (values.size == 0) {
+      None
+    } else {
+      Some(values.sum.toDouble/values.size)
+    }
+  }
+
   def weightedMean(values: Seq[Option[Long]], weights: Seq[Long]): Option[Double] = {
     if (values.size == weights.size) {
       val clean_pairs = (values zip weights).map(pair => pair._1.map((_, pair._2))).flatten
