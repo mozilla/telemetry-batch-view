@@ -26,7 +26,8 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
     ("experiment_id",     List(null, "displayport-tuning-nightly@experiments.mozilla.org")),
     ("experiment_branch", List("control", "experiment")),
     ("e10s",              List(true, false)),
-    ("e10s_cohort",       List("control", "test"))
+    ("e10s_cohort",       List("control", "test")),
+    ("gfx_compositor",    List("simple", "none", null))
   )
 
   var sc: Option[SparkContext] = None
@@ -99,9 +100,12 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
         ("subsessionStartDate" -> JString(dimensions("activity_date").asInstanceOf[String]))
       else JObject()
       val system =
-        "os" ->
+        ("os" ->
           ("name" -> dimensions("os_name").asInstanceOf[String]) ~
-          ("version" -> dimensions("os_version").asInstanceOf[String])
+          ("version" -> dimensions("os_version").asInstanceOf[String])) ~
+        ("gfx" ->
+          ("features" ->
+            ("compositor" -> dimensions("gfx_compositor").asInstanceOf[String])))
       val settings =
         ("e10sEnabled" -> dimensions("e10s").asInstanceOf[Boolean]) ~
         ("e10sCohort" -> dimensions("e10s_cohort").asInstanceOf[String])
@@ -156,7 +160,9 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
     // the number of aggregates is half of the number of pings originally - this is because pings vary all their dimensions, including the doc type
     // when the doc type is "crash", the ping gets treated the same as if it was a "main" ping that also contains a main process crash
     // we basically "fold" the doc type dimension into the aggregates
-    assert(fixture.records.count() == fixture.pings.length / 2)
+    // UPDATE: we also need to consider gfx_backend = [null, "none"] as a unique value, so we end up with 2 out of 3
+    // possible combinations.
+    assert(fixture.records.count() == fixture.pings.length / 3)
     assert(fixture.mainProcessedAccumulator.value == fixture.pings.length / 2)
     assert(fixture.mainIgnoredAccumulator.value == 0)
     assert(fixture.crashProcessedAccumulator.value == fixture.pings.length / 2)
@@ -189,25 +195,54 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
       assert(dimensionValues("experiment_branch") contains dimensions.getOrElse("experiment_branch", null))
       assert(List("True", "False")                contains dimensions.getOrElse("e10s_enabled", null))
       assert(dimensionValues("e10s_cohort")       contains dimensions.getOrElse("e10s_cohort", null))
+      assert(dimensionValues("gfx_compositor")    contains dimensions.getOrElse("gfx_compositor", null))
     }
   }
 
+  "gfx_backend" must "be either a string or null" in {
+    val values = fixture.records.select("dimensions.gfx_compositor").distinct().rdd.map(r => r(0)).collect()
+    assert(values.toSet == Set("simple", null))
+  }
+
   "crash rates" must "be converted correctly" in {
-    for (row <- fixture.records.select("stats").collect()) {
+    for (row <- fixture.records.select("stats", "dimensions.gfx_compositor").collect()) {
       val stats = row.getJavaMap[String, Double](0)
-      assert(stats("ping_count")                       == 1)
-      assert(stats("usage_hours")                      == 42 / 3600.0)
-      assert(stats("main_crashes")                     == 1)
-      assert(stats("content_crashes")                  == 42 * 2)
-      assert(stats("plugin_crashes")                   == 42 * 2)
-      assert(stats("gmplugin_crashes")                 == 42 * 2)
-      assert(stats("content_shutdown_crashes")         == 42 * 2)
-      assert(stats("usage_hours_squared")              == 0.00013611111111111113)
-      assert(stats("main_crashes_squared")             == 1)
-      assert(stats("content_crashes_squared")          == 3528)
-      assert(stats("plugin_crashes_squared")           == 3528)
-      assert(stats("gmplugin_crashes_squared")         == 3528)
-      assert(stats("content_shutdown_crashes_squared") == 3528)
+      val gfx_compositor = row.getString(1)
+      val has_gfx_compositor = gfx_compositor match {
+        case null => false
+        case s: String => true
+      }
+      // We need a special case for gfx_compositor, since it has 2 ('none', null) values that count as one.
+      // Because of that, all the stats for gfx_compositor == null need to be doubled.
+      if (has_gfx_compositor) {
+        assert(stats("ping_count")                       == 1)
+        assert(stats("usage_hours")                      == 42 / 3600.0)
+        assert(stats("main_crashes")                     == 1)
+        assert(stats("content_crashes")                  == 42 * 2)
+        assert(stats("plugin_crashes")                   == 42 * 2)
+        assert(stats("gmplugin_crashes")                 == 42 * 2)
+        assert(stats("content_shutdown_crashes")         == 42 * 2)
+        assert(stats("usage_hours_squared")              == scala.math.pow(42 / 3600.0, 2))
+        assert(stats("main_crashes_squared")             == scala.math.pow(1, 2))
+        assert(stats("content_crashes_squared")          == scala.math.pow(42, 2) * 2)
+        assert(stats("plugin_crashes_squared")           == scala.math.pow(42, 2) * 2)
+        assert(stats("gmplugin_crashes_squared")         == scala.math.pow(42, 2) * 2)
+        assert(stats("content_shutdown_crashes_squared") == scala.math.pow(42, 2) * 2)
+      } else {
+        assert(stats("ping_count")                       == 2)
+        assert(stats("usage_hours")                      == (42 / 3600.0) * 2)
+        assert(stats("main_crashes")                     == 1 * 2)
+        assert(stats("content_crashes")                  == 42 * 2 * 2)
+        assert(stats("plugin_crashes")                   == 42 * 2 * 2)
+        assert(stats("gmplugin_crashes")                 == 42 * 2 * 2)
+        assert(stats("content_shutdown_crashes")         == 42 * 2 * 2)
+        assert(stats("usage_hours_squared")              == scala.math.pow(42 / 3600.0, 2) * 2)
+        assert(stats("main_crashes_squared")             == scala.math.pow(1, 2) * 2)
+        assert(stats("content_crashes_squared")          == scala.math.pow(42, 2) * 2 * 2)
+        assert(stats("plugin_crashes_squared")           == scala.math.pow(42, 2) * 2 * 2)
+        assert(stats("gmplugin_crashes_squared")         == scala.math.pow(42, 2) * 2 * 2)
+        assert(stats("content_shutdown_crashes_squared") == scala.math.pow(42, 2) * 2 * 2)
+      }
     }
   }
 }
