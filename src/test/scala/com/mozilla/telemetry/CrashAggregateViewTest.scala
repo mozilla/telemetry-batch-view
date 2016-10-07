@@ -26,7 +26,8 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
     ("experiment_id",     List(null, "displayport-tuning-nightly@experiments.mozilla.org")),
     ("experiment_branch", List("control", "experiment")),
     ("e10s",              List(true, false)),
-    ("e10s_cohort",       List("control", "test"))
+    ("e10s_cohort",       List("control", "test")),
+    ("gfx_compositor",    List("simple"))
   )
 
   var sc: Option[SparkContext] = None
@@ -99,9 +100,12 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
         ("subsessionStartDate" -> JString(dimensions("activity_date").asInstanceOf[String]))
       else JObject()
       val system =
-        "os" ->
+        ("os" ->
           ("name" -> dimensions("os_name").asInstanceOf[String]) ~
-          ("version" -> dimensions("os_version").asInstanceOf[String])
+          ("version" -> dimensions("os_version").asInstanceOf[String])) ~
+        ("gfx" ->
+          ("features" ->
+            ("compositor" -> dimensions("gfx_compositor").asInstanceOf[String])))
       val settings =
         ("e10sEnabled" -> dimensions("e10s").asInstanceOf[Boolean]) ~
         ("e10sCohort" -> dimensions("e10s_cohort").asInstanceOf[String])
@@ -189,6 +193,7 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
       assert(dimensionValues("experiment_branch") contains dimensions.getOrElse("experiment_branch", null))
       assert(List("True", "False")                contains dimensions.getOrElse("e10s_enabled", null))
       assert(dimensionValues("e10s_cohort")       contains dimensions.getOrElse("e10s_cohort", null))
+      assert(dimensionValues("gfx_compositor")    contains dimensions.getOrElse("gfx_compositor", null))
     }
   }
 
@@ -209,5 +214,168 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
       assert(stats("gmplugin_crashes_squared")         == 3528)
       assert(stats("content_shutdown_crashes_squared") == 3528)
     }
+  }
+}
+
+class CrashAggregateViewGfxCompositorTest extends FlatSpec with Matchers with BeforeAndAfterAll {
+  val pingDimensions = List(
+    ("submission_date", List("20160305")),
+    ("activity_date", List("2016-03-02T00:00:00.0-03:00")),
+    ("application", List("Firefox")),
+    ("doc_type", List("main")),
+    ("channel", List("nightly")),
+    ("build_version", List("45.0a1")),
+    ("build_id", List("20160301000000")),
+    ("os_name", List("Linux")),
+    ("os_version", List("6.1")),
+    ("architecture", List("x86")),
+    ("country", List("US")),
+    ("experiment_id", List("displayport-tuning-nightly@experiments.mozilla.org")),
+    ("experiment_branch", List("control")),
+    ("e10s", List(true)),
+    ("e10s_cohort", List("control")),
+    ("gfx_compositor", List("simple", "none", null))
+  )
+
+  var sc: Option[SparkContext] = None
+  var sqlContext: Option[SQLContext] = None
+
+  override def beforeAll(configMap: org.scalatest.ConfigMap) {
+    // set up and configure Spark
+    val sparkConf = new SparkConf().setAppName("KPI")
+    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
+    sc = Some(new SparkContext(sparkConf))
+    sqlContext = Some(new SQLContext(sc.get))
+  }
+
+  override def afterAll(configMap: org.scalatest.ConfigMap) {
+    sc.get.stop()
+  }
+
+  def fixture = {
+    def cartesianProduct(dimensions: List[(String, List[Any])]): Iterable[Map[String, Any]] = {
+      dimensions match {
+        case Nil => List(Map[String, Any]())
+        case (dimensionName, dimensionValues) :: rest =>
+          dimensionValues.flatMap(dimensionValue =>
+            cartesianProduct(dimensions.tail).map(
+              configuration => configuration + (dimensionName -> dimensionValue)
+            )
+          )
+      }
+    }
+
+    def createPing(dimensions: Map[String, Any]): Map[String, Any] = {
+      val SCALAR_VALUE = 42
+      val keyedHistograms =
+        ("SUBPROCESS_CRASHES_WITH_DUMP" ->
+          ("content" ->
+            ("bucket_count" -> 3) ~
+              ("histogram_type" -> 4) ~
+              ("range" -> List(1, 2)) ~
+              ("sum" -> SCALAR_VALUE) ~
+              ("values" -> Map("0" -> SCALAR_VALUE, "1" -> 0))
+            ) ~
+            ("plugin" ->
+              ("bucket_count" -> 3) ~
+                ("histogram_type" -> 4) ~
+                ("range" -> List(1, 2)) ~
+                ("sum" -> SCALAR_VALUE) ~
+                ("values" -> Map("0" -> SCALAR_VALUE, "1" -> 0))
+              ) ~
+            ("gmplugin" ->
+              ("bucket_count" -> 3) ~
+                ("histogram_type" -> 4) ~
+                ("range" -> List(1, 2)) ~
+                ("sum" -> SCALAR_VALUE) ~
+                ("values" -> Map("0" -> SCALAR_VALUE, "1" -> 0))
+              )
+          ) ~
+          ("SUBPROCESS_KILL_HARD" ->
+            ("ShutDownKill" ->
+              ("bucket_count" -> 3) ~
+                ("histogram_type" -> 4) ~
+                ("range" -> List(1, 2)) ~
+                ("sum" -> SCALAR_VALUE) ~
+                ("values" -> Map("0" -> SCALAR_VALUE, "1" -> 0))
+              )
+            )
+
+      val isMain = dimensions("doc_type") == "main"
+      val info = if (isMain)
+        ("subsessionLength" -> JInt(SCALAR_VALUE)) ~
+          ("subsessionStartDate" -> JString(dimensions("activity_date").asInstanceOf[String]))
+      else JObject()
+      val system =
+        ("os" ->
+          ("name" -> dimensions("os_name").asInstanceOf[String]) ~
+            ("version" -> dimensions("os_version").asInstanceOf[String])) ~
+        ("gfx" ->
+          ("features" ->
+            ("compositor" -> dimensions("gfx_compositor").asInstanceOf[String])))
+      val settings =
+        ("e10sEnabled" -> dimensions("e10s").asInstanceOf[Boolean]) ~
+          ("e10sCohort" -> dimensions("e10s_cohort").asInstanceOf[String])
+      val build =
+        ("version" -> dimensions("build_version").asInstanceOf[String]) ~
+          ("buildId" -> dimensions("build_id").asInstanceOf[String]) ~
+          ("architecture" -> dimensions("architecture").asInstanceOf[String])
+      val addons =
+        "activeExperiment" ->
+          ("id" -> dimensions("experiment_id").asInstanceOf[String]) ~
+            ("branch" -> dimensions("experiment_branch").asInstanceOf[String])
+      val payload = if (isMain) None
+      else {
+        compact(render(
+          "payload" ->
+            ("crashDate" -> dimensions("activity_date").asInstanceOf[String].substring(0, 10))
+        ))
+      }
+
+      implicit val formats = DefaultFormats
+
+      Map(
+        "submissionDate" -> dimensions("submission_date").asInstanceOf[String],
+        "docType" -> dimensions("doc_type").asInstanceOf[String],
+        "geoCountry" -> dimensions("country").asInstanceOf[String],
+        "normalizedChannel" -> dimensions("channel").asInstanceOf[String],
+        "appName" -> dimensions("application").asInstanceOf[String],
+        "payload.keyedHistograms" -> compact(render(keyedHistograms)),
+        "payload.info" -> compact(render(info)),
+        "payload" -> payload,
+        "environment.system" -> compact(render(system)),
+        "environment.settings" -> compact(render(settings)),
+        "environment.build" -> compact(render(build)),
+        "environment.addons" -> compact(render(addons))
+      )
+    }
+
+    new {
+      val pings: List[Map[String, Any]] = (for (configuration <- cartesianProduct(pingDimensions)) yield createPing(configuration)).toList
+
+      val (
+        rowRDD,
+        mainProcessedAccumulator, mainIgnoredAccumulator,
+        crashProcessedAccumulator, crashIgnoredAccumulator
+        ) = CrashAggregateView.compareCrashes(sc.get, sc.get.parallelize(pings))
+      val schema = CrashAggregateView.buildSchema()
+      val records = sqlContext.get.createDataFrame(rowRDD, schema)
+      records.count() // Spark is pretty lazy; kick it so it'll update our accumulators properly
+    }
+  }
+
+  "Records" must "have the correct lengths" in {
+    // Pings with a value of gfx_compositor of None and "none" end up in the same aggregate.
+    // So out of 3 values, we only get 2 aggregates.
+    assert(fixture.records.count() == 2)
+  }
+
+  "crash rates" must "be converted correctly" in {
+    val simpleCompositorStats = fixture.records.filter("dimensions.gfx_compositor = 'simple'")
+                                                   .select("stats").collect()(0)
+    val noneCompositorStats = fixture.records.filter("dimensions.gfx_compositor is null")
+                                                 .select("stats").collect()(0)
+    assert(simpleCompositorStats.getJavaMap[String, Double](0)("ping_count") == 1)
+    assert(noneCompositorStats.getJavaMap[String, Double](0)("ping_count") == 2)
   }
 }
