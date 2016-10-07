@@ -77,6 +77,7 @@ The `crash_aggregates` table has 4 commonly-used columns:
     * `dimensions['experiment_branch']` is the branch of the experiment being participated in, such as `control` or `experiment`, or null if no experiment.
     * `dimensions['e10s_enabled']` is whether E10S is enabled.
     * `dimensions['e10s_cohort']` is the E10S cohort the user is part of, such as `control`, `test`, or `disqualified`.
+    * `dimensions['gfx_compositor']` is the graphics backend compositor used by the program, such as `d3d11`, `opengl` and `simple`. Null values may be reported as `none` as well.
     * All of the above fields can potentially be blank, which means "not present". That means that in the actual pings, the corresponding fields were null.
 * `stats` contains the aggregate values that we care about:
     * `stats['usage_hours']` is the number of user-hours represented by the aggregate.
