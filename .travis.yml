@@ -11,7 +11,7 @@ before_cache:
   - find $HOME/.ivy2 -name "ivydata-*.properties" -delete
   - find $HOME/.sbt -name "*.lock" -delete
 env:
- - _JAVA_OPTIONS="-Xms2048M -Xmx2048M -Xss6M -XX:MaxMetaspaceSize=512M"
+ - _JAVA_OPTIONS="-Xms4G -Xmx4G -Xss4M -XX:MaxMetaspaceSize=256M"
 scala:
   - 2.10.6
 sbt_args: -J-Xss2M
