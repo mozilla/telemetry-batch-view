@@ -119,6 +119,8 @@ object SyncView {
       println("     RECORDS IGNORED: %d".format(ignoredCount.value))
       println("=======================================================================================")
     }
+
+    sc.stop()
   }
 
   // Convert the given Heka message containing a "sync" ping
