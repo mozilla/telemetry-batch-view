@@ -1,4 +1,4 @@
--XX:MaxPermSize=512m
--Xms1g
--Xmx2g
--Xss4m
+-Xms2048M
+-Xmx2048M
+-Xss6M
+-XX:MaxMetaspaceSize=512M
