@@ -1,4 +1,6 @@
 language: scala
+jdk:
+  - oraclejdk8
 # These directories are cached to S3 at the end of the build
 cache:
   directories:
@@ -8,6 +10,8 @@ before_cache:
   # Tricks to avoid unnecessary cache updates
   - find $HOME/.ivy2 -name "ivydata-*.properties" -delete
   - find $HOME/.sbt -name "*.lock" -delete
+env:
+ - _JAVA_OPTIONS="-Xms4G -Xmx4G -Xss4M -XX:MaxMetaspaceSize=256M"
 scala:
   - 2.10.6
 sbt_args: -J-Xss2M
