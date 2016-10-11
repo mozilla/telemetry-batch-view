@@ -43,34 +43,34 @@ case class CrossSectional (
     val client_id: String
   , val normalized_channel: String
   , val active_hours_total: Double
-  , val active_hours_sun: Double
-  , val active_hours_mon: Double
-  , val active_hours_tue: Double
-  , val active_hours_wed: Double
-  , val active_hours_thu: Double
-  , val active_hours_fri: Double
-  , val active_hours_sat: Double
-  , val geo_Mode: Option[String]
-  , val geo_Cfgs: Long
-  , val architecture_Mode: Option[String]
-  , val ffLocale_Mode: Option[String]
+  , val active_hours_0_mon: Double
+  , val active_hours_1_tue: Double
+  , val active_hours_2_wed: Double
+  , val active_hours_3_thu: Double
+  , val active_hours_4_fri: Double
+  , val active_hours_5_sat: Double
+  , val active_hours_6_sun: Double
+  , val geo_mode: Option[String]
+  , val geo_cfgs: Long
+  , val architecture_mode: Option[String]
+  , val ffLocale_mode: Option[String]
 ) {
   def this(base: Longitudinal) = {
     this(
-      client_id = base.client_id,
-      normalized_channel = base.normalized_channel,
-      active_hours_total = base.session_length.getOrElse(Seq()).sum,
-      active_hours_sun = base.activeHoursByDOW(0),
-      active_hours_mon = base.activeHoursByDOW(1),
-      active_hours_tue = base.activeHoursByDOW(2),
-      active_hours_wed = base.activeHoursByDOW(3),
-      active_hours_thu = base.activeHoursByDOW(4),
-      active_hours_fri = base.activeHoursByDOW(5),
-      active_hours_sat = base.activeHoursByDOW(6),
-      geo_Mode = base.weightedMode(base.geo_country),
-      geo_Cfgs = base.geo_country.getOrElse(Seq()).distinct.length,
-      architecture_Mode = base.weightedMode(base.architecture).getOrElse(None),
-      ffLocale_Mode = base.weightedMode(base.locale).getOrElse(None)
+        client_id = base.client_id
+      , normalized_channel = base.normalized_channel
+      , active_hours_total = base.session_length.getOrElse(Seq()).sum
+      , active_hours_0_mon = base.activeHoursByDOW(1)
+      , active_hours_1_tue = base.activeHoursByDOW(2)
+      , active_hours_2_wed = base.activeHoursByDOW(3)
+      , active_hours_3_thu = base.activeHoursByDOW(4)
+      , active_hours_4_fri = base.activeHoursByDOW(5)
+      , active_hours_5_sat = base.activeHoursByDOW(6)
+      , active_hours_6_sun = base.activeHoursByDOW(0)
+      , geo_mode = base.weightedMode(base.geo_country)
+      , geo_cfgs = base.geo_country.getOrElse(Seq()).distinct.length
+      , architecture_mode = base.weightedMode(base.architecture).getOrElse(None)
+      , ffLocale_mode = base.weightedMode(base.locale).getOrElse(None)
     )
   }
 }

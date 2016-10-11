@@ -43,35 +43,35 @@ class CrossSectionalViewTest extends FlatSpec {
 
   def getExampleLongitudinal(client_id: String) = {
     new Longitudinal(
-      client_id = client_id,
-      normalized_channel = "release",
-      submission_date = Some(Seq("2016-01-01T00:00:00.0+00:00",
-        "2016-01-02T00:00:00.0+00:00", "2016-01-03T00:00:00.0+00:00")),
-      geo_country = Some(Seq("DE", "DE", "IT")),
-      session_length = Some(Seq(3600, 7200, 14400)),
-      is_default_browser = Some(Seq(Some(true), Some(true), Some(true))),
-      default_search_engine = Some(Seq(Some("grep"), Some("grep"), Some("grep"))),
-      locale = Some(Seq(Some("de_DE"), Some("de_DE"), None)),
-      architecture = Some(Seq(None, Some("arch"), Some("arch")))
+        client_id = client_id
+      , normalized_channel = "release"
+      , submission_date = Some(Seq("2016-01-01T00:00:00.0+00:00"
+      ,   "2016-01-02T00:00:00.0+00:00", "2016-01-03T00:00:00.0+00:00"))
+      , geo_country = Some(Seq("DE", "DE", "IT"))
+      , session_length = Some(Seq(3600, 7200, 14400))
+      , is_default_browser = Some(Seq(Some(true), Some(true), Some(true)))
+      , default_search_engine = Some(Seq(Some("grep"), Some("grep"), Some("grep")))
+      , locale = Some(Seq(Some("de_DE"), Some("de_DE"), None))
+      , architecture = Some(Seq(None, Some("arch"), Some("arch")))
     )
   }
 
   def getExampleCrossSectional(client_id: String) = {
     new CrossSectional(
-      client_id = client_id,
-      normalized_channel = "release",
-      active_hours_total = 25200,
-      active_hours_sun = 14400 / 3600.0,
-      active_hours_mon = 0.0,
-      active_hours_tue = 0.0,
-      active_hours_wed = 0.0,
-      active_hours_thu = 0.0,
-      active_hours_fri = 3600/3600.0,
-      active_hours_sat = 7200/3600.0,
-      geo_Mode = Some("IT"),
-      geo_Cfgs = 2,
-      architecture_Mode = Some("arch"),
-      ffLocale_Mode = None
+        client_id = client_id
+      , normalized_channel = "release"
+      , active_hours_total = 25200
+      , active_hours_0_mon = 0.0
+      , active_hours_1_tue = 0.0
+      , active_hours_2_wed = 0.0
+      , active_hours_3_thu = 0.0
+      , active_hours_4_fri = 3600/3600.0
+      , active_hours_5_sat = 7200/3600.0
+      , active_hours_6_sun = 14400 / 3600.0
+      , geo_mode = Some("IT")
+      , geo_cfgs = 2
+      , architecture_mode = Some("arch")
+      , ffLocale_mode = None
     )
   }
 
