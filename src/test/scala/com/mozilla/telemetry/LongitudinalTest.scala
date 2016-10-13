@@ -69,10 +69,18 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
           ("other" -> "some"))
 
       var pingPayload =
-        ("processes" ->
-          ("parent" ->
-            ("scalars" -> scalars) ~
-            ("keyedScalars" -> keyedScalars)))
+        if (idx == 1) {
+          // Skip the scalar section for the first payload.
+          ("processes" ->
+            ("parent" ->
+              ("bogus" -> "other") ~
+              ("keyedScalars" -> keyedScalars)))
+        } else {
+          ("processes" ->
+            ("parent" ->
+              ("scalars" -> scalars) ~
+              ("keyedScalars" -> keyedScalars)))
+        }
 
       val simpleMeasurements = "uptime" -> 18L
 
@@ -486,19 +494,31 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
   "Unsigned scalars" must "be converted correctly" in {
     val scalars = fixture.row.getList[Long](fixture.row.fieldIndex("scalar_parent_mock_scalar_uint"))
     assert(scalars.length == fixture.payloads.length)
-    scalars.foreach(x => assert(x == 3))
+    scalars.zipWithIndex.foreach {
+      // The first payload in the fixture is missing the scalars section. The scalars
+      // must contain the default value for it.
+      case (x, index) => if (index == 0) assert(x == 0) else assert(x == 3)
+    }
   }
 
   "Boolean scalars" must "be converted correctly" in {
     val scalars = fixture.row.getList[Boolean](fixture.row.fieldIndex("scalar_parent_mock_scalar_bool"))
     assert(scalars.length == fixture.payloads.length)
-    scalars.foreach(x => assert(x == true))
+    scalars.zipWithIndex.foreach {
+      // The first payload in the fixture is missing the scalars section. The scalars
+      // must contain the default value for it.
+      case (x, index) => if (index == 0) assert(x == false) else assert(x == true)
+    }
   }
 
   "String scalars" must "be converted correctly" in {
     val scalars = fixture.row.getList[String](fixture.row.fieldIndex("scalar_parent_mock_scalar_string"))
     assert(scalars.length == fixture.payloads.length)
-    scalars.foreach(x => assert(x == "a nice string scalar"))
+    scalars.zipWithIndex.foreach {
+      // The first payload in the fixture is missing the scalars section. The scalars
+      // must contain the default value for it.
+      case (x, index) => if (index == 0) assert(x == "") else assert(x == "a nice string scalar")
+    }
   }
 
   "Keyed unsigned scalars" must "be converted correctly" in {

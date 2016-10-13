@@ -760,9 +760,13 @@ object LongitudinalView {
       // Get the payload of the Heka frame, which contains the payload for the
       // main ping.
       val payload = x.getOrElse("payload", return).asInstanceOf[JObject]
+      // If we can't find the "scalars" section for a ping, don't throw away all
+      // the data. This is semantically different from how we handle other stuff
+      // in the longitudinal (e.g. Histograms), but we need this since scalars
+      // landed recently and this section is not there on old pings.
       (payload \ "processes" \ "parent" \ "scalars").toOption match {
         case Some(scalars) => scalars.extract[Map[String, AnyVal]]
-        case _ => return
+        case _ => Map[String, AnyVal]()
       }
     }
 
@@ -788,7 +792,7 @@ object LongitudinalView {
       val payload = x.getOrElse("payload", return).asInstanceOf[JObject]
       (payload \ "processes" \ "parent" \ "keyedScalars").toOption match {
         case Some(scalars) => scalars.extract[Map[String, Map[String, AnyVal]]]
-        case _ => return
+        case _ => Map[String, Map[String, AnyVal]]()
       }
     }
 
