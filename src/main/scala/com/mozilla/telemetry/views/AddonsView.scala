@@ -1,7 +1,7 @@
 package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.heka.{Dataset, Message}
-import com.mozilla.telemetry.utils.S3Store
+import com.mozilla.telemetry.utils.{Addon, S3Store}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.util.LongAccumulator
@@ -11,22 +11,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._
 
-import scala.util.Try
-
-case class AddonData(blocklisted: Option[Boolean],
-                     description: Option[String],
-                     name: Option[String],
-                     userDisabled: Option[Boolean],
-                     appDisabled: Option[Boolean],
-                     version: Option[String],
-                     scope: Option[Integer],
-                     `type`: Option[String],
-                     foreignInstall: Option[Boolean],
-                     hasBinaryComponents: Option[Boolean],
-                     installDay: Option[Integer],
-                     updateDay: Option[Integer],
-                     signedState: Option[Integer],
-                     isSystem: Option[Boolean])
+import scala.util.{Failure, Success, Try}
 
 object AddonsView {
   def streamVersion: String = "v1"
@@ -187,39 +172,39 @@ object AddonsView {
       case _ => return None
     }
 
-    val activeAddons = addons \ "activeAddons"
-    val addonIds = activeAddons match {
-      case JObject(addon) => addon map(x => x._1)
-      case _ => List()
-    }
-
     implicit val formats = DefaultFormats
+    val activeAddons = Try((addons \ "activeAddons").extract[Map[String, Addon]])
 
-    val addonsParsed = addonIds map(aid => Try((aid, (activeAddons \ aid).extract[AddonData])))
-    counter.add(addonsParsed.count(_.isFailure))
-    val successes = addonsParsed.filter(_.isSuccess).map(_.get).map { case (aid, addonData: AddonData) =>
-      Row(docId, clientId, sampleId, aid,
-        addonData.blocklisted.orNull,
-        addonData.name.orNull,
-        addonData.userDisabled.orNull,
-        addonData.appDisabled.orNull,
-        addonData.version.orNull,
-        addonData.scope.orNull,
-        addonData.`type`.orNull,
-        addonData.foreignInstall.orNull,
-        addonData.hasBinaryComponents.orNull,
-        addonData.installDay.orNull,
-        addonData.updateDay.orNull,
-        addonData.signedState.orNull,
-        addonData.isSystem.orNull)
+    val successes = activeAddons match {
+      case Success(a) => a.map { case (aid, addonData) =>
+        Row(docId, clientId, sampleId, aid,
+          addonData.blocklisted.orNull,
+          addonData.name.orNull,
+          addonData.userDisabled.orNull,
+          addonData.appDisabled.orNull,
+          addonData.version.orNull,
+          addonData.scope.orNull,
+          addonData.`type`.orNull,
+          addonData.foreignInstall.orNull,
+          addonData.hasBinaryComponents.orNull,
+          addonData.installDay.orNull,
+          addonData.updateDay.orNull,
+          addonData.signedState.orNull,
+          addonData.isSystem.orNull)
+      }
+      case Failure(f) => {
+        counter.add(1)
+        return None
+      }
+      case _ => return None
     }
 
-    if (addonIds.isEmpty)
+    if (successes.isEmpty)
       // Output a row with a null addon_id for this submission. This way we can identify pings without any addons.
       Some(List(Row(docId, clientId, sampleId, null, null, null, null, null,
         null, null, null, null, null, null, null, null, null)))
     else
-      Some(successes)
+      Some(successes.toList)
   }
 
   def buildSchema: StructType = {

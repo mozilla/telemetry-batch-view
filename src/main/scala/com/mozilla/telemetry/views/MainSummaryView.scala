@@ -8,7 +8,10 @@ import org.json4s.JsonAST.{JBool, JInt, JString, JValue}
 import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._
 import com.mozilla.telemetry.heka.{Dataset, Message}
-import com.mozilla.telemetry.utils.{MainPing, S3Store}
+import com.mozilla.telemetry.utils.{Addon, MainPing, S3Store}
+import org.json4s.DefaultFormats
+
+import scala.util.{Success, Try}
 
 object MainSummaryView {
   def streamVersion: String = "v3"
@@ -136,6 +139,54 @@ object MainSummaryView {
     }
   }
 
+  def getActiveAddons(activeAddons: JValue): Option[List[Row]] = {
+    implicit val formats = DefaultFormats
+    Try(activeAddons.extract[Map[String, Addon]]) match {
+      case Success(addons) => {
+        val rows = addons.map { case (addonId, addonData) =>
+          Row(addonId,
+              addonData.blocklisted.orNull,
+              addonData.name.orNull,
+              addonData.userDisabled.orNull,
+              addonData.appDisabled.orNull,
+              addonData.version.orNull,
+              addonData.scope.orNull,
+              addonData.`type`.orNull,
+              addonData.foreignInstall.orNull,
+              addonData.hasBinaryComponents.orNull,
+              addonData.installDay.orNull,
+              addonData.updateDay.orNull,
+              addonData.signedState.orNull,
+              addonData.isSystem.orNull)
+        }
+        Some(rows.toList)
+      }
+      case _ => None
+    }
+  }
+
+  def getTheme(theme: JValue): Option[Row] = {
+    implicit val formats = DefaultFormats
+    Try(theme.extract[Addon]) match {
+      case Success(addonData) =>
+        Some(Row(addonData.id.getOrElse("MISSING"),
+          addonData.blocklisted.orNull,
+          addonData.name.orNull,
+          addonData.userDisabled.orNull,
+          addonData.appDisabled.orNull,
+          addonData.version.orNull,
+          addonData.scope.orNull,
+          addonData.`type`.orNull,
+          addonData.foreignInstall.orNull,
+          addonData.hasBinaryComponents.orNull,
+          addonData.installDay.orNull,
+          addonData.updateDay.orNull,
+          addonData.signedState.orNull,
+          addonData.isSystem.orNull))
+      case _ => None
+    }
+  }
+
   // Convert the given Heka message containing a "main" ping
   // to a map containing just the fields we're interested in.
   def messageToRow(message: Message): Option[Row] = {
@@ -217,6 +268,7 @@ object MainSummaryView {
       },
       system \ "os" \ "version" match {
         case JString(x) => x
+        case JInt(x) => x.toString()
         case _ => null
       },
       system \ "os" \ "servicePackMajor" match {
@@ -370,55 +422,89 @@ object MainSummaryView {
       MainPing.keyedEnumHistogramToMap(keyedHistograms \ "POPUP_NOTIFICATION_STATS",
         popupNotificationStatsKeys).orNull,
 
-      MainPing.getSearchCounts(keyedHistograms \ "SEARCH_COUNTS").orNull
+      MainPing.getSearchCounts(keyedHistograms \ "SEARCH_COUNTS").orNull,
+
+      getActiveAddons(addons \ "activeAddons").orNull,
+      getTheme(addons \ "theme").orNull,
+      settings \ "blocklistEnabled" match {
+        case JBool(x) => x
+        case _ => null
+      },
+      settings \ "addonCompatibilityCheckEnabled" match {
+        case JBool(x) => x
+        case _ => null
+      },
+      settings \ "telemetryEnabled" match {
+        case JBool(x) => x
+        case _ => null
+      }
     )
     Some(row)
   }
 
-  def buildSchema: StructType = {
-    // Type for encapsulating search counts
-    val searchCountsType = StructType(List(
-      StructField("engine", StringType, nullable = true), // Name of the search engine
-      StructField("source", StringType, nullable = true), // Source of the search (urlbar, etc)
-      StructField("count",  LongType,   nullable = true)  // Number of searches
+  // Type for encapsulating search counts
+  def buildSearchSchema = StructType(List(
+    StructField("engine", StringType, nullable = true), // Name of the search engine
+    StructField("source", StringType, nullable = true), // Source of the search (urlbar, etc)
+    StructField("count",  LongType,   nullable = true)  // Number of searches
+  ))
+
+  // Enumerated buckets from LOOP_ACTIVITY_COUNTER histogram
+  def buildLoopSchema = StructType(List(
+    StructField("open_panel",        IntegerType, nullable = true), // bucket 0
+    StructField("open_conversation", IntegerType, nullable = true), // bucket 1
+    StructField("room_open",         IntegerType, nullable = true), // bucket 2
+    StructField("room_share",        IntegerType, nullable = true), // bucket 3
+    StructField("room_delete",       IntegerType, nullable = true)  // bucket 4
+  ))
+
+  // Enumerated buckets from POPUP_NOTIFICATION_STATS keyed histogram
+  // Field names based on toolkit/modules/PopupNotifications.jsm
+  def buildPopupSchema = StructType(List(
+    StructField("offered",                          IntegerType, nullable = true), // bucket 0
+    StructField("action_1",                         IntegerType, nullable = true), // bucket 1
+    StructField("action_2",                         IntegerType, nullable = true), // bucket 2
+    StructField("action_3",                         IntegerType, nullable = true), // bucket 3
+    StructField("action_last",                      IntegerType, nullable = true), // bucket 4
+    StructField("dismissal_click_elsewhere",        IntegerType, nullable = true), // bucket 5
+    StructField("dismissal_leave_page",             IntegerType, nullable = true), // bucket 6
+    StructField("dismissal_close_button",           IntegerType, nullable = true), // bucket 7
+    StructField("dismissal_not_now",                IntegerType, nullable = true), // bucket 8
+    StructField("open_submenu",                     IntegerType, nullable = true), // bucket 10
+    StructField("learn_more",                       IntegerType, nullable = true), // bucket 11
+    StructField("reopen_offered",                   IntegerType, nullable = true), // bucket 20
+    StructField("reopen_action_1",                  IntegerType, nullable = true), // bucket 21
+    StructField("reopen_action_2",                  IntegerType, nullable = true), // bucket 22
+    StructField("reopen_action_3",                  IntegerType, nullable = true), // bucket 23
+    StructField("reopen_action_last",               IntegerType, nullable = true), // bucket 24
+    StructField("reopen_dismissal_click_elsewhere", IntegerType, nullable = true), // bucket 25
+    StructField("reopen_dismissal_leave_page",      IntegerType, nullable = true), // bucket 26
+    StructField("reopen_dismissal_close_button",    IntegerType, nullable = true), // bucket 27
+    StructField("reopen_dismissal_not_now",         IntegerType, nullable = true), // bucket 28
+    StructField("reopen_open_submenu",              IntegerType, nullable = true), // bucket 30
+    StructField("reopen_learn_more",                IntegerType, nullable = true)  // bucket 31
+  ))
+
+  // Data for a single addon per Bug 1290181
+  def buildAddonSchema = StructType(List(
+      StructField("addon_id",              StringType,  nullable = false),
+      StructField("blocklisted",           BooleanType, nullable = true),
+      // Note: Skip "description" field - if needed, look it up from AMO.
+      StructField("name",                  StringType,  nullable = true),
+      StructField("user_disabled",         BooleanType, nullable = true),
+      StructField("app_disabled",          BooleanType, nullable = true),
+      StructField("version",               StringType,  nullable = true),
+      StructField("scope",                 IntegerType, nullable = true),
+      StructField("type",                  StringType,  nullable = true),
+      StructField("foreign_install",       BooleanType, nullable = true),
+      StructField("has_binary_components", BooleanType, nullable = true),
+      StructField("install_day",           IntegerType, nullable = true),
+      StructField("update_day",            IntegerType, nullable = true),
+      StructField("signed_state",          IntegerType, nullable = true),
+      StructField("is_system",             BooleanType, nullable = true)
     ))
 
-    // Enumerated buckets from LOOP_ACTIVITY_COUNTER histogram
-    val loopActivityCounterType = StructType(List(
-      StructField("open_panel",        IntegerType, nullable = true), // bucket 0
-      StructField("open_conversation", IntegerType, nullable = true), // bucket 1
-      StructField("room_open",         IntegerType, nullable = true), // bucket 2
-      StructField("room_share",        IntegerType, nullable = true), // bucket 3
-      StructField("room_delete",       IntegerType, nullable = true)  // bucket 4
-    ))
-
-    // Enumerated buckets from POPUP_NOTIFICATION_STATS keyed histogram
-    // Field names based on toolkit/modules/PopupNotifications.jsm
-    val popupNotificationStatsType = StructType(List(
-      StructField("offered",                          IntegerType, nullable = true), // bucket 0
-      StructField("action_1",                         IntegerType, nullable = true), // bucket 1
-      StructField("action_2",                         IntegerType, nullable = true), // bucket 2
-      StructField("action_3",                         IntegerType, nullable = true), // bucket 3
-      StructField("action_last",                      IntegerType, nullable = true), // bucket 4
-      StructField("dismissal_click_elsewhere",        IntegerType, nullable = true), // bucket 5
-      StructField("dismissal_leave_page",             IntegerType, nullable = true), // bucket 6
-      StructField("dismissal_close_button",           IntegerType, nullable = true), // bucket 7
-      StructField("dismissal_not_now",                IntegerType, nullable = true), // bucket 8
-      StructField("open_submenu",                     IntegerType, nullable = true), // bucket 10
-      StructField("learn_more",                       IntegerType, nullable = true), // bucket 11
-      StructField("reopen_offered",                   IntegerType, nullable = true), // bucket 20
-      StructField("reopen_action_1",                  IntegerType, nullable = true), // bucket 21
-      StructField("reopen_action_2",                  IntegerType, nullable = true), // bucket 22
-      StructField("reopen_action_3",                  IntegerType, nullable = true), // bucket 23
-      StructField("reopen_action_last",               IntegerType, nullable = true), // bucket 24
-      StructField("reopen_dismissal_click_elsewhere", IntegerType, nullable = true), // bucket 25
-      StructField("reopen_dismissal_leave_page",      IntegerType, nullable = true), // bucket 26
-      StructField("reopen_dismissal_close_button",    IntegerType, nullable = true), // bucket 27
-      StructField("reopen_dismissal_not_now",         IntegerType, nullable = true), // bucket 28
-      StructField("reopen_open_submenu",              IntegerType, nullable = true), // bucket 30
-      StructField("reopen_learn_more",                IntegerType, nullable = true)  // bucket 31
-    ))
-
+    def buildSchema: StructType = {
     StructType(List(
       StructField("document_id", StringType, nullable = false), // id
       StructField("client_id", StringType, nullable = true), // clientId
@@ -493,7 +579,7 @@ object MainSummaryView {
       StructField("default_search_engine", StringType, nullable = true), // environment/settings/defaultSearchEngine
 
       // LOOP_ACTIVITY_COUNTER histogram per bug 1261829
-      StructField("loop_activity_counter", loopActivityCounterType, nullable = true),
+      StructField("loop_activity_counter", buildLoopSchema, nullable = true),
 
       // DevTools usage per bug 1262478
       StructField("devtools_toolbox_opened_count", IntegerType, nullable = true), // DEVTOOLS_TOOLBOX_OPENED_COUNT
@@ -509,15 +595,23 @@ object MainSummaryView {
       StructField("places_bookmarks_count", IntegerType, nullable = true), // mean of PLACES_BOOKMARKS_COUNT
       StructField("places_pages_count", IntegerType, nullable = true), // mean of PLACES_PAGES_COUNT
 
+
       // Push metrics per bug 1270482
       StructField("push_api_notification_received", IntegerType, nullable = true), // PUSH_API_NOTIFICATION_RECEIVED
       StructField("web_notification_shown", IntegerType, nullable = true), // WEB_NOTIFICATION_SHOWN
 
       // Info from POPUP_NOTIFICATION_STATS keyed histogram
-      StructField("popup_notification_stats", MapType(StringType, popupNotificationStatsType), nullable = true),
+      StructField("popup_notification_stats", MapType(StringType, buildPopupSchema), nullable = true),
 
       // Search counts
-      StructField("search_counts", ArrayType(searchCountsType, containsNull = false), nullable = true) // split up and organize the SEARCH_COUNTS keyed histogram
+      StructField("search_counts", ArrayType(buildSearchSchema, containsNull = false), nullable = true), // split up and organize the SEARCH_COUNTS keyed histogram
+
+      // Addon and configuration settings per Bug 1290181
+      StructField("active_addons", ArrayType(buildAddonSchema, containsNull = false), nullable = true), // One per item in environment.addons.activeAddons
+      StructField("active_theme", buildAddonSchema, nullable = true), // environment.addons.theme
+      StructField("blocklist_enabled", BooleanType, nullable = true), // environment.settings.blocklistEnabled
+      StructField("addon_compatibility_check_enabled", BooleanType, nullable = true), // environment.settings.addonCompatibilityCheckEnabled
+      StructField("telemetry_enabled", BooleanType, nullable = true) // environment.settings.telemetryEnabled
     ))
   }
 }

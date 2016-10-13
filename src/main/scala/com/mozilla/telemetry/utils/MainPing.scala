@@ -3,6 +3,22 @@ package com.mozilla.telemetry.utils
 import org.apache.spark.sql.Row
 import org.json4s.JsonAST._
 
+case class Addon(id: Option[String],
+                 blocklisted: Option[Boolean],
+                 description: Option[String],
+                 name: Option[String],
+                 userDisabled: Option[Boolean],
+                 appDisabled: Option[Boolean],
+                 version: Option[String],
+                 scope: Option[Integer],
+                 `type`: Option[String],
+                 foreignInstall: Option[Boolean],
+                 hasBinaryComponents: Option[Boolean],
+                 installDay: Option[Integer],
+                 updateDay: Option[Integer],
+                 signedState: Option[Integer],
+                 isSystem: Option[Boolean])
+
 object MainPing{
   // Count the number of keys inside a JSON Object
   def countKeys(o: JValue): Option[Long] = {
