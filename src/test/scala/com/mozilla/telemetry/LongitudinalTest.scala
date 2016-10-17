@@ -69,10 +69,18 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
           ("other" -> "some"))
 
       var pingPayload =
-        ("processes" ->
-          ("parent" ->
-            ("scalars" -> scalars) ~
-            ("keyedScalars" -> keyedScalars)))
+        if (idx == 1) {
+          // Skip the scalar section for the first payload.
+          ("processes" ->
+            ("parent" ->
+              ("bogus" -> "other") ~
+              ("keyedScalars" -> keyedScalars)))
+        } else {
+          ("processes" ->
+            ("parent" ->
+              ("scalars" -> scalars) ~
+              ("keyedScalars" -> keyedScalars)))
+        }
 
       val simpleMeasurements = "uptime" -> 18L
 
@@ -484,51 +492,72 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
   }
 
   "Unsigned scalars" must "be converted correctly" in {
-    val scalars = fixture.row.getList[Long](fixture.row.fieldIndex("scalar_parent_mock_scalar_uint"))
+    val scalars = fixture.row.getList[Row](fixture.row.fieldIndex("scalar_parent_mock_scalar_uint"))
     assert(scalars.length == fixture.payloads.length)
-    scalars.foreach(x => assert(x == 3))
+    scalars.zipWithIndex.foreach { case (x, index) =>
+      // The first payload in the fixture is missing the scalars section. The scalars
+      // must contain null for it.
+      Option(x.getAs[Long]("value")) match {
+        case Some(value) => assert(value == 3)
+        case None => assert(index == 0)
+      }
+    }
   }
 
   "Boolean scalars" must "be converted correctly" in {
-    val scalars = fixture.row.getList[Boolean](fixture.row.fieldIndex("scalar_parent_mock_scalar_bool"))
+    val scalars = fixture.row.getList[Row](fixture.row.fieldIndex("scalar_parent_mock_scalar_bool"))
     assert(scalars.length == fixture.payloads.length)
-    scalars.foreach(x => assert(x == true))
+    scalars.zipWithIndex.foreach { case (x, index) =>
+      // The first payload in the fixture is missing the scalars section. The scalars
+      // must contain null for it.
+      Option(x.getAs[Boolean]("value")) match {
+        case Some(value) => assert(value == true)
+        case None => assert(index == 0)
+      }
+    }
   }
 
   "String scalars" must "be converted correctly" in {
-    val scalars = fixture.row.getList[String](fixture.row.fieldIndex("scalar_parent_mock_scalar_string"))
+    val scalars = fixture.row.getList[Row](fixture.row.fieldIndex("scalar_parent_mock_scalar_string"))
     assert(scalars.length == fixture.payloads.length)
-    scalars.foreach(x => assert(x == "a nice string scalar"))
+    scalars.zipWithIndex.foreach { case (x, index) =>
+      // The first payload in the fixture is missing the scalars section. The scalars
+      // must contain null for it.
+      Option(x.getAs[String]("value")) match {
+        case Some(value) => assert(value == "a nice string scalar")
+        case None => assert(index == 0)
+      }
+    }
   }
 
   "Keyed unsigned scalars" must "be converted correctly" in {
     val entries =
-      fixture.row.getMap[String, WrappedArray[Long]](fixture.row.fieldIndex("scalar_parent_mock_keyed_scalar_uint"))
+      fixture.row.getMap[String, WrappedArray[Row]](fixture.row.fieldIndex("scalar_parent_mock_keyed_scalar_uint"))
     assert(entries.size == 2)
     assert(entries("a_key").size == fixture.payloads.length)
-    entries("a_key").foreach(x => assert(x == 37))
+    entries("a_key").foreach(x => assert(x.getAs[Long]("value") == 37))
     assert(entries("second_key").size == fixture.payloads.length)
-    entries("second_key").foreach(x => assert(x == 42))
+    entries("second_key").foreach(x => assert(x.getAs[Long]("value") == 42))
   }
 
   "Keyed boolean scalars" must "be converted correctly" in {
     val entries =
-      fixture.row.getMap[String, WrappedArray[Boolean]](fixture.row.fieldIndex("scalar_parent_mock_keyed_scalar_bool"))
+      fixture.row.getMap[String, WrappedArray[Row]](fixture.row.fieldIndex("scalar_parent_mock_keyed_scalar_bool"))
     assert(entries.size == 2)
     assert(entries("foo").size == fixture.payloads.length)
-    entries("foo").foreach(x => assert(x == true))
+    entries("foo").foreach(x => assert(x.getAs[Boolean]("value") == true))
     assert(entries("bar").size == fixture.payloads.length)
-    entries("bar").foreach(x => assert(x == false))
+    entries("bar").foreach(x => assert(x.getAs[Boolean]("value") == false))
   }
 
   "Keyed string scalars" must "be converted correctly" in {
     val entries =
-      fixture.row.getMap[String, WrappedArray[String]](fixture.row.fieldIndex("scalar_parent_mock_keyed_scalar_string"))
+      fixture.row.getMap[String, WrappedArray[Row]](fixture.row.fieldIndex("scalar_parent_mock_keyed_scalar_string"))
     assert(entries.size == 2)
     assert(entries("fizz").size == fixture.payloads.length)
-    entries("fizz").foreach(x => assert(x == "buzz"))
+    entries("fizz").foreach(x => assert(x.getAs[String]("value") == "buzz"))
     assert(entries("other").size == fixture.payloads.length)
-    entries("other").foreach(x => assert(x == "some"))
+    entries("other").foreach(x => assert(x.getAs[String]("value") == "some"))
   }
 
   "Test scalars" must "not be adedd to the dataset" in {
