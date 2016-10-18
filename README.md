@@ -43,3 +43,25 @@ If you run into memory issues during compilation time issue the following comman
 ```bash
 export _JAVA_OPTIONS="-Xss4M -Xmx2G"
 ```
+
+**Running on Windows**
+
+Executing scala/Spark jobs could be particularly problematic on this platform. Here's a list of common issues and the relative solutions:
+
+**Issue:** *I see a weird reflection error or an odd exception when trying to run my code.*
+
+This is probably due to *winutils* being missing or not found. Winutils are needed by HADOOP and can be downloaded from [here](https://github.com/steveloughran/winutils).
+
+**Issue:** *java.net.URISyntaxException: Relative path in absolute URI: ...*
+
+This means that *winutils* cannot be found or that Spark cannot find a valid warehouse directory. Add the following line at the beginning of your entry function to make it work:
+
+```scala
+System.setProperty("hadoop.home.dir", "C:\\path\\to\\winutils")
+System.setProperty("spark.sql.warehouse.dir", "file:///C:/somereal-dir/spark-warehouse")
+```
+
+**Issue:** *The root scratch dir: /tmp/hive on HDFS should be writable. Current permissions are: ---------*
+
+See [SPARK-10528](https://issues.apache.org/jira/browse/SPARK-10528). Run "winutils chmod 777 /tmp/hive" from a privileged prompt to make it work.
+

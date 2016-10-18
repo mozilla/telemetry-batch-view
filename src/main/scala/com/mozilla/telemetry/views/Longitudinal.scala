@@ -75,6 +75,25 @@ object LongitudinalView {
   // columns.
   private val ScalarColumnNamePrefix = "scalar_"
 
+  // In theory, we shouldn't really need to define this types. However, on Spark 2.0
+  // and Avro 1.7.x this is the only sane way to have Arrays with null elements.
+  // See https://github.com/mozilla/telemetry-batch-view/pull/124#issuecomment-254218256
+  // for context.
+  private val UintScalarSchema = SchemaBuilder
+    .record("uint_scalar").fields()
+      .name("value").`type`().optional().longType()
+    .endRecord()
+
+  private val BoolScalarSchema = SchemaBuilder
+    .record("bool_scalar").fields()
+      .name("value").`type`().optional().booleanType()
+    .endRecord()
+
+  private val StringScalarSchema = SchemaBuilder
+    .record("string_scalar").fields()
+      .name("value").`type`().optional().stringType()
+    .endRecord()
+
   private class ClientIdPartitioner(size: Int) extends Partitioner {
     def numPartitions: Int = size
 
@@ -508,17 +527,20 @@ object LongitudinalView {
       val key = getParquetFriendlyScalarName(k.toLowerCase, "parent")
       value match {
         case s: UintScalar if !s.keyed =>
-          builder.name(key).`type`().optional().array().items().longType()
+          // TODO: After migrating to Spark 2.1.0, change this and the next
+          // definitions to builder.name(key).`type`().optional().items().nullable().theTypeDef()
+          // Context: https://github.com/mozilla/telemetry-batch-view/pull/124#issuecomment-254218256
+          builder.name(key).`type`().optional().array().items(UintScalarSchema)
         case s: UintScalar =>
-          builder.name(key).`type`().optional().map().values().array().items().longType()
+          builder.name(key).`type`().optional().map().values().array().items(UintScalarSchema)
         case s: BooleanScalar if !s.keyed =>
-          builder.name(key).`type`().optional().array().items().booleanType()
+          builder.name(key).`type`().optional().array().items(BoolScalarSchema)
         case s: BooleanScalar =>
-          builder.name(key).`type`().optional().map().values().array().items().booleanType()
+          builder.name(key).`type`().optional().map().values().array().items(BoolScalarSchema)
         case s: StringScalar if !s.keyed =>
-          builder.name(key).`type`().optional().array().items().stringType()
+          builder.name(key).`type`().optional().array().items(StringScalarSchema)
         case s: StringScalar =>
-          builder.name(key).`type`().optional().map().values().array().items().stringType()
+          builder.name(key).`type`().optional().map().values().array().items(StringScalarSchema)
         case _ =>
           throw new Exception("Unrecognized scalar type")
       }
@@ -734,13 +756,34 @@ object LongitudinalView {
                                           payloads: List[Map[String, AnyVal]]): java.util.Collection[Any] = {
     definition match {
       case _: UintScalar =>
-        vectorizeScalar_(name, payloads, s => s.asInstanceOf[BigInt], 0)
+        vectorizeScalar_(
+          name, payloads,
+          s => {
+            val record = new GenericData.Record(UintScalarSchema)
+            record.put("value", s.asInstanceOf[BigInt])
+            record
+           },
+          new GenericData.Record(UintScalarSchema))
 
       case _: BooleanScalar =>
-        vectorizeScalar_(name, payloads, s => s.asInstanceOf[Boolean], false)
+        vectorizeScalar_(
+          name, payloads,
+          s => {
+            val record = new GenericData.Record(BoolScalarSchema)
+            record.put("value", s.asInstanceOf[Boolean])
+            record
+          },
+          new GenericData.Record(BoolScalarSchema))
 
       case _: StringScalar =>
-        vectorizeScalar_(name, payloads, s => s.asInstanceOf[String], "")
+        vectorizeScalar_(
+          name, payloads,
+          s => {
+            val record = new GenericData.Record(StringScalarSchema)
+            record.put("value", s.asInstanceOf[String])
+            record
+          },
+          new GenericData.Record(StringScalarSchema))
     }
   }
 
@@ -760,9 +803,13 @@ object LongitudinalView {
       // Get the payload of the Heka frame, which contains the payload for the
       // main ping.
       val payload = x.getOrElse("payload", return).asInstanceOf[JObject]
+      // If we can't find the "scalars" section for a ping, don't throw away all
+      // the data. This is semantically different from how we handle other stuff
+      // in the longitudinal (e.g. Histograms), but we need this since scalars
+      // landed recently and this section is not there on old pings.
       (payload \ "processes" \ "parent" \ "scalars").toOption match {
         case Some(scalars) => scalars.extract[Map[String, AnyVal]]
-        case _ => return
+        case _ => Map[String, AnyVal]()
       }
     }
 
@@ -788,7 +835,7 @@ object LongitudinalView {
       val payload = x.getOrElse("payload", return).asInstanceOf[JObject]
       (payload \ "processes" \ "parent" \ "keyedScalars").toOption match {
         case Some(scalars) => scalars.extract[Map[String, Map[String, AnyVal]]]
-        case _ => return
+        case _ => Map[String, Map[String, AnyVal]]()
       }
     }
 
