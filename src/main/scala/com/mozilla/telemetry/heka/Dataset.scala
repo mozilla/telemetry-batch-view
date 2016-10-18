@@ -78,8 +78,9 @@ object Dataset {
     val metaBucket = "net-mozaws-prod-us-west-2-pipeline-metadata"
     val metaSources = parse(Source.fromInputStream(s3Store.getKey(metaBucket, "sources.json")).mkString)
     val JString(prefix) = metaSources \\ dataset \\ "prefix"
+    val JString(metadataPrefix) = metaSources \\ dataset \\ "metadata_prefix"
     val JString(bucketName) = metaSources \\ dataset \\ "bucket"
-    val schema = parse(Source.fromInputStream(s3Store.getKey(metaBucket, s"$prefix/schema.json")).mkString)
+    val schema = parse(Source.fromInputStream(s3Store.getKey(metaBucket, s"$metadataPrefix/schema.json")).mkString)
       .camelizeKeys
       .extract[Schema]
 

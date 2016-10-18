@@ -31,6 +31,7 @@ object MockS3Store extends AbstractS3Store {
         |{
         |  "telemetry": {
         |    "prefix": "telemetry",
+        |    "metadata_prefix": "telemetry",
         |    "bucket": "foo"
         |  }
         |}
