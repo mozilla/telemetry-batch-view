@@ -14,7 +14,7 @@ the main_summary table in two important ways:
 Accordingly, one should prefer using the Longitudinal dataset except in the
 rare case where a 100% sample is strictly necessary.
 
-As discussed in the [Longitudinal Data Set Example Notebook](https://gist.github.com/vitillo/627eab7e2b3f814725d2):
+As discussed in the [Longitudinal Data Set Example Notebook][1]:
 
     The longitudinal dataset is logically organized as a table where rows
     represent profiles and columns the various metrics (e.g. startup time). Each
@@ -216,3 +216,5 @@ quotes. Try using single quotes instead.
 - [Longitudinal schema
   definition](https://github.com/mozilla/telemetry-batch-view/blob/master/src/main/scala/com/mozilla/telemetry/views/Longitudinal.scala#L194)
 - [Custom_dashboards_with_re:dash](https://wiki.mozilla.org/Custom_dashboards_with_re:dash)
+
+[1]: https://github.com/mozilla/emr-bootstrap-spark/blob/master/examples/Longitudinal%20Dataset%20Tutorial.ipynb
