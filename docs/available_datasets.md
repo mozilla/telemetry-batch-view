@@ -6,11 +6,11 @@ re:dash/sql.telemetry.mozilla.org (s.t.m.o). In addition, they can be
 queried using a Spark cluster - see 
 [these directions](https://wiki.mozilla.org/Telemetry/Custom_analysis_with_spark#How_can_I_load_parquet_datasets_in_a_Jupyter_notebook.3F).
 The Longditudinal dataset is also available natively within Spark, see the
-[longitudinal tutorial](https://github.com/mozilla/emr-bootstrap-spark/blob/master/examples/Longitudinal%20Dataset%20Tutorial.ipynb).
+[longitudinal tutorial][1].
 
 Longitudinal
 ------------
-[Complete documentation](Telemetry/LongitudinalExamples "wikilink")
+[Complete documentation](longitudinal_examples.md)
 
 The longitudinal dataset is a summary of main pings. If you're not sure which
 dataset to use for your query, this is probably what you want. It differs from
@@ -26,7 +26,7 @@ the main_summary table in two important ways:
 Accordingly, one should prefer using the Longitudinal dataset except in the
 rare case where a 100% sample is strictly necessary.
 
-As discussed in the [Longitudinal Data Set Example Notebook](https://gist.github.com/vitillo/627eab7e2b3f814725d2):
+As discussed in the [Longitudinal Data Set Example Notebook][1]:
 
     The longitudinal dataset is logically organized as a table where rows
     represent profiles and columns the various metrics (e.g. startup time). Each
@@ -40,7 +40,7 @@ As discussed in the [Longitudinal Data Set Example Notebook](https://gist.github
 Main Summary
 ------------
 
-[Complete Documentation](https://github.com/mozilla/telemetry-batch-view/blob/master/docs/MainSummary.md)
+[Complete Documentation](MainSummary.md)
 
 Like the longitudinal dataset, main summary summarizes [main
 pings](https://gecko.readthedocs.io/en/latest/toolkit/components/telemetry/telemetry/data/main-ping.html).
@@ -117,13 +117,13 @@ Crash Aggregates
 ----------------
 
 [Complete
-Documentation](https://github.com/mozilla/telemetry-batch-view/blob/master/docs/CrashAggregateView.md)
+Documentation](CrashAggregateView.md)
 
 The Crash Aggregates dataset compiles crash statistics over various
 dimensions for each day. Example dimensions include channel and country,
 example statistics include usage hours and plugin crashes. See the
 [complete
-documentation](https://github.com/mozilla/telemetry-batch-view/blob/master/docs/CrashAggregateView.md)
+documentation](CrashAggregateView.md)
 for all available dimensions and statistics.
 
 This dataset is good for queries of the form *How many crashes did X
@@ -140,3 +140,6 @@ mobile\_clients tables are documented here:
 # Appendix
 For reference, this documentation was previously hosted here:
 https://wiki.mozilla.org/Telemetry/Available_Telemetry_Datasets_and_their_Applications
+
+
+[1]: https://github.com/mozilla/emr-bootstrap-spark/blob/master/examples/Longitudinal%20Dataset%20Tutorial.ipynb

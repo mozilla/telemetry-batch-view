@@ -2,7 +2,7 @@ E10s Experiment Derived Streams
 -------------------------------
 
 To create a derived dataset for running analyses like
-[e10s_experiment.ipynb](https://github.com/vitillo/e10s_analyses/tree/master/beta46-apz)
+[e10s_experiment.ipynb](https://github.com/mozilla/e10s_analyses/tree/master/beta/46/apz)
 :
 
 1. Fire up a 20-node Spark cluster [here](https://analysis.telemetry.mozilla.org/).
