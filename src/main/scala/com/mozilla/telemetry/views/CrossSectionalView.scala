@@ -117,8 +117,7 @@ case class Longitudinal (
   }
 
   def parsedStartDate(): Seq[LocalDate] = {
-    this.subsession_start_date.getOrElse(Seq())
-      .map(parseDate)
+    this.subsession_start_date.getOrElse(Seq()).map(parseDate)
   }
 
   def activeHoursByDOW(dow: Int): Double = {
@@ -219,7 +218,7 @@ case class CrossSectional (
   val locale_mode: Option[String],
   val version_cfgs: Option[Long],
   val version_max: Option[String],
-  val addon_names_list: Seq[Option[String]],
+  val addon_names_list: Option[Seq[Option[String]]],
   val has_ad_blocker: Boolean,
   val main_ping_reason_num_aborted: Long,
   val main_ping_reason_num_end_of_day: Long,
@@ -305,7 +304,7 @@ case class CrossSectional (
       locale_mode = base.weightedMode(base.locale).getOrElse(None),
       version_cfgs = base.version.map(_.distinct.length),
       version_max = base.version.map(_.max).getOrElse(None),
-      addon_names_list = base.addonNames.getOrElse(Seq()),
+      addon_names_list = base.addonNames,
       has_ad_blocker = base.hasAdBlocker,
       main_ping_reason_num_aborted = base.countPingReason("aborted-session"),
       main_ping_reason_num_end_of_day = base.countPingReason("daily"),

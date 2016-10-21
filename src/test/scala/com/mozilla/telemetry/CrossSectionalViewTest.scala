@@ -22,11 +22,17 @@ class CrossSectionalViewTest extends FlatSpec {
       // necessarily preserve transitivity.
       // Do the comparison
       def compareElement(pair: (Any, Any)) = {
-        pair match {
+        val out = pair match {
           case (Some(first: Double), Some(second: Double)) => Math.abs(first - second) < epsilon
           case (first: Any, second: Any) => first == second
           case _ => false
         }
+
+        if (!out) {
+          println(pair)
+          println(out)
+        }
+        out
       }
 
       def productToSeq(prod: Product): Seq[Any] = {
@@ -113,7 +119,7 @@ class CrossSectionalViewTest extends FlatSpec {
     addon_count_avg: Option[Double] = None,
     addon_count_cfgs: Option[Long] = None,
     addon_count_mode: Option[Long] = None,
-    addon_names_list: Seq[Option[String]] = Seq(),
+    addon_names_list: Option[Seq[Option[String]]] = None,
     has_ad_blocker: Boolean = false
   ) = {
     new CrossSectional(
@@ -249,7 +255,7 @@ class CrossSectionalViewTest extends FlatSpec {
       addon_count_avg = Some(2.0),
       addon_count_cfgs = Some(1),
       addon_count_mode = Some(2),
-      addon_names_list = Seq(Some("Name"), Some("Test")),
+      addon_names_list = Some(Seq(Some("Name"), Some("Test"))),
       has_ad_blocker = false
     )
 
@@ -274,7 +280,7 @@ class CrossSectionalViewTest extends FlatSpec {
       addon_count_avg = Some(2.0),
       addon_count_cfgs = Some(1),
       addon_count_mode = Some(2),
-      addon_names_list = Seq(Some("Name"), Some("UBloCKer Plus Plus")),
+      addon_names_list = Some(Seq(Some("Name"), Some("UBloCKer Plus Plus"))),
       has_ad_blocker = true
     )
 
