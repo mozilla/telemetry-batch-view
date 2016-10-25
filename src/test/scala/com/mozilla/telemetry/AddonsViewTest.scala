@@ -1,125 +1,74 @@
 package com.mozilla.telemetry
 
-import com.mozilla.telemetry.heka.HekaFrame
 import com.mozilla.telemetry.views.AddonsView
-import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{FlatSpec, Matchers}
 
-class AddonsViewTest extends FlatSpec with Matchers{
-  def checkRowValues(row: Row, schema: StructType, expected: Map[String,Any]) = {
-    val actual = new GenericRowWithSchema(row.toSeq.toArray, schema).getValuesMap(expected.keys.toList)
-    val aid = expected("addon_id")
-    for ((f, v) <- expected) {
-      withClue(s"$aid[$f]:") { actual.get(f) should be (Some(v)) }
-    }
-    actual should be (expected)
-  }
+case class Addon(addon_id: String,
+                 blocklisted: Boolean,
+                 name: String,
+                 user_disabled: Boolean,
+                 app_disabled: Boolean,
+                 version: String,
+                 scope: Integer,
+                 `type`: String,
+                 foreign_install: Boolean,
+                 has_binary_components: Boolean,
+                 install_day: Integer,
+                 update_day: Integer,
+                 signed_state: Integer,
+                 is_system: Boolean)
 
-  "Addon records" can "be converted" in {
-    val sparkConf = new SparkConf().setAppName("Addons")
+case class PartialMain(document_id: String,
+                       client_id: String,
+                       sample_id: Long,
+                       subsession_start_date: String,
+                       active_addons: Seq[Addon])
+
+class AddonsViewTest extends FlatSpec with Matchers{
+  "Addon records" can "be extracted from MainSummary" in {
+    val sparkConf = new SparkConf().setAppName("AddonsViewTest")
     sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
     val sc = new SparkContext(sparkConf)
-    val badAddonCount = sc.longAccumulator("Number of Bad Addon records skipped")
     sc.setLogLevel("WARN")
+
+    val spark = SparkSession
+      .builder()
+      .appName("AddonsViewTest")
+      .getOrCreate()
+
+    import spark.implicits._
+
     try {
-      val schema = AddonsView.buildSchema
+      val mains = Seq(
+        PartialMain("doc1", "client1", 1l, "2016-10-01T00:00:00", Seq(
+          Addon("addon1", true, "addon1name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, true),
+          Addon("addon2", true, "addon2name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false))),
+        PartialMain("doc2", "client2", 2l, "2016-10-01T00:00:00", null),
+        PartialMain("doc3", "client2", 2l, "2016-10-01T00:00:00", Seq()),
+        PartialMain("doc4", "client3", 3l, "2016-10-01T00:00:00", Seq(
+          Addon("addon1", true, "addon1name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, true),
+          Addon("addon3", true, "addon3name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false),
+          Addon("addon4", true, "addon4name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false)))
+      ).toDS().toDF()
 
-      // Use an example framed-heka message. It is based on test_main.json.gz,
-      // submitted with a URL of
-      //    /submit/telemetry/foo/main/Firefox/48.0a1/nightly/20160315030230
-      val hekaFileName = "/test_main.snappy.heka"
-      val hekaURL = getClass.getResource(hekaFileName)
-      val input = hekaURL.openStream()
-      val rows = HekaFrame.parse(input).flatMap(AddonsView.messageToRows(_, badAddonCount)).flatten
+      mains.count() should be(4)
+      val addons = AddonsView.addonsFromMain(mains)
 
-      // Serialize this one row as Parquet
-      val sqlContext = new SQLContext(sc)
-      val dataframe = sqlContext.createDataFrame(sc.parallelize(rows.toSeq), schema)
-      val tempFile = com.mozilla.telemetry.utils.temporaryFileName()
-      dataframe.write.parquet(tempFile.toString)
+      addons.count() should be(7)
 
-      badAddonCount.value should be (0)
+      addons.where("addon_id is null").count() should be (2)
+      addons.where("addon_id is not null").count() should be (5)
 
-      // Then read it back
-      val data = sqlContext.read.parquet(tempFile.toString)
+      addons.select("client_id").distinct().count() should be(3)
 
-      val docId = "foo"
-      val clientId = "c4582ba1-79fc-1f47-ae2a-671118dccd8b"
-      val sampleId = 4l
+      // Null plus the 4 actual ids.
+      addons.select("addon_id").distinct().count() should be(5)
 
-      data.count() should be (3)
-      data.filter(data("document_id") === "foo").count() should be (3)
-      val e10s = data.filter(data("addon_id") === "e10srollout@mozilla.org")
-      e10s.count() should be (1)
-      checkRowValues(e10s.first, schema, Map(
-        "document_id"           -> docId,
-        "client_id"             -> clientId,
-        "sample_id"             -> sampleId,
-        "addon_id"              -> "e10srollout@mozilla.org",
-        "blocklisted"           -> false,
-        "name"                  -> "Multi-process staged rollout",
-        "user_disabled"         -> false,
-        "app_disabled"          -> false,
-        "version"               -> "1.0",
-        "scope"                 -> 1,
-        "type"                  -> "extension",
-        "foreign_install"       -> false,
-        "has_binary_components" -> false,
-        "install_day"           -> 16865,
-        "update_day"            -> 16875,
-        "signed_state"          -> null,
-        "is_system"             -> true
-      ))
-
-      val pocket = data.filter(data("addon_id") === "firefox@getpocket.com")
-      pocket.count() should be (1)
-      checkRowValues(pocket.first, schema, Map(
-        "document_id"           -> docId,
-        "client_id"             -> clientId,
-        "sample_id"             -> sampleId,
-        "addon_id"              -> "firefox@getpocket.com",
-        "blocklisted"           -> false,
-        "name"                  -> "Pocket",
-        "user_disabled"         -> false,
-        "app_disabled"          -> false,
-        "version"               -> "1.0",
-        "scope"                 -> 1,
-        "type"                  -> "extension",
-        "foreign_install"       -> false,
-        "has_binary_components" -> false,
-        "install_day"           -> 16861,
-        "update_day"            -> 16875,
-        "signed_state"          -> null,
-        "is_system"             -> true
-      ))
-
-      val loop = data.filter(data("addon_id") === "loop@mozilla.org")
-      loop.count() should be (1)
-      checkRowValues(loop.first, schema, Map(
-        "document_id"           -> docId,
-        "client_id"             -> clientId,
-        "sample_id"             -> sampleId,
-        "addon_id"              -> "loop@mozilla.org",
-        "blocklisted"           -> false,
-        "name"                  -> "Firefox Hello Beta",
-        "user_disabled"         -> false,
-        "app_disabled"          -> false,
-        "version"               -> "1.1.12",
-        "scope"                 -> 1,
-        "type"                  -> "extension",
-        "foreign_install"       -> false,
-        "has_binary_components" -> false,
-        "install_day"           -> 16861,
-        "update_day"            -> 16875,
-        "signed_state"          -> null,
-        "is_system"             -> true
-      ))
-
+      addons.where("addon_id == 'addon1'").select("client_id").distinct().count() should be(2)
     } finally {
-      sc.stop()
+      spark.stop()
     }
   }
 }
