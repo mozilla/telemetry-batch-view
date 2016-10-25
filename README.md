@@ -44,6 +44,11 @@ If you run into memory issues during compilation time issue the following comman
 export _JAVA_OPTIONS="-Xss4M -Xmx2G"
 ```
 
+The test suite is memory intensive and run best with these java opts:
+```bash
+export _JAVA_OPTIONS="-Xms4G -Xmx4G -Xss4M -XX:MaxMetaspaceSize=256M"
+```
+
 **Running on Windows**
 
 Executing scala/Spark jobs could be particularly problematic on this platform. Here's a list of common issues and the relative solutions:
