@@ -601,7 +601,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           "default_search_engine"           -> "google",
           "devtools_toolbox_opened_count"   -> 3,
           "client_submission_date"          -> null,
-          "push_api_notification_received"  -> null,
+          "push_api_notify"                 -> null,
           "web_notification_shown"          -> null,
           "places_pages_count"              -> 104849,
           "places_bookmarks_count"          -> 183
