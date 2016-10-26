@@ -205,6 +205,7 @@ class CrossSectionalViewTest extends FlatSpec {
     val sparkConf = new SparkConf().setAppName("CrossSectionalTest")
     sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
     val sc = new SparkContext(sparkConf)
+    sc.setLogLevel("WARN")
     val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
 
