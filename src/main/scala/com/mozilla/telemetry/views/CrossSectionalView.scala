@@ -43,7 +43,7 @@ object Longitudinal {
 case class Longitudinal (
   val client_id: String,
   val normalized_channel: String,
-  val submission_date: Option[Seq[String]], // TODO(harter): This needs to be scrubbed of negative and large vals
+  val submission_date: Option[Seq[String]],
   val geo_country: Option[Seq[String]],
   val session_length: Option[Seq[Long]],
   val is_default_browser: Option[Seq[Option[Boolean]]],
@@ -68,18 +68,34 @@ case class Longitudinal (
   val search_counts: Option[scala.collection.Map[String, Seq[Long]]],
   val session_id: Option[Seq[String]]
 ) {
+
+  def cleanSessionLength(): Option[Seq[Option[Long]]] = {
+    this.session_length.map(
+      _.map(x => if ((x <= -1) || (x > SECONDS_PER_DAY)) None else Some(x))
+    )
+  }
+
+  private def bothOrNone[A, B](first: Option[A], second: Option[B]): Option[(A, B)] = {
+    first.flatMap(x => second.flatMap(y => Some((x, y))))
+  }
+
+  private def bothOrNone[A, B](pair: (Option[A], Option[B])): Option[(A, B)] = {
+    bothOrNone(pair._1, pair._2)
+  }
+
+  private def collate[A, B](seqPair: (Seq[A], Seq[B])): Option[Seq[(A, B)]] = {
+    val (first, second) = seqPair
+    if (first.size == second.size) Some(first zip second) else None 
+  }
+
   def weightedMean(values: Option[Seq[Option[Long]]]): Option[Double] = {
-    (values, this.session_length) match {
-      case (Some(v), Some(sl)) => aggregation.weightedMean(v, sl)
-      case _ => None
-    }
+    bothOrNone(values, this.cleanSessionLength).flatMap(collate)
+      .map(_.map(bothOrNone(_)).flatten).flatMap(aggregation.weightedMean)
   }
 
   def weightedMode[A](values: Option[Seq[A]]): Option[A] = {
-    (values, this.session_length) match {
-      case (Some(v), Some(sl)) => aggregation.weightedMode(v, sl)
-      case _ => None
-    }
+    bothOrNone(values, this.cleanSessionLength).flatMap(collate)
+      .map(_.flatMap(x => x._2.map((x._1, _)))).flatMap(aggregation.weightedMode)
   }
 
   def addonNames(): Option[Seq[Option[String]]] = {
@@ -113,8 +129,8 @@ case class Longitudinal (
   }
 
   def activeHoursByDOW(dow: Int): Option[Double] = {
-    this.session_length.map(sl => this.parsedStartDate.map(psd => sl zip psd)).getOrElse(None)
-      .map(_.filter(_._2.getDayOfWeek == dow).map(_._1).sum.toDouble / SECONDS_PER_HOUR)
+    bothOrNone(this.cleanSessionLength, this.parsedStartDate).flatMap(collate)
+      .map(_.filter(_._2.getDayOfWeek == dow).flatMap(_._1).sum.toDouble / SECONDS_PER_HOUR)
   }
 
   def activeDaysByDOW(dow: Int): Option[Long] = {
@@ -254,7 +270,7 @@ case class CrossSectional (
     this(
       client_id = base.client_id,
       normalized_channel = base.normalized_channel,
-      active_hours_total = base.session_length.map(_.sum.toDouble / SECONDS_PER_HOUR),
+      active_hours_total = base.cleanSessionLength.map(_.flatten.sum.toDouble / SECONDS_PER_HOUR),
       active_hours_0_mon = base.activeHoursByDOW(MONDAY),
       active_hours_1_tue = base.activeHoursByDOW(TUESDAY),
       active_hours_2_wed = base.activeHoursByDOW(WEDNESDAY),
