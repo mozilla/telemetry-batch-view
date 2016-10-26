@@ -38,6 +38,7 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
     val sparkConf = new SparkConf().setAppName("KPI")
     sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
     sc = Some(new SparkContext(sparkConf))
+    sc.get.setLogLevel("WARN")
     sqlContext = Some(new SQLContext(sc.get))
   }
 
