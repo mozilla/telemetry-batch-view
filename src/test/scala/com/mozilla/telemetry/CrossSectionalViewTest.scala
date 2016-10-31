@@ -312,4 +312,21 @@ class CrossSectionalViewTest extends FlatSpec {
 
     assert(actual compare expected)
   }
+
+  it must "handle bad dates" in {
+    val actual = new CrossSectional(
+      getExampleLongitudinal("a").copy(
+        submission_date = Some(Seq("2016-01-01T00:00:00.0+00:00", //Odd Date
+          "invalid-02T00:00:00.0+00:00", "2016-01-07T00:00:00.0+00:00"))
+      )
+    )
+
+    val expected = getExampleCrossSectional("a").copy(
+      date_skew_per_ping_avg = Some(2.0 / 2),
+      date_skew_per_ping_max = Some(2),
+      date_skew_per_ping_min = Some(0)
+    )
+
+    assert(actual compare expected)
+  }
 }

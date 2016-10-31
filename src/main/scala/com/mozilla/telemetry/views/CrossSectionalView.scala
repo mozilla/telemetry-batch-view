@@ -131,7 +131,7 @@ case class Longitudinal (
     this.active_plugins.map(_.map(x => Some(x.length.toLong)))
   }
 
-  def parsedStartDate(): Option[Seq[LocalDate]] = {
+  def parsedStartDate(): Option[Seq[Option[LocalDate]]] = {
     this.subsession_start_date.map(_.map(parseDate))
   }
 
@@ -146,7 +146,8 @@ case class Longitudinal (
       val hours = for {
         pairs <- optPairs.toSeq
         pair <- pairs
-        if pair._2.getDayOfWeek == dow
+        date <- pair._2
+        if date.getDayOfWeek == dow
         sessionLength <- pair._1
       } yield {sessionLength.toDouble / SECONDS_PER_HOUR}
 
@@ -157,14 +158,14 @@ case class Longitudinal (
   }
 
   def activeDaysByDOW(dow: Int): Option[Long] = {
-    this.parsedStartDate.map(_.filter(_.getDayOfWeek == dow).distinct.length)
+    this.parsedStartDate.map(_.flatten.filter(_.getDayOfWeek == dow).distinct.length)
   }
 
   def rangeOfPossibleDates(): Option[Seq[LocalDate]] = {
     this.parsedStartDate.map(
       psd => {
-        val start = this.parsedStartDate.getOrElse(Seq()).minBy(_.toDate)
-        val end = this.parsedStartDate.getOrElse(Seq()).maxBy(_.toDate)
+        val start = psd.flatten.minBy(_.toDate)
+        val end = psd.flatten.maxBy(_.toDate)
         val between = Days.daysBetween(start, end).getDays
 
         (0 to between).map(start.plusDays(_))
@@ -173,7 +174,6 @@ case class Longitudinal (
   }
 
   def daysPossibleByDOW(dow: Int): Option[Long] = {
-    // Note that joda time uses 1:7 to refer to Monday through Sunday
     this.rangeOfPossibleDates.map(_.filter(_.getDayOfWeek == dow).size)
   }
 
@@ -185,19 +185,33 @@ case class Longitudinal (
       this.previous_subsession_id.map(_.groupBy(identity).mapValues(_.size))
   }
 
-  def ssStartToSubmission(): Option[Seq[Long]] = {
-    (this.subsession_start_date, this.submission_date) match {
-      case (Some(sd), Some(ssd)) => Some((sd zip ssd).map(x => getDateDiff(x._1, x._2)))
-      case _ => None
+  def ssStartToSubmission(): Option[Seq[Option[Long]]] = {
+    for {
+      ssd <- this.subsession_start_date
+      sd <- this.submission_date
+      pairs <- collate(ssd, sd)
+    } yield { 
+      pairs.map(pair => getDateDiff(pair._1, pair._2))
     }
   }
 
-  private def getDateDiff(begin: String, end: String): Long = {
-    Days.daysBetween(parseDate(begin), parseDate(end)).getDays.toLong
+  private def getDateDiff(begin: String, end: String): Option[Long] = {
+    for {
+      startDate <- parseDate(begin)
+      endDate <- parseDate(end)
+    } yield {
+      Days.daysBetween(startDate, endDate).getDays.toLong
+    }
   }
 
-  private def parseDate(sdate: String): LocalDate = {
-    new LocalDate(sdate.slice(0, 10))
+  private def parseDate(sdate: String): Option[LocalDate] = {
+    // Date format is "YYYY-MM-DDT00:00:00.0+00:00"
+    val cleanDate = sdate.split("T")(0)
+    try {
+      Some(new LocalDate(cleanDate))
+    } catch {
+      case e: java.lang.IllegalArgumentException => None
+    }
   }
 }
 
@@ -355,8 +369,8 @@ case class CrossSectional (
       plugins_count_avg = base.weightedMean(base.pluginsCount),
       plugins_count_configs = base.pluginsCount.map(_.distinct.length),
       plugins_count_mode = base.weightedMode(base.pluginsCount).getOrElse(None),
-      start_date_oldest = base.parsedStartDate.map(_.minBy(_.toDate).toString),
-      start_date_newest = base.parsedStartDate.map(_.maxBy(_.toDate).toString),
+      start_date_oldest = base.parsedStartDate.map(_.flatten.minBy(_.toDate).toString),
+      start_date_newest = base.parsedStartDate.map(_.flatten.maxBy(_.toDate).toString),
       subsession_length_badTimer = base.session_length.map(_.filter(_ == -1).length),
       subsession_length_negative = base.session_length.map(_.filter(_ < -1).length),
       subsession_length_tooLong = base.session_length.map(_.filter(_ > SECONDS_PER_DAY * CrossSectional.MarginOfError).length),
@@ -370,9 +384,9 @@ case class CrossSectional (
       search_default_mode = base.weightedMode(base.default_search_engine).getOrElse(None),
       session_num_total = base.session_id.map(_.distinct.length),
       subsession_branches = base.previousSubsessionIdCounts.map(_.values.filter(_ > 1).size),
-      date_skew_per_ping_avg = base.ssStartToSubmission.map(aggregation.mean).getOrElse(None),
-      date_skew_per_ping_max = base.ssStartToSubmission.map(_.max),
-      date_skew_per_ping_min = base.ssStartToSubmission.map(_.min)
+      date_skew_per_ping_avg = base.ssStartToSubmission.flatMap(x => aggregation.mean(x.flatten)),
+      date_skew_per_ping_max = base.ssStartToSubmission.map(_.flatten.max),
+      date_skew_per_ping_min = base.ssStartToSubmission.map(_.flatten.min)
     )
   }
 }
