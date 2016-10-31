@@ -145,11 +145,16 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
 
     new {
       val pings: List[Map[String, Any]] = (for (configuration <- cartesianProduct(pingDimensions)) yield createPing(configuration)).toList
-
+      val sampleCrashPings = pings.filter(p =>
+        p.get("docType") match {
+          case Some("crash") => true
+          case _ => false
+        }
+      ).take(10)
       val (
         rowRDD,
         mainProcessedAccumulator, mainIgnoredAccumulator,
-        crashProcessedAccumulator, crashIgnoredAccumulator
+        crashProcessedAccumulator, crashIgnoredAccumulator, contentCrashIgnoredAccumulator
       ) = CrashAggregateView.compareCrashes(sc.get, sc.get.parallelize(pings))
       val schema = CrashAggregateView.buildSchema()
       val records = sqlContext.get.createDataFrame(rowRDD, schema)
@@ -168,6 +173,7 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
     assert(fixture.mainIgnoredAccumulator.value == 0)
     assert(fixture.crashProcessedAccumulator.value == fixture.pings.length / 2)
     assert(fixture.crashIgnoredAccumulator.value == 0)
+    assert(fixture.contentCrashIgnoredAccumulator.value == 0)
   }
 
   "activity date" must "be in a fixed set of dates" in {
@@ -245,5 +251,45 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
         assert(stats("content_shutdown_crashes_squared") == scala.math.pow(42, 2) * 2 * 2)
       }
     }
+  }
+
+  "content crash pings" must "be ignored"  in {
+    val contentCrashPings = fixture.sampleCrashPings.map(
+      p => p + ("processType" -> "content")
+    )
+    val (
+      rowRDD,
+      mainProcessedAccumulator, mainIgnoredAccumulator,
+      crashProcessedAccumulator, crashIgnoredAccumulator, contentCrashIgnoredAccumulator
+      ) = CrashAggregateView.compareCrashes(sc.get, sc.get.parallelize(contentCrashPings))
+    rowRDD.collect()
+    assert(crashProcessedAccumulator.value == 0)
+    assert(contentCrashIgnoredAccumulator.value == contentCrashPings.length)
+  }
+
+  "browser crash pings" must "not be ignored"  in {
+    val browserCrashPings = fixture.sampleCrashPings.map(
+      p => p + ("processType" -> "browser")
+    )
+    val (
+      rowRDD,
+      mainProcessedAccumulator, mainIgnoredAccumulator,
+      crashProcessedAccumulator, crashIgnoredAccumulator, contentCrashIgnoredAccumulator
+      ) = CrashAggregateView.compareCrashes(sc.get, sc.get.parallelize(browserCrashPings))
+    rowRDD.collect()
+    assert(crashProcessedAccumulator.value == 10)
+    assert(contentCrashIgnoredAccumulator.value == 0)
+  }
+
+  "old pings" must "not be ignored"  in {
+    val oldPings = fixture.sampleCrashPings.take(10)
+    val (
+      rowRDD,
+      mainProcessedAccumulator, mainIgnoredAccumulator,
+      crashProcessedAccumulator, crashIgnoredAccumulator, contentCrashIgnoredAccumulator
+      ) = CrashAggregateView.compareCrashes(sc.get, sc.get.parallelize(oldPings))
+    rowRDD.collect()
+    assert(crashProcessedAccumulator.value == 10)
+    assert(contentCrashIgnoredAccumulator.value == 0)
   }
 }

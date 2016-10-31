@@ -11,6 +11,7 @@ import org.json4s.jackson.JsonMethods._
 import org.rogach.scallop._
 import com.mozilla.telemetry.heka.Dataset
 
+
 object CrashAggregateView {
   private class Conf(args: Array[String]) extends ScallopConf(args) {
     val from = opt[String]("from", descr = "From submission date", required = false)
@@ -55,7 +56,7 @@ object CrashAggregateView {
           case date if date == currentDate.toString("yyyyMMdd") => true
         }.map(message => message.fieldsAsMap + ("payload" -> message.payload.getOrElse("")))
 
-      val (rowRDD, main_processed, main_ignored, crash_processed, crash_ignored) = compareCrashes(sc, messages)
+      val (rowRDD, main_processed, main_ignored, browser_crash_processed, browser_crash_ignored, content_crash_ignored) = compareCrashes(sc, messages)
 
       // create a dataframe containing all the crash aggregates
       val schema = buildSchema()
@@ -67,7 +68,8 @@ object CrashAggregateView {
       println("=======================================================================================")
       println(s"JOB COMPLETED SUCCESSFULLY FOR $currentDate")
       println(s"${main_processed.value} main pings processed, ${main_ignored.value} pings ignored")
-      println(s"${crash_processed.value} crash pings processed, ${crash_ignored.value} pings ignored")
+      println(s"${browser_crash_processed.value} browser crash pings processed, ${browser_crash_ignored.value} pings ignored")
+      println(s"${content_crash_ignored.value} content crash pings ignored")
       println("=======================================================================================")
 
       sc.stop()
@@ -126,13 +128,31 @@ object CrashAggregateView {
     } catch { case _: Throwable => 0 }
   }
 
-  def compareCrashes(sc: SparkContext, messages: RDD[Map[String, Any]]): (RDD[Row], LongAccumulator, LongAccumulator, LongAccumulator, LongAccumulator) = {
+  def compareCrashes(sc: SparkContext, messages: RDD[Map[String, Any]]): (
+      RDD[Row], LongAccumulator, LongAccumulator, LongAccumulator, LongAccumulator, LongAccumulator) = {
     // get the crash pairs for all of the pings, keeping track of how many we see
     val mainProcessedAccumulator = sc.longAccumulator("Number of processed main pings")
     val mainIgnoredAccumulator = sc.longAccumulator("Number of ignored main pings")
     val crashProcessedAccumulator = sc.longAccumulator("Number of processed crash pings")
     val crashIgnoredAccumulator = sc.longAccumulator("Number of ignored crash pings")
-    val crashPairs = messages.flatMap((pingFields) => {
+    val contentCrashIgnoredAccumulator = sc.longAccumulator("Number of ignored content crash pings")
+    // Filter out content crash pings, since we already obtain them from the main ping.
+    // See https://bugzilla.mozilla.org/show_bug.cgi?id=1310673
+    val filtered_messages = messages.filter(m => {
+      m.get("docType") match {
+        case Some("crash") =>
+          m.get("processType") match {
+            case Some("browser") | None => true
+            case _ => {
+              contentCrashIgnoredAccumulator.add(1)
+              false
+            }
+          }
+        case _ => true
+      }
+    })
+
+    val crashPairs = filtered_messages.flatMap((pingFields) => {
       getCrashPair(pingFields) match {
         case Some(crashPair) =>
           pingFields.get("docType") match {
@@ -172,7 +192,14 @@ object CrashAggregateView {
       Row(activityDate, dimensionsMap, statsMap)
     })
 
-    (records, mainProcessedAccumulator, mainIgnoredAccumulator, crashProcessedAccumulator, crashIgnoredAccumulator)
+    (
+      records,
+      mainProcessedAccumulator,
+      mainIgnoredAccumulator,
+      crashProcessedAccumulator,
+      crashIgnoredAccumulator,
+      contentCrashIgnoredAccumulator
+    )
   }
 
   private def getCrashPair(pingFields: Map[String, Any]): Option[(List[java.io.Serializable], List[Double])] = {
