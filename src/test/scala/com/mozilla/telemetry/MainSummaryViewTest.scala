@@ -722,6 +722,6 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   "Job parameters" can "conform to expected values" in {
     MainSummaryView.jobName should be ("main_summary")
     val versionPattern = "^v[0-9]+$".r
-    (versionPattern findAllIn MainSummaryView.streamVersion).mkString("Oops") should be (MainSummaryView.streamVersion)
+    (versionPattern findAllIn MainSummaryView.schemaVersion).mkString("Oops") should be (MainSummaryView.schemaVersion)
   }
 }

@@ -8,7 +8,7 @@ import org.joda.time.{DateTime, Days, format}
 import org.rogach.scallop._
 
 object AddonsView {
-  def streamVersion: String = "v2"
+  def schemaVersion: String = "v2"
   def jobName: String = "addons"
 
   // Configuration for command line arguments
@@ -57,18 +57,18 @@ object AddonsView {
     val outputBucket = conf.outputBucket()
     val inputBucket = conf.inputBucket.get.getOrElse(outputBucket)
 
-    val mainSummary = spark.read.parquet(s"s3://$inputBucket/main_summary/${MainSummaryView.streamVersion}")
+    val mainSummary = spark.read.parquet(s"s3://$inputBucket/main_summary/${MainSummaryView.schemaVersion}")
 
     for (offset <- 0 to Days.daysBetween(from, to).getDays) {
       val currentDate = from.plusDays(offset)
       val currentDateString = currentDate.toString("yyyyMMdd")
 
       println("=======================================================================================")
-      println(s"BEGINNING JOB $jobName $streamVersion FOR $currentDateString")
+      println(s"BEGINNING JOB $jobName $schemaVersion FOR $currentDateString")
 
       val addons = addonsFromMain(mainSummary.filter(s"submission_date_s3 == '$currentDateString'"))
 
-      val s3prefix = s"$jobName/$streamVersion/submission_date_s3=$currentDateString"
+      val s3prefix = s"$jobName/$schemaVersion/submission_date_s3=$currentDateString"
       val s3path = s"s3://$outputBucket/$s3prefix"
 
       // Repartition the dataframe by sample_id before saving.

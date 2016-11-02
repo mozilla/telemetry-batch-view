@@ -14,7 +14,7 @@ import org.json4s.DefaultFormats
 import scala.util.{Success, Try}
 
 object MainSummaryView {
-  def streamVersion: String = "v3"
+  def schemaVersion: String = "v3"
   def jobName: String = "main_summary"
 
   // Configuration for command line arguments
@@ -116,7 +116,7 @@ object MainSummaryView {
       //    loaded, so we can't do single day incremental updates.
       //  - "ignore" causes new data not to be saved.
       // So we manually add the "submission_date_s3" parameter to the s3path.
-      val s3prefix = s"$jobName/$streamVersion/submission_date_s3=$currentDateString"
+      val s3prefix = s"$jobName/$schemaVersion/submission_date_s3=$currentDateString"
       val s3path = s"s3://${conf.outputBucket()}/$s3prefix"
 
       // Repartition the dataframe by sample_id before saving.
