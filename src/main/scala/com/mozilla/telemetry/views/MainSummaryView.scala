@@ -4,7 +4,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.joda.time.{DateTime, Days, format}
-import org.json4s.JsonAST.{JBool, JInt, JString, JValue}
+import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._
 import com.mozilla.telemetry.heka.{Dataset, Message}
@@ -186,6 +186,14 @@ object MainSummaryView {
       case _ => None
     }
   }
+
+  def getUserPrefs(prefs: JValue): Option[Row] = {
+    prefs \ "dom.ipc.processCount" match {
+      case JInt(pc) => Some(Row(pc.toInt))
+      case _ => None
+    }
+  }
+
 
   // Convert the given Heka message containing a "main" ping
   // to a map containing just the fields we're interested in.
@@ -437,7 +445,8 @@ object MainSummaryView {
       settings \ "telemetryEnabled" match {
         case JBool(x) => x
         case _ => null
-      }
+      },
+      getUserPrefs(settings \ "userPrefs").orNull
     )
     Some(row)
   }
@@ -504,7 +513,12 @@ object MainSummaryView {
       StructField("is_system",             BooleanType, nullable = true)
     ))
 
-    def buildSchema: StructType = {
+  // Data for user prefs
+  def buildUserPrefsSchema = StructType(List(
+    StructField("dom_ipc_process_count", IntegerType, nullable = true) // dom.ipc.processCount
+  ))
+
+  def buildSchema: StructType = {
     StructType(List(
       StructField("document_id", StringType, nullable = false), // id
       StructField("client_id", StringType, nullable = true), // clientId
@@ -595,7 +609,6 @@ object MainSummaryView {
       StructField("places_bookmarks_count", IntegerType, nullable = true), // mean of PLACES_BOOKMARKS_COUNT
       StructField("places_pages_count", IntegerType, nullable = true), // mean of PLACES_PAGES_COUNT
 
-
       // Push metrics per bug 1270482
       StructField("push_api_notification_received", IntegerType, nullable = true), // PUSH_API_NOTIFICATION_RECEIVED
       StructField("web_notification_shown", IntegerType, nullable = true), // WEB_NOTIFICATION_SHOWN
@@ -611,7 +624,8 @@ object MainSummaryView {
       StructField("active_theme", buildAddonSchema, nullable = true), // environment.addons.theme
       StructField("blocklist_enabled", BooleanType, nullable = true), // environment.settings.blocklistEnabled
       StructField("addon_compatibility_check_enabled", BooleanType, nullable = true), // environment.settings.addonCompatibilityCheckEnabled
-      StructField("telemetry_enabled", BooleanType, nullable = true) // environment.settings.telemetryEnabled
+      StructField("telemetry_enabled", BooleanType, nullable = true), // environment.settings.telemetryEnabled
+      StructField("user_prefs", buildUserPrefsSchema, nullable = true) // environment.settings.userPrefs
     ))
   }
 }

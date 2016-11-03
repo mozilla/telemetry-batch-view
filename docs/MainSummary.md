@@ -170,6 +170,8 @@ root
  |-- blocklist_enabled: boolean (nullable = true)
  |-- addon_compatibility_check_enabled: boolean (nullable = true)
  |-- telemetry_enabled: boolean (nullable = true)
+ |-- user_prefs: struct (nullable = true)
+ |    |-- dom_ipc_process_count: integer (nullable = true)
  |-- submission_date_s3: string (nullable = true)
  |-- sample_id: string (nullable = true)
 ```
@@ -203,6 +205,7 @@ Most of the fields are simple scalar values, with a few notable exceptions:
 * The `theme` field contains a single struct in the same shape as the items in the
   `active_addons` array. It contains information about the currently active browser
   theme.
+* The `user_prefs` field contains a struct with values for preferences of interest.
 
 It is recommended to work with this dataset via **Spark** rather than **sql.t.m.o** -
 due to the large number of records, queries can consume a lot of resources on the
