@@ -12,7 +12,7 @@ import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._ // Just for my attempted mocks below.....
 
 object SyncView {
-  def streamVersion: String = "v1"
+  def schemaVersion: String = "v1"
   def jobName: String = "sync_summary"
 
   // Configuration for command line arguments
@@ -100,7 +100,7 @@ object SyncView {
         //    loaded, so we can't do single day incremental updates.
         //  - "ignore" causes new data not to be saved.
         // So we manually add the "submission_date_s3" parameter to the s3path.
-        val s3prefix = s"$jobName/$streamVersion/submission_date_s3=$currentDateString"
+        val s3prefix = s"$jobName/$schemaVersion/submission_date_s3=$currentDateString"
         val s3path = s"s3://${conf.outputBucket()}/$s3prefix"
 
         records.write.mode("error").parquet(s3path)
