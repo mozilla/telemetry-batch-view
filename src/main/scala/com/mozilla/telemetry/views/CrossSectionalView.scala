@@ -43,7 +43,7 @@ object Longitudinal {
 case class Longitudinal (
   val client_id: String,
   val normalized_channel: String,
-  val submission_date: Option[Seq[String]], // TODO(harter): This needs to be scrubbed of negative and large vals
+  val submission_date: Option[Seq[String]],
   val geo_country: Option[Seq[String]],
   val session_length: Option[Seq[Long]],
   val is_default_browser: Option[Seq[Option[Boolean]]],
@@ -68,18 +68,41 @@ case class Longitudinal (
   val search_counts: Option[scala.collection.Map[String, Seq[Long]]],
   val session_id: Option[Seq[String]]
 ) {
+
+  def cleanSessionLength(): Option[Seq[Option[Long]]] = {
+    this.session_length.map(
+      _.map(x => if ((x <= -1) || (x > SECONDS_PER_DAY)) None else Some(x))
+    )
+  }
+
+  private def collate[A, B](seqPair: (Seq[A], Seq[B])): Option[Seq[(A, B)]] = {
+    val (first, second) = seqPair
+    if (first.size == second.size) Some(first zip second) else None 
+  }
+
   def weightedMean(values: Option[Seq[Option[Long]]]): Option[Double] = {
-    (values, this.session_length) match {
-      case (Some(v), Some(sl)) => aggregation.weightedMean(v, sl)
-      case _ => None
-    }
+    val cleanPairs = for {
+      v <- values.toSeq
+      csl <- this.cleanSessionLength.toSeq
+      pairs <- collate(v, csl).toSeq
+      pair <- pairs
+      value <- pair._1
+      weight <- pair._2
+    } yield (value, weight)
+
+    aggregation.weightedMean(cleanPairs)
   }
 
   def weightedMode[A](values: Option[Seq[A]]): Option[A] = {
-    (values, this.session_length) match {
-      case (Some(v), Some(sl)) => aggregation.weightedMode(v, sl)
-      case _ => None
-    }
+    val cleanPairs = for {
+      v <- values.toSeq
+      csl <- this.cleanSessionLength.toSeq
+      pairs <- collate(v, csl).toSeq
+      pair <- pairs
+      weight <- pair._2.toSeq
+    } yield (pair._1, weight)
+
+    aggregation.weightedMode(cleanPairs)
   }
 
   def addonNames(): Option[Seq[Option[String]]] = {
@@ -113,8 +136,24 @@ case class Longitudinal (
   }
 
   def activeHoursByDOW(dow: Int): Option[Double] = {
-    this.session_length.map(sl => this.parsedStartDate.map(psd => sl zip psd)).getOrElse(None)
-      .map(_.filter(_._2.getDayOfWeek == dow).map(_._1).sum.toDouble / SECONDS_PER_HOUR)
+    val optPairs = for {
+      csl <- this.cleanSessionLength
+      psd <- this.parsedStartDate
+      pairs <- collate(csl, psd)
+    } yield pairs
+
+    if (optPairs.isDefined) {
+      val hours = for {
+        pairs <- optPairs.toSeq
+        pair <- pairs
+        if pair._2.getDayOfWeek == dow
+        sessionLength <- pair._1
+      } yield {sessionLength.toDouble / SECONDS_PER_HOUR}
+
+      Some(hours.sum)
+    } else {
+      None
+    }
   }
 
   def activeDaysByDOW(dow: Int): Option[Long] = {
@@ -254,7 +293,7 @@ case class CrossSectional (
     this(
       client_id = base.client_id,
       normalized_channel = base.normalized_channel,
-      active_hours_total = base.session_length.map(_.sum.toDouble / SECONDS_PER_HOUR),
+      active_hours_total = base.cleanSessionLength.map(_.flatten.sum.toDouble / SECONDS_PER_HOUR),
       active_hours_0_mon = base.activeHoursByDOW(MONDAY),
       active_hours_1_tue = base.activeHoursByDOW(TUESDAY),
       active_hours_2_wed = base.activeHoursByDOW(WEDNESDAY),
