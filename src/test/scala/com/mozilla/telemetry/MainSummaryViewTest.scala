@@ -3,9 +3,9 @@ package com.mozilla.telemetry
 import com.mozilla.telemetry.heka.HekaFrame
 import com.mozilla.telemetry.utils.MainPing
 import com.mozilla.telemetry.views.MainSummaryView
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.types.{ArrayType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.{SparkConf, SparkContext}
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{FlatSpec, Matchers}
@@ -485,6 +485,12 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
     val sc = new SparkContext(sparkConf)
     sc.setLogLevel("WARN")
+
+    val spark = SparkSession
+      .builder()
+      .appName("MainSummary")
+      .getOrCreate()
+
     try {
       val schema = MainSummaryView.buildSchema
 
@@ -497,13 +503,12 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       val rows = HekaFrame.parse(input).flatMap(MainSummaryView.messageToRow)
 
       // Serialize this one row as Parquet
-      val sqlContext = new SQLContext(sc)
-      val dataframe = sqlContext.createDataFrame(sc.parallelize(rows.toSeq), schema)
+      val dataframe = spark.createDataFrame(sc.parallelize(rows.toSeq), schema)
       val tempFile = com.mozilla.telemetry.utils.temporaryFileName()
       dataframe.write.parquet(tempFile.toString)
 
       // Then read it back
-      val data = sqlContext.read.parquet(tempFile.toString)
+      val data = spark.read.parquet(tempFile.toString)
 
       data.count() should be (1)
       data.filter(data("document_id") === "foo").count() should be (1)
@@ -515,7 +520,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   // Apply the given schema to the given potentially-generic Row.
   def applySchema(row: Row, schema: StructType): Row = new GenericRowWithSchema(row.toSeq.toArray, schema)
 
-  def checkRowValues(row: Row, schema: StructType, expected: Map[String,Any]) = {
+  def checkAddonValues(row: Row, schema: StructType, expected: Map[String,Any]) = {
     val actual = applySchema(row, schema).getValuesMap(expected.keys.toList)
     val aid = expected("addon_id")
     for ((f, v) <- expected) {
@@ -609,7 +614,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           "places_bookmarks_count"            -> 183,
           "blocklist_enabled"                 -> true,
           "addon_compatibility_check_enabled" -> true,
-          "telemetry_enabled"                 -> true
+          "telemetry_enabled"                 -> true,
+          "user_prefs"                        -> null
         )
 
         val actual = r.getValuesMap(expected.keys.toList)
@@ -637,7 +643,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         popup should be (expectedPopup)
 
         val addonSchema = MainSummaryView.buildAddonSchema
-        checkRowValues(r.getStruct(r.fieldIndex("active_theme")), addonSchema, Map(
+        checkAddonValues(r.getStruct(r.fieldIndex("active_theme")), addonSchema, Map(
           "addon_id"              -> "{972ce4c6-7e08-4474-a285-3208198ce6fd}",
           "blocklisted"           -> false,
           "name"                  -> "Default",
@@ -661,7 +667,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           val a = applySchema(addon, addonSchema)
           val addonId = a.getString(a.fieldIndex("addon_id"))
           addonId match {
-            case "e10srollout@mozilla.org" => checkRowValues(addon, addonSchema, Map(
+            case "e10srollout@mozilla.org" => checkAddonValues(addon, addonSchema, Map(
               "addon_id"              -> "e10srollout@mozilla.org",
               "blocklisted"           -> false,
               "name"                  -> "Multi-process staged rollout",
@@ -677,7 +683,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
               "signed_state"          -> null,
               "is_system"             -> true
             ))
-            case "firefox@getpocket.com" => checkRowValues(addon, addonSchema, Map(
+            case "firefox@getpocket.com" => checkAddonValues(addon, addonSchema, Map(
               "addon_id"              -> "firefox@getpocket.com",
               "blocklisted"           -> false,
               "name"                  -> "Pocket",
@@ -693,7 +699,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
               "signed_state"          -> null,
               "is_system"             -> true
             ))
-            case "loop@mozilla.org" => checkRowValues(addon, addonSchema, Map(
+            case "loop@mozilla.org" => checkAddonValues(addon, addonSchema, Map(
               "addon_id"              -> "loop@mozilla.org",
               "blocklisted"           -> false,
               "name"                  -> "Firefox Hello Beta",
@@ -723,5 +729,83 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     MainSummaryView.jobName should be ("main_summary")
     val versionPattern = "^v[0-9]+$".r
     (versionPattern findAllIn MainSummaryView.schemaVersion).mkString("Oops") should be (MainSummaryView.schemaVersion)
+  }
+
+  "User prefs" can "be extracted" in {
+    // Contains prefs, but not dom.ipc.processCount:
+    val json1 = parse(
+      """
+        |{
+        | "environment": {
+        |  "settings": {
+        |   "userPrefs": {
+        |    "browser.cache.disk.capacity": 358400,
+        |    "browser.newtabpage.enhanced": true,
+        |    "browser.startup.page": 3
+        |   }
+        |  }
+        | }
+        |}
+      """.stripMargin)
+    MainSummaryView.getUserPrefs(json1 \ "environment" \ "settings" \ "userPrefs") should be (None)
+
+    // Doesn't contain any prefs:
+    val json2 = parse(
+      """
+        |{
+        | "environment": {
+        |  "settings": {
+        |   "userPrefs": {}
+        |  }
+        | }
+        |}
+      """.stripMargin)
+    MainSummaryView.getUserPrefs(json2 \ "environment" \ "settings" \ "userPrefs") should be (None)
+
+    // Contains prefs, including dom.ipc.processCount
+    val json3 = parse(
+      """
+        |{
+        | "environment": {
+        |  "settings": {
+        |   "userPrefs": {
+        |    "dom.ipc.processCount": 2,
+        |    "browser.newtabpage.enhanced": true,
+        |    "browser.startup.page": 3
+        |   }
+        |  }
+        | }
+        |}
+      """.stripMargin)
+    MainSummaryView.getUserPrefs(json3 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(2)))
+
+    // Contains dom.ipc.processCount with a bogus data type
+    val json4 = parse(
+      """
+        |{
+        | "environment": {
+        |  "settings": {
+        |   "userPrefs": {
+        |    "dom.ipc.processCount": "2",
+        |    "browser.newtabpage.enhanced": true,
+        |    "browser.startup.page": 3
+        |   }
+        |  }
+        | }
+        |}
+      """.stripMargin)
+    MainSummaryView.getUserPrefs(json4 \ "environment" \ "settings" \ "userPrefs") should be (None)
+
+    // Missing the prefs section entirely:
+    val json5 = parse(
+      """
+        |{
+        | "environment": {
+        |  "settings": {
+        |  }
+        | }
+        |}
+      """.stripMargin)
+    MainSummaryView.getUserPrefs(json5 \ "environment" \ "settings" \ "userPrefs") should be (None)
   }
 }
