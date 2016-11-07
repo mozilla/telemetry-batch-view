@@ -57,8 +57,6 @@ object AddonsView {
     val outputBucket = conf.outputBucket()
     val inputBucket = conf.inputBucket.get.getOrElse(outputBucket)
 
-    val mainSummary = spark.read.parquet(s"s3://$inputBucket/main_summary/${MainSummaryView.schemaVersion}")
-
     for (offset <- 0 to Days.daysBetween(from, to).getDays) {
       val currentDate = from.plusDays(offset)
       val currentDateString = currentDate.toString("yyyyMMdd")
@@ -66,7 +64,8 @@ object AddonsView {
       println("=======================================================================================")
       println(s"BEGINNING JOB $jobName $schemaVersion FOR $currentDateString")
 
-      val addons = addonsFromMain(mainSummary.filter(s"submission_date_s3 == '$currentDateString'"))
+      val mainSummary = spark.read.parquet(s"s3://$inputBucket/main_summary/${MainSummaryView.schemaVersion}/submission_date_s3=$currentDateString")
+      val addons = addonsFromMain(mainSummary)
 
       val s3prefix = s"$jobName/$schemaVersion/submission_date_s3=$currentDateString"
       val s3path = s"s3://$outputBucket/$s3prefix"
