@@ -39,9 +39,9 @@ spark-submit --master yarn-client --class com.mozilla.telemetry.views.Longitudin
 ```
 
 ### Caveats
-If you run into memory issues during compilation time issue the following command before running sbt:
+If you run into memory issues during compilation time or running the test suite, issue the following command before running sbt:
 ```bash
-export _JAVA_OPTIONS="-Xss4M -Xmx2G"
+export _JAVA_OPTIONS="-Xms4G -Xmx4G -Xss4M -XX:MaxMetaspaceSize=256M"
 ```
 
 **Running on Windows**

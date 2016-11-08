@@ -11,13 +11,16 @@ Generating the dataset
 ======================
 
 For distributed execution, we can build a self-contained JAR file, then run it with Spark.
-For example, to generate the main_summary dataset for April 12, 2016 to April 28, 2016:
+For example, to generate the main_summary dataset for April 12, 2016 to April 28, 2016,
+and storing the resulting data in an s3 bucket called `example_bucket`:
 ```bash
 sbt assembly
 spark-submit \
-    --master yarn-client \
+    --master yarn \
+    --deploy-mode client \
     --class com.mozilla.telemetry.views.MainSummaryView \
     telemetry-batch-view-1.1.jar \
+    --bucket example_bucket \
     --from 20160412 \
     --to 20160428
 ```
@@ -133,10 +136,47 @@ root
  |    |    |-- engine: string (nullable = true)
  |    |    |-- source: string (nullable = true)
  |    |    |-- count: long (nullable = true)
+ |-- active_addons: array (nullable = true)
+ |    |-- element: struct (containsNull = true)
+ |    |    |-- addon_id: string (nullable = true)
+ |    |    |-- blocklisted: boolean (nullable = true)
+ |    |    |-- name: string (nullable = true)
+ |    |    |-- user_disabled: boolean (nullable = true)
+ |    |    |-- app_disabled: boolean (nullable = true)
+ |    |    |-- version: string (nullable = true)
+ |    |    |-- scope: integer (nullable = true)
+ |    |    |-- type: string (nullable = true)
+ |    |    |-- foreign_install: boolean (nullable = true)
+ |    |    |-- has_binary_components: boolean (nullable = true)
+ |    |    |-- install_day: integer (nullable = true)
+ |    |    |-- update_day: integer (nullable = true)
+ |    |    |-- signed_state: integer (nullable = true)
+ |    |    |-- is_system: boolean (nullable = true)
+ |-- active_theme: struct (nullable = true)
+ |    |-- addon_id: string (nullable = true)
+ |    |-- blocklisted: boolean (nullable = true)
+ |    |-- name: string (nullable = true)
+ |    |-- user_disabled: boolean (nullable = true)
+ |    |-- app_disabled: boolean (nullable = true)
+ |    |-- version: string (nullable = true)
+ |    |-- scope: integer (nullable = true)
+ |    |-- type: string (nullable = true)
+ |    |-- foreign_install: boolean (nullable = true)
+ |    |-- has_binary_components: boolean (nullable = true)
+ |    |-- install_day: integer (nullable = true)
+ |    |-- update_day: integer (nullable = true)
+ |    |-- signed_state: integer (nullable = true)
+ |    |-- is_system: boolean (nullable = true)
+ |-- blocklist_enabled: boolean (nullable = true)
+ |-- addon_compatibility_check_enabled: boolean (nullable = true)
+ |-- telemetry_enabled: boolean (nullable = true)
+ |-- user_prefs: struct (nullable = true)
+ |    |-- dom_ipc_process_count: integer (nullable = true)
+ |-- submission_date_s3: string (nullable = true)
  |-- sample_id: string (nullable = true)
 ```
 For more detail on where these fields come from in the
-[raw data](https://gecko.readthedocs.org/en/latest/toolkit/components/telemetry/telemetry/main-ping.html),
+[raw data](https://gecko.readthedocs.io/en/latest/toolkit/components/telemetry/telemetry/data/main-ping.html),
 please look [in the MainSummaryView code](src/main/scala/views/MainSummaryView.scala)
 in the `buildSchema` function.
 
@@ -159,6 +199,13 @@ Most of the fields are simple scalar values, with a few notable exceptions:
 * The `places_bookmarks_count` and `places_pages_count` fields contain the **mean**
   value of the corresponding Histogram, which can be interpreted as the average number
   of bookmarks or pages in a given subsession.
+* The `active_addons` field contains an array of structs, one for each entry in
+  the `environment.addons.activeAddons` section of the payload. More detail in
+  [Bug 1290181](https://bugzilla.mozilla.org/show_bug.cgi?id=1290181).
+* The `theme` field contains a single struct in the same shape as the items in the
+  `active_addons` array. It contains information about the currently active browser
+  theme.
+* The `user_prefs` field contains a struct with values for preferences of interest.
 
 It is recommended to work with this dataset via **Spark** rather than **sql.t.m.o** -
 due to the large number of records, queries can consume a lot of resources on the
@@ -167,7 +214,7 @@ short `submission_date_s3` range, and ideally make use of the `sample_id` field.
 
 When using Presto to query the data from sql.t.m.o, you can use the
 [`UNNEST`](https://prestodb.io/docs/current/sql/select.html#unnest) feature to
-access items in the `search_counts` and `popup_notification_stats` fields.
+access items in the `search_counts`, `popup_notification_stats` and `active_addons` fields.
 
 For example, to compare the search volume for different search `source` values, you could use:
 ```sql

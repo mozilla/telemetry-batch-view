@@ -3,9 +3,9 @@ package com.mozilla.telemetry
 import com.mozilla.telemetry.heka.HekaFrame
 import com.mozilla.telemetry.utils.MainPing
 import com.mozilla.telemetry.views.MainSummaryView
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.types.{ArrayType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.{SparkConf, SparkContext}
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{FlatSpec, Matchers}
@@ -485,6 +485,12 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
     val sc = new SparkContext(sparkConf)
     sc.setLogLevel("WARN")
+
+    val spark = SparkSession
+      .builder()
+      .appName("MainSummary")
+      .getOrCreate()
+
     try {
       val schema = MainSummaryView.buildSchema
 
@@ -497,13 +503,12 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       val rows = HekaFrame.parse(input).flatMap(MainSummaryView.messageToRow)
 
       // Serialize this one row as Parquet
-      val sqlContext = new SQLContext(sc)
-      val dataframe = sqlContext.createDataFrame(sc.parallelize(rows.toSeq), schema)
+      val dataframe = spark.createDataFrame(sc.parallelize(rows.toSeq), schema)
       val tempFile = com.mozilla.telemetry.utils.temporaryFileName()
       dataframe.write.parquet(tempFile.toString)
 
       // Then read it back
-      val data = sqlContext.read.parquet(tempFile.toString)
+      val data = spark.read.parquet(tempFile.toString)
 
       data.count() should be (1)
       data.filter(data("document_id") === "foo").count() should be (1)
@@ -515,6 +520,15 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   // Apply the given schema to the given potentially-generic Row.
   def applySchema(row: Row, schema: StructType): Row = new GenericRowWithSchema(row.toSeq.toArray, schema)
 
+  def checkAddonValues(row: Row, schema: StructType, expected: Map[String,Any]) = {
+    val actual = applySchema(row, schema).getValuesMap(expected.keys.toList)
+    val aid = expected("addon_id")
+    for ((f, v) <- expected) {
+      withClue(s"$aid[$f]:") { actual.get(f) should be (Some(v)) }
+    }
+    actual should be (expected)
+  }
+
   "Heka records" can "be summarized" in {
     // Use an example framed-heka message. It is based on test_main.json.gz,
     // submitted with a URL of
@@ -524,13 +538,6 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     val input = hekaURL.openStream()
 
     val schema = MainSummaryView.buildSchema
-    val searchField = schema.fields.filter(p => p.name == "search_counts").head
-    val searchSchema = searchField.dataType match {
-      case searchCountsType: ArrayType =>
-        searchCountsType.elementType match {
-          case searchCountsStruct: StructType => searchCountsStruct
-        }
-    }
 
     var count = 0
     for (message <- HekaFrame.parse(input)) {
@@ -543,76 +550,82 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         val r = applySchema(summary, schema)
 
         val expected = Map(
-          "document_id"                     -> "foo",
-          "client_id"                       -> "c4582ba1-79fc-1f47-ae2a-671118dccd8b",
-          "sample_id"                       -> 4l,
-          "channel"                         -> "nightly",
-          "normalized_channel"              -> "nightly",
-          "country"                         -> "??",
-          "city"                            -> "??",
-          "os"                              -> "Darwin",
-          "os_version"                      -> "15.3.0",
-          "os_service_pack_major"           -> null,
-          "os_service_pack_minor"           -> null,
-          "windows_build_number"            -> null,
-          "windows_ubr"                     -> null,
-          "install_year"                    -> null,
-          "profile_creation_date"           -> 16861l,
-          "subsession_start_date"           -> "2016-03-28T00:00:00.0-03:00",
-          "subsession_length"               -> 14557l,
-          "distribution_id"                 -> null,
-          "submission_date"                 -> "20160407",
-          "sync_configured"                 -> false,
-          "sync_count_desktop"              -> null,
-          "sync_count_mobile"               -> null,
-          "app_build_id"                    -> "20160315030230",
-          "app_display_version"             -> "48.0a1",
-          "app_name"                        -> "Firefox",
-          "app_version"                     -> "48.0a1",
-          "timestamp"                       -> 1460036116829920000l,
-          "env_build_id"                    -> "20160315030230",
-          "env_build_version"               -> "48.0a1",
-          "env_build_arch"                  -> "x86-64",
-          "e10s_enabled"                    -> true,
-          "e10s_cohort"                     -> "unsupportedChannel",
-          "locale"                          -> "en-US",
-          "active_experiment_id"            -> null,
-          "active_experiment_branch"        -> null,
-          "reason"                          -> "gather-payload",
-          "timezone_offset"                 -> -180,
-          "plugin_hangs"                    -> null,
-          "aborts_plugin"                   -> null,
-          "aborts_content"                  -> null,
-          "aborts_gmplugin"                 -> null,
-          "crashes_detected_plugin"         -> null,
-          "crashes_detected_content"        -> null,
-          "crashes_detected_gmplugin"       -> null,
-          "crash_submit_attempt_main"       -> null,
-          "crash_submit_attempt_content"    -> null,
-          "crash_submit_attempt_plugin"     -> null,
-          "crash_submit_success_main"       -> null,
-          "crash_submit_success_content"    -> null,
-          "crash_submit_success_plugin"     -> null,
-          "active_addons_count"             -> 3l,
-          "flash_version"                   -> null,
-          "vendor"                          -> "Mozilla",
-          "is_default_browser"              -> true,
-          "default_search_engine_data_name" -> "Google",
-          "default_search_engine"           -> "google",
-          "devtools_toolbox_opened_count"   -> 3,
-          "client_submission_date"          -> null,
-          "push_api_notify"                 -> null,
-          "web_notification_shown"          -> null,
-          "places_pages_count"              -> 104849,
-          "places_bookmarks_count"          -> 183
+          "document_id"                       -> "foo",
+          "client_id"                         -> "c4582ba1-79fc-1f47-ae2a-671118dccd8b",
+          "sample_id"                         -> 4l,
+          "channel"                           -> "nightly",
+          "normalized_channel"                -> "nightly",
+          "country"                           -> "??",
+          "city"                              -> "??",
+          "os"                                -> "Darwin",
+          "os_version"                        -> "15.3.0",
+          "os_service_pack_major"             -> null,
+          "os_service_pack_minor"             -> null,
+          "windows_build_number"              -> null,
+          "windows_ubr"                       -> null,
+          "install_year"                      -> null,
+          "profile_creation_date"             -> 16861l,
+          "subsession_start_date"             -> "2016-03-28T00:00:00.0-03:00",
+          "subsession_length"                 -> 14557l,
+          "distribution_id"                   -> null,
+          "submission_date"                   -> "20160407",
+          "sync_configured"                   -> false,
+          "sync_count_desktop"                -> null,
+          "sync_count_mobile"                 -> null,
+          "app_build_id"                      -> "20160315030230",
+          "app_display_version"               -> "48.0a1",
+          "app_name"                          -> "Firefox",
+          "app_version"                       -> "48.0a1",
+          "timestamp"                         -> 1460036116829920000l,
+          "env_build_id"                      -> "20160315030230",
+          "env_build_version"                 -> "48.0a1",
+          "env_build_arch"                    -> "x86-64",
+          "e10s_enabled"                      -> true,
+          "e10s_cohort"                       -> "unsupportedChannel",
+          "locale"                            -> "en-US",
+          "active_experiment_id"              -> null,
+          "active_experiment_branch"          -> null,
+          "reason"                            -> "gather-payload",
+          "timezone_offset"                   -> -180,
+          "plugin_hangs"                      -> null,
+          "aborts_plugin"                     -> null,
+          "aborts_content"                    -> null,
+          "aborts_gmplugin"                   -> null,
+          "crashes_detected_plugin"           -> null,
+          "crashes_detected_content"          -> null,
+          "crashes_detected_gmplugin"         -> null,
+          "crash_submit_attempt_main"         -> null,
+          "crash_submit_attempt_content"      -> null,
+          "crash_submit_attempt_plugin"       -> null,
+          "crash_submit_success_main"         -> null,
+          "crash_submit_success_content"      -> null,
+          "crash_submit_success_plugin"       -> null,
+          "active_addons_count"               -> 3l,
+          "flash_version"                     -> null,
+          "vendor"                            -> "Mozilla",
+          "is_default_browser"                -> true,
+          "default_search_engine_data_name"   -> "Google",
+          "default_search_engine"             -> "google",
+          "devtools_toolbox_opened_count"     -> 3,
+          "client_submission_date"            -> null,
+          "push_api_notify"                   -> null,
+          "web_notification_shown"            -> null,
+          "places_pages_count"                -> 104849,
+          "places_bookmarks_count"            -> 183,
+          "blocklist_enabled"                 -> true,
+          "addon_compatibility_check_enabled" -> true,
+          "telemetry_enabled"                 -> true,
+          "user_prefs"                        -> null
         )
 
         val actual = r.getValuesMap(expected.keys.toList)
         for ((f, v) <- expected) {
+          withClue(s"$f:") { actual.get(f) should be (Some(v)) }
           actual.get(f) should be (Some(v))
         }
         actual should be (expected)
 
+        val searchSchema = MainSummaryView.buildSearchSchema
         val searches = r.getSeq[Row](r.fieldIndex("search_counts"))
         val searchCounter = searches.map(search => {
           val sW = applySchema(search, searchSchema)
@@ -629,6 +642,82 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           "web-notifications" -> Row(2,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0))
         popup should be (expectedPopup)
 
+        val addonSchema = MainSummaryView.buildAddonSchema
+        checkAddonValues(r.getStruct(r.fieldIndex("active_theme")), addonSchema, Map(
+          "addon_id"              -> "{972ce4c6-7e08-4474-a285-3208198ce6fd}",
+          "blocklisted"           -> false,
+          "name"                  -> "Default",
+          "user_disabled"         -> false,
+          "app_disabled"          -> false,
+          "version"               -> "48.0a1",
+          "scope"                 -> 4,
+          "type"                  -> null,
+          "foreign_install"       -> false,
+          "has_binary_components" -> false,
+          "install_day"           -> 16861,
+          "update_day"            -> 16875,
+          "signed_state"          -> null,
+          "is_system"             -> null
+        ))
+
+        val addons = r.getSeq[Row](r.fieldIndex("active_addons"))
+        addons.size should be (3)
+
+        for (addon <- addons) {
+          val a = applySchema(addon, addonSchema)
+          val addonId = a.getString(a.fieldIndex("addon_id"))
+          addonId match {
+            case "e10srollout@mozilla.org" => checkAddonValues(addon, addonSchema, Map(
+              "addon_id"              -> "e10srollout@mozilla.org",
+              "blocklisted"           -> false,
+              "name"                  -> "Multi-process staged rollout",
+              "user_disabled"         -> false,
+              "app_disabled"          -> false,
+              "version"               -> "1.0",
+              "scope"                 -> 1,
+              "type"                  -> "extension",
+              "foreign_install"       -> false,
+              "has_binary_components" -> false,
+              "install_day"           -> 16865,
+              "update_day"            -> 16875,
+              "signed_state"          -> null,
+              "is_system"             -> true
+            ))
+            case "firefox@getpocket.com" => checkAddonValues(addon, addonSchema, Map(
+              "addon_id"              -> "firefox@getpocket.com",
+              "blocklisted"           -> false,
+              "name"                  -> "Pocket",
+              "user_disabled"         -> false,
+              "app_disabled"          -> false,
+              "version"               -> "1.0",
+              "scope"                 -> 1,
+              "type"                  -> "extension",
+              "foreign_install"       -> false,
+              "has_binary_components" -> false,
+              "install_day"           -> 16861,
+              "update_day"            -> 16875,
+              "signed_state"          -> null,
+              "is_system"             -> true
+            ))
+            case "loop@mozilla.org" => checkAddonValues(addon, addonSchema, Map(
+              "addon_id"              -> "loop@mozilla.org",
+              "blocklisted"           -> false,
+              "name"                  -> "Firefox Hello Beta",
+              "user_disabled"         -> false,
+              "app_disabled"          -> false,
+              "version"               -> "1.1.12",
+              "scope"                 -> 1,
+              "type"                  -> "extension",
+              "foreign_install"       -> false,
+              "has_binary_components" -> false,
+              "install_day"           -> 16861,
+              "update_day"            -> 16875,
+              "signed_state"          -> null,
+              "is_system"             -> true
+            ))
+            case x => x should be ("Should not have happened")
+          }
+        }
         count += 1
       }
     }
@@ -639,6 +728,84 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   "Job parameters" can "conform to expected values" in {
     MainSummaryView.jobName should be ("main_summary")
     val versionPattern = "^v[0-9]+$".r
-    (versionPattern findAllIn MainSummaryView.streamVersion).mkString("Oops") should be (MainSummaryView.streamVersion)
+    (versionPattern findAllIn MainSummaryView.schemaVersion).mkString("Oops") should be (MainSummaryView.schemaVersion)
+  }
+
+  "User prefs" can "be extracted" in {
+    // Contains prefs, but not dom.ipc.processCount:
+    val json1 = parse(
+      """
+        |{
+        | "environment": {
+        |  "settings": {
+        |   "userPrefs": {
+        |    "browser.cache.disk.capacity": 358400,
+        |    "browser.newtabpage.enhanced": true,
+        |    "browser.startup.page": 3
+        |   }
+        |  }
+        | }
+        |}
+      """.stripMargin)
+    MainSummaryView.getUserPrefs(json1 \ "environment" \ "settings" \ "userPrefs") should be (None)
+
+    // Doesn't contain any prefs:
+    val json2 = parse(
+      """
+        |{
+        | "environment": {
+        |  "settings": {
+        |   "userPrefs": {}
+        |  }
+        | }
+        |}
+      """.stripMargin)
+    MainSummaryView.getUserPrefs(json2 \ "environment" \ "settings" \ "userPrefs") should be (None)
+
+    // Contains prefs, including dom.ipc.processCount
+    val json3 = parse(
+      """
+        |{
+        | "environment": {
+        |  "settings": {
+        |   "userPrefs": {
+        |    "dom.ipc.processCount": 2,
+        |    "browser.newtabpage.enhanced": true,
+        |    "browser.startup.page": 3
+        |   }
+        |  }
+        | }
+        |}
+      """.stripMargin)
+    MainSummaryView.getUserPrefs(json3 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(2)))
+
+    // Contains dom.ipc.processCount with a bogus data type
+    val json4 = parse(
+      """
+        |{
+        | "environment": {
+        |  "settings": {
+        |   "userPrefs": {
+        |    "dom.ipc.processCount": "2",
+        |    "browser.newtabpage.enhanced": true,
+        |    "browser.startup.page": 3
+        |   }
+        |  }
+        | }
+        |}
+      """.stripMargin)
+    MainSummaryView.getUserPrefs(json4 \ "environment" \ "settings" \ "userPrefs") should be (None)
+
+    // Missing the prefs section entirely:
+    val json5 = parse(
+      """
+        |{
+        | "environment": {
+        |  "settings": {
+        |  }
+        | }
+        |}
+      """.stripMargin)
+    MainSummaryView.getUserPrefs(json5 \ "environment" \ "settings" \ "userPrefs") should be (None)
   }
 }

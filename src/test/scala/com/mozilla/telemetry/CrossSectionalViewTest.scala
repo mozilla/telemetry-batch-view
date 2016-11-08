@@ -205,6 +205,7 @@ class CrossSectionalViewTest extends FlatSpec {
     val sparkConf = new SparkConf().setAppName("CrossSectionalTest")
     sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
     val sc = new SparkContext(sparkConf)
+    sc.setLogLevel("WARN")
     val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
 
@@ -272,6 +273,58 @@ class CrossSectionalViewTest extends FlatSpec {
       addon_count_configs = Some(1),
       addon_count_mode = Some(2),
       addon_names_list = Some(Seq(Some("Name"), Some("UBloCKer Plus Plus")))
+    )
+
+    assert(actual compare expected)
+  }
+
+  it must "filter bad session lengths" in {
+    val actual = new CrossSectional(
+      getExampleLongitudinal("a").copy(session_length = Some(Seq(3600, 7200, -14400)))
+    )
+
+    val expected = getExampleCrossSectional("a").copy(
+      subsession_length_negative = Some(1),
+      bookmarks_avg = Some(7.0 / 3),
+      memory_avg = Some(1023.0),
+      pages_count_avg = Some(500.0 / 3),
+      default_pct = Some(1.0 / 3),
+      active_hours_total = Some(10800 / 3600.0),
+      active_hours_0_mon = Some(0.0),
+      active_hours_1_tue = Some(0.0),
+      active_hours_2_wed = Some(0.0),
+      active_hours_3_thu = Some(0.0),
+      active_hours_4_fri = Some(3600/3600.0),
+      active_hours_5_sat = Some(7200/3600.0),
+      active_hours_6_sun = Some(0.0),
+      geo_mode = Some("DE"),
+      architecture_mode = Some("arch"),
+      ffLocale_mode = Some("de_DE"),
+      cpu_count_mode = Some(2),
+      channel_mode = Some("release"),
+      locale_mode = Some("de_DE"),
+      os_name_mode = Some("Windows_NT"),
+      os_version_mode = Some("5.1"),
+      plugins_count_avg = Some(4.0 / 3),
+      plugins_count_mode = Some(1),
+      search_default_mode = Some("grep")
+    )
+
+    assert(actual compare expected)
+  }
+
+  it must "handle bad dates" in {
+    val actual = new CrossSectional(
+      getExampleLongitudinal("a").copy(
+        submission_date = Some(Seq("2016-01-01T00:00:00.0+00:00", //Odd Date
+          "invalid-02T00:00:00.0+00:00", "2016-01-07T00:00:00.0+00:00"))
+      )
+    )
+
+    val expected = getExampleCrossSectional("a").copy(
+      date_skew_per_ping_avg = Some(2.0 / 2),
+      date_skew_per_ping_max = Some(2),
+      date_skew_per_ping_min = Some(0)
     )
 
     assert(actual compare expected)

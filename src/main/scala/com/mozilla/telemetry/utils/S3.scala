@@ -2,6 +2,7 @@ package com.mozilla.telemetry.utils
 
 import java.io.{File, InputStream}
 import java.util.UUID
+import java.util.zip.GZIPInputStream
 import awscala.s3.{Bucket, S3}
 import org.apache.log4j.Logger
 import scala.collection.JavaConverters._
@@ -40,7 +41,13 @@ object S3Store extends AbstractS3Store {
   @transient private lazy val logger = Logger.getLogger("S3Store")
 
   def getKey(bucket: String, key: String): InputStream = {
-    Bucket(bucket).getObject(key).getOrElse(throw new Exception(s"File missing on S3: $key")).getObjectContent
+    val s3Object = Bucket(bucket).getObject(key).getOrElse(throw new Exception(s"File missing on S3: $key"))
+    val encoding = s3Object.getObjectMetadata.getContentEncoding
+
+    encoding match {
+      case "gzip" => new GZIPInputStream(s3Object.getObjectContent)
+      case _ => s3Object.getObjectContent
+    }
   }
 
   def listKeys(bucket: String, prefix: String): Stream[ObjectSummary] = {
