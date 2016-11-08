@@ -424,7 +424,7 @@ object MainSummaryView {
       },
       MainPing.histogramToMean(histograms \ "PLACES_BOOKMARKS_COUNT").orNull,
       MainPing.histogramToMean(histograms \ "PLACES_PAGES_COUNT").orNull,
-      hsum(histograms \ "PUSH_API_NOTIFICATION_RECEIVED"),
+      hsum(histograms \ "PUSH_API_NOTIFY"),
       hsum(histograms \ "WEB_NOTIFICATION_SHOWN"),
 
       MainPing.keyedEnumHistogramToMap(keyedHistograms \ "POPUP_NOTIFICATION_STATS",
@@ -609,8 +609,8 @@ object MainSummaryView {
       StructField("places_bookmarks_count", IntegerType, nullable = true), // mean of PLACES_BOOKMARKS_COUNT
       StructField("places_pages_count", IntegerType, nullable = true), // mean of PLACES_PAGES_COUNT
 
-      // Push metrics per bug 1270482
-      StructField("push_api_notification_received", IntegerType, nullable = true), // PUSH_API_NOTIFICATION_RECEIVED
+      // Push metrics per bug 1270482 and bug 1311174
+      StructField("push_api_notify", IntegerType, nullable = true), // PUSH_API_NOTIFY
       StructField("web_notification_shown", IntegerType, nullable = true), // WEB_NOTIFICATION_SHOWN
 
       // Info from POPUP_NOTIFICATION_STATS keyed histogram
