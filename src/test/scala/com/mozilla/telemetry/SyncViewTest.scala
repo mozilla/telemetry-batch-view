@@ -33,6 +33,7 @@ class SyncViewTest extends FlatSpec with Matchers{
       checkRow.getAs[String]("app_display_version") should be ((ping \ "application" \ "displayVersion").extract[String])
       checkRow.getAs[String]("app_name") should be ((ping \ "application" \ "name").extract[String])
       checkRow.getAs[String]("app_version") should be ((ping \ "application" \ "version").extract[String])
+      checkRow.getAs[String]("app_channel") should be ((ping \ "application" \ "channel").extract[String])
 
       val payload = ping \ "payload"
       checkRow.getAs[Long]("when") should be ((payload \ "when").extract[Long])
@@ -162,6 +163,7 @@ class SyncViewTest extends FlatSpec with Matchers{
     firstSync.getAs[String]("app_display_version") should be ((ping \ "application" \ "displayVersion").extract[String])
     firstSync.getAs[String]("app_name") should be ((ping \ "application" \ "name").extract[String])
     firstSync.getAs[String]("app_version") should be ((ping \ "application" \ "version").extract[String])
+    firstSync.getAs[String]("app_channel") should be ((ping \ "application" \ "channel").extract[String])
 
     val firstPing = (ping \ "payload" \ "syncs")(0)
     firstSync.getAs[Long]("when") should be ((firstPing \ "when").extract[Long])
@@ -180,6 +182,7 @@ class SyncViewTest extends FlatSpec with Matchers{
     secondSync.getAs[String]("app_display_version") should be ((ping \ "application" \ "displayVersion").extract[String])
     secondSync.getAs[String]("app_name") should be ((ping \ "application" \ "name").extract[String])
     secondSync.getAs[String]("app_version") should be ((ping \ "application" \ "version").extract[String])
+    secondSync.getAs[String]("app_channel") should be ((ping \ "application" \ "channel").extract[String])
 
     val secondPing = (ping \ "payload" \ "syncs")(1)
 
