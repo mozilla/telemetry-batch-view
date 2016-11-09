@@ -92,7 +92,6 @@ class SyncViewTest extends FlatSpec with Matchers{
     }
   }
 
-
   "SyncPing records with validation and device data" can "be round-tripped to parquet" in {
     val sparkConf = new SparkConf().setAppName("SyncPing")
     sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
@@ -111,6 +110,24 @@ class SyncViewTest extends FlatSpec with Matchers{
       localDataset.registerTempTable("sync")
       val localDataframe = sqlContext.sql("SELECT * FROM sync")
       validateComplexSyncPing(localDataframe.collect(), SyncViewTestPayloads.complexSyncPing)
+    } finally {
+      sc.stop()
+    }
+  }
+
+  "SyncPing records with top level ids" can "come through as if they were not at the top level" in {
+    val sparkConf = new SparkConf().setAppName("SyncPing")
+    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
+    val sc = new SparkContext(sparkConf)
+    sc.setLogLevel("WARN")
+    try {
+      val row = SyncPingConverter.pingToRows(SyncViewTestPayloads.multiSyncPingWithTopLevelIds)
+      // Write a parquet file with the rows.
+      val sqlContext = new SQLContext(sc)
+      val rdd = sc.parallelize(row.toSeq)
+      val dataframe = sqlContext.createDataFrame(rdd, SyncPingConverter.syncType)
+      // Note: We intentionally validate with a *different* json object from the one we parsed.
+      validateMultiSyncPing(dataframe.collect(), SyncViewTestPayloads.multiSyncPing)
     } finally {
       sc.stop()
     }
@@ -168,6 +185,7 @@ class SyncViewTest extends FlatSpec with Matchers{
     val firstPing = (ping \ "payload" \ "syncs")(0)
     firstSync.getAs[Long]("when") should be ((firstPing \ "when").extract[Long])
     firstSync.getAs[String]("uid") should be ((firstPing \ "uid").extract[String])
+    firstSync.getAs[String]("deviceID") should be ((firstPing \ "deviceID").extract[String])
     firstSync.getAs[Long]("took") should be ((firstPing \ "took").extract[Long])
 
     firstSync.getAs[GenericRowWithSchema]("status") should be (null)
@@ -188,6 +206,7 @@ class SyncViewTest extends FlatSpec with Matchers{
 
     secondSync.getAs[Long]("when") should be ((secondPing \ "when").extract[Long])
     secondSync.getAs[String]("uid") should be ((secondPing \ "uid").extract[String])
+    secondSync.getAs[String]("deviceID") should be ((secondPing \ "deviceID").extract[String])
     secondSync.getAs[Long]("took") should be ((secondPing \ "took").extract[Long])
 
     secondSync.getAs[GenericRowWithSchema]("status") should be (null)

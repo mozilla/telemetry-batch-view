@@ -430,8 +430,21 @@ object SyncPingConverter {
   }
 
   // Convert an "old style" ping that records a single Sync to a row.
-  private def singleSyncPayloadToRow(ping: JValue, payload: JValue): Option[Row] = {
+  private def singleSyncPayloadToRow(ping: JValue, sync: JValue): Option[Row] = {
     val application = ping \ "application"
+    val payload = ping \ "payload"
+
+    def stringFromSyncOrPayload(s: String): String = {
+      sync \ s match {
+        case JString(x) => x
+        case _ =>
+          payload \ s match {
+            case JString(x) => x
+            case _ => null
+          }
+      }
+    }
+
     val row = Row(
       // The metadata...
       application \ "buildId" match {
@@ -456,30 +469,28 @@ object SyncPingConverter {
       },
 
       // Info about the sync.
-      payload \ "uid" match {
-        case JString(x) => x
-        case _ => return None // a required field.
-      },
-      payload \ "deviceID" match {
-        case JString(x) => x
-        case _ => null
-      },
-      payload \ "when" match {
+      stringFromSyncOrPayload("uid"),
+      stringFromSyncOrPayload("deviceID"),
+
+      sync \ "when" match {
         case JInt(x) => x.toLong
         case _ => return None
       },
-      payload \ "took" match {
+      sync \ "took" match {
         case JInt(x) => x.toLong
         case _ => return None
       },
-      failureReasonToRow(payload \ "failureReason"),
-      statusToRow(payload \ "status"),
-      payload \ "why" match {
+      failureReasonToRow(sync \ "failureReason"),
+      statusToRow(sync \ "status"),
+      sync \ "why" match {
         case JString(x) => x
         case _ => null
       },
-      toEnginesRows(payload \ "engines"),
-      toDeviceRows(payload \ "devices")
+      toEnginesRows(sync \ "engines"),
+      sync \ "devices" match {
+        case devices @ JArray(_) => toDeviceRows(devices)
+        case _ => null
+      }
     )
 
     Some(row)

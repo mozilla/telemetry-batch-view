@@ -110,6 +110,7 @@ object SyncViewTestPayloads {
     |      {
     |        "when": 1473313854446,
     |        "uid": "12345678912345678912345678912345",
+    |        "deviceID": "2222222222222222222222222222222222222222222222222222222222222222",
     |        "took": 2277,
     |        "engines": [
     |          {
@@ -167,6 +168,7 @@ object SyncViewTestPayloads {
     |      {
     |        "when": 1473313890947,
     |        "uid": "12345678912345678912345678912345",
+    |        "deviceID": "2222222222222222222222222222222222222222222222222222222222222222",
     |        "took": 484,
     |        "engines": [
     |          {
@@ -278,4 +280,116 @@ object SyncViewTestPayloads {
       |  }
       |}
     """.stripMargin)
+
+  def multiSyncPingWithTopLevelIds = parse(
+    """
+      |{
+      |  "type": "sync",
+      |  "id": "a1d969b7-0084-4a78-a841-2abaf887f1b4",
+      |  "creationDate": "2016-09-08T18:19:09.808Z",
+      |  "version": 4,
+      |  "application": {
+      |    "architecture": "x86-64",
+      |    "buildId": "20160907030427",
+      |    "name": "Firefox",
+      |    "version": "51.0a1",
+      |    "displayVersion": "51.0a1",
+      |    "vendor": "Mozilla",
+      |    "platformVersion": "51.0a1",
+      |    "xpcomAbi": "x86_64-msvc",
+      |    "channel": "nightly"
+      |  },
+      |  "payload": {
+      |    "why": "schedule",
+      |    "version": 1,
+      |    "uid": "12345678912345678912345678912345",
+      |    "deviceID": "2222222222222222222222222222222222222222222222222222222222222222",
+      |    "syncs": [
+      |      {
+      |        "when": 1473313854446,
+      |        "took": 2277,
+      |        "engines": [
+      |          {
+      |            "name": "clients",
+      |            "outgoing": [
+      |              {
+      |                "sent": 1
+      |              }
+      |            ],
+      |            "took": 468
+      |          },
+      |          {
+      |            "name": "passwords",
+      |            "took": 16
+      |          },
+      |          {
+      |            "name": "tabs",
+      |            "incoming": {
+      |              "applied": 2,
+      |              "reconciled": 1
+      |            },
+      |            "outgoing": [
+      |              {
+      |                "sent": 1
+      |              }
+      |            ],
+      |            "took": 795
+      |          },
+      |          {
+      |            "name": "bookmarks"
+      |          },
+      |          {
+      |            "name": "forms",
+      |            "outgoing": [
+      |              {
+      |                "sent": 2
+      |              }
+      |            ],
+      |            "took": 266
+      |          },
+      |          {
+      |            "name": "history",
+      |            "incoming": {
+      |              "applied": 2
+      |            },
+      |            "outgoing": [
+      |              {
+      |                "sent": 2
+      |              }
+      |            ],
+      |            "took": 514
+      |          }
+      |        ]
+      |      },
+      |      {
+      |        "when": 1473313890947,
+      |        "took": 484,
+      |        "engines": [
+      |          {
+      |            "name": "clients",
+      |            "took": 249
+      |          },
+      |          {
+      |            "name": "passwords"
+      |          },
+      |          {
+      |            "name": "tabs",
+      |            "took": 16
+      |          },
+      |          {
+      |            "name": "bookmarks"
+      |          },
+      |          {
+      |            "name": "forms"
+      |          },
+      |          {
+      |            "name": "history"
+      |          }
+      |        ]
+      |      }
+      |    ]
+      |  }
+      |}
+    """.stripMargin)
+
 }
