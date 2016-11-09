@@ -8,6 +8,7 @@ import org.apache.avro.generic.GenericRecord
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.json4s.JsonDSL._
+import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{FlatSpec, Matchers, PrivateMethodTester}
 
@@ -102,7 +103,16 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
 
       val settings =
         ("e10sEnabled" -> true) ~
-        ("userPrefs" -> Map("browser.download.lastDir" -> "/home/anthony/Desktop"))
+        ("userPrefs" -> 
+          ("network.proxy.http" -> "proxy http") ~
+          ("dom.ipc.processCount" -> 2) ~
+          ("browser.zoom.full" -> false) ~
+          ("extensions.blocklist.url" -> "www.test.com") ~
+          ("browser.startup.homepage" -> "homepage") ~
+          ("browser.startup.page" -> 4) ~
+          ("privacy.trackingprotection.enabled" -> true) ~
+          ("layers.prefer-opengl" -> true)
+        )
 
       val system =
         ("memoryMB" -> 2048) ~
@@ -322,6 +332,16 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     val records = fixture.row.getList[Row](fixture.row.fieldIndex("settings"))
     assert(records.length == fixture.payloads.length)
     records.foreach(x => assert(x.getAs[Boolean]("e10s_enabled")))
+  }
+
+  "environment.settings.userPrefs" must "be converted correctly" in {
+    val records = fixture.row.getList[Row](fixture.row.fieldIndex("settings"))
+    val prefs  = records.map(
+      record => record.getAs[Map[String, String]](record.fieldIndex("user_prefs"))
+    )
+    prefs.foreach(x => assert(x("browser.zoom.full") == "false"))
+    prefs.foreach(x => assert(x("browser.startup.homepage") == "homepage"))
+    prefs.foreach(x => assert(x("browser.startup.page") == "4"))
   }
 
   "environment.addons.activeAddons" must "be converted correctly" in {
