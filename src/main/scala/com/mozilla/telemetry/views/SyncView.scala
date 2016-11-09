@@ -3,10 +3,11 @@ package com.mozilla.telemetry.views
 import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.utils.S3Store
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.util.LongAccumulator
 import org.apache.spark.{SparkConf, SparkContext}
 import org.joda.time.{DateTime, Days, format}
-import org.json4s.{DefaultFormats, JValue}
+import org.json4s.{DefaultFormats, JValue, string2JsonInput}
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._ // Just for my attempted mocks below.....
@@ -43,7 +44,10 @@ object SyncView {
     val sparkConf = new SparkConf().setAppName(jobName)
     sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
     implicit val sc = new SparkContext(sparkConf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder()
+      .appName("SyncView")
+      .getOrCreate()
     val hadoopConf = sc.hadoopConfiguration
 
     // We want to end up with reasonably large parquet files on S3.
@@ -59,8 +63,8 @@ object SyncView {
       println("=======================================================================================")
       println(s"BEGINNING JOB $jobName FOR $currentDateString")
 
-      val ignoredCount = sc.accumulator(0, "Number of Records Ignored")
-      val processedCount = sc.accumulator(0, "Number of Records Processed")
+      val ignoredCount = new LongAccumulator(); // Number of records ignored
+      val processedCount = new LongAccumulator();  // Number of Records Processed
 
       val messages = Dataset("telemetry")
         .where("sourceName") {
@@ -78,15 +82,15 @@ object SyncView {
       val rowRDD = messages.flatMap(m => {
         messageToRow(m) match {
           case Nil =>
-            ignoredCount += 1
+            ignoredCount.add(1)
             None
           case x =>
-            processedCount += 1
+            processedCount.add(1)
             x
         }
       })
 
-      val records = sqlContext.createDataFrame(rowRDD, SyncPingConverter.syncType)
+      val records = spark.createDataFrame(rowRDD, SyncPingConverter.syncType)
 
       if (conf.outputBucket.supplied) {
         // Note we cannot just use 'partitionBy' below to automatically populate
@@ -115,8 +119,8 @@ object SyncView {
       }
 
       println(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
-      println("     RECORDS SEEN:    %d".format(ignoredCount.value + processedCount.value))
-      println("     RECORDS IGNORED: %d".format(ignoredCount.value))
+      println(s"     RECORDS SEEN:    ${ignoredCount.value + processedCount.value}")
+      println(s"     RECORDS IGNORED: ${ignoredCount.value}")
       println("=======================================================================================")
     }
 
@@ -126,9 +130,7 @@ object SyncView {
   // Convert the given Heka message containing a "sync" ping
   // to a list of rows containing all the fields.
   def messageToRow(message: Message): List[Row] = {
-    val fields = message.fieldsAsMap()
-
-    val payload = parse(message.payload.getOrElse("{}").asInstanceOf[String])
+    val payload = parse(string2JsonInput(message.payload.getOrElse("{}")))
     SyncPingConverter.pingToRows(payload)
   }
 }
@@ -223,7 +225,7 @@ object SyncPingConverter {
 
   // Create a row representing incomingType
   private def incomingToRow(incoming: JValue): Row = incoming match {
-    case JObject(x) =>
+    case JObject(_) =>
       Row(
         incoming \ "applied" match {
           case JInt(x) => x.toLong
@@ -251,11 +253,11 @@ object SyncPingConverter {
       for (outgoing_entry <- x) {
         buf.append(Row(
           outgoing_entry \ "sent" match {
-          case JInt(x) => x.toLong
+          case JInt(n) => n.toLong
           case _ => 0L
           },
           outgoing_entry \ "failed" match {
-            case JInt(x) => x.toLong
+            case JInt(n) => n.toLong
             case _ => 0L
           }
         ))
@@ -300,7 +302,7 @@ object SyncPingConverter {
   }
 
   private def statusToRow(status: JValue): Row = status match {
-    case JObject(x) =>
+    case JObject(_) =>
       Row(
         status \ "sync" match {
           case JString(x) => x
@@ -314,7 +316,7 @@ object SyncPingConverter {
     case _ => null
   }
 
-  // Take an entire ping and return a list of rows with "syncType" as a schemma.
+  // Take an entire ping and return a list of rows with "syncType" as a schema.
   def pingToRows(ping: JValue): List[Row] = {
     ping \ "payload" \ "syncs" match {
       case JArray(x) => multiSyncPayloadToRow(ping, x)
