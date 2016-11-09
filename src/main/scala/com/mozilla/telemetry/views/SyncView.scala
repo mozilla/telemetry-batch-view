@@ -163,6 +163,13 @@ object SyncPingConverter {
     StructField("failed", LongType, nullable = false)
   ))
 
+  // Entries in devices array
+  private val deviceType = StructType(List(
+    StructField("id", StringType, nullable = false),
+    StructField("version", StringType, nullable = false),
+    StructField("os", StringType, nullable = false)
+  ))
+
   // The schema for an engine.
   private val engineType = StructType(List(
     StructField("name", StringType, nullable = false),
@@ -197,7 +204,8 @@ object SyncPingConverter {
     StructField("status", statusType, nullable = true),
     // "why" is defined in the client-side schema but currently never populated.
     StructField("why", StringType, nullable = true),
-    StructField("engines", ArrayType(SyncPingConverter.engineType, containsNull = false), nullable = true)
+    StructField("engines", ArrayType(SyncPingConverter.engineType, containsNull = false), nullable = true),
+    StructField("devices", ArrayType(SyncPingConverter.deviceType, containsNull = false), nullable = true)
   ))
 
  /*
@@ -221,6 +229,33 @@ object SyncPingConverter {
       )
     case _ =>
       null
+  }
+
+  private def deviceToRow(device: JValue): Option[Row] = device match {
+    case JObject(d) =>
+      Some(Row(
+        device \ "id" match {
+          case JString(x) => x
+          case _ => return None
+        },
+        device \ "version" match {
+          case JString(x) => x
+          case _ => return None
+        },
+        device \ "os" match {
+          case JString(x) => x
+          case _ => return None
+        }
+      ))
+    case _ => None
+  }
+
+  private def toDeviceRows(devices: JValue): List[Row] = devices match {
+    case JArray(x) =>
+      val rows = x.flatMap(d => deviceToRow(d))
+      if (rows.isEmpty) null
+      else rows
+    case _ => null
   }
 
   // Create a row representing incomingType
@@ -379,7 +414,8 @@ object SyncPingConverter {
         case JString(x) => x
         case _ => null
       },
-      toEnginesRows(payload \ "engines")
+      toEnginesRows(payload \ "engines"),
+      toDeviceRows(payload \ "devices")
     )
 
     Some(row)
