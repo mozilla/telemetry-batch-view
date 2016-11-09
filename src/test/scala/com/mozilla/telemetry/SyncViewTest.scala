@@ -91,6 +91,30 @@ class SyncViewTest extends FlatSpec with Matchers{
     }
   }
 
+
+  "SyncPing records with device data" can "be round-tripped to parquet" in {
+    val sparkConf = new SparkConf().setAppName("SyncPing")
+    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
+    val sc = new SparkContext(sparkConf)
+    sc.setLogLevel("WARN")
+    try {
+      val row = SyncPingConverter.pingToRows(SyncViewTestPayloads.syncPingWithDevices)
+      // Write a parquet file with the rows.
+      val sqlContext = new SQLContext(sc)
+      val rdd = sc.parallelize(row.toSeq)
+      val dataframe = sqlContext.createDataFrame(rdd, SyncPingConverter.syncType)
+      val tempFile = com.mozilla.telemetry.utils.temporaryFileName()
+      dataframe.write.parquet(tempFile.toString)
+      // read it back in and verify it.
+      val localDataset = sqlContext.read.load(tempFile.toString)
+      localDataset.registerTempTable("sync")
+      val localDataframe = sqlContext.sql("SELECT * FROM sync")
+      validateDevicesSyncPing(localDataframe.collect(), SyncViewTestPayloads.syncPingWithDevices)
+    } finally {
+      sc.stop()
+    }
+  }
+
   // A helper to validate rows created for engines against the source JSON payload
   private def validateEngines(engines: mutable.WrappedArray[GenericRowWithSchema], jsonengines: List[JValue]): Unit = {
     implicit val formats = DefaultFormats
@@ -164,8 +188,44 @@ class SyncViewTest extends FlatSpec with Matchers{
     secondSync.getAs[Long]("took") should be ((secondPing \ "took").extract[Long])
 
     secondSync.getAs[GenericRowWithSchema]("status") should be (null)
+    secondSync.getAs[GenericRowWithSchema]("devices") should be (null)
 
     val secondEngines = secondSync.getAs[mutable.WrappedArray[GenericRowWithSchema]]("engines")
     validateEngines(secondEngines, (secondPing \ "engines").extract[List[JValue]])
+  }
+
+
+  // A helper to check the contents of the sync ping with devices
+  private def validateDevicesSyncPing(rows: Array[Row], ping: JValue) {
+    implicit val formats = DefaultFormats
+    rows.length should be (1)
+
+    val sync = rows(0)
+
+    sync.getAs[String]("app_build_id") should be ((ping \ "application" \ "buildId").extract[String])
+    sync.getAs[String]("app_display_version") should be ((ping \ "application" \ "displayVersion").extract[String])
+    sync.getAs[String]("app_name") should be ((ping \ "application" \ "name").extract[String])
+    sync.getAs[String]("app_version") should be ((ping \ "application" \ "version").extract[String])
+
+    val pingPayload = (ping \ "payload" \ "syncs")(0)
+    sync.getAs[Long]("when") should be ((pingPayload \ "when").extract[Long])
+    sync.getAs[String]("uid") should be ((pingPayload \ "uid").extract[String])
+    sync.getAs[Long]("took") should be ((pingPayload \ "took").extract[Long])
+
+    sync.getAs[GenericRowWithSchema]("status") should be (null)
+
+    val syncDevices = sync.getAs[mutable.WrappedArray[GenericRowWithSchema]]("devices")
+    val pingDevices = (pingPayload \ "devices").extract[List[JValue]]
+
+    syncDevices.length should be (pingDevices.length)
+
+    for (i <- 0 to 1) {
+      syncDevices(i).getAs[String]("os") should be ((pingDevices(i) \ "os").extract[String])
+      syncDevices(i).getAs[String]("version") should be ((pingDevices(i) \ "version").extract[String])
+      syncDevices(i).getAs[String]("id") should be ((pingDevices(i) \ "id").extract[String])
+    }
+
+    val engines = sync.getAs[mutable.WrappedArray[GenericRowWithSchema]]("engines")
+    validateEngines(engines, (pingPayload \ "engines").extract[List[JValue]])
   }
 }
