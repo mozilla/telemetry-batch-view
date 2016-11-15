@@ -16,8 +16,20 @@ class IfExistsOption[A](val from: Option[A]) {
   def ifExists[B](f: (A) => B) = from.map(f) 
 }
 
+class SafeIterable[A](val from: Iterable[A]) {
+  def ifNonEmpty[B](f: (Iterable[A]) => B): Option[B] = {
+    if (from.nonEmpty) Some(f(from)) else None
+  }
+
+  def optMin[B >: A](implicit cmp: Ordering[B]) = ifNonEmpty(_.min(cmp))
+  def optMax[B >: A](implicit cmp: Ordering[B]) = ifNonEmpty(_.max(cmp))
+  def optMinBy[B](f: (A) => B)(implicit cmp: Ordering[B]) = ifNonEmpty(_.minBy(f)(cmp))
+  def optMaxBy[B](f: (A) => B)(implicit cmp: Ordering[B]) = ifNonEmpty(_.maxBy(f)(cmp))
+}
+
 object Implicits {
   implicit def opt2IfExistsOpt[A](from: Option[A]) = new IfExistsOption(from)
+  implicit def seq2SafeIterable[A](from: Iterable[A]) = new SafeIterable(from)
 }
 
 import Implicits._
@@ -175,15 +187,12 @@ case class Longitudinal (
   }
 
   def rangeOfPossibleDates(): Option[Seq[LocalDate]] = {
-    this.parsedStartDate.ifExists(
-      psd => {
-        val start = psd.flatten.minBy(_.toDate)
-        val end = psd.flatten.maxBy(_.toDate)
-        val between = Days.daysBetween(start, end).getDays
-
-        (0 to between).map(start.plusDays(_))
-      }
-    )
+    for {
+      psd <- this.parsedStartDate
+      start <- psd.flatten.optMinBy(_.toDate)
+      end <- psd.flatten.optMaxBy(_.toDate)
+      between = Days.daysBetween(start, end).getDays
+    } yield (0 to between).map(start.plusDays(_))
   }
 
   def daysPossibleByDOW(dow: Int): Option[Long] = {
@@ -194,7 +203,7 @@ case class Longitudinal (
     this.reason.getOrElse(Seq()).filter(_ == value).size
   }
 
-  def previousSubsessionIdCounts(): Option[Map[String, Int]] = {
+  def previousSubsessionIdCounts(): Option[Map[String, Long]] = {
       this.previous_subsession_id.ifExists(_.groupBy(identity).mapValues(_.size))
   }
 
@@ -330,21 +339,21 @@ case class CrossSectional (
       active_hours_6_sun = base.activeHoursByDOW(SUNDAY),
       geo_mode = base.weightedMode(base.geo_country),
       geo_configs = base.geo_country.getOrElse(Seq()).distinct.length,
-      architecture_mode = base.weightedMode(base.architecture).getOrElse(None),
-      ffLocale_mode = base.weightedMode(base.locale).getOrElse(None),
+      architecture_mode = base.weightedMode(base.architecture).flatten,
+      ffLocale_mode = base.weightedMode(base.locale).flatten,
       addon_count_foreign_avg = base.weightedMean(base.foreignAddonCount),
       addon_count_foreign_configs = base.foreignAddonCount.ifExists(_.distinct.length),
-      addon_count_foreign_mode = base.weightedMode(base.foreignAddonCount).getOrElse(None),
+      addon_count_foreign_mode = base.weightedMode(base.foreignAddonCount).flatten,
       addon_count_avg = base.weightedMean(base.addonCount),
       addon_count_configs = base.addonCount.ifExists(_.distinct.length),
-      addon_count_mode = base.weightedMode(base.addonCount).getOrElse(None),
+      addon_count_mode = base.weightedMode(base.addonCount).flatten,
       number_of_pings = base.session_length.ifExists(_.length),
       bookmarks_avg = base.weightedMean(base.bookmarks_sum),
-      bookmarks_max = base.bookmarks_sum.ifExists(_.flatten.max),
-      bookmarks_min = base.bookmarks_sum.ifExists(_.flatten.min),
-      cpu_count_mode = base.weightedMode(base.cpu_count).getOrElse(None),
+      bookmarks_max = base.bookmarks_sum.ifExists(_.flatten.optMax).flatten,
+      bookmarks_min = base.bookmarks_sum.ifExists(_.flatten.optMin).flatten,
+      cpu_count_mode = base.weightedMode(base.cpu_count).flatten,
       channel_configs = base.channel.ifExists(_.distinct.length),
-      channel_mode = base.weightedMode(base.channel).getOrElse(None),
+      channel_mode = base.weightedMode(base.channel).flatten,
       days_active = base.parsedStartDate.ifExists(_.distinct.length),
       days_active_0_mon = base.activeDaysByDOW(MONDAY),
       days_active_1_tue = base.activeDaysByDOW(TUESDAY),
@@ -363,9 +372,9 @@ case class CrossSectional (
       days_possible_6_sun = base.daysPossibleByDOW(SUNDAY),
       default_pct = base.weightedMean(base.is_default_browser.ifExists(_.map(_.ifExists(x => if(x) 1l else 0l)))),
       locale_configs = base.locale.ifExists(_.distinct.length),
-      locale_mode = base.weightedMode(base.locale).getOrElse(None),
+      locale_mode = base.weightedMode(base.locale).flatten,
       version_configs = base.version.ifExists(_.distinct.length),
-      version_max = base.version.ifExists(_.max).getOrElse(None),
+      version_max = base.version.ifExists(_.optMax.flatten).flatten,
       addon_names_list = base.addonNames,
       main_ping_reason_num_aborted = base.countPingReason("aborted-session"),
       main_ping_reason_num_end_of_day = base.countPingReason("daily"),
@@ -373,33 +382,33 @@ case class CrossSectional (
       main_ping_reason_num_shutdown  = base.countPingReason("shutdown"),
       memory_avg = base.weightedMean(base.memory_mb),
       memory_configs = base.memory_mb.ifExists(_.distinct.length),
-      os_name_mode = base.weightedMode(base.os_name).getOrElse(None),
-      os_version_mode = base.weightedMode(base.os_version).getOrElse(None),
+      os_name_mode = base.weightedMode(base.os_name).flatten,
+      os_version_mode = base.weightedMode(base.os_version).flatten,
       os_version_configs = base.os_version.ifExists(_.distinct.length),
       pages_count_avg = base.weightedMean(base.pages_count),
-      pages_count_min = base.pages_count.ifExists(_.flatten.min),
-      pages_count_max = base.pages_count.ifExists(_.flatten.max),
+      pages_count_min = base.pages_count.ifExists(_.flatten.optMin).flatten,
+      pages_count_max = base.pages_count.ifExists(_.flatten.optMax).flatten,
       plugins_count_avg = base.weightedMean(base.pluginsCount),
       plugins_count_configs = base.pluginsCount.ifExists(_.distinct.length),
-      plugins_count_mode = base.weightedMode(base.pluginsCount).getOrElse(None),
-      start_date_oldest = base.parsedStartDate.ifExists(_.flatten.minBy(_.toDate).toString),
-      start_date_newest = base.parsedStartDate.ifExists(_.flatten.maxBy(_.toDate).toString),
+      plugins_count_mode = base.weightedMode(base.pluginsCount).flatten,
+      start_date_oldest = base.parsedStartDate.ifExists(_.flatten.optMinBy(_.toDate).ifExists(_.toString)).flatten,
+      start_date_newest = base.parsedStartDate.ifExists(_.flatten.optMaxBy(_.toDate).ifExists(_.toString)).flatten,
       subsession_length_badTimer = base.session_length.ifExists(_.filter(_ == -1).length),
       subsession_length_negative = base.session_length.ifExists(_.filter(_ < -1).length),
       subsession_length_tooLong = base.session_length.ifExists(_.filter(_ > SECONDS_PER_DAY * CrossSectional.MarginOfError).length),
-      previous_subsession_id_repeats = base.previousSubsessionIdCounts.ifExists(_.values.max),
+      previous_subsession_id_repeats = base.previousSubsessionIdCounts.ifExists(_.values.optMax).flatten,
       profile_creation_date = base.profile_creation_date.ifExists(_.head),
-      profile_subsession_counter_min = base.profile_subsession_counter.ifExists(_.min),
-      profile_subsession_counter_max = base.profile_subsession_counter.ifExists(_.max),
+      profile_subsession_counter_min = base.profile_subsession_counter.ifExists(_.optMin).flatten,
+      profile_subsession_counter_max = base.profile_subsession_counter.ifExists(_.optMax).flatten,
       profile_subsession_counter_configs = base.profile_subsession_counter.ifExists(_.distinct.length),
       search_counts_total = base.search_counts.ifExists(_.values.foldLeft(0l)(_ + _.sum)),
       search_default_configs = base.default_search_engine.ifExists(_.distinct.length),
-      search_default_mode = base.weightedMode(base.default_search_engine).getOrElse(None),
+      search_default_mode = base.weightedMode(base.default_search_engine).flatten,
       session_num_total = base.session_id.ifExists(_.distinct.length),
       subsession_branches = base.previousSubsessionIdCounts.ifExists(_.values.filter(_ > 1).size),
       date_skew_per_ping_avg = base.ssStartToSubmission.flatMap(x => aggregation.mean(x.flatten)),
-      date_skew_per_ping_max = base.ssStartToSubmission.ifExists(_.flatten.max),
-      date_skew_per_ping_min = base.ssStartToSubmission.ifExists(_.flatten.min)
+      date_skew_per_ping_max = base.ssStartToSubmission.ifExists(_.flatten.optMax).flatten,
+      date_skew_per_ping_min = base.ssStartToSubmission.ifExists(_.flatten.optMin).flatten
     )
   }
 }
