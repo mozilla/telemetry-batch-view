@@ -9,6 +9,19 @@ import com.mozilla.telemetry.utils.aggregation
 import org.joda.time.{Days, LocalDate, Seconds}
 import org.joda.time.DateTimeConstants._
 
+class IfExistsOption[A](val from: Option[A]) {
+  // A simple alias for an Option's map function.  We have a lot of
+  // Option[Seq[A]] in this dataset, and calling _.map(_.map(...)) obfuscates
+  // the code. This alias allows us to instead write: _.ifExists(_.map(...))
+  def ifExists[B](f: (A) => B) = from.map(f) 
+}
+
+object Implicits {
+  implicit def opt2IfExistsOpt[A](from: Option[A]) = new IfExistsOption(from)
+}
+
+import Implicits._
+
 case class ActiveAddon (
   val blocklisted: Option[Boolean],
   val description: Option[String],
@@ -70,7 +83,7 @@ case class Longitudinal (
 ) {
 
   def cleanSessionLength(): Option[Seq[Option[Long]]] = {
-    this.session_length.map(
+    this.session_length.ifExists(
       _.map(x => if ((x <= -1) || (x > SECONDS_PER_DAY)) None else Some(x))
     )
   }
@@ -106,17 +119,17 @@ case class Longitudinal (
   }
 
   def addonNames(): Option[Seq[Option[String]]] = {
-    this.active_addons.map( // if active_addons isn't empty
+    this.active_addons.ifExists(
       _.foldLeft(Seq[Option[String]]())((acc, x) => acc ++ x.values.map(_.name)).distinct
     )
   }
 
   def addonCount(): Option[Seq[Option[Long]]] = {
-    this.active_addons.map(_.map(x => Some(x.size.toLong)))
+    this.active_addons.ifExists(_.map(x => Some(x.size.toLong)))
   }
 
   def foreignAddons(): Option[Seq[Map[String, ActiveAddon]]] = {
-    this.active_addons.map( // If array exists
+    this.active_addons.ifExists(
       _.map( // for each ping
         _.filter(_._2.foreign_install.getOrElse(false))
       )
@@ -124,15 +137,15 @@ case class Longitudinal (
   }
 
   def foreignAddonCount(): Option[Seq[Option[Long]]] = {
-    this.foreignAddons.map(_.map(x => Some(x.size.toLong)))
+    this.foreignAddons.ifExists(_.map(x => Some(x.size.toLong)))
   }
 
   def pluginsCount(): Option[Seq[Option[Long]]] = {
-    this.active_plugins.map(_.map(x => Some(x.length.toLong)))
+    this.active_plugins.ifExists(_.map(x => Some(x.length.toLong)))
   }
 
   def parsedStartDate(): Option[Seq[Option[LocalDate]]] = {
-    this.subsession_start_date.map(_.map(parseDate))
+    this.subsession_start_date.ifExists(_.map(parseDate))
   }
 
   def sessionHoursByDOW(dow: Int): Option[Double] = {
@@ -158,11 +171,11 @@ case class Longitudinal (
   }
 
   def activeDaysByDOW(dow: Int): Option[Long] = {
-    this.parsedStartDate.map(_.flatten.filter(_.getDayOfWeek == dow).distinct.length)
+    this.parsedStartDate.ifExists(_.flatten.filter(_.getDayOfWeek == dow).distinct.length)
   }
 
   def rangeOfPossibleDates(): Option[Seq[LocalDate]] = {
-    this.parsedStartDate.map(
+    this.parsedStartDate.ifExists(
       psd => {
         val start = psd.flatten.minBy(_.toDate)
         val end = psd.flatten.maxBy(_.toDate)
@@ -174,7 +187,7 @@ case class Longitudinal (
   }
 
   def daysPossibleByDOW(dow: Int): Option[Long] = {
-    this.rangeOfPossibleDates.map(_.filter(_.getDayOfWeek == dow).size)
+    this.rangeOfPossibleDates.ifExists(_.filter(_.getDayOfWeek == dow).size)
   }
 
   def countPingReason(value: String): Long = {
@@ -182,7 +195,7 @@ case class Longitudinal (
   }
 
   def previousSubsessionIdCounts(): Option[Map[String, Int]] = {
-      this.previous_subsession_id.map(_.groupBy(identity).mapValues(_.size))
+      this.previous_subsession_id.ifExists(_.groupBy(identity).mapValues(_.size))
   }
 
   def ssStartToSubmission(): Option[Seq[Option[Long]]] = {
@@ -307,7 +320,7 @@ case class CrossSectional (
     this(
       client_id = base.client_id,
       normalized_channel = base.normalized_channel,
-      session_hours_total = base.cleanSessionLength.map(_.flatten.sum.toDouble / SECONDS_PER_HOUR),
+      session_hours_total = base.cleanSessionLength.ifExists(_.flatten.sum.toDouble / SECONDS_PER_HOUR),
       session_hours_0_mon = base sessionHoursByDOW(MONDAY),
       session_hours_1_tue = base sessionHoursByDOW(TUESDAY),
       session_hours_2_wed = base sessionHoursByDOW(WEDNESDAY),
@@ -320,19 +333,19 @@ case class CrossSectional (
       architecture_mode = base.weightedMode(base.architecture).getOrElse(None),
       ffLocale_mode = base.weightedMode(base.locale).getOrElse(None),
       addon_count_foreign_avg = base.weightedMean(base.foreignAddonCount),
-      addon_count_foreign_configs = base.foreignAddonCount.map(_.distinct.length),
+      addon_count_foreign_configs = base.foreignAddonCount.ifExists(_.distinct.length),
       addon_count_foreign_mode = base.weightedMode(base.foreignAddonCount).getOrElse(None),
       addon_count_avg = base.weightedMean(base.addonCount),
-      addon_count_configs = base.addonCount.map(_.distinct.length),
+      addon_count_configs = base.addonCount.ifExists(_.distinct.length),
       addon_count_mode = base.weightedMode(base.addonCount).getOrElse(None),
-      number_of_pings = base.session_length.map(_.length),
+      number_of_pings = base.session_length.ifExists(_.length),
       bookmarks_avg = base.weightedMean(base.bookmarks_sum),
-      bookmarks_max = base.bookmarks_sum.map(_.flatten.max),
-      bookmarks_min = base.bookmarks_sum.map(_.flatten.min),
+      bookmarks_max = base.bookmarks_sum.ifExists(_.flatten.max),
+      bookmarks_min = base.bookmarks_sum.ifExists(_.flatten.min),
       cpu_count_mode = base.weightedMode(base.cpu_count).getOrElse(None),
-      channel_configs = base.channel.map(_.distinct.length),
+      channel_configs = base.channel.ifExists(_.distinct.length),
       channel_mode = base.weightedMode(base.channel).getOrElse(None),
-      days_active = base.parsedStartDate.map(_.distinct.length),
+      days_active = base.parsedStartDate.ifExists(_.distinct.length),
       days_active_0_mon = base.activeDaysByDOW(MONDAY),
       days_active_1_tue = base.activeDaysByDOW(TUESDAY),
       days_active_2_wed = base.activeDaysByDOW(WEDNESDAY),
@@ -340,7 +353,7 @@ case class CrossSectional (
       days_active_4_fri = base.activeDaysByDOW(FRIDAY),
       days_active_5_sat = base.activeDaysByDOW(SATURDAY),
       days_active_6_sun = base.activeDaysByDOW(SUNDAY),
-      days_possible = base.rangeOfPossibleDates.map(_.size),
+      days_possible = base.rangeOfPossibleDates.ifExists(_.size),
       days_possible_0_mon = base.daysPossibleByDOW(MONDAY),
       days_possible_1_tue = base.daysPossibleByDOW(TUESDAY),
       days_possible_2_wed = base.daysPossibleByDOW(WEDNESDAY),
@@ -348,45 +361,45 @@ case class CrossSectional (
       days_possible_4_fri = base.daysPossibleByDOW(FRIDAY),
       days_possible_5_sat = base.daysPossibleByDOW(SATURDAY),
       days_possible_6_sun = base.daysPossibleByDOW(SUNDAY),
-      default_pct = base.weightedMean(base.is_default_browser.map(_.map(_.map(x => if(x) 1l else 0l)))),
-      locale_configs = base.locale.map(_.distinct.length),
+      default_pct = base.weightedMean(base.is_default_browser.ifExists(_.map(_.ifExists(x => if(x) 1l else 0l)))),
+      locale_configs = base.locale.ifExists(_.distinct.length),
       locale_mode = base.weightedMode(base.locale).getOrElse(None),
-      version_configs = base.version.map(_.distinct.length),
-      version_max = base.version.map(_.max).getOrElse(None),
+      version_configs = base.version.ifExists(_.distinct.length),
+      version_max = base.version.ifExists(_.max).getOrElse(None),
       addon_names_list = base.addonNames,
       main_ping_reason_num_aborted = base.countPingReason("aborted-session"),
       main_ping_reason_num_end_of_day = base.countPingReason("daily"),
       main_ping_reason_num_env_change  = base.countPingReason("environment-change"),
       main_ping_reason_num_shutdown  = base.countPingReason("shutdown"),
       memory_avg = base.weightedMean(base.memory_mb),
-      memory_configs = base.memory_mb.map(_.distinct.length),
+      memory_configs = base.memory_mb.ifExists(_.distinct.length),
       os_name_mode = base.weightedMode(base.os_name).getOrElse(None),
       os_version_mode = base.weightedMode(base.os_version).getOrElse(None),
-      os_version_configs = base.os_version.map(_.distinct.length),
+      os_version_configs = base.os_version.ifExists(_.distinct.length),
       pages_count_avg = base.weightedMean(base.pages_count),
-      pages_count_min = base.pages_count.map(_.flatten.min),
-      pages_count_max = base.pages_count.map(_.flatten.max),
+      pages_count_min = base.pages_count.ifExists(_.flatten.min),
+      pages_count_max = base.pages_count.ifExists(_.flatten.max),
       plugins_count_avg = base.weightedMean(base.pluginsCount),
-      plugins_count_configs = base.pluginsCount.map(_.distinct.length),
+      plugins_count_configs = base.pluginsCount.ifExists(_.distinct.length),
       plugins_count_mode = base.weightedMode(base.pluginsCount).getOrElse(None),
-      start_date_oldest = base.parsedStartDate.map(_.flatten.minBy(_.toDate).toString),
-      start_date_newest = base.parsedStartDate.map(_.flatten.maxBy(_.toDate).toString),
-      subsession_length_badTimer = base.session_length.map(_.filter(_ == -1).length),
-      subsession_length_negative = base.session_length.map(_.filter(_ < -1).length),
-      subsession_length_tooLong = base.session_length.map(_.filter(_ > SECONDS_PER_DAY * CrossSectional.MarginOfError).length),
-      previous_subsession_id_repeats = base.previousSubsessionIdCounts.map(_.values.max),
-      profile_creation_date = base.profile_creation_date.map(_.head),
-      profile_subsession_counter_min = base.profile_subsession_counter.map(_.min),
-      profile_subsession_counter_max = base.profile_subsession_counter.map(_.max),
-      profile_subsession_counter_configs = base.profile_subsession_counter.map(_.distinct.length),
-      search_counts_total = base.search_counts.map(_.values.foldLeft(0l)(_ + _.sum)),
-      search_default_configs = base.default_search_engine.map(_.distinct.length),
+      start_date_oldest = base.parsedStartDate.ifExists(_.flatten.minBy(_.toDate).toString),
+      start_date_newest = base.parsedStartDate.ifExists(_.flatten.maxBy(_.toDate).toString),
+      subsession_length_badTimer = base.session_length.ifExists(_.filter(_ == -1).length),
+      subsession_length_negative = base.session_length.ifExists(_.filter(_ < -1).length),
+      subsession_length_tooLong = base.session_length.ifExists(_.filter(_ > SECONDS_PER_DAY * CrossSectional.MarginOfError).length),
+      previous_subsession_id_repeats = base.previousSubsessionIdCounts.ifExists(_.values.max),
+      profile_creation_date = base.profile_creation_date.ifExists(_.head),
+      profile_subsession_counter_min = base.profile_subsession_counter.ifExists(_.min),
+      profile_subsession_counter_max = base.profile_subsession_counter.ifExists(_.max),
+      profile_subsession_counter_configs = base.profile_subsession_counter.ifExists(_.distinct.length),
+      search_counts_total = base.search_counts.ifExists(_.values.foldLeft(0l)(_ + _.sum)),
+      search_default_configs = base.default_search_engine.ifExists(_.distinct.length),
       search_default_mode = base.weightedMode(base.default_search_engine).getOrElse(None),
-      session_num_total = base.session_id.map(_.distinct.length),
-      subsession_branches = base.previousSubsessionIdCounts.map(_.values.filter(_ > 1).size),
+      session_num_total = base.session_id.ifExists(_.distinct.length),
+      subsession_branches = base.previousSubsessionIdCounts.ifExists(_.values.filter(_ > 1).size),
       date_skew_per_ping_avg = base.ssStartToSubmission.flatMap(x => aggregation.mean(x.flatten)),
-      date_skew_per_ping_max = base.ssStartToSubmission.map(_.flatten.max),
-      date_skew_per_ping_min = base.ssStartToSubmission.map(_.flatten.min)
+      date_skew_per_ping_max = base.ssStartToSubmission.ifExists(_.flatten.max),
+      date_skew_per_ping_min = base.ssStartToSubmission.ifExists(_.flatten.min)
     )
   }
 }
