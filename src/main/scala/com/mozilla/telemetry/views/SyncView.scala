@@ -225,6 +225,7 @@ object SyncPingConverter {
           case "autherror" => (failure \ "from").extract[String]
           case "othererror" => (failure \ "error").extract[String]
           case "unexpectederror" => (failure \ "error").extract[String]
+          case "sqlerror" => (failure \ "code").extract[String]
           case _ => null
         }
       )
