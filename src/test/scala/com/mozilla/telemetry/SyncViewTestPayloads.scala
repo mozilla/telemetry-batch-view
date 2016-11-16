@@ -196,8 +196,8 @@ object SyncViewTestPayloads {
     |}
     """.stripMargin)
 
-  // Sync ping payload with devices.
-  def syncPingWithDevices = parse(
+  // Sync ping payload with devices and validation data.
+  def complexSyncPing = parse(
     """
       |{
       |  "type": "sync",
@@ -248,7 +248,23 @@ object SyncViewTestPayloads {
       |            "took": 16
       |          },
       |          {
-      |            "name": "bookmarks"
+      |            "name": "bookmarks",
+      |            "took": 1000,
+      |            "validation": {
+      |              "version": 1,
+      |              "checked": 290,
+      |              "took": 723,
+      |              "problems": [
+      |                {
+      |                  "name": "serverMissing",
+      |                  "count": 20
+      |                },
+      |                {
+      |                  "name": "rootOnServer",
+      |                  "count": 1
+      |                }
+      |              ]
+      |            }
       |          },
       |          {
       |            "name": "forms"
