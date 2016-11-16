@@ -53,6 +53,7 @@ object Histograms {
               case "true" => Some(true)
               case _ => Some(false)
             }
+            case ("releaseChannelCollection", JString(x)) => Some(x)
             case _ => None
           }
         } catch {
@@ -69,6 +70,7 @@ object Histograms {
 
       val pretty = for {
         (k, v) <- result
+        if v.getOrElse("releaseChannelCollection", None) == Some("opt-out")
       } yield {
         val kind = v("kind").get.asInstanceOf[String]
         val keyed = v.getOrElse("keyed", Some(false)).get.asInstanceOf[Boolean]
