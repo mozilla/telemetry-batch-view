@@ -19,19 +19,22 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
   val fixture = {
     def createPayload(idx: Int): Map[String, Any] = {
       val histograms =
-        ("TELEMETRY_TEST_FLAG" ->
+        ("FIPS_ENABLED" ->
           ("values" -> ("0" -> 0)) ~
           ("sum" -> 0)) ~
-        ("DEVTOOLS_WEBIDE_CONNECTION_RESULT" ->
+        ("BROWSER_IS_USER_DEFAULT" ->
           ("values" -> ("0" -> 42)) ~
           ("sum" -> 0)) ~
-        ("UPDATE_CHECK_NO_UPDATE_EXTERNAL" ->
+        ("PUSH_API_NOTIFY" ->
           ("values" -> ("0" -> 42)) ~
           ("sum" -> 42)) ~
-        ("PLACES_BACKUPS_DAYSFROMLAST" ->
+        ("GFX_CRASH" ->
           ("values" -> ("1" -> 42)) ~
           ("sum" -> 42)) ~
-        ("GC_BUDGET_MS" ->
+        ("SEARCH_SERVICE_ENGINE_COUNT" ->
+          ("values" -> ("1" -> 42)) ~
+          ("sum" -> 42)) ~
+        ("FX_TAB_SWITCH_TOTAL_MS" ->
           ("values" -> ("1" -> 42)) ~
           ("sum" -> 42)) ~
         ("GC_MS" ->
@@ -39,7 +42,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
           ("sum" -> 42))
 
       val keyedHistograms =
-        ("ADDON_SHIM_USAGE" ->
+        ("FX_MIGRATION_ERRORS" ->
           ("foo" ->
             ("values" -> ("1" -> 42)) ~
             ("sum" -> 42))) ~
@@ -47,7 +50,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
           ("foo" ->
             ("values" -> ("0" -> 42)) ~
             ("sum" -> 42))) ~
-        ("DEVTOOLS_PERFTOOLS_SELECTED_VIEW_MS" ->
+        ("FX_MIGRATION_LOGINS_IMPORT_MS" ->
           ("foo" ->
             ("values" -> ("1" -> 42)) ~
             ("sum" -> 42)))
@@ -390,29 +393,29 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
   }
 
   "Flag histograms" must "be converted correctly" in {
-    val histograms = fixture.row.getList[Boolean](fixture.row.fieldIndex("telemetry_test_flag"))
+    val histograms = fixture.row.getList[Boolean](fixture.row.fieldIndex("fips_enabled"))
     assert(histograms.length == fixture.payloads.length)
     histograms.foreach(x => assert(x))
   }
 
   "Boolean histograms" must "be converted correctly" in {
-    val histograms = fixture.row.getList[WrappedArray[Long]](fixture.row.fieldIndex("devtools_webide_connection_result"))
+    val histograms = fixture.row.getList[WrappedArray[Long]](fixture.row.fieldIndex("browser_is_user_default"))
     assert(histograms.length == fixture.payloads.length)
     histograms.foreach(x => assert(x.toList == List(42, 0)))
   }
 
   "Count histograms" must "be converted correctly" in {
-    val histograms = fixture.row.getList[Int](fixture.row.fieldIndex("update_check_no_update_external"))
+    val histograms = fixture.row.getList[Int](fixture.row.fieldIndex("push_api_notify"))
     assert(histograms.length == fixture.payloads.length)
     histograms.foreach(x => assert(x == 42))
   }
 
   "Enumerated histograms" must "be converted correctly" in {
-    val histograms = fixture.row.getList[WrappedArray[Int]](fixture.row.fieldIndex("places_backups_daysfromlast"))
+    val histograms = fixture.row.getList[WrappedArray[Int]](fixture.row.fieldIndex("gfx_crash"))
     assert(histograms.length == fixture.payloads.length)
 
     for (h <- histograms) {
-      assert(h.length == 16)
+      assert(h.length == 101)
 
       for ((value, key) <- h.zipWithIndex) {
         if (key == 1)
@@ -424,10 +427,10 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
   }
 
   "Linear histograms" must "be converted correctly" in {
-    val histograms = fixture.row.getList[Row](fixture.row.fieldIndex("gc_budget_ms"))
+    val histograms = fixture.row.getList[Row](fixture.row.fieldIndex("search_service_engine_count"))
     assert(histograms.length == fixture.payloads.length)
 
-    val reference = List(0, 42, 0, 0, 0, 0, 0, 0, 0, 0)
+    val reference = List(0, 42) ++ List.fill(48)(0)
     histograms.foreach{ x =>
       assert(x.getAs[Long]("sum") == 42L)
       assert(x.getList[Int](x.fieldIndex("values")).toList == reference)
@@ -435,12 +438,10 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
   }
 
   "Exponential histograms" must "be converted correctly" in {
-    val histograms = fixture.row.getList[Row](fixture.row.fieldIndex("gc_ms"))
+    val histograms = fixture.row.getList[Row](fixture.row.fieldIndex("fx_tab_switch_total_ms"))
     assert(histograms.length == fixture.payloads.length)
 
-    val reference = Array.fill(50){0}
-    reference(1) = 42
-
+    val reference = List(0, 42) ++ List.fill(18)(0)
     histograms.foreach{ x =>
       assert(x.getAs[Long]("sum") == 42L)
       assert(x.getList[Int](x.fieldIndex("values")).toList == reference.toList)
@@ -448,11 +449,11 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
   }
 
   "Keyed enumerated histograms" must "be converted correctly" in {
-    val entries = fixture.row.getMap[String, WrappedArray[WrappedArray[Int]]](fixture.row.fieldIndex("addon_shim_usage"))
+    val entries = fixture.row.getMap[String, WrappedArray[WrappedArray[Int]]](fixture.row.fieldIndex("fx_migration_errors"))
     assert(entries.size == 1)
 
     for (h <- entries("foo")) {
-      assert(h.length == 16)
+      assert(h.length == 13)
 
       for ((value, key) <- h.zipWithIndex) {
         if (key == 1)
@@ -471,19 +472,21 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
   }
 
   "Keyed exponential histograms" must "be converted correctly" in {
-    val entries = fixture.row.getMap[String, WrappedArray[Row]](fixture.row.fieldIndex("devtools_perftools_selected_view_ms"))
+    val entries = fixture.row.getMap[String, WrappedArray[Row]](fixture.row.fieldIndex("fx_migration_logins_import_ms"))
     assert(entries.size == 1)
 
     val histograms = entries("foo")
     assert(histograms.length == fixture.payloads.length)
 
-    val reference = Array.fill(20){0}
-    reference(1) = 42
-
+    val reference = List(0, 42) ++ List.fill(68)(0)
     histograms.foreach{ x =>
       assert(x.getAs[Long]("sum") == 42L)
       assert(x.getList[Int](x.fieldIndex("values")).toList == reference.toList)
     }
+  }
+
+  "Opt-in Histograms" must "be ignored" in {
+    intercept[IllegalArgumentException](fixture.row.fieldIndex("gc_ms"))
   }
 
   "ClientIterator" should "not trim histories of size < 1000" in {
