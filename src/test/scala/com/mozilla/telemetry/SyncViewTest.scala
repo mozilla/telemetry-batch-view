@@ -93,13 +93,13 @@ class SyncViewTest extends FlatSpec with Matchers{
   }
 
 
-  "SyncPing records with device data" can "be round-tripped to parquet" in {
+  "SyncPing records with validation and device data" can "be round-tripped to parquet" in {
     val sparkConf = new SparkConf().setAppName("SyncPing")
     sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
     val sc = new SparkContext(sparkConf)
     sc.setLogLevel("WARN")
     try {
-      val row = SyncPingConverter.pingToRows(SyncViewTestPayloads.syncPingWithDevices)
+      val row = SyncPingConverter.pingToRows(SyncViewTestPayloads.complexSyncPing)
       // Write a parquet file with the rows.
       val sqlContext = new SQLContext(sc)
       val rdd = sc.parallelize(row.toSeq)
@@ -110,7 +110,7 @@ class SyncViewTest extends FlatSpec with Matchers{
       val localDataset = sqlContext.read.load(tempFile.toString)
       localDataset.registerTempTable("sync")
       val localDataframe = sqlContext.sql("SELECT * FROM sync")
-      validateDevicesSyncPing(localDataframe.collect(), SyncViewTestPayloads.syncPingWithDevices)
+      validateComplexSyncPing(localDataframe.collect(), SyncViewTestPayloads.complexSyncPing)
     } finally {
       sc.stop()
     }
@@ -197,9 +197,8 @@ class SyncViewTest extends FlatSpec with Matchers{
     validateEngines(secondEngines, (secondPing \ "engines").extract[List[JValue]])
   }
 
-
-  // A helper to check the contents of the sync ping wiht devices
-  private def validateDevicesSyncPing(rows: Array[Row], ping: JValue) {
+  // A helper to check the contents of the sync ping with devices and validation data.
+  private def validateComplexSyncPing(rows: Array[Row], ping: JValue) {
     implicit val formats = DefaultFormats
     rows.length should be (1)
 
@@ -229,6 +228,26 @@ class SyncViewTest extends FlatSpec with Matchers{
     }
 
     val engines = sync.getAs[mutable.WrappedArray[GenericRowWithSchema]]("engines")
-    validateEngines(engines, (pingPayload \ "engines").extract[List[JValue]])
+    val pingEngines = (pingPayload \ "engines").extract[List[JValue]]
+    validateEngines(engines, pingEngines)
+
+    validateEngines(engines , pingEngines)
+    // Check the validation data on the bookmark engine in the first sync.
+    val bmarkValidationRow = engines.find(x => x.getAs[String]("name") == "bookmarks").get
+      .getAs[GenericRowWithSchema]("validation")
+    val bmarkValidationJson = pingEngines.find(x => (x \ "name").extract[String] == "bookmarks").get \ "validation"
+
+    bmarkValidationRow.getAs[Long]("version") should be ((bmarkValidationJson \ "version").extract[Long])
+    bmarkValidationRow.getAs[Long]("took") should be ((bmarkValidationJson \ "took").extract[Long])
+    bmarkValidationRow.getAs[Long]("checked") should be ((bmarkValidationJson \ "checked").extract[Long])
+    val bmarkProblems = bmarkValidationRow.getAs[mutable.WrappedArray[GenericRowWithSchema]]("problems")
+    val bmarkProblemsJson= (bmarkValidationJson \ "problems").extract[List[JValue]]
+
+    bmarkProblems.length should be (bmarkProblemsJson.length)
+
+    for (i <- 0 to 1) {
+      bmarkProblems(i).getAs[String]("name") should be ((bmarkProblemsJson(i) \ "name").extract[String])
+      bmarkProblems(i).getAs[Long]("count") should be ((bmarkProblemsJson(i) \ "count").extract[Long])
+    }
   }
 }

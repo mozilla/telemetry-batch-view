@@ -170,6 +170,23 @@ object SyncPingConverter {
     StructField("os", StringType, nullable = false)
   ))
 
+  // Data about a single validation problem found
+  private val validationProblemType = StructType(List(
+    StructField("name", StringType, nullable = false),
+    StructField("count", LongType, nullable = false)
+  ))
+
+  // Data about a validation run on an engine
+  private val validationType = StructType(List(
+    // Validator version, optional per spec, but we fill in 0 where it was missing.
+    StructField("version", LongType, nullable = false),
+    StructField("checked", LongType, nullable = false), // # records checked
+    StructField("took", LongType, nullable = false), // milliseconds
+    StructField("problems", ArrayType(validationProblemType, containsNull = false), nullable = true),
+    // present if the validator failed for some reason.
+    StructField("failureReason", failureType, nullable = true)
+  ))
+
   // The schema for an engine.
   private val engineType = StructType(List(
     StructField("name", StringType, nullable = false),
@@ -177,7 +194,8 @@ object SyncPingConverter {
     StructField("status", StringType, nullable = true),
     StructField("failureReason", failureType, nullable = true),
     StructField("incoming", incomingType, nullable = true),
-    StructField("outgoing", ArrayType(outgoingType, containsNull = false), nullable = true)
+    StructField("outgoing", ArrayType(outgoingType, containsNull = false), nullable = true),
+    StructField("validation", validationType, nullable = true)
   ))
 
   // The status for the Sync itself (ie, not the status for an engine - that's just a string)
@@ -304,6 +322,45 @@ object SyncPingConverter {
     case _ => null
   }
 
+  private def validationToRow(validation: JValue): Row = validation match {
+    case JObject(_) =>
+      Row(
+        validation \ "version" match {
+          case JInt(x) => x.toLong
+          case _ => 0L
+        },
+        validation \ "checked" match {
+          case JInt(x) => x.toLong
+          case _ => 0L // Should this
+        },
+        validation \ "took" match {
+          case JInt(x) => x.toLong
+          case _ => 0L
+        },
+        validation \ "problems" match {
+          case JArray(problems) =>
+            problems.flatMap(validationProblemToRow)
+          case _ => null
+        },
+        failureReasonToRow(validation \ "failureReason")
+      )
+    case _ => null
+  }
+
+  private def validationProblemToRow(problem: JValue): Option[Row] = problem match {
+    case JObject(_) =>
+      Some(Row(
+        problem \ "name" match {
+          case JString(x) => x
+          case _ => return None
+        },
+        problem \ "count" match {
+          case JInt(x) => x.toLong
+          case _ => return None
+        }
+      ))
+    case _ => None
+  }
 
   // Parse an element of "engines" elt in a sync object
   private def engineToRow(engine: JValue): Row = {
@@ -322,7 +379,8 @@ object SyncPingConverter {
       },
       failureReasonToRow(engine \ "failureReason"),
       incomingToRow(engine \ "incoming"),
-      outgoingToRow(engine \ "outgoing")
+      outgoingToRow(engine \ "outgoing"),
+      validationToRow(engine \ "validation")
     )
   }
 
