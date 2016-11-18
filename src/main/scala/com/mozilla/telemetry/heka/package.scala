@@ -11,6 +11,7 @@ package object heka {
   private def field(f: Field): Any = {
     // I am assuming there is only one value
     f.valueType match {
+      case Some(Field.ValueType.BYTES) => f.valueBytes(0).toStringUtf8
       case Some(Field.ValueType.STRING) => f.valueString(0)
       case Some(Field.ValueType.BOOL) => f.valueBool(0)
       case Some(Field.ValueType.DOUBLE) => f.valueDouble(0)
