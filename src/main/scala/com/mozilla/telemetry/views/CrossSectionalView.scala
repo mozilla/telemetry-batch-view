@@ -135,7 +135,7 @@ case class Longitudinal (
     this.subsession_start_date.map(_.map(parseDate))
   }
 
-  def activeHoursByDOW(dow: Int): Option[Double] = {
+  def sessionHoursByDOW(dow: Int): Option[Double] = {
     val optPairs = for {
       csl <- this.cleanSessionLength
       psd <- this.parsedStartDate
@@ -222,14 +222,14 @@ object CrossSectional {
 case class CrossSectional (
   val client_id: String,
   val normalized_channel: String,
-  val active_hours_total: Option[Double],
-  val active_hours_0_mon: Option[Double],
-  val active_hours_1_tue: Option[Double],
-  val active_hours_2_wed: Option[Double],
-  val active_hours_3_thu: Option[Double],
-  val active_hours_4_fri: Option[Double],
-  val active_hours_5_sat: Option[Double],
-  val active_hours_6_sun: Option[Double],
+  val session_hours_total: Option[Double],
+  val session_hours_0_mon: Option[Double],
+  val session_hours_1_tue: Option[Double],
+  val session_hours_2_wed: Option[Double],
+  val session_hours_3_thu: Option[Double],
+  val session_hours_4_fri: Option[Double],
+  val session_hours_5_sat: Option[Double],
+  val session_hours_6_sun: Option[Double],
   val geo_mode: Option[String],
   val geo_configs: Long,
   val architecture_mode: Option[String],
@@ -307,14 +307,14 @@ case class CrossSectional (
     this(
       client_id = base.client_id,
       normalized_channel = base.normalized_channel,
-      active_hours_total = base.cleanSessionLength.map(_.flatten.sum.toDouble / SECONDS_PER_HOUR),
-      active_hours_0_mon = base.activeHoursByDOW(MONDAY),
-      active_hours_1_tue = base.activeHoursByDOW(TUESDAY),
-      active_hours_2_wed = base.activeHoursByDOW(WEDNESDAY),
-      active_hours_3_thu = base.activeHoursByDOW(THURSDAY),
-      active_hours_4_fri = base.activeHoursByDOW(FRIDAY),
-      active_hours_5_sat = base.activeHoursByDOW(SATURDAY),
-      active_hours_6_sun = base.activeHoursByDOW(SUNDAY),
+      session_hours_total = base.cleanSessionLength.map(_.flatten.sum.toDouble / SECONDS_PER_HOUR),
+      session_hours_0_mon = base sessionHoursByDOW(MONDAY),
+      session_hours_1_tue = base sessionHoursByDOW(TUESDAY),
+      session_hours_2_wed = base sessionHoursByDOW(WEDNESDAY),
+      session_hours_3_thu = base sessionHoursByDOW(THURSDAY),
+      session_hours_4_fri = base sessionHoursByDOW(FRIDAY),
+      session_hours_5_sat = base sessionHoursByDOW(SATURDAY),
+      session_hours_6_sun = base sessionHoursByDOW(SUNDAY),
       geo_mode = base.weightedMode(base.geo_country),
       geo_configs = base.geo_country.getOrElse(Seq()).distinct.length,
       architecture_mode = base.weightedMode(base.architecture).getOrElse(None),
