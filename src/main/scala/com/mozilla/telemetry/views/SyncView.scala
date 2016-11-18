@@ -130,7 +130,7 @@ object SyncView {
   // Convert the given Heka message containing a "sync" ping
   // to a list of rows containing all the fields.
   def messageToRow(message: Message): List[Row] = {
-    val payload = parse(string2JsonInput(message.payload.getOrElse("{}")))
+    val payload = parse(string2JsonInput(message.payload.getOrElse(message.fieldsAsMap.getOrElse("submission", "{}")).asInstanceOf[String]))
     SyncPingConverter.pingToRows(payload)
   }
 }
