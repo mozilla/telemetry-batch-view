@@ -57,6 +57,14 @@ object JSON2Avro{
   def parseString(schema: Schema, json: JValue): Option[String] = json match {
     case JString(value) =>
       Some(value)
+    case JInt(value) =>
+      Some(value.toString)
+    case JDecimal(value) =>
+      Some(value.toString)
+    case JDouble(value) =>
+      Some(value.toString)
+    case JBool(value) =>
+      Some(value.toString)
     case _ =>
       None
   }
