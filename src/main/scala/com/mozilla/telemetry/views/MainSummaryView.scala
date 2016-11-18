@@ -248,7 +248,7 @@ object MainSummaryView {
     // Don't compute the expensive stuff until we need it. We may skip a record
     // due to missing required fields.
     lazy val addons = parse(fields.getOrElse("environment.addons", "{}").asInstanceOf[String])
-    lazy val payload = parse(message.payload.getOrElse("{}").asInstanceOf[String])
+    lazy val payload = parse(message.payload.getOrElse(fields.getOrElse("submission", "{}")).asInstanceOf[String])
     lazy val application = payload \ "application"
     lazy val build = parse(fields.getOrElse("environment.build", "{}").asInstanceOf[String])
     lazy val profile = parse(fields.getOrElse("environment.profile", "{}").asInstanceOf[String])

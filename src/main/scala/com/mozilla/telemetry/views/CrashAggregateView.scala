@@ -58,11 +58,11 @@ object CrashAggregateView {
           val fields = message.fieldsAsMap
           fields.get("docType") match {
             case Some("crash") => {
-              val payload = message.payload match {
-                case Some(value: String) => parse(value)
+              val payload = message.payload.getOrElse(fields.getOrElse("submission", "{}")) match {
+                case value: String => parse(value)
                 case _ => JNothing
               }
-              fields + ("payload" -> payload)
+              fields + ("payload" -> payload) - "submission"
             }
             case _ => fields
           }
