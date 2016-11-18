@@ -159,11 +159,11 @@ object LongitudinalView {
     val clientMessages = messages
       .flatMap {
         (message) =>
-          val payload = message.payload match {
-            case Some(p) => parse(p) \ "payload"
+          val fields = message.fieldsAsMap
+          val payload = message.payload.getOrElse(fields.get("submission")) match {
+            case p: String => parse(p) \ "payload"
             case _ => JObject()
           }
-          val fields = message.fieldsAsMap + ("payload" -> payload)
           for {
             clientId <- fields.get("clientId").asInstanceOf[Option[String]]
             json <- fields.get("payload.info").asInstanceOf[Option[String]]
@@ -171,7 +171,7 @@ object LongitudinalView {
             info = parse(json)
             JString(startDate) <- (info \ "subsessionStartDate").toOption
             JInt(counter) <- (info \ "profileSubsessionCounter").toOption
-          } yield ((clientId, startDate, counter.toInt), fields)
+          } yield ((clientId, startDate, counter.toInt), fields + ("payload" -> payload) - "submission")
       }
       .repartitionAndSortWithinPartitions(new ClientIdPartitioner(480))
       .map { case (key, value) => (key._1, value) }
