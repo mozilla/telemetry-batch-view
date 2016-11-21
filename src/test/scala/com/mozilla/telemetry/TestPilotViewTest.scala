@@ -2,7 +2,7 @@ package com.mozilla.telemetry
 
 import com.mozilla.telemetry.heka.HekaFrame
 import com.mozilla.telemetry.views.TestPilotView
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{FlatSpec, Matchers}
 

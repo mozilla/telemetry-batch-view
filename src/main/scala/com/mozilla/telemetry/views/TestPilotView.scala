@@ -1,20 +1,10 @@
 package com.mozilla.telemetry.views
 
-import com.mozilla.telemetry.heka.{Dataset, Message}
-import com.mozilla.telemetry.parquet.ParquetFile
-import com.mozilla.telemetry.utils._
+import com.mozilla.telemetry.heka.Message
 import org.apache.spark.sql.types._
-import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
-import org.apache.avro.{Schema, SchemaBuilder}
-import org.joda.time.{DateTime, Days, format}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.{SparkConf, SparkContext}
-import org.joda.time.Days
-import org.joda.time.format.DateTimeFormat
-import org.json4s.JsonAST.{JInt, JArray, JObject, JString, JValue}
-import org.apache.spark.sql.{Row, SQLContext}
+import org.json4s.JsonAST.{JInt, JArray, JString, JValue}
+import org.apache.spark.sql.Row
 import org.json4s.jackson.JsonMethods.parse
-import org.rogach.scallop._
 
 object TestPilotView extends TelemetryView{
   def schemaVersion: String = "v1"
