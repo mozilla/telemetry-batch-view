@@ -615,7 +615,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           "blocklist_enabled"                 -> true,
           "addon_compatibility_check_enabled" -> true,
           "telemetry_enabled"                 -> true,
-          "user_prefs"                        -> null
+          "user_prefs"                        -> null,
+          "browser_engagement"                -> null
         )
 
         val actual = r.getValuesMap(expected.keys.toList)
@@ -807,5 +808,56 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |}
       """.stripMargin)
     MainSummaryView.getUserPrefs(json5 \ "environment" \ "settings" \ "userPrefs") should be (None)
+  }
+
+  "Engagement measures" can "be extracted" in {
+    // Doesn't have scalars
+    val jNoScalars = parse(
+      """{}""")
+    MainSummaryView.getBrowserEngagement(jNoScalars).get should be (Row(null, null, null, null, null, null, null))
+
+    // Has scalars, but none of the expected ones
+    val jUnexpectedScalars = parse(
+      """{
+        |  "nonexistent1": 249,
+        |  "nonexistent2": 2
+        |}""".stripMargin)
+    MainSummaryView.getBrowserEngagement(jUnexpectedScalars).get should be (Row(null, null, null, null, null, null, null))
+
+    // Has scalars, and some of the expected ones
+    val jSomeExpectedScalars = parse(
+      """{
+        |  "browser.engagement.max_concurrent_window_count": 2,
+        |  "nonexistent1": 97,
+        |  "nonexistent2": 11,
+        |  "browser.engagement.total_uri_count": 93
+        |}""".stripMargin)
+    MainSummaryView.getBrowserEngagement(jSomeExpectedScalars).get should be (Row(null, null, 2, null, 93, null, null))
+
+    // Has scalars, all of the expected ones
+    val jAllScalars = parse(
+      """{
+        |  "browser.engagement.max_concurrent_tab_count": 249,
+        |  "browser.engagement.max_concurrent_window_count": 2,
+        |  "browser.engagement.unfiltered_uri_count": 97,
+        |  "browser.engagement.tab_open_event_count": 11,
+        |  "browser.engagement.unique_domains_count": 10,
+        |  "browser.engagement.total_uri_count": 93,
+        |  "browser.engagement.window_open_event_count": 1
+        |}""".stripMargin)
+    MainSummaryView.getBrowserEngagement(jAllScalars).get should be (Row(249, 11, 2, 1, 93, 97, 10))
+
+    // Has scalars with weird data
+    val jWeirdScalars = parse(
+      """{
+        |  "browser.engagement.max_concurrent_tab_count": "two hundred and something",
+        |  "browser.engagement.max_concurrent_window_count": false,
+        |  "browser.engagement.unfiltered_uri_count": [9, 7]
+        |}""".stripMargin)
+    MainSummaryView.getBrowserEngagement(jWeirdScalars).get should be (Row(null, null, null, null, null, null, null))
+
+    // Has a scalars section containing unexpected data.
+    val jBogusScalars = parse("""[10, "ten"]""")
+    MainSummaryView.getBrowserEngagement(jBogusScalars) should be (None)
   }
 }
