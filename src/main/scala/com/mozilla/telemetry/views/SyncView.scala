@@ -3,10 +3,11 @@ package com.mozilla.telemetry.views
 import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.utils.S3Store
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.util.LongAccumulator
 import org.apache.spark.{SparkConf, SparkContext}
 import org.joda.time.{DateTime, Days, format}
-import org.json4s.{DefaultFormats, JValue}
+import org.json4s.{DefaultFormats, JValue, string2JsonInput}
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._ // Just for my attempted mocks below.....
@@ -43,7 +44,10 @@ object SyncView {
     val sparkConf = new SparkConf().setAppName(jobName)
     sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
     implicit val sc = new SparkContext(sparkConf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder()
+      .appName("SyncView")
+      .getOrCreate()
     val hadoopConf = sc.hadoopConfiguration
 
     // We want to end up with reasonably large parquet files on S3.
@@ -59,8 +63,8 @@ object SyncView {
       println("=======================================================================================")
       println(s"BEGINNING JOB $jobName FOR $currentDateString")
 
-      val ignoredCount = sc.accumulator(0, "Number of Records Ignored")
-      val processedCount = sc.accumulator(0, "Number of Records Processed")
+      val ignoredCount = new LongAccumulator(); // Number of records ignored
+      val processedCount = new LongAccumulator();  // Number of Records Processed
 
       val messages = Dataset("telemetry")
         .where("sourceName") {
@@ -78,15 +82,15 @@ object SyncView {
       val rowRDD = messages.flatMap(m => {
         messageToRow(m) match {
           case Nil =>
-            ignoredCount += 1
+            ignoredCount.add(1)
             None
           case x =>
-            processedCount += 1
+            processedCount.add(1)
             x
         }
       })
 
-      val records = sqlContext.createDataFrame(rowRDD, SyncPingConverter.syncType)
+      val records = spark.createDataFrame(rowRDD, SyncPingConverter.syncType)
 
       if (conf.outputBucket.supplied) {
         // Note we cannot just use 'partitionBy' below to automatically populate
@@ -115,8 +119,8 @@ object SyncView {
       }
 
       println(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
-      println("     RECORDS SEEN:    %d".format(ignoredCount.value + processedCount.value))
-      println("     RECORDS IGNORED: %d".format(ignoredCount.value))
+      println(s"     RECORDS SEEN:    ${ignoredCount.value + processedCount.value}")
+      println(s"     RECORDS IGNORED: ${ignoredCount.value}")
       println("=======================================================================================")
     }
 
@@ -126,9 +130,7 @@ object SyncView {
   // Convert the given Heka message containing a "sync" ping
   // to a list of rows containing all the fields.
   def messageToRow(message: Message): List[Row] = {
-    val fields = message.fieldsAsMap()
-
-    val payload = parse(message.payload.getOrElse("{}").asInstanceOf[String])
+    val payload = parse(string2JsonInput(message.payload.getOrElse("{}")))
     SyncPingConverter.pingToRows(payload)
   }
 }
@@ -161,6 +163,30 @@ object SyncPingConverter {
     StructField("failed", LongType, nullable = false)
   ))
 
+  // Entries in devices array
+  private val deviceType = StructType(List(
+    StructField("id", StringType, nullable = false),
+    StructField("version", StringType, nullable = false),
+    StructField("os", StringType, nullable = false)
+  ))
+
+  // Data about a single validation problem found
+  private val validationProblemType = StructType(List(
+    StructField("name", StringType, nullable = false),
+    StructField("count", LongType, nullable = false)
+  ))
+
+  // Data about a validation run on an engine
+  private val validationType = StructType(List(
+    // Validator version, optional per spec, but we fill in 0 where it was missing.
+    StructField("version", LongType, nullable = false),
+    StructField("checked", LongType, nullable = false), // # records checked
+    StructField("took", LongType, nullable = false), // milliseconds
+    StructField("problems", ArrayType(validationProblemType, containsNull = false), nullable = true),
+    // present if the validator failed for some reason.
+    StructField("failureReason", failureType, nullable = true)
+  ))
+
   // The schema for an engine.
   private val engineType = StructType(List(
     StructField("name", StringType, nullable = false),
@@ -168,7 +194,8 @@ object SyncPingConverter {
     StructField("status", StringType, nullable = true),
     StructField("failureReason", failureType, nullable = true),
     StructField("incoming", incomingType, nullable = true),
-    StructField("outgoing", ArrayType(outgoingType, containsNull = false), nullable = true)
+    StructField("outgoing", ArrayType(outgoingType, containsNull = false), nullable = true),
+    StructField("validation", validationType, nullable = true)
   ))
 
   // The status for the Sync itself (ie, not the status for an engine - that's just a string)
@@ -184,6 +211,7 @@ object SyncPingConverter {
     StructField("app_display_version", StringType, nullable = true), // application/displayVersion
     StructField("app_name", StringType, nullable = true), // application/name
     StructField("app_version", StringType, nullable = true), // application/version
+    StructField("app_channel", StringType, nullable = true), // application/channel
     // XXX - how do we record the "platform"?
 
     // These fields are unique to the sync pings.
@@ -195,7 +223,8 @@ object SyncPingConverter {
     StructField("status", statusType, nullable = true),
     // "why" is defined in the client-side schema but currently never populated.
     StructField("why", StringType, nullable = true),
-    StructField("engines", ArrayType(SyncPingConverter.engineType, containsNull = false), nullable = true)
+    StructField("engines", ArrayType(SyncPingConverter.engineType, containsNull = false), nullable = true),
+    StructField("devices", ArrayType(SyncPingConverter.deviceType, containsNull = false), nullable = true)
   ))
 
  /*
@@ -214,6 +243,7 @@ object SyncPingConverter {
           case "autherror" => (failure \ "from").extract[String]
           case "othererror" => (failure \ "error").extract[String]
           case "unexpectederror" => (failure \ "error").extract[String]
+          case "sqlerror" => (failure \ "code").extract[String]
           case _ => null
         }
       )
@@ -221,9 +251,36 @@ object SyncPingConverter {
       null
   }
 
+  private def deviceToRow(device: JValue): Option[Row] = device match {
+    case JObject(d) =>
+      Some(Row(
+        device \ "id" match {
+          case JString(x) => x
+          case _ => return None
+        },
+        device \ "version" match {
+          case JString(x) => x
+          case _ => return None
+        },
+        device \ "os" match {
+          case JString(x) => x
+          case _ => return None
+        }
+      ))
+    case _ => None
+  }
+
+  private def toDeviceRows(devices: JValue): List[Row] = devices match {
+    case JArray(x) =>
+      val rows = x.flatMap(d => deviceToRow(d))
+      if (rows.isEmpty) null
+      else rows
+    case _ => null
+  }
+
   // Create a row representing incomingType
   private def incomingToRow(incoming: JValue): Row = incoming match {
-    case JObject(x) =>
+    case JObject(_) =>
       Row(
         incoming \ "applied" match {
           case JInt(x) => x.toLong
@@ -251,11 +308,11 @@ object SyncPingConverter {
       for (outgoing_entry <- x) {
         buf.append(Row(
           outgoing_entry \ "sent" match {
-          case JInt(x) => x.toLong
+          case JInt(n) => n.toLong
           case _ => 0L
           },
           outgoing_entry \ "failed" match {
-            case JInt(x) => x.toLong
+            case JInt(n) => n.toLong
             case _ => 0L
           }
         ))
@@ -265,6 +322,45 @@ object SyncPingConverter {
     case _ => null
   }
 
+  private def validationToRow(validation: JValue): Row = validation match {
+    case JObject(_) =>
+      Row(
+        validation \ "version" match {
+          case JInt(x) => x.toLong
+          case _ => 0L
+        },
+        validation \ "checked" match {
+          case JInt(x) => x.toLong
+          case _ => 0L
+        },
+        validation \ "took" match {
+          case JInt(x) => x.toLong
+          case _ => 0L
+        },
+        validation \ "problems" match {
+          case JArray(problems) =>
+            problems.flatMap(validationProblemToRow)
+          case _ => null
+        },
+        failureReasonToRow(validation \ "failureReason")
+      )
+    case _ => null
+  }
+
+  private def validationProblemToRow(problem: JValue): Option[Row] = problem match {
+    case JObject(_) =>
+      Some(Row(
+        problem \ "name" match {
+          case JString(x) => x
+          case _ => return None
+        },
+        problem \ "count" match {
+          case JInt(x) => x.toLong
+          case _ => return None
+        }
+      ))
+    case _ => None
+  }
 
   // Parse an element of "engines" elt in a sync object
   private def engineToRow(engine: JValue): Row = {
@@ -283,7 +379,8 @@ object SyncPingConverter {
       },
       failureReasonToRow(engine \ "failureReason"),
       incomingToRow(engine \ "incoming"),
-      outgoingToRow(engine \ "outgoing")
+      outgoingToRow(engine \ "outgoing"),
+      validationToRow(engine \ "validation")
     )
   }
 
@@ -300,7 +397,7 @@ object SyncPingConverter {
   }
 
   private def statusToRow(status: JValue): Row = status match {
-    case JObject(x) =>
+    case JObject(_) =>
       Row(
         status \ "sync" match {
           case JString(x) => x
@@ -314,7 +411,7 @@ object SyncPingConverter {
     case _ => null
   }
 
-  // Take an entire ping and return a list of rows with "syncType" as a schemma.
+  // Take an entire ping and return a list of rows with "syncType" as a schema.
   def pingToRows(ping: JValue): List[Row] = {
     ping \ "payload" \ "syncs" match {
       case JArray(x) => multiSyncPayloadToRow(ping, x)
@@ -333,8 +430,21 @@ object SyncPingConverter {
   }
 
   // Convert an "old style" ping that records a single Sync to a row.
-  private def singleSyncPayloadToRow(ping: JValue, payload: JValue): Option[Row] = {
+  private def singleSyncPayloadToRow(ping: JValue, sync: JValue): Option[Row] = {
     val application = ping \ "application"
+    val payload = ping \ "payload"
+
+    def stringFromSyncOrPayload(s: String): String = {
+      sync \ s match {
+        case JString(x) => x
+        case _ =>
+          payload \ s match {
+            case JString(x) => x
+            case _ => null
+          }
+      }
+    }
+
     val row = Row(
       // The metadata...
       application \ "buildId" match {
@@ -353,31 +463,34 @@ object SyncPingConverter {
         case JString(x) => x
         case _ => return None // a required field.
       },
-
-      // Info about the sync.
-      payload \ "uid" match {
+      application \ "channel" match {
         case JString(x) => x
         case _ => return None // a required field.
       },
-      payload \ "deviceID" match {
-        case JString(x) => x
-        case _ => null
-      },
-      payload \ "when" match {
+
+      // Info about the sync.
+      stringFromSyncOrPayload("uid"),
+      stringFromSyncOrPayload("deviceID"),
+
+      sync \ "when" match {
         case JInt(x) => x.toLong
         case _ => return None
       },
-      payload \ "took" match {
+      sync \ "took" match {
         case JInt(x) => x.toLong
         case _ => return None
       },
-      failureReasonToRow(payload \ "failureReason"),
-      statusToRow(payload \ "status"),
-      payload \ "why" match {
+      failureReasonToRow(sync \ "failureReason"),
+      statusToRow(sync \ "status"),
+      sync \ "why" match {
         case JString(x) => x
         case _ => null
       },
-      toEnginesRows(payload \ "engines")
+      toEnginesRows(sync \ "engines"),
+      sync \ "devices" match {
+        case devices @ JArray(_) => toDeviceRows(devices)
+        case _ => null
+      }
     )
 
     Some(row)
