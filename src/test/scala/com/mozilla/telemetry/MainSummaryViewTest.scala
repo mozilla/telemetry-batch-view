@@ -615,7 +615,14 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           "blocklist_enabled"                 -> true,
           "addon_compatibility_check_enabled" -> true,
           "telemetry_enabled"                 -> true,
-          "user_prefs"                        -> null
+          "user_prefs"                        -> null,
+          "max_concurrent_tab_count"          -> null,
+          "tab_open_event_count"              -> null,
+          "max_concurrent_window_count"       -> null,
+          "window_open_event_count"           -> null,
+          "total_uri_count"                   -> null,
+          "unfiltered_uri_count"              -> null,
+          "unique_domains_count"              -> null
         )
 
         val actual = r.getValuesMap(expected.keys.toList)
@@ -807,5 +814,68 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |}
       """.stripMargin)
     MainSummaryView.getUserPrefs(json5 \ "environment" \ "settings" \ "userPrefs") should be (None)
+  }
+
+  "Engagement measures" can "be extracted" in {
+    // Doesn't have scalars
+    val jNoScalars = parse(
+      """{}""")
+    MainSummaryView.getBrowserEngagement(jNoScalars, "anything") should be (null)
+
+    // Has scalars, but none of the expected ones
+    val jUnexpectedScalars = parse(
+      """{
+        |  "example1": 249,
+        |  "example2": 2
+        |}""".stripMargin)
+    MainSummaryView.getBrowserEngagement(jUnexpectedScalars, "missing") should be (null)
+    // Missing its prefix, so it shouldn't be found.
+    MainSummaryView.getBrowserEngagement(jUnexpectedScalars, "example2") should be (null)
+
+    // Has scalars, and some of the expected ones
+    val jSomeExpectedScalars = parse(
+      """{
+        |  "browser.engagement.max_concurrent_window_count": 2,
+        |  "nonexistent1": 97,
+        |  "nonexistent2": 11,
+        |  "browser.engagement.total_uri_count": 93
+        |}""".stripMargin)
+    MainSummaryView.getBrowserEngagement(jSomeExpectedScalars, "max_concurrent_window_count") should be (2)
+    MainSummaryView.getBrowserEngagement(jSomeExpectedScalars, "total_uri_count") should be (93)
+    MainSummaryView.getBrowserEngagement(jSomeExpectedScalars, "unique_domains_count") should be (null)
+
+    // Has scalars, all of the expected ones
+    val jAllScalars = parse(
+      """{
+        |  "browser.engagement.max_concurrent_tab_count": 249,
+        |  "browser.engagement.max_concurrent_window_count": 2,
+        |  "browser.engagement.unfiltered_uri_count": 97,
+        |  "browser.engagement.tab_open_event_count": 11,
+        |  "browser.engagement.unique_domains_count": 10,
+        |  "browser.engagement.total_uri_count": 93,
+        |  "browser.engagement.window_open_event_count": 1
+        |}""".stripMargin)
+    MainSummaryView.getBrowserEngagement(jAllScalars, "max_concurrent_tab_count") should be (249)
+    MainSummaryView.getBrowserEngagement(jAllScalars, "max_concurrent_window_count") should be (2)
+    MainSummaryView.getBrowserEngagement(jAllScalars, "unfiltered_uri_count") should be (97)
+    MainSummaryView.getBrowserEngagement(jAllScalars, "tab_open_event_count") should be (11)
+    MainSummaryView.getBrowserEngagement(jAllScalars, "unique_domains_count") should be (10)
+    MainSummaryView.getBrowserEngagement(jAllScalars, "total_uri_count") should be (93)
+    MainSummaryView.getBrowserEngagement(jAllScalars, "window_open_event_count") should be (1)
+
+    // Has scalars with weird data
+    val jWeirdScalars = parse(
+      """{
+        |  "browser.engagement.max_concurrent_tab_count": "two hundred and something",
+        |  "browser.engagement.max_concurrent_window_count": false,
+        |  "browser.engagement.unfiltered_uri_count": [9, 7]
+        |}""".stripMargin)
+    MainSummaryView.getBrowserEngagement(jWeirdScalars, "max_concurrent_tab_count") should be (null)
+    MainSummaryView.getBrowserEngagement(jWeirdScalars, "max_concurrent_window_count") should be (null)
+    MainSummaryView.getBrowserEngagement(jWeirdScalars, "unfiltered_uri_count") should be (null)
+
+    // Has a scalars section containing unexpected data.
+    val jBogusScalars = parse("""[10, "ten"]""")
+    MainSummaryView.getBrowserEngagement(jBogusScalars, "anything") should be (null)
   }
 }
