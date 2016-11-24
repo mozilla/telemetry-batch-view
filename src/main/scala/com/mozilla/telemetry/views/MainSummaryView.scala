@@ -9,7 +9,7 @@ import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._
 import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.utils.{Addon, MainPing, S3Store}
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, JValue}
 
 import scala.util.{Success, Try}
 
@@ -134,9 +134,8 @@ object MainSummaryView {
       println("     RECORDS SEEN:    %d".format(ignoredCount.value + processedCount.value))
       println("     RECORDS IGNORED: %d".format(ignoredCount.value))
       println("=======================================================================================")
-
-      sc.stop()
     }
+    sc.stop()
   }
 
   def getActiveAddons(activeAddons: JValue): Option[List[Row]] = {
@@ -194,6 +193,15 @@ object MainSummaryView {
     }
   }
 
+  def getBrowserEngagement(scalars: JValue, engagementMetric: String): Integer = {
+    val prefix = "browser.engagement."
+    asInt(scalars \ (prefix + engagementMetric))
+  }
+
+  def asInt(v: JValue): Integer = v match {
+    case JInt(x) => x.toInt
+    case _ => null
+  }
 
   // Convert the given Heka message containing a "main" ping
   // to a map containing just the fields we're interested in.
@@ -217,6 +225,7 @@ object MainSummaryView {
     lazy val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
     lazy val weaveDesktop = MainPing.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
     lazy val weaveMobile = MainPing.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
+    lazy val parentScalars = payload \ "payload" \ "processes" \ "parent" \ "scalars"
 
     val loopActivityCounterKeys = (0 to 4).map(_.toString)
 
@@ -227,12 +236,6 @@ object MainSummaryView {
     // wonky histogram (one for which the "sum" field is not a
     // valid number) as null.
     val hsum = (h: JValue) => h \ "sum" match {
-      case JInt(x) => x.toInt
-      case _ => null
-    }
-
-    // Get the value of a given histogram bucket as an Int.
-    val hval = (h: JValue, b: String) => h \ "values" \ b match {
       case JInt(x) => x.toInt
       case _ => null
     }
@@ -375,10 +378,7 @@ object MainSummaryView {
         case JString(x) => x
         case _ => null
       },
-      info \ "timezoneOffset" match {
-        case JInt(x) => x.toInt
-        case _ => null
-      },
+      asInt(info \ "timezoneOffset"),
       hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "pluginhang"),
       hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "plugin"),
       hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "content"),
@@ -446,7 +446,14 @@ object MainSummaryView {
         case JBool(x) => x
         case _ => null
       },
-      getUserPrefs(settings \ "userPrefs").orNull
+      getUserPrefs(settings \ "userPrefs").orNull,
+      getBrowserEngagement(parentScalars, "max_concurrent_tab_count"),
+      getBrowserEngagement(parentScalars, "tab_open_event_count"),
+      getBrowserEngagement(parentScalars, "max_concurrent_window_count"),
+      getBrowserEngagement(parentScalars, "window_open_event_count"),
+      getBrowserEngagement(parentScalars, "total_uri_count"),
+      getBrowserEngagement(parentScalars, "unfiltered_uri_count"),
+      getBrowserEngagement(parentScalars, "unique_domains_count")
     )
     Some(row)
   }
@@ -625,7 +632,19 @@ object MainSummaryView {
       StructField("blocklist_enabled", BooleanType, nullable = true), // environment.settings.blocklistEnabled
       StructField("addon_compatibility_check_enabled", BooleanType, nullable = true), // environment.settings.addonCompatibilityCheckEnabled
       StructField("telemetry_enabled", BooleanType, nullable = true), // environment.settings.telemetryEnabled
-      StructField("user_prefs", buildUserPrefsSchema, nullable = true) // environment.settings.userPrefs
+      StructField("user_prefs", buildUserPrefsSchema, nullable = true), // environment.settings.userPrefs
+
+      // Engagement measures per Bug 1315663, taken from
+      //  payload.processes.parent.scalars["browser.engagement.*"]
+      // For more information, see the Scalars definitions at
+      //  https://dxr.mozilla.org/mozilla-central/source/toolkit/components/telemetry/Scalars.yaml
+      StructField("max_concurrent_tab_count", IntegerType, nullable = true),
+      StructField("tab_open_event_count", IntegerType, nullable = true),
+      StructField("max_concurrent_window_count", IntegerType, nullable = true),
+      StructField("window_open_event_count", IntegerType, nullable = true),
+      StructField("total_uri_count", IntegerType, nullable = true),
+      StructField("unfiltered_uri_count", IntegerType, nullable = true),
+      StructField("unique_domains_count", IntegerType, nullable = true)
     ))
   }
 }

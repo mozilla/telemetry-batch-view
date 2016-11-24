@@ -172,6 +172,13 @@ root
  |-- telemetry_enabled: boolean (nullable = true)
  |-- user_prefs: struct (nullable = true)
  |    |-- dom_ipc_process_count: integer (nullable = true)
+ |-- max_concurrent_tab_count: integer (nullable = true)
+ |-- tab_open_event_count: integer (nullable = true)
+ |-- max_concurrent_window_count: integer (nullable = true)
+ |-- window_open_event_count: integer (nullable = true)
+ |-- total_uri_count: integer (nullable = true)
+ |-- unfiltered_uri_count: integer (nullable = true)
+ |-- unique_domains_count: integer (nullable = true)
  |-- submission_date_s3: string (nullable = true)
  |-- sample_id: string (nullable = true)
 ```
