@@ -9,7 +9,7 @@ import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._
 import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.utils.{Addon, MainPing, S3Store}
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, JValue}
 
 import scala.util.{Success, Try}
 
@@ -193,25 +193,14 @@ object MainSummaryView {
     }
   }
 
+  def getBrowserEngagement(scalars: JValue, engagementMetric: String): Integer = {
+    val prefix = "browser.engagement."
+    asInt(scalars \ (prefix + engagementMetric))
+  }
+
   def asInt(v: JValue): Integer = v match {
     case JInt(x) => x.toInt
     case _ => null
-  }
-
-  def getBrowserEngagement(scalars: JValue): Option[Row] = {
-    val prefix = "browser.engagement."
-    scalars match {
-      case JObject(m) => Some(Row(
-        asInt(scalars \ (prefix + "max_concurrent_tab_count")),
-        asInt(scalars \ (prefix + "tab_open_event_count")),
-        asInt(scalars \ (prefix + "max_concurrent_window_count")),
-        asInt(scalars \ (prefix + "window_open_event_count")),
-        asInt(scalars \ (prefix + "total_uri_count")),
-        asInt(scalars \ (prefix + "unfiltered_uri_count")),
-        asInt(scalars \ (prefix + "unique_domains_count"))
-      ))
-      case _ => None
-    }
   }
 
   // Convert the given Heka message containing a "main" ping
@@ -236,6 +225,7 @@ object MainSummaryView {
     lazy val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
     lazy val weaveDesktop = MainPing.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
     lazy val weaveMobile = MainPing.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
+    lazy val parentScalars = payload \ "payload" \ "processes" \ "parent" \ "scalars"
 
     val loopActivityCounterKeys = (0 to 4).map(_.toString)
 
@@ -457,7 +447,13 @@ object MainSummaryView {
         case _ => null
       },
       getUserPrefs(settings \ "userPrefs").orNull,
-      getBrowserEngagement(payload \ "payload" \ "processes" \ "parent" \ "scalars").orNull
+      getBrowserEngagement(parentScalars, "max_concurrent_tab_count"),
+      getBrowserEngagement(parentScalars, "tab_open_event_count"),
+      getBrowserEngagement(parentScalars, "max_concurrent_window_count"),
+      getBrowserEngagement(parentScalars, "window_open_event_count"),
+      getBrowserEngagement(parentScalars, "total_uri_count"),
+      getBrowserEngagement(parentScalars, "unfiltered_uri_count"),
+      getBrowserEngagement(parentScalars, "unique_domains_count")
     )
     Some(row)
   }
@@ -527,20 +523,6 @@ object MainSummaryView {
   // Data for user prefs
   def buildUserPrefsSchema = StructType(List(
     StructField("dom_ipc_process_count", IntegerType, nullable = true) // dom.ipc.processCount
-  ))
-
-  // Data for browser engagement measures, taken from:
-  //  processes.parent.scalars["browser.engagement.*"]
-  // For more information, see the Scalars definitions at
-  //  https://dxr.mozilla.org/mozilla-central/source/toolkit/components/telemetry/Scalars.yaml
-  def buildBrowserEngagementSchema = StructType(List(
-    StructField("max_concurrent_tab_count", IntegerType, nullable = true),
-    StructField("tab_open_event_count", IntegerType, nullable = true),
-    StructField("max_concurrent_window_count", IntegerType, nullable = true),
-    StructField("window_open_event_count", IntegerType, nullable = true),
-    StructField("total_uri_count", IntegerType, nullable = true),
-    StructField("unfiltered_uri_count", IntegerType, nullable = true),
-    StructField("unique_domains_count", IntegerType, nullable = true)
   ))
 
   def buildSchema: StructType = {
@@ -652,8 +634,17 @@ object MainSummaryView {
       StructField("telemetry_enabled", BooleanType, nullable = true), // environment.settings.telemetryEnabled
       StructField("user_prefs", buildUserPrefsSchema, nullable = true), // environment.settings.userPrefs
 
-      // Engagement measures per Bug 1315663
-      StructField("browser_engagement", buildBrowserEngagementSchema, nullable = true) // processes.parent.scalars["browser.engagement.*"]
+      // Engagement measures per Bug 1315663, taken from
+      //  payload.processes.parent.scalars["browser.engagement.*"]
+      // For more information, see the Scalars definitions at
+      //  https://dxr.mozilla.org/mozilla-central/source/toolkit/components/telemetry/Scalars.yaml
+      StructField("max_concurrent_tab_count", IntegerType, nullable = true),
+      StructField("tab_open_event_count", IntegerType, nullable = true),
+      StructField("max_concurrent_window_count", IntegerType, nullable = true),
+      StructField("window_open_event_count", IntegerType, nullable = true),
+      StructField("total_uri_count", IntegerType, nullable = true),
+      StructField("unfiltered_uri_count", IntegerType, nullable = true),
+      StructField("unique_domains_count", IntegerType, nullable = true)
     ))
   }
 }
