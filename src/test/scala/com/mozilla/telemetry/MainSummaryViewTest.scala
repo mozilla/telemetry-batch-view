@@ -878,4 +878,298 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     val jBogusScalars = parse("""[10, "ten"]""")
     MainSummaryView.getBrowserEngagement(jBogusScalars, "anything") should be (null)
   }
+
+  "Another Heka record" can "be summarized" in {
+    // Use an example framed-heka message. It is based on test_main.json.gz,
+    // submitted with a URL of
+    //    /submit/telemetry/bar/main/Firefox/53.0a1/nightly/20161117030212
+    val hekaFileName = "/test_main.2.snappy.heka"
+    val hekaURL = getClass.getResource(hekaFileName)
+    val input = hekaURL.openStream()
+
+    val schema = MainSummaryView.buildSchema
+
+    var count = 0
+    for (message <- HekaFrame.parse(input)) {
+      message.timestamp should be (1480010642481083392l)
+      message.`type`.get should be ("telemetry")
+      message.logger.get should be ("telemetry")
+
+      for (summary <- MainSummaryView.messageToRow(message)) {
+        // Apply our schema to a generic Row object
+        val r = applySchema(summary, schema)
+
+        val expected = Map(
+          "document_id"                       -> "bar",
+          "client_id"                         -> "c4582ba1-79fc-1f47-ae2a-671118dccd8b",
+          "sample_id"                         -> 4l,
+          "channel"                           -> "nightly",
+          "normalized_channel"                -> "nightly",
+          "country"                           -> "??",
+          "city"                              -> "??",
+          "os"                                -> "Darwin",
+          "os_version"                        -> "16.1.0",
+          "os_service_pack_major"             -> null,
+          "os_service_pack_minor"             -> null,
+          "windows_build_number"              -> null,
+          "windows_ubr"                       -> null,
+          "install_year"                      -> null,
+          "profile_creation_date"             -> 16861l,
+          "subsession_start_date"             -> "2016-11-24T00:00:00.0-04:00",
+          "subsession_length"                 -> 9203l,
+          "distribution_id"                   -> null,
+          "submission_date"                   -> "20161124",
+          "sync_configured"                   -> null,
+          "sync_count_desktop"                -> 1,
+          "sync_count_mobile"                 -> 1,
+          "app_build_id"                      -> "20161117030212",
+          "app_display_version"               -> "53.0a1",
+          "app_name"                          -> "Firefox",
+          "app_version"                       -> "53.0a1",
+          "timestamp"                         -> 1480010642481083392l,
+          "env_build_id"                      -> "20161117030212",
+          "env_build_version"                 -> "53.0a1",
+          "env_build_arch"                    -> "x86-64",
+          "e10s_enabled"                      -> true,
+          "e10s_cohort"                       -> "unsupportedChannel",
+          "locale"                            -> "en-US",
+          "active_experiment_id"              -> null,
+          "active_experiment_branch"          -> null,
+          "reason"                            -> "gather-subsession-payload",
+          "timezone_offset"                   -> -240,
+          "plugin_hangs"                      -> null,
+          "aborts_plugin"                     -> null,
+          "aborts_content"                    -> null,
+          "aborts_gmplugin"                   -> null,
+          "crashes_detected_plugin"           -> null,
+          "crashes_detected_content"          -> null,
+          "crashes_detected_gmplugin"         -> null,
+          "crash_submit_attempt_main"         -> null,
+          "crash_submit_attempt_content"      -> null,
+          "crash_submit_attempt_plugin"       -> null,
+          "crash_submit_success_main"         -> null,
+          "crash_submit_success_content"      -> null,
+          "crash_submit_success_plugin"       -> null,
+          "active_addons_count"               -> 9l,
+          "flash_version"                     -> null,
+          "vendor"                            -> "Mozilla",
+          "is_default_browser"                -> true,
+          "default_search_engine_data_name"   -> "Google",
+          "default_search_engine"             -> "google-nocodes",
+          "devtools_toolbox_opened_count"     -> null,
+          "client_submission_date"            -> null,
+          "push_api_notify"                   -> null,
+          "web_notification_shown"            -> null,
+          "places_pages_count"                -> 0,
+          "places_bookmarks_count"            -> 0,
+          "blocklist_enabled"                 -> true,
+          "addon_compatibility_check_enabled" -> true,
+          "telemetry_enabled"                 -> true,
+          "user_prefs"                        -> null,
+          "max_concurrent_tab_count"          -> 249,
+          "tab_open_event_count"              -> 11,
+          "max_concurrent_window_count"       -> 2,
+          "window_open_event_count"           -> null,
+          "total_uri_count"                   -> 93,
+          "unfiltered_uri_count"              -> 97,
+          "unique_domains_count"              -> 10
+        )
+
+        val actual = r.getValuesMap(expected.keys.toList)
+        for ((f, v) <- expected) {
+          withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+          actual.get(f) should be (Some(v))
+        }
+        actual should be (expected)
+
+        val searchSchema = MainSummaryView.buildSearchSchema
+        val searches = r.getSeq[Row](r.fieldIndex("search_counts"))
+        val searchCounter = searches.map(search => {
+          val sW = applySchema(search, searchSchema)
+          sW.getLong(sW.fieldIndex("count"))
+        }).sum
+        searchCounter should be (2l)
+
+        r.getStruct(r.fieldIndex("loop_activity_counter")) should be (null)
+        r.getMap[String,Row](r.fieldIndex("popup_notification_stats")) should be (null)
+
+        val addonSchema = MainSummaryView.buildAddonSchema
+        checkAddonValues(r.getStruct(r.fieldIndex("active_theme")), addonSchema, Map(
+          "addon_id"              -> "{972ce4c6-7e08-4474-a285-3208198ce6fd}",
+          "blocklisted"           -> false,
+          "name"                  -> "Default",
+          "user_disabled"         -> false,
+          "app_disabled"          -> false,
+          "version"               -> "53.0a1",
+          "scope"                 -> 4,
+          "type"                  -> null,
+          "foreign_install"       -> false,
+          "has_binary_components" -> false,
+          "install_day"           -> 16861,
+          "update_day"            -> 17122,
+          "signed_state"          -> null,
+          "is_system"             -> null
+        ))
+
+        val addons = r.getSeq[Row](r.fieldIndex("active_addons"))
+        addons.size should be (9)
+
+        for (addon <- addons) {
+          val a = applySchema(addon, addonSchema)
+          val addonId = a.getString(a.fieldIndex("addon_id"))
+          addonId match {
+            case "e10srollout@mozilla.org" => checkAddonValues(addon, addonSchema, Map(
+              "addon_id"              -> "e10srollout@mozilla.org",
+              "blocklisted"           -> false,
+              "name"                  -> "Multi-process staged rollout",
+              "user_disabled"         -> false,
+              "app_disabled"          -> false,
+              "version"               -> "1.6",
+              "scope"                 -> 1,
+              "type"                  -> "extension",
+              "foreign_install"       -> false,
+              "has_binary_components" -> false,
+              "install_day"           -> 16865,
+              "update_day"            -> 17122,
+              "signed_state"          -> null,
+              "is_system"             -> true
+            ))
+            case "firefox@getpocket.com" => checkAddonValues(addon, addonSchema, Map(
+              "addon_id"              -> "firefox@getpocket.com",
+              "blocklisted"           -> false,
+              "name"                  -> "Pocket",
+              "user_disabled"         -> false,
+              "app_disabled"          -> false,
+              "version"               -> "1.0.5",
+              "scope"                 -> 1,
+              "type"                  -> "extension",
+              "foreign_install"       -> false,
+              "has_binary_components" -> false,
+              "install_day"           -> 16861,
+              "update_day"            -> 17122,
+              "signed_state"          -> null,
+              "is_system"             -> true
+            ))
+            case "webcompat@mozilla.org" => checkAddonValues(addon, addonSchema, Map(
+              "addon_id"              -> "webcompat@mozilla.org",
+              "blocklisted"           -> false,
+              "name"                  -> "Web Compat",
+              "user_disabled"         -> false,
+              "app_disabled"          -> false,
+              "version"               -> "1.0",
+              "scope"                 -> 1,
+              "type"                  -> "extension",
+              "foreign_install"       -> false,
+              "has_binary_components" -> false,
+              "install_day"           -> 16923,
+              "update_day"            -> 17122,
+              "signed_state"          -> null,
+              "is_system"             -> true
+            ))
+            case "flyweb@mozilla.org" => checkAddonValues(addon, addonSchema, Map(
+              "addon_id"              -> "flyweb@mozilla.org",
+              "blocklisted"           -> false,
+              "name"                  -> "FlyWeb",
+              "user_disabled"         -> false,
+              "app_disabled"          -> false,
+              "version"               -> "1.0.0",
+              "scope"                 -> 1,
+              "type"                  -> "extension",
+              "foreign_install"       -> false,
+              "has_binary_components" -> false,
+              "install_day"           -> 16963,
+              "update_day"            -> 17122,
+              "signed_state"          -> null,
+              "is_system"             -> true
+            ))
+            case "formautofill@mozilla.org" => checkAddonValues(addon, addonSchema, Map(
+              "addon_id"              -> "formautofill@mozilla.org",
+              "blocklisted"           -> false,
+              "name"                  -> "Form Autofill",
+              "user_disabled"         -> false,
+              "app_disabled"          -> false,
+              "version"               -> "1.0",
+              "scope"                 -> 1,
+              "type"                  -> "extension",
+              "foreign_install"       -> false,
+              "has_binary_components" -> false,
+              "install_day"           -> 17065,
+              "update_day"            -> 17122,
+              "signed_state"          -> null,
+              "is_system"             -> true
+            ))
+            case "aushelper@mozilla.org" => checkAddonValues(addon, addonSchema, Map(
+              "addon_id"              -> "aushelper@mozilla.org",
+              "blocklisted"           -> false,
+              "name"                  -> "Application Update Service Helper",
+              "user_disabled"         -> false,
+              "app_disabled"          -> false,
+              "version"               -> "1.0",
+              "scope"                 -> 1,
+              "type"                  -> "extension",
+              "foreign_install"       -> false,
+              "has_binary_components" -> false,
+              "install_day"           -> 17105,
+              "update_day"            -> 17122,
+              "signed_state"          -> null,
+              "is_system"             -> true
+            ))
+            case "tabgroups@quicksaver" => checkAddonValues(addon, addonSchema, Map(
+              "addon_id"              -> "tabgroups@quicksaver",
+              "blocklisted"           -> false,
+              "name"                  -> "Tab Groups",
+              "user_disabled"         -> false,
+              "app_disabled"          -> false,
+              "version"               -> "2.1.2",
+              "scope"                 -> 1,
+              "type"                  -> "extension",
+              "foreign_install"       -> false,
+              "has_binary_components" -> false,
+              "install_day"           -> 16989,
+              "update_day"            -> 17129,
+              "signed_state"          -> 2,
+              "is_system"             -> false
+            ))
+            case "support@lastpass.com" => checkAddonValues(addon, addonSchema, Map(
+              "addon_id"              -> "support@lastpass.com",
+              "blocklisted"           -> false,
+              "name"                  -> "LastPass",
+              "user_disabled"         -> false,
+              "app_disabled"          -> false,
+              "version"               -> "4.1.32a",
+              "scope"                 -> 1,
+              "type"                  -> "extension",
+              "foreign_install"       -> false,
+              "has_binary_components" -> false,
+              "install_day"           -> 16891,
+              "update_day"            -> 17120,
+              "signed_state"          -> 2,
+              "is_system"             -> false
+            ))
+            case "uBlock0@raymondhill.net" => checkAddonValues(addon, addonSchema, Map(
+              "addon_id"              -> "uBlock0@raymondhill.net",
+              "blocklisted"           -> false,
+              "name"                  -> "uBlock Origin",
+              "user_disabled"         -> false,
+              "app_disabled"          -> false,
+              "version"               -> "1.9.16",
+              "scope"                 -> 1,
+              "type"                  -> "extension",
+              "foreign_install"       -> false,
+              "has_binary_components" -> false,
+              "install_day"           -> 17052,
+              "update_day"            -> 17100,
+              "signed_state"          -> 2,
+              "is_system"             -> false
+            ))
+            case x => x should be ("Should not have happened")
+          }
+        }
+
+        count += 1
+      }
+    }
+    input.close()
+    count should be (1)
+  }
 }
