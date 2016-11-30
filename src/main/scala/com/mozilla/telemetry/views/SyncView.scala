@@ -63,8 +63,8 @@ object SyncView {
       println("=======================================================================================")
       println(s"BEGINNING JOB $jobName FOR $currentDateString")
 
-      val ignoredCount = new LongAccumulator(); // Number of records ignored
-      val processedCount = new LongAccumulator();  // Number of Records Processed
+      val ignoredCount = sc.accumulator(0, "Number of Records Ignored")
+      val processedCount = sc.accumulator(0, "Number of Records Processed")
 
       val messages = Dataset("telemetry")
         .where("sourceName") {
@@ -82,10 +82,10 @@ object SyncView {
       val rowRDD = messages.flatMap(m => {
         messageToRow(m) match {
           case Nil =>
-            ignoredCount.add(1)
+            ignoredCount += 1
             None
           case x =>
-            processedCount.add(1)
+            processedCount += 1
             x
         }
       })
@@ -469,7 +469,11 @@ object SyncPingConverter {
       },
 
       // Info about the sync.
-      stringFromSyncOrPayload("uid"),
+      stringFromSyncOrPayload("uid") match {
+        case null => return None // required.
+        case x => x
+      },
+
       stringFromSyncOrPayload("deviceID"),
 
       sync \ "when" match {
