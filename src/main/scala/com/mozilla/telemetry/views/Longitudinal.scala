@@ -693,7 +693,7 @@ object LongitudinalView {
       definition <- Histograms.definitions.get(key)
     } yield (key, definition)
 
-    val histogramSchema = getElemType(schema, "gc_ms")
+    val histogramSchema = getElemType(schema, "fx_tab_switch_total_ms")
 
     for ((key, definition) <- validKeys) {
       val keyedHistogramsList = histogramsList.map{x =>
@@ -728,7 +728,7 @@ object LongitudinalView {
       definition <- Histograms.definitions.get(key)
     } yield (key, definition)
 
-    val histogramSchema = getElemType(schema, "gc_ms")
+    val histogramSchema = getElemType(schema, "fx_tab_switch_total_ms")
 
     for ((key, definition) <- validKeys) {
       root.set(key.toLowerCase, vectorizeHistogram(key, definition, histogramsList, histogramSchema))
