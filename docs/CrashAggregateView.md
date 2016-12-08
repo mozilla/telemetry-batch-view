@@ -22,15 +22,13 @@ Notes:
 
 * A Spark analysis runs daily using a [scheduled analysis job](https://analysis.telemetry.mozilla.org/cluster/schedule).
     * The job, `crash-aggregates`, runs the `run_crash_aggregator.ipynb` Jupyter notebook, which downloads, installs, and runs the crash-rate-aggregates on the cluster.
-    * Currently, this job is running under :mdoglio's account every day at 1am UTC, with the default settings for everything else. The job is named `crash-aggregates`.
+    * Currently, this is running every day at midnight UTC on [airflow](http://workflow.telemetry.mozilla.org/admin/airflow/graph?root=&dag_id=crash_aggregates). The job definition is publicly available on the [telemetry-airflow repository](https://github.com/mozilla/telemetry-airflow/blob/master/dags/crash_aggregates.py)
 * The job uploads the resulting data to S3 as [Parquet](https://parquet.apache.org/)-serialized [DataFrames](https://spark.apache.org/docs/1.6.0/api/java/org/apache/spark/sql/DataFrame.html), under prefixes of the form `crash-aggregates/v1/submission_date=(YYYY-MM-DD SUBMISSION DATE)/` in the `telemetry-parquet` bucket.
     * Each of these prefixes is a partition. There is a partition for each submission date..
 * We have [Presto](https://prestodb.io/) set up to query the data on S3 using Presto's SQL query engine.
     * Currently, this instance is available at `ec2-54-218-5-112.us-west-2.compute.amazonaws.com`. The [provisioning files for the Presto instance](https://github.com/mozilla/emr-bootstrap-presto) are available as well.
     * At the moment, new partitions must be imported using [parquet2hive](https://github.com/mozilla/parquet2hive). There's a temporary cron job set up on the instance to do the importing, which will [eventually be replaced with something better](https://bugzilla.mozilla.org/show_bug.cgi?id=1251648).
 * The [re:dash](https://sql.telemetry.mozilla.org/dashboard/general) setup connects to Presto and allows users to make SQL queries, build dashboards, etc. with the crash aggregates data.
-* A watchdog notebook, `crash-rate-aggregates-watchdog.ipynb`, can be run regularly to send out email alerts if the crash aggregator fails in any way to output the results on S3.
-    * Currently, this is running every day at 1am as a [scheduled analysis job](https://analysis.telemetry.mozilla.org/cluster/schedule) under :mdoglio's account.
 
 Schemas and Making Queries
 --------------------------
