@@ -7,7 +7,7 @@ Essentially, each row of the view represents the stats for a particular populati
 
 To generate the dataset for April 10, 2016 to April 11, 2016:
 ```bash
-sbt "run-main telemetry.views.CrashAggregateView --from 20160410 --to 20160411 --bucket telemetry-bucket"
+sbt "run-main com.mozilla.telemetry.views.CrashAggregateView --from 20160410 --to 20160411 --bucket telemetry-bucket"
 ```
 
 **Note:** Currently, due to [avro-parquet issues](https://issues.apache.org/jira/browse/HIVE-12828), Parquet writing only works under the `spark-submit` commands - the above example will fail. This will be fixed when avro-parquet updates or is removed.
@@ -15,7 +15,7 @@ sbt "run-main telemetry.views.CrashAggregateView --from 20160410 --to 20160411 -
 For distributed execution, we can build a self-contained JAR file, then run it with Spark. To generate the dataset for April 10, 2016 to April 11, 2016:
 ```bash
 sbt assembly
-spark-submit --master yarn-client --class telemetry.views.CrashAggregateView target/scala-2.10/telemetry-batch-view-*.jar --from 20160410 --to 20160411 --bucket telemetry-bucket
+spark-submit --master yarn-client --class com.mozilla.telemetry.views.CrashAggregateView target/scala-2.11/telemetry-batch-view-*.jar --from 20160410 --to 20160411 --bucket telemetry-bucket
 ```
 
 Notes:
