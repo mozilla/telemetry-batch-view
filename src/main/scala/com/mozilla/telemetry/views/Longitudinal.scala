@@ -145,8 +145,14 @@ object LongitudinalView {
     val clsName = "longitudinal" // Needed for retro-compatibility with existing data
     val prefix = s"${clsName}/v${opts.to()}"
     val outputBucket = opts.outputBucket()
+    val lockfileName = "RUNNING"
 
     require(S3Store.isPrefixEmpty(outputBucket, prefix), s"s3://${outputBucket}/${prefix} already exists!")
+
+    // Bug 1321424 -- add a lockfile into the folder to prevent duplicate jobs from running
+    val lockfile = new java.io.File(lockfileName)
+    lockfile.createNewFile()
+    S3Store.uploadFile(lockfile, outputBucket, prefix, lockfileName)
 
     // Sort submissions in descending order
     implicit val ordering = Ordering[(String, String, Int)].reverse
@@ -210,6 +216,9 @@ object LongitudinalView {
     val counts = partitionCounts.reduce( (x, y) => (x._1 + y._1, x._2 + y._2))
     println("Clients seen: %d".format(counts._1))
     println("Clients ignored: %d".format(counts._2))
+
+    // NOTE: This line must be after the reduce above due to lazy eval, or else this will execute before any real work
+    S3Store.deleteKey(outputBucket,  s"${prefix}/${lockfileName}")
   }
 
   private def buildSchema: Schema = {
