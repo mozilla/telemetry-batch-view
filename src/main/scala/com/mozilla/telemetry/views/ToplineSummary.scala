@@ -40,7 +40,7 @@ object ToplineSummary {
 
   /* Returns the profile creation date in seconds since unix epoch */
   private val convertProfileCreation: UserDefinedFunction = udf {
-    (timestamp: Int) =>
+    (timestamp: Long) =>
       timestamp match {
         case ts if ts > 0 => ts * SecondsInDay
         case _ => 0
@@ -132,7 +132,9 @@ object ToplineSummary {
       .filter($"submission_date_s3" >= startDate)
       .filter($"submission_date_s3" <= endDate)
       .filter($"app_name" === "Firefox")
-      .na.fill("", Seq("country", "channel", "os"))  // preprocess columns before feeding into normalize functions
+      // preprocess columns before feeding into normalize functions
+      .na.fill("", Seq("country", "channel", "os"))
+      .na.fill(0, Seq("profile_creation_date", "subsession_length"))
       .select(
         $"client_id",
         $"submission_date",
@@ -142,7 +144,7 @@ object ToplineSummary {
         convertProfileCreation($"profile_creation_date").alias("profile_creation_date"),
         normalizeChannel($"channel").alias("channel"),
         normalizeOS($"os").alias("os"),
-        convertHours($"subsession_length").alias("hours")
+        convertHours($"subsession_length".cast(DoubleType)).alias("hours")
       )
   }
 
@@ -174,8 +176,7 @@ object ToplineSummary {
     crashData.select(
       normalizeCountry($"country").alias("country"),
       normalizeChannel($"channel").alias("channel"),
-      normalizeOS($"os").alias("os")
-    )
+      normalizeOS($"os").alias("os"))
   }
 
   private def messageToRow(message: Message): Row = {
@@ -207,7 +208,9 @@ object ToplineSummary {
     */
   private def searchAggregates(reportData: DataFrame): DataFrame = {
     val searchSchema = MainSummaryView.buildSearchSchema
+
     val searchData = reportData
+      .where($"search_counts".isNotNull)
       .withColumn("search_counts", explode($"search_counts"))
       .select(
         $"country",
@@ -298,6 +301,7 @@ object ToplineSummary {
     val reportStart = opt[String]("report_start", descr = "Start day of the reporting period (YYYYMMDD)", required = true)
     val mode = opt[String]("mode", descr = "Report mode: weekly or monthly", required = true)
     val outputBucket = opt[String]("bucket", descr = "bucket", required = false)
+    val debug = opt[Boolean]("debug", descr = "debug", required = false)
     verify()
   }
 
@@ -305,25 +309,32 @@ object ToplineSummary {
     val opts = new Opts(args)
     val reportStart = opts.reportStart()
     val mode = opts.mode()
+    val debug = opts.debug()
     val outputBucket = "net-mozaws-prod-us-west-2-pipeline-analysis"
 
     val formatter = DateTimeFormat.forPattern("yyyyMMdd")
     val fromDate = formatter.parseDateTime(reportStart)
 
     val from = reportStart
-    val to = from
+    val to = from // TODO: to date should be manipulated by mode
 
     try {
       val mainSummaryData: DataFrame = spark.read.parquet(main_summary_url)
+        .filter($"sample_id" === 1)
       val reportData = createReportDataset(mainSummaryData, from, to)
       val crashData = createCrashDataset(from, to)
+
+      if (debug) {
+        reportData.count()
+        crashData.count()
+      }
 
       val finalReport = easyAggregates(reportData, crashData)
         .join(clientValues(reportData, from), Seq("country", "channel", "os"))
 
       val s3prefix = s"amiyaguchi/topline/mode=$mode/report_start=$reportStart"
       val s3path = s"s3://$outputBucket/$s3prefix"
-      finalReport.repartition(1).write.mode("overwrite").parquet(s3path)
+      finalReport.write.mode("overwrite").parquet(s3path)
       logger.info(s"Topline Report completed for $reportStart")
     } finally {
       spark.stop()

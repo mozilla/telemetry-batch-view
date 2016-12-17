@@ -17,18 +17,18 @@ case class Crashes(country: String,
 
 case class SearchCounts(engine: String,
                         source: String,
-                        count: Int)
+                        count: Some[Long])
 
 case class PartialToplineMain(app_name: String,
                        channel: String,
                        client_id: String,
                        country: String,
                        is_default_browser: Boolean,
-                       profile_creation_date: Int,
+                       profile_creation_date: Long,
                        os: String,
                        search_counts: Seq[SearchCounts],
                        submission_date: String,
-                       subsession_length: Int,
+                       subsession_length: Long,
                        submission_date_s3: String)
 
 
@@ -54,11 +54,11 @@ class ToplineSummaryTest extends FlatSpec
         SearchCounts(
           engine = "yahoo",
           source = "",
-          count = 1),
+          count = Some(1)),
         SearchCounts(
           engine = "yahoo",
           source = "awesomebar",
-          count = 3)
+          count = Some(3))
       ),
       submission_date = fake_date,
       subsession_length = 3600,
@@ -95,6 +95,7 @@ class ToplineSummaryTest extends FlatSpec
     val schema = StructType(df.schema.map {
       case StructField(c, t, _, m) => StructField(c, t, nullable = true, m)
     })
+
     df.sqlContext.createDataFrame(df.rdd, schema)
   }
 
@@ -144,7 +145,7 @@ class ToplineSummaryTest extends FlatSpec
 
   it should "handle null values" in {
     import sqlContext.implicits._
-    val nullify = udf { () => None: Option[Int] }
+    val nullify = udf { () => None: Option[Long] }
     val data = createNullableDataFrame(Seq(fake_ping).toDF())
       .withColumn("subsession_length", nullify())
     val expect = 0
@@ -157,13 +158,13 @@ class ToplineSummaryTest extends FlatSpec
 
   "[UDF] convertProfileCreation" should "handle null values" in {
     import sqlContext.implicits._
-    val nullify = udf { () => None: Option[Int] }
+    val nullify = udf { () => None: Option[Long] }
     val data = createNullableDataFrame(Seq(fake_ping).toDF())
       .withColumn("profile_creation_date", nullify())
     val expect = 0
 
     val df = ToplineSummary invokePrivate createReportDataset(data)
-    val result = df.head().getAs[Int]("profile_creation_date")
+    val result = df.head().getAs[Long]("profile_creation_date")
 
     assert(expect == result)
   }
@@ -284,6 +285,20 @@ class ToplineSummaryTest extends FlatSpec
     assert(expect == result)
   }
 
+  it should "handle null values" in {
+    import sqlContext.implicits._
+    val nullify = udf { () => None: Option[String] }
+    val data = createNullableDataFrame(Seq(fake_ping).toDF())
+      .withColumn("os", nullify())
+    val expect = "Other"
+
+    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val result = df.head().getAs[String]("os")
+
+    assert(expect == result)
+  }
+
+
   "searchAggregates" should "aggregate the number of yahoo counts" in {
     import sqlContext.implicits._
     val main_df = Seq(fake_ping, fake_ping).toDF()
@@ -296,6 +311,35 @@ class ToplineSummaryTest extends FlatSpec
 
     assert(expect == result)
   }
+
+  it should "handle null values" in {
+    import sqlContext.implicits._
+    val data = createNullableDataFrame(
+        Seq(fake_ping, fake_ping.copy(search_counts=null)
+      ).toDF())
+    val expect = 4
+
+    val reportData = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummary invokePrivate searchAggregates(reportData)
+    val result = df.head().getAs[Long]("yahoo")
+
+    assert(expect == result)
+  }
+
+  it should "handle zero searches" in {
+    import sqlContext.implicits._
+    val nullify = udf { () => None: Option[Seq[SearchCounts]] }
+    val data = createNullableDataFrame(Seq(fake_ping).toDF())
+      .withColumn("search_counts", nullify())
+    val expect = 0
+
+    val reportData = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummary invokePrivate searchAggregates(reportData)
+    val result = df.count()
+
+    assert(expect == result)
+  }
+
 
   it should "default to 0 search counts" in {
     import sqlContext.implicits._
@@ -350,7 +394,7 @@ class ToplineSummaryTest extends FlatSpec
   "clientValues" should "count a new client" in {
     import sqlContext.implicits._
     val future = dateFormat.parseDateTime(future_date).getMillis() / (1000 * 3600 * 24)
-    val data = Seq(fake_ping.copy(profile_creation_date = future.toInt)).toDF()
+    val data = Seq(fake_ping.copy(profile_creation_date = future)).toDF()
     val reportData = ToplineSummary invokePrivate createReportDataset(data)
     val expect = 1
 
@@ -363,7 +407,7 @@ class ToplineSummaryTest extends FlatSpec
   it should "not count a client as new" in {
     import sqlContext.implicits._
     val past = dateFormat.parseDateTime(past_date).getMillis() / (1000 * 3600 * 24)
-    val data = Seq(fake_ping.copy(profile_creation_date = past.toInt)).toDF()
+    val data = Seq(fake_ping.copy(profile_creation_date = past)).toDF()
     val reportData = ToplineSummary invokePrivate createReportDataset(data)
     val expect = 0
 
