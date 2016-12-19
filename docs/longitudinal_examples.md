@@ -158,11 +158,12 @@ WITH samples AS
  (SELECT
    client_id,
    normalized_channel as channel,
-   mctc AS max_concurrent_tabs
+   mctc.value AS max_concurrent_tabs
   FROM longitudinal
   CROSS JOIN UNNEST(scalar_parent_browser_engagement_max_concurrent_tab_count) as t (mctc)
   WHERE
    scalar_parent_browser_engagement_max_concurrent_tab_count is not null and
+   mctc.value is not null and
    normalized_channel = 'nightly')
 SELECT approx_distinct(client_id) FROM samples WHERE max_concurrent_tabs > 100
 ```
