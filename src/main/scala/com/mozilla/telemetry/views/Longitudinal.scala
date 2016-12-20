@@ -159,11 +159,7 @@ object LongitudinalView {
     val clientMessages = messages
       .flatMap {
         (message) =>
-          val payload = message.payload match {
-            case Some(p) => parse(p) \ "payload"
-            case _ => JObject()
-          }
-          val fields = message.fieldsAsMap + ("payload" -> payload)
+          val fields = message.fieldsAsMap
           for {
             clientId <- fields.get("clientId").asInstanceOf[Option[String]]
             json <- fields.get("payload.info").asInstanceOf[Option[String]]
@@ -688,12 +684,7 @@ object LongitudinalView {
   }
 
   private def keyedHistograms2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
-    implicit val formats = DefaultFormats
-
-    val histogramsList = payloads.map{ case (x) =>
-      val json = x.getOrElse("payload.keyedHistograms", return).asInstanceOf[String]
-      parse(json).extract[Map[String, Map[String, RawHistogram]]]
-    }
+    val histogramsList = payloads.map(Histograms.stripKeyedHistograms)
 
     val uniqueKeys = histogramsList.flatMap(x => x.keys).distinct.toSet
 
@@ -723,13 +714,8 @@ object LongitudinalView {
   }
 
   private def histograms2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
-    implicit val formats = DefaultFormats
-
-    val histogramsList = payloads.map{ case (x) =>
-      val json = x.getOrElse("payload.histograms", return).asInstanceOf[String]
-      parse(json).extract[Map[String, RawHistogram]]
-    }
-
+    val histogramsList = payloads.map(Histograms.stripHistograms)
+        
     val uniqueKeys = histogramsList.flatMap(x => x.keys).distinct.toSet
 
     val validKeys = for {
@@ -811,7 +797,7 @@ object LongitudinalView {
     val scalarList = payloads.map{ case (x) =>
       // Get the payload of the Heka frame, which contains the payload for the
       // main ping.
-      val payload = x.getOrElse("payload", return).asInstanceOf[JObject]
+      val payload = parse(x.getOrElse("payload", return).asInstanceOf[String]).extract[JValue]
       // If we can't find the "scalars" section for a ping, don't throw away all
       // the data. This is semantically different from how we handle other stuff
       // in the longitudinal (e.g. Histograms), but we need this since scalars
@@ -841,7 +827,7 @@ object LongitudinalView {
     implicit val formats = DefaultFormats
 
     val scalarsList = payloads.map{ case (x) =>
-      val payload = x.getOrElse("payload", return).asInstanceOf[JObject]
+      val payload = parse(x.getOrElse("payload", return).asInstanceOf[String]).extract[JValue]
       (payload \ "processes" \ "parent" \ "keyedScalars").toOption match {
         case Some(scalars) => scalars.extract[Map[String, Map[String, AnyVal]]]
         case _ => Map[String, Map[String, AnyVal]]()
