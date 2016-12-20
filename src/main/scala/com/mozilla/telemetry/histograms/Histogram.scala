@@ -16,6 +16,56 @@ case class LinearHistogram(keyed: Boolean, low: Int, high: Int, nBuckets: Int) e
 case class ExponentialHistogram(keyed: Boolean, low: Int, high: Int, nBuckets: Int) extends HistogramDefinition
 
 object Histograms {
+  private val processTypes = List("content", "gpu")
+  private case class HistogramLocation(path: List[String], suffix: String)
+  private def generateLocations(histogramKey: String)(processType: String): HistogramLocation = {
+    HistogramLocation(
+      List("payload", "processes", processType, histogramKey),
+      "_" + processType.toUpperCase
+    )
+  }
+
+  // Locations for non-keyed histograms
+  private val histogramLocations = 
+    HistogramLocation(List("payload.histograms"), "") ::
+    processTypes.map(generateLocations("histograms"))
+
+  private val keyedHistogramLocations =
+    HistogramLocation(List("payload.keyedHistograms"), "") ::
+    processTypes.map(generateLocations("keyedHistograms"))
+
+  private val suffixes = (histogramLocations ++ keyedHistogramLocations).map(_.suffix).distinct
+
+  private def parseHistogramLocation[HistogramFormat : Manifest](
+    payload: Map[String, Any],
+    location: HistogramLocation
+  ): Option[Map[String, HistogramFormat]] = {
+    implicit val formats = DefaultFormats
+    for {
+      // Extract the json from the payload as a JValue
+      json <- payload.get(location.path.head)
+      root = parse(json.asInstanceOf[String])
+      // Traverse the rest of the histogram path
+      leaf = location.path.tail.foldLeft(root)((acc, x) => acc \ x)
+      histograms <- leaf.extractOpt[Map[String, HistogramFormat]]
+    } yield (
+      histograms.map(pair => (pair._1 + location.suffix, pair._2))
+    )
+  }
+
+  private def stripPayload[HistogramFormat: Manifest](
+    locations: List[HistogramLocation]
+  )(
+    payload: Map[String, Any]
+  ): Map[String, HistogramFormat] = {
+    locations.map(parseHistogramLocation[HistogramFormat](payload, _))
+      .flatten
+      .foldLeft(Map[String, HistogramFormat]())((acc, map) => acc ++ map)
+  }
+
+  val stripHistograms = stripPayload[RawHistogram](histogramLocations) _
+  val stripKeyedHistograms = stripPayload[Map[String, RawHistogram]](keyedHistogramLocations) _
+
   val definitions = {
     implicit val formats = DefaultFormats
 
@@ -79,25 +129,29 @@ object Histograms {
         val high = v.getOrElse("high", None).asInstanceOf[Option[Int]]
         val nBuckets = v.getOrElse("n_buckets", None).asInstanceOf[Option[Int]]
 
+        def addSuffixes(key: String, histogram: HistogramDefinition): List[(String, HistogramDefinition)] = {
+          suffixes.map(suffix => (key + suffix, histogram))
+        }
+
         (kind, nValues, high, nBuckets) match {
           case ("flag", _, _, _) =>
-            Some((k, FlagHistogram(keyed)))
+            Some(addSuffixes(k, FlagHistogram(keyed)))
           case ("boolean", _, _ , _) =>
-            Some((k, BooleanHistogram(keyed)))
+            Some(addSuffixes(k, BooleanHistogram(keyed)))
           case ("count", _, _, _) =>
-            Some((k, CountHistogram(keyed)))
+            Some(addSuffixes(k, CountHistogram(keyed)))
           case ("enumerated", Some(x), _, _) =>
-            Some((k, EnumeratedHistogram(keyed, x)))
+            Some(addSuffixes(k, EnumeratedHistogram(keyed, x)))
           case ("linear", _, Some(h), Some(n)) =>
-            Some((k, LinearHistogram(keyed, low, h, n)))
+            Some(addSuffixes(k, LinearHistogram(keyed, low, h, n)))
           case ("exponential", _, Some(h), Some(n)) =>
-            Some((k, ExponentialHistogram(keyed, low, h, n)))
+            Some(addSuffixes(k, ExponentialHistogram(keyed, low, h, n)))
           case _ =>
             None
         }
       }
 
-      (key, pretty.flatten.toMap)
+      (key, pretty.flatten.flatten.toMap)
     }
 
     // Histograms are considered to be immutable so it's OK to merge their definitions
