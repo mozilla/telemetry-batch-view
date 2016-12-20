@@ -214,7 +214,6 @@ object LongitudinalView {
       }
 
     val counts = partitionCounts.reduce( (x, y) => (x._1 + y._1, x._2 + y._2))
-    println("Clients seen: %d".format(counts._1))
     println("Clients ignored: %d".format(counts._2))
 
     // NOTE: This line must be after the reduce above due to lazy eval, or else this will execute before any real work
@@ -688,12 +687,7 @@ object LongitudinalView {
   }
 
   private def keyedHistograms2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
-    implicit val formats = DefaultFormats
-
-    val histogramsList = payloads.map{ case (x) =>
-      val json = x.getOrElse("payload.keyedHistograms", return).asInstanceOf[String]
-      parse(json).extract[Map[String, Map[String, RawHistogram]]]
-    }
+    val histogramsList = payloads.map(Histograms.stripKeyedHistograms)
 
     val uniqueKeys = histogramsList.flatMap(x => x.keys).distinct.toSet
 
@@ -723,13 +717,8 @@ object LongitudinalView {
   }
 
   private def histograms2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
-    implicit val formats = DefaultFormats
-
-    val histogramsList = payloads.map{ case (x) =>
-      val json = x.getOrElse("payload.histograms", return).asInstanceOf[String]
-      parse(json).extract[Map[String, RawHistogram]]
-    }
-
+    val histogramsList = payloads.map(Histograms.stripHistograms)
+        
     val uniqueKeys = histogramsList.flatMap(x => x.keys).distinct.toSet
 
     val validKeys = for {
