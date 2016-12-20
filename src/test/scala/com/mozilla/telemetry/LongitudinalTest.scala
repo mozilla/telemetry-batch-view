@@ -72,19 +72,24 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
           ("fizz" -> "buzz") ~
           ("other" -> "some"))
 
-      var pingPayload =
+      val parent =
         if (idx == 1) {
           // Skip the scalar section for the first payload.
-          ("processes" ->
-            ("parent" ->
-              ("bogus" -> "other") ~
-              ("keyedScalars" -> keyedScalars)))
+          ("bogus" -> "other") ~
+          ("keyedScalars" -> keyedScalars)
         } else {
-          ("processes" ->
-            ("parent" ->
-              ("scalars" -> scalars) ~
-              ("keyedScalars" -> keyedScalars)))
+          ("scalars" -> scalars) ~
+          ("keyedScalars" -> keyedScalars)
         }
+
+      val pingPayload =
+        ("processes" ->
+          ("parent" -> parent) ~
+          ("content" ->
+            ("histograms" -> histograms) ~
+            ("keyedHistograms" -> keyedHistograms)
+          )
+        )
 
       val simpleMeasurements = "uptime" -> 18L
 
@@ -183,7 +188,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
         "payload.simpleMeasurements" -> compact(render(simpleMeasurements)),
         "payload.histograms" -> compact(render(histograms)),
         "payload.keyedHistograms" -> compact(render(keyedHistograms)),
-        "payload" -> render(pingPayload),
+        "payload" -> compact(render(pingPayload)),
         "environment.build" -> compact(render(build)),
         "environment.partner" -> compact(render(partner)),
         "environment.profile" -> compact(render(profile)),
@@ -485,8 +490,20 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     }
   }
 
+  "Keyed Content Histograms" must "be included" in {
+    val entries = fixture.row.getMap[String, WrappedArray[Int]](fixture.row.fieldIndex("search_counts_content"))
+    assert(entries.size == 1)
+    assert(entries("foo").size == fixture.payloads.length)
+    entries("foo").foreach(x => assert(x == 42))
+  }
+
   "Opt-in Histograms" must "be ignored" in {
     intercept[IllegalArgumentException](fixture.row.fieldIndex("gc_ms"))
+  }
+
+  "Content Histograms" must "be included" in {
+    val histograms = fixture.row.getList[Boolean](fixture.row.fieldIndex("fips_enabled_content"))
+    histograms.foreach(x => assert(x))
   }
 
   "ClientIterator" should "not trim histories of size < 1000" in {
