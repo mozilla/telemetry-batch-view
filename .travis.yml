@@ -11,10 +11,17 @@ before_cache:
   # Tricks to avoid unnecessary cache updates
   - find $HOME/.ivy2 -name "ivydata-*.properties" -delete
   - find $HOME/.sbt -name "*.lock" -delete
+install:
+  - wget https://archive.apache.org/dist/hbase/1.2.3/hbase-1.2.3-bin.tar.gz
+  - tar xzf hbase-1.2.3-bin.tar.gz
+  - mkdir /tmp/hbase
+  - echo "<configuration><property><name>hbase.rootdir</name><value>/tmp/hbase</value></property></configuration>" > hbase-1.2.3/conf/hbase-site.xml
+  - hbase-1.2.3/bin/start-hbase.sh
+  - hbase-1.2.3/bin/hbase-daemon.sh start thrift
 env:
  - _JAVA_OPTIONS="-Xms4G -Xmx4G -Xss4M -XX:MaxMetaspaceSize=256M"
 scala:
-  - 2.10.6
+  - 2.11.8
 sbt_args: -J-Xss2M
 script:
   - sbt coverage test
