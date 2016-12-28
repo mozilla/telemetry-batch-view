@@ -152,14 +152,16 @@ object CrashAggregateView {
     // See https://bugzilla.mozilla.org/show_bug.cgi?id=1310673
     val filtered_messages = messages.filter(m => {
       m.get("docType") match {
-        case Some("crash") =>
-          m.get("processType") match {
-            case Some("browser") | None => true
+        case Some("crash") => m.get("payload") match {
+          case Some(payload: JValue) => payload \ "payload" \ "processType" match {
+            case JString("browser") | JNothing => true
             case _ => {
               contentCrashIgnoredAccumulator.add(1)
               false
             }
           }
+          case _ => true
+        }
         case _ => true
       }
     })
