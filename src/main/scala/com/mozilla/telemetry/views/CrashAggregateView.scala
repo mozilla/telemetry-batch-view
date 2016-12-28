@@ -54,7 +54,19 @@ object CrashAggregateView {
           case doc if List("main", "crash") contains doc => true
         }.where("submissionDate") {
           case date if date == currentDate.toString("yyyyMMdd") => true
-        }.map(message => message.fieldsAsMap + ("payload" -> message.payload.getOrElse("")))
+        }.map(message => {
+          val fields = message.fieldsAsMap
+          fields.get("docType") match {
+            case Some("crash") => {
+              val payload = message.payload match {
+                case Some(value: String) => parse(value)
+                case _ => JNothing
+              }
+              fields + ("payload" -> payload)
+            }
+            case _ => fields
+          }
+        })
 
       val (rowRDD, main_processed, main_ignored, browser_crash_processed, browser_crash_ignored, content_crash_ignored) = compareCrashes(sc, messages)
 
@@ -249,8 +261,8 @@ object CrashAggregateView {
       }
     } else {
       val payload = pingFields.get("payload") match {
-        case Some(value: String) => parse(value)
-        case _ => JObject()
+        case Some(value: JValue) => value
+        case _ => JNothing
       }
 
       payload \ "payload" \ "crashDate" match {
