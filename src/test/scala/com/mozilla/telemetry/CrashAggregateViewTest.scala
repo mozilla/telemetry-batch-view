@@ -3,6 +3,7 @@ package com.mozilla.telemetry
 import com.mozilla.telemetry.views.CrashAggregateView
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
+import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -118,12 +119,11 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
         "activeExperiment" ->
           ("id" -> dimensions("experiment_id").asInstanceOf[String]) ~
           ("branch" -> dimensions("experiment_branch").asInstanceOf[String])
-      val payload = if (isMain) None else {
-        compact(render(
+      val payload = if (isMain) "{}" else compact(render(
           "payload" ->
-            ("crashDate" -> dimensions("activity_date").asInstanceOf[String].substring(0, 10))
-          ))
-      }
+            ("crashDate" -> dimensions("activity_date").asInstanceOf[String].substring(0, 10)) ~
+            ("processType" -> "browser")))
+
 
       implicit val formats = DefaultFormats
 
@@ -135,7 +135,7 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
         "appName" -> dimensions("application").asInstanceOf[String],
         "payload.keyedHistograms" -> compact(render(keyedHistograms)),
         "payload.info" -> compact(render(info)),
-        "payload" -> payload,
+        "payload" -> parse(payload),
         "environment.system" -> compact(render(system)),
         "environment.settings" -> compact(render(settings)),
         "environment.build" -> compact(render(build)),
@@ -254,9 +254,13 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
   }
 
   "content crash pings" must "be ignored"  in {
-    val contentCrashPings = fixture.sampleCrashPings.map(
-      p => p + ("processType" -> "content")
-    )
+    val contentCrashPings = fixture.sampleCrashPings.map(p => {
+      val payload = p.get("payload") match {
+        case Some(s: JObject) => s.replace(List("payload", "processType"), "content")
+        case _ =>
+      }
+      p.updated("payload", payload)
+    })
     val (
       rowRDD,
       mainProcessedAccumulator, mainIgnoredAccumulator,

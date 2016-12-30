@@ -54,7 +54,19 @@ object CrashAggregateView {
           case doc if List("main", "crash") contains doc => true
         }.where("submissionDate") {
           case date if date == currentDate.toString("yyyyMMdd") => true
-        }.map(message => message.fieldsAsMap + ("payload" -> message.payload.getOrElse("")))
+        }.map(message => {
+          val fields = message.fieldsAsMap
+          fields.get("docType") match {
+            case Some("crash") => {
+              val payload = message.payload match {
+                case Some(value: String) => parse(value)
+                case _ => JNothing
+              }
+              fields + ("payload" -> payload)
+            }
+            case _ => fields
+          }
+        })
 
       val (rowRDD, main_processed, main_ignored, browser_crash_processed, browser_crash_ignored, content_crash_ignored) = compareCrashes(sc, messages)
 
@@ -140,14 +152,16 @@ object CrashAggregateView {
     // See https://bugzilla.mozilla.org/show_bug.cgi?id=1310673
     val filtered_messages = messages.filter(m => {
       m.get("docType") match {
-        case Some("crash") =>
-          m.get("processType") match {
-            case Some("browser") | None => true
+        case Some("crash") => m.get("payload") match {
+          case Some(payload: JValue) => payload \ "payload" \ "processType" match {
+            case JString("browser") | JNothing => true
             case _ => {
               contentCrashIgnoredAccumulator.add(1)
               false
             }
           }
+          case _ => true
+        }
         case _ => true
       }
     })
@@ -249,8 +263,8 @@ object CrashAggregateView {
       }
     } else {
       val payload = pingFields.get("payload") match {
-        case Some(value: String) => parse(value)
-        case _ => JObject()
+        case Some(value: JValue) => value
+        case _ => JNothing
       }
 
       payload \ "payload" \ "crashDate" match {
