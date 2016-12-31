@@ -154,7 +154,7 @@ object CrashAggregateView {
       m.get("docType") match {
         case Some("crash") => m.get("payload") match {
           case Some(payload: JValue) => payload \ "payload" \ "processType" match {
-            case JString("browser") | JNothing => true
+            case JString("main") | JNothing => true
             case _ => {
               contentCrashIgnoredAccumulator.add(1)
               false

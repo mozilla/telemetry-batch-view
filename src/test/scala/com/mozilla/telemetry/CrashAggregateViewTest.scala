@@ -122,7 +122,7 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
       val payload = if (isMain) "{}" else compact(render(
           "payload" ->
             ("crashDate" -> dimensions("activity_date").asInstanceOf[String].substring(0, 10)) ~
-            ("processType" -> "browser")))
+            ("processType" -> "main")))
 
 
       implicit val formats = DefaultFormats
@@ -271,9 +271,9 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
     assert(contentCrashIgnoredAccumulator.value == contentCrashPings.length)
   }
 
-  "browser crash pings" must "not be ignored"  in {
+  "main crash pings" must "not be ignored"  in {
     val browserCrashPings = fixture.sampleCrashPings.map(
-      p => p + ("processType" -> "browser")
+      p => p + ("processType" -> "main")
     )
     val (
       rowRDD,
