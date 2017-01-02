@@ -878,4 +878,43 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     val jBogusScalars = parse("""[10, "ten"]""")
     MainSummaryView.getBrowserEngagement(jBogusScalars, "anything") should be (null)
   }
+  "Events" can "be extracted" in {
+    val events = parse(
+      """[
+           [533352, "navigation", "search", "urlbar", "enter", {"engine": "other-StartPage - English"}],
+           [533352, "navigation", "search", "urlbar", "enter", {"engine": "other-StartPage - English"}, "random extra"],
+           [85959, "navigation", "search", "urlbar", "enter"],
+           [81994404, "navigation", "search", "searchbar"],
+           ["malformed"]
+         ]""".stripMargin
+    )
+
+    val eventRows = MainSummaryView.getEvents(events)
+
+    eventRows should be (
+      Some(List(
+        Row(533352, "navigation", "search", "urlbar", "enter", Map("engine" -> "other-StartPage - English")),
+        Row(85959, "navigation", "search", "urlbar", "enter"),
+        Row(81994404, "navigation", "search", "searchbar")
+      )
+    ))
+    MainSummaryView.getEvents(parse(testPayload) \ "events") should be (None)
+    MainSummaryView.getEvents(parse("""[]""")) should be (None)
+
+    // Apply events schema to event rows
+    val schema = MainSummaryView.buildEventSchema
+    val sparkConf = new SparkConf().setAppName("MainSummary")
+    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
+    val sc = new SparkContext(sparkConf)
+    val spark = SparkSession
+      .builder()
+      .appName("MainSummary")
+      .getOrCreate()
+
+    try {
+      noException should be thrownBy spark.createDataFrame(sc.parallelize(eventRows.get), schema)
+    } finally {
+      sc.stop
+    }
+  }
 }

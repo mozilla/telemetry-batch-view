@@ -186,6 +186,43 @@ object MainSummaryView {
     }
   }
 
+  def getEvents(events: JValue): Option[List[Row]]  = {
+    implicit val formats = DefaultFormats
+    Try(events.extract[List[List[Any]]]) match {
+      case Success(eventList) => {
+        val rows = eventList.flatMap {
+          case _ @ List(
+            timestamp : BigInt,
+            category :  String,
+            method :    String,
+            obj :       String,
+            strValue :  String,
+            mapValues : Map[String @unchecked, String @unchecked])
+            => List(Row(timestamp.toLong, category, method, obj, strValue, mapValues))
+          case _ @ List(
+            timestamp : BigInt,
+            category :  String,
+            method :    String,
+            obj :       String,
+            strValue :  String)
+            => List(Row(timestamp.toLong, category, method, obj, strValue))
+          case _ @ List(
+            timestamp : BigInt,
+            category :  String,
+            method :    String,
+            obj :       String)
+            => List(Row(timestamp.toLong, category, method, obj))
+          case _ => None
+        }
+        rows match {
+          case Nil => None
+          case x => Some(x)
+        }
+      }
+      case _ => None
+    }
+  }
+
   def getUserPrefs(prefs: JValue): Option[Row] = {
     prefs \ "dom.ipc.processCount" match {
       case JInt(pc) => Some(Row(pc.toInt))
@@ -226,6 +263,7 @@ object MainSummaryView {
     lazy val weaveDesktop = MainPing.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
     lazy val weaveMobile = MainPing.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
     lazy val parentScalars = payload \ "payload" \ "processes" \ "parent" \ "scalars"
+    lazy val parentEvents = payload \ "payload" \ "processes" \ "parent" \ "events"
 
     val loopActivityCounterKeys = (0 to 4).map(_.toString)
 
@@ -434,6 +472,7 @@ object MainSummaryView {
 
       getActiveAddons(addons \ "activeAddons").orNull,
       getTheme(addons \ "theme").orNull,
+      getEvents(parentEvents).orNull,
       settings \ "blocklistEnabled" match {
         case JBool(x) => x
         case _ => null
@@ -519,6 +558,15 @@ object MainSummaryView {
       StructField("signed_state",          IntegerType, nullable = true),
       StructField("is_system",             BooleanType, nullable = true)
     ))
+
+  def buildEventSchema = StructType(List(
+    StructField("timestamp", LongType, nullable = false),
+    StructField("category", StringType, nullable = false),
+    StructField("method", StringType, nullable = false),
+    StructField("object", StringType, nullable = false),
+    StructField("string_value", StringType, nullable = true),
+    StructField("map_values", MapType(StringType, StringType), nullable = true)
+  ))
 
   // Data for user prefs
   def buildUserPrefsSchema = StructType(List(
@@ -629,6 +677,7 @@ object MainSummaryView {
       // Addon and configuration settings per Bug 1290181
       StructField("active_addons", ArrayType(buildAddonSchema, containsNull = false), nullable = true), // One per item in environment.addons.activeAddons
       StructField("active_theme", buildAddonSchema, nullable = true), // environment.addons.theme
+      StructField("events", ArrayType(buildEventSchema, containsNull = false), nullable = true), // payload.processes.parent.events
       StructField("blocklist_enabled", BooleanType, nullable = true), // environment.settings.blocklistEnabled
       StructField("addon_compatibility_check_enabled", BooleanType, nullable = true), // environment.settings.addonCompatibilityCheckEnabled
       StructField("telemetry_enabled", BooleanType, nullable = true), // environment.settings.telemetryEnabled
