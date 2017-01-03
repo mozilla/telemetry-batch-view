@@ -1,7 +1,6 @@
 package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.heka.{Dataset, Message}
-import org.apache.log4j.Logger
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -12,19 +11,25 @@ import org.joda.time.{DateTime, format}
 import org.joda.time.format.DateTimeFormat
 import org.rogach.scallop.ScallopConf
 
-import scala.util.Try
+import scala.annotation.tailrec
 import scala.util.matching.Regex
 
 object ToplineSummary {
   private val main_summary_url: String = "s3://telemetry-parquet/main_summary/v3"
 
-  private val logger: Logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
   private val sparkConf: SparkConf = new SparkConf().setAppName("FirefoxSummary")
   sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
-  implicit val sc = SparkContext.getOrCreate(sparkConf)
-  private val spark = SparkSession.builder.config(sparkConf).getOrCreate()
-  import spark.implicits._
+  private var currentSession: SparkSession = null
 
+  def session: SparkSession = {
+    if (currentSession == null) {
+      currentSession = SparkSession
+        .builder()
+        .config(sparkConf)
+        .getOrCreate()
+    }
+    currentSession
+  }
 
   private val SecondsInHour: Int = 60 * 60
   private val SecondsInDay: Int = SecondsInHour * 24
@@ -50,29 +55,31 @@ object ToplineSummary {
   /**
     * Normalizes a string to a set of labels by matching them against a pattern.
     *
-    * This assumes that we will always match with some pattern. The default pattern
-    * by convention will be the last element corresponding to ('.*', 'Other'). As a
-    * result, we need to be careful with what we feed this function. Null values should
-    * be removed before passing data into this function.
-    *
     * @param patterns a list of compiled regex patterns
     * @param labels label to attach to a given string once it has been identified
+    * @param default default label if regexes don't match
     * @param str input string
     * @return the label of the string
     */
-  private def normalize(patterns: List[Regex], labels: List[String], str: String): String = {
-    (patterns zip labels)
-      .map { case (pattern, label) => Try(str match { case pattern() => label }).toOption }
-      .filter(_.isDefined)
-      .head
-      .getOrElse(labels.last)
+  private def normalize(patterns: List[Regex], labels: List[String], default: String, str: String): String = {
+    @tailrec
+    def go(mapping: List[(Regex, String)]): String =
+      mapping match {
+        case Nil => default
+        case (pattern, label) :: xs => str match {
+          case pattern() => label
+          case _ => go(xs)
+        }
+      }
+    go(patterns zip labels)
   }
 
   private val normalizeChannel: UserDefinedFunction = udf {
     (channel: String) => normalize(
-      List("release", "beta", "nightly|nightly-cck-.*", "aurora", ".*")
+      List("release", "beta", "nightly|nightly-cck-.*", "aurora")
         .map(pattern => pattern.r),
-      List("release", "beta", "nightly", "aurora", "Other"),
+      List("release", "beta", "nightly", "aurora"),
+      "Other",
       channel)
   }
 
@@ -80,9 +87,10 @@ object ToplineSummary {
     (os: String) => normalize(
       // NOTE: (?:foo) is a non-capturing group, see also the difference between using
       // `case pattern()` vs `case pattern(_)` in the match statement in normalize
-      List("Windows.*|WINNT", "Darwin", ".*(?:Linux|BSD|SunOS).*", ".*")
+      List("Windows.*|WINNT", "Darwin", ".*(?:Linux|BSD|SunOS).*")
         .map(pattern => pattern.r),
-      List("Windows", "Mac", "Linux", "Other"),
+      List("Windows", "Mac", "Linux"),
+      "Other",
       os)
   }
 
@@ -90,9 +98,10 @@ object ToplineSummary {
   private val SearchLabels = List("google", "bing", "yahoo", "other")
   private val normalizeSearch = udf {
     (searches: String) => normalize(
-      List("[Gg]oogle", "[Bb]ing", "[Yy]ahoo", ".*")
+      List("[Gg]oogle", "[Bb]ing", "[Yy]ahoo")
         .map(pattern => pattern.r),
-      SearchLabels,
+      SearchLabels.init,
+      SearchLabels.last,
       searches)
   }
 
@@ -116,7 +125,7 @@ object ToplineSummary {
     "VG","VI","VN","VU","WF","WS","YE","YT","ZA","ZM","ZW")
 
   private val normalizeCountry: UserDefinedFunction = udf {
-    (country: String) => if (countryNames contains country) { country } else { "Other" }
+    (country: String) => if (!country.isEmpty && (countryNames contains country)) { country } else { "Other" }
   }
 
   /**
@@ -128,13 +137,13 @@ object ToplineSummary {
     * @return Report DataFrame with normalized fields (aside from search_counts).
     */
   private def createReportDataset(mainSummary: DataFrame, startDate: String, endDate: String): DataFrame = {
+    val s = session
+    import s.implicits._
+
     mainSummary
       .filter($"submission_date_s3" >= startDate)
       .filter($"submission_date_s3" <= endDate)
       .filter($"app_name" === "Firefox")
-      // preprocess columns before feeding into normalize functions
-      .na.fill("", Seq("country", "channel", "os"))
-      .na.fill(0, Seq("profile_creation_date", "subsession_length"))
       .select(
         $"client_id",
         $"submission_date",
@@ -159,19 +168,24 @@ object ToplineSummary {
     * @return Dataset where every row represents a single crash
     */
   private def createCrashDataset(startDate: String, endDate: String): DataFrame = {
+    val s = session
+    import s.implicits._
+
     val CrashSchema = StructType(List(
       StructField("country", StringType, nullable = true),
       StructField("channel", StringType, nullable = true),
       StructField("os", StringType, nullable = true)))
 
+    implicit val sc = SparkContext.getOrCreate(sparkConf)
     val messages: RDD[Message] = Dataset("telemetry")
       .where("docType") { case "crash" => true }
       .where("appName") { case "Firefox" => true }
       .where("submissionDate") { case date => startDate <= date && date <= endDate }
       .records()
 
+
     val crashRDD = messages.map(messageToRow)
-    val crashData = spark.createDataFrame(crashRDD, CrashSchema)
+    val crashData = s.createDataFrame(crashRDD, CrashSchema)
 
     crashData.select(
       normalizeCountry($"country").alias("country"),
@@ -207,6 +221,9 @@ object ToplineSummary {
     * @return dataframe with aggregated search counts with a column per search engine
     */
   private def searchAggregates(reportData: DataFrame): DataFrame = {
+    val s = session
+    import s.implicits._
+
     val searchSchema = MainSummaryView.buildSearchSchema
 
     val searchData = reportData
@@ -218,7 +235,6 @@ object ToplineSummary {
         $"os",
         normalizeSearch($"search_counts.engine").alias("engine"),
         $"search_counts.count".alias("count"))
-      .na.fill(0, Seq("count"))
 
     searchData
       .groupBy("country", "channel", "os")
@@ -260,6 +276,9 @@ object ToplineSummary {
     * @return dataframe with client aggregates
     */
   private def clientValues(reportData: DataFrame, reportDate: String): DataFrame = {
+    val s = session
+    import s.implicits._
+
     val fmt = format.DateTimeFormat.forPattern("yyyyMMdd")
     val dt: DateTime = fmt.parseDateTime(reportDate)
     val reportTimestamp = dt.getMillis() / 1000
@@ -299,35 +318,49 @@ object ToplineSummary {
 
   private class Opts(args: Array[String]) extends ScallopConf(args) {
     val reportStart = opt[String]("report_start", descr = "Start day of the reporting period (YYYYMMDD)", required = true)
-    val mode = opt[String]("mode", descr = "Report mode: weekly or monthly", required = true)
+    val mode = opt[String]("mode", descr = "Report mode: weekly or monthly", default = Some("monthly"), required = true)
     val outputBucket = opt[String]("bucket", descr = "bucket", required = false)
-    val debug = opt[Boolean]("debug", descr = "debug", required = false)
     verify()
   }
 
   def main(args: Array[String]): Unit = {
+    val s = session
+    import s.implicits._
+
     val opts = new Opts(args)
     val reportStart = opts.reportStart()
     val mode = opts.mode()
-    val debug = opts.debug()
     val outputBucket = "net-mozaws-prod-us-west-2-pipeline-analysis"
 
+    // find the date range for the report
     val formatter = DateTimeFormat.forPattern("yyyyMMdd")
     val fromDate = formatter.parseDateTime(reportStart)
 
-    val from = reportStart
-    val to = from // TODO: to date should be manipulated by mode
+    if (mode != "weekly"  && mode != "monthly") {
+      Console.err.println(s"Unknown run mode '$mode'. Should be either 'weekly' or 'monthly'")
+      s.stop()
+      System.exit(1)
+    }
 
+    val toDate: DateTime = mode match {
+      case "weekly" => fromDate.plusWeeks(1)
+      case "monthly" => fromDate.plusMonths(1)
+    }
+
+    val from = formatter.print(fromDate)
+    val to = formatter.print(toDate)
+
+    if (toDate.isAfterNow()) {
+      Console.err.print(s"Report is still gathering data until $to $mode")
+      s.stop()
+      System.exit(1)
+    }
+
+    println(s"Starting report from $from to $to with mode $mode")
     try {
-      val mainSummaryData: DataFrame = spark.read.parquet(main_summary_url)
-        .filter($"sample_id" === 1)
+      val mainSummaryData: DataFrame = s.read.parquet(main_summary_url)
       val reportData = createReportDataset(mainSummaryData, from, to)
       val crashData = createCrashDataset(from, to)
-
-      if (debug) {
-        reportData.count()
-        crashData.count()
-      }
 
       val finalReport = easyAggregates(reportData, crashData)
         .join(clientValues(reportData, from), Seq("country", "channel", "os"))
@@ -335,9 +368,9 @@ object ToplineSummary {
       val s3prefix = s"amiyaguchi/topline/mode=$mode/report_start=$reportStart"
       val s3path = s"s3://$outputBucket/$s3prefix"
       finalReport.write.mode("overwrite").parquet(s3path)
-      logger.info(s"Topline Report completed for $reportStart")
+      println(s"Topline Report completed for $reportStart")
     } finally {
-      spark.stop()
+      s.stop()
     }
   }
 }

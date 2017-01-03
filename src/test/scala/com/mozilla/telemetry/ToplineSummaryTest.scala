@@ -106,9 +106,23 @@ class ToplineSummaryTest extends FlatSpec
     import sqlContext.implicits._
     val data = Seq(fake_ping).toDF()
     val df = ToplineSummary invokePrivate createReportDataset(data)
-    df.show()
     assert(hasColumn(df, "country"))
   }
+
+  it should "handle empty column values" in {
+    import sqlContext.implicits._
+    val data = Seq(fake_ping.copy(country = "", channel = "", os = "")).toDF()
+    val df = ToplineSummary invokePrivate createReportDataset(data)
+    var expect = "Other"
+
+    val cols = Seq("country", "channel", "os")
+    for (col <- cols) {
+      val result = df.head().getAs[String](col)
+      assert(result == expect)
+    }
+  }
+
+
 
   "[UDF] convertHours" should "be a double" in {
     import sqlContext.implicits._
