@@ -104,7 +104,7 @@ root
  |-- client_submission_date: string (nullable = true)
  |-- places_bookmarks_count: integer (nullable = true)
  |-- places_pages_count: integer (nullable = true)
- |-- push_api_notification_received: integer (nullable = true)
+ |-- push_api_notify: integer (nullable = true)
  |-- web_notification_shown: integer (nullable = true)
  |-- popup_notification_stats: map (nullable = true)
  |    |-- key: string
@@ -181,6 +181,16 @@ root
  |-- unique_domains_count: integer (nullable = true)
  |-- submission_date_s3: string (nullable = true)
  |-- sample_id: string (nullable = true)
+ |-- events: array (nullable = true)
+ |    |-- element: struct (containsNull = true)
+ |    |    |-- timestamp: long (nullable = false)
+ |    |    |-- category: string (nullable = false)
+ |    |    |-- method: string (nullable = false)
+ |    |    |-- object: string (nullable = false)
+ |    |    |-- string_value: string (nullable = true)
+ |    |    |-- map_values: map (nullable = true)
+ |    |    |    |-- key: string
+ |    |    |    |-- value: string
 ```
 For more detail on where these fields come from in the
 [raw data](https://gecko.readthedocs.io/en/latest/toolkit/components/telemetry/telemetry/data/main-ping.html),
