@@ -104,7 +104,7 @@ root
  |-- client_submission_date: string (nullable = true)
  |-- places_bookmarks_count: integer (nullable = true)
  |-- places_pages_count: integer (nullable = true)
- |-- push_api_notification_received: integer (nullable = true)
+ |-- push_api_notify: integer (nullable = true)
  |-- web_notification_shown: integer (nullable = true)
  |-- popup_notification_stats: map (nullable = true)
  |    |-- key: string
