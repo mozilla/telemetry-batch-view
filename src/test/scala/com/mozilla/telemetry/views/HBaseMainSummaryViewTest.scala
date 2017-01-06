@@ -4,6 +4,7 @@ import org.apache.hadoop.hbase.client.HBaseAdmin
 import org.apache.spark.sql.SparkSession
 import org.joda.time.DateTime
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+import org.scalatest.tagobjects.Slow
 import unicredit.spark.hbase._
 
 case class MainSummaryPing(client_id: Option[String], document_id: Option[String], subsession_start_date: Option[String], channel: String)
@@ -13,13 +14,13 @@ class HBaseMainSummaryViewTest extends FlatSpec with Matchers with BeforeAndAfte
   val columnFamily = HBaseMainSummaryView.columnFamily
   val column = HBaseMainSummaryView.column
 
-  implicit val hbaseConfig = HBaseConfig("hbase.fs.tmp.dir" -> "/tmp/hbase-test")
-  val admin = new HBaseAdmin(hbaseConfig.get)
+  implicit lazy val hbaseConfig = HBaseConfig("hbase.fs.tmp.dir" -> "/tmp/hbase-test")
+  lazy val admin = new HBaseAdmin(hbaseConfig.get)
 
-  implicit val spark = SparkSession.builder().master("local[*]").appName("HBaseMainSummaryView").getOrCreate()
+  implicit lazy val spark = SparkSession.builder().master("local[*]").appName("HBaseMainSummaryView").getOrCreate()
   import spark.implicits._
 
-  "The ETL job" should "create a HBase table if one doesn't exist" in {
+  "The ETL job" should "create a HBase table if one doesn't exist" taggedAs(Slow) in {
     if (admin.tableExists(tableName)) {
       admin.disableTable(tableName)
       admin.deleteTable(tableName)
@@ -29,11 +30,11 @@ class HBaseMainSummaryViewTest extends FlatSpec with Matchers with BeforeAndAfte
     assert(admin.tableExists(tableName))
   }
 
-  it should "not fail if the HBase table already exists" in {
+  it should "not fail if the HBase table already exists" taggedAs(Slow) in {
     HBaseMainSummaryView.createHBaseTable(useCompression = false)
   }
 
-  it should "load main summary pings into HBase" in {
+  it should "load main summary pings into HBase" taggedAs(Slow) in {
     val dataset = Seq(
       MainSummaryPing(Some("foo"), Some("bar"), Some("2016-12-28T00:00:00.0+00:00"), "release"),
       MainSummaryPing(Some("foo"), Some("bar"), Some("corrupted"), "release"),
@@ -52,7 +53,7 @@ class HBaseMainSummaryViewTest extends FlatSpec with Matchers with BeforeAndAfte
     assert(table(0)._2("cf")("payload") == """{"subsession_start_date":"2016-12-28T00:00:00.0+00:00","channel":"release"}""")
   }
 
-  it should "overwrite entries when backfilling" in {
+  it should "overwrite entries when backfilling" taggedAs(Slow) in {
     val dataset = Seq(MainSummaryPing(Some("foo"), Some("bar"), Some("2016-12-28T00:00:00.0+00:00"), "nightly")).toDS()
 
     dataset.createOrReplaceTempView("main_summary")

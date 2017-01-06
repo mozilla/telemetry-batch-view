@@ -1,6 +1,5 @@
 target/
 lib_managed/
-project/
 .ipynb_checkpoints/
 metastore_db/
 .idea/

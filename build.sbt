@@ -45,3 +45,11 @@ mergeStrategy in assembly := {
   case "reference.conf"              => MergeStrategy.concat
   case x => MergeStrategy.first
 }
+
+lazy val Slow = config("slow").extend(Test)
+configs(Slow)
+inConfig(Slow)(Defaults.testTasks)
+
+testOptions in Test += Tests.Argument("-l", "org.scalatest.tags.Slow")
+testOptions in Slow -= Tests.Argument("-l", "org.scalatest.tags.Slow")
+testOptions in Slow += Tests.Argument("-n", "org.scalatest.tags.Slow")
