@@ -13,6 +13,7 @@ import org.rogach.scallop.ScallopConf
 
 import scala.annotation.tailrec
 import scala.util.matching.Regex
+import scala.util.Random
 
 object ToplineSummary {
   private val main_summary_url: String = "s3://telemetry-parquet/main_summary/v3"
@@ -320,6 +321,7 @@ object ToplineSummary {
     val reportStart = opt[String]("report_start", descr = "Start day of the reporting period (YYYYMMDD)", required = true)
     val mode = opt[String]("mode", descr = "Report mode: weekly or monthly", default = Some("monthly"), required = true)
     val outputBucket = opt[String]("bucket", descr = "bucket", required = false)
+    val sample = opt[Int]("sample", descr = "Sample a percentage of the population to run report on", required = false)
     verify()
   }
 
@@ -331,6 +333,18 @@ object ToplineSummary {
     val reportStart = opts.reportStart()
     val mode = opts.mode()
     val outputBucket = "net-mozaws-prod-us-west-2-pipeline-analysis"
+
+    // Change the output path if we are taking a sample, since it's not the final report
+    val s3path = opts.sample.get match {
+      case Some(sample) => {
+        val s3prefix = s"amiyaguchi/topline_sampled/mode=$mode/report_start=$reportStart/sample=$sample"
+        s"s3://$outputBucket/$s3prefix"
+      }
+      case None => {
+        val s3prefix = s"amiyaguchi/topline/mode=$mode/report_start=$reportStart"
+        s"s3://$outputBucket/$s3prefix"
+      }
+    }
 
     // find the date range for the report
     val formatter = DateTimeFormat.forPattern("yyyyMMdd")
@@ -358,15 +372,24 @@ object ToplineSummary {
 
     println(s"Starting report from $from to $to with mode $mode")
     try {
-      val mainSummaryData: DataFrame = s.read.parquet(main_summary_url)
+      val dataset: DataFrame = s.read.parquet(main_summary_url)
+
+      val mainSummaryData = opts.sample.get match {
+        case Some(k) => {
+          println(s"Taking a $k% of main summary")
+          val sample_ids = Random.shuffle(1 to 100).take(k)
+          dataset.where($"sample_id" isin sample_ids)
+        }
+        case None => dataset
+      }
+
       val reportData = createReportDataset(mainSummaryData, from, to)
       val crashData = createCrashDataset(from, to)
 
       val finalReport = easyAggregates(reportData, crashData)
         .join(clientValues(reportData, from), Seq("country", "channel", "os"))
 
-      val s3prefix = s"amiyaguchi/topline/mode=$mode/report_start=$reportStart"
-      val s3path = s"s3://$outputBucket/$s3prefix"
+      println(s"Saving report to $s3path")
       finalReport.write.mode("overwrite").parquet(s3path)
       println(s"Topline Report completed for $reportStart")
     } finally {
