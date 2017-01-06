@@ -145,6 +145,7 @@ object ToplineSummary {
       .filter($"submission_date_s3" >= startDate)
       .filter($"submission_date_s3" <= endDate)
       .filter($"app_name" === "Firefox")
+      .na.fill("", Seq("country"))
       .select(
         $"client_id",
         $"submission_date",
