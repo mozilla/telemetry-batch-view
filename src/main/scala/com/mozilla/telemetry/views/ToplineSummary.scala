@@ -379,7 +379,7 @@ object ToplineSummary {
         case Some(k) => {
           println(s"Taking a $k% of main summary")
           val sample_ids = Random.shuffle(1 to 100).take(k)
-          dataset.where($"sample_id" isin sample_ids)
+          dataset.where($"sample_id".isin(sample_ids:_*))
         }
         case None => dataset
       }
