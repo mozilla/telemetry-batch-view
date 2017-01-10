@@ -78,6 +78,13 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
             ("sum" -> SCALAR_VALUE) ~
             ("values" -> Map("0" -> SCALAR_VALUE, "1" -> 0))
           ) ~
+          ("gpu" ->
+            ("bucket_count" -> 3) ~
+            ("histogram_type" -> 4) ~
+            ("range" -> List(1, 2)) ~
+            ("sum" -> SCALAR_VALUE) ~
+            ("values" -> Map("0" -> SCALAR_VALUE, "1" -> 0))
+            ) ~
           ("gmplugin" ->
             ("bucket_count" -> 3) ~
             ("histogram_type" -> 4) ~
@@ -229,12 +236,14 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
         assert(stats("plugin_crashes")                   == 42 * 2)
         assert(stats("gmplugin_crashes")                 == 42 * 2)
         assert(stats("content_shutdown_crashes")         == 42 * 2)
+        assert(stats("gpu_crashes")                      == 42 * 2)
         assert(stats("usage_hours_squared")              == scala.math.pow(42 / 3600.0, 2))
         assert(stats("main_crashes_squared")             == scala.math.pow(1, 2))
         assert(stats("content_crashes_squared")          == scala.math.pow(42, 2) * 2)
         assert(stats("plugin_crashes_squared")           == scala.math.pow(42, 2) * 2)
         assert(stats("gmplugin_crashes_squared")         == scala.math.pow(42, 2) * 2)
         assert(stats("content_shutdown_crashes_squared") == scala.math.pow(42, 2) * 2)
+        assert(stats("gpu_crashes_squared")              == scala.math.pow(42, 2) * 2)
       } else {
         assert(stats("ping_count")                       == 2)
         assert(stats("usage_hours")                      == (42 / 3600.0) * 2)
@@ -243,12 +252,14 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
         assert(stats("plugin_crashes")                   == 42 * 2 * 2)
         assert(stats("gmplugin_crashes")                 == 42 * 2 * 2)
         assert(stats("content_shutdown_crashes")         == 42 * 2 * 2)
+        assert(stats("gpu_crashes")                      == 42 * 2 * 2)
         assert(stats("usage_hours_squared")              == scala.math.pow(42 / 3600.0, 2) * 2)
         assert(stats("main_crashes_squared")             == scala.math.pow(1, 2) * 2)
         assert(stats("content_crashes_squared")          == scala.math.pow(42, 2) * 2 * 2)
         assert(stats("plugin_crashes_squared")           == scala.math.pow(42, 2) * 2 * 2)
         assert(stats("gmplugin_crashes_squared")         == scala.math.pow(42, 2) * 2 * 2)
         assert(stats("content_shutdown_crashes_squared") == scala.math.pow(42, 2) * 2 * 2)
+        assert(stats("gpu_crashes_squared")              == scala.math.pow(42, 2) * 2 * 2)
       }
     }
   }

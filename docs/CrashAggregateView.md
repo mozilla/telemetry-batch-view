@@ -43,7 +43,8 @@ SELECT dimensions['channel'] AS channel,
        1000 * sum(stats['main_crashes']) / sum(stats['usage_hours']) AS main_crash_rate,
        1000 * sum(stats['content_crashes']) / sum(stats['usage_hours']) AS content_crash_rate,
        1000 * sum(stats['plugin_crashes']) / sum(stats['usage_hours']) AS plugin_crash_rate,
-       1000 * sum(stats['gmplugin_crashes']) / sum(stats['usage_hours']) AS gmplugin_crash_rate
+       1000 * sum(stats['gmplugin_crashes']) / sum(stats['usage_hours']) AS gmplugin_crash_rate,
+       1000 * sum(stats['gpu_crashes']) / sum(stats['usage_hours']) AS gpu_crash_rate
 FROM crash_aggregates
 GROUP BY dimensions['channel']
 ORDER BY -sum(stats['usage_hours'])
@@ -84,6 +85,7 @@ The `crash_aggregates` table has 4 commonly-used columns:
     * `stats['plugin_crashes']` is the number of plugin process crashes represented by the aggregate.
     * `stats['gmplugin_crashes']` is the number of Gecko media plugin (often abbreviated GMPlugin) process crashes represented by the aggregate.
     * `stats['content_shutdown_crashes']` is the number of content process crashes that were caused by failure to shut down in a timely manner.
+    * `stats['gpu_crashes']` is the number of gpu process crashes represented by the aggregate.
 
 Plugin process crashes per hour on Nightly for March 14:
 
