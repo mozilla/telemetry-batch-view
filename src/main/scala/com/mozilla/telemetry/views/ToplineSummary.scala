@@ -313,9 +313,9 @@ object ToplineSummary {
     clientsData
       .groupBy("country", "channel", "os")
       .agg(
-        count("*").alias("active"),
-        sum("new_client").alias("new_client"),
-        sum("default_client").alias("default_client"))
+        count("*").alias("actives"),
+        sum("new_client").alias("new_records"),
+        sum("default_client").alias("default"))
   }
 
   private class Opts(args: Array[String]) extends ScallopConf(args) {
@@ -387,8 +387,12 @@ object ToplineSummary {
       val reportData = createReportDataset(mainSummaryData, from, to)
       val crashData = createCrashDataset(from, to)
 
+      val report_fmt = format.DateTimeFormat.forPattern("yyyy-mm-dd")
       val finalReport = easyAggregates(reportData, crashData)
         .join(clientValues(reportData, from), Seq("country", "channel", "os"))
+        .withColumn("date", lit(report_fmt.print(fromDate)))
+        .withColumnRenamed("country", "geo")
+
 
       println(s"Saving report to $s3path")
       finalReport.write.mode("overwrite").parquet(s3path)
