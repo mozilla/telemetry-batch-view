@@ -44,6 +44,9 @@ If you run into memory issues during compilation time or running the test suite,
 export _JAVA_OPTIONS="-Xms4G -Xmx4G -Xss4M -XX:MaxMetaspaceSize=256M"
 ```
 
+**Slow tests**
+By default slow tests are not run when using `sbt test`. To run slow tests use `sbt slow:test`.
+
 **Running on Windows**
 
 Executing scala/Spark jobs could be particularly problematic on this platform. Here's a list of common issues and the relative solutions:
