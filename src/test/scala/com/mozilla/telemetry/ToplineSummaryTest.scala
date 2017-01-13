@@ -299,6 +299,17 @@ class ToplineSummaryTest extends FlatSpec
     assert(expect == result)
   }
 
+  it should "recognize `ltext-Windows` as Other" in {
+    import sqlContext.implicits._
+    val data = Seq(fake_ping.copy(os = "ltext-Windows")).toDF()
+    val expect = "Other"
+
+    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val result = df.head().getAs[String]("os")
+
+    assert(expect == result)
+  }
+
   it should "handle null values" in {
     import sqlContext.implicits._
     val nullify = udf { () => None: Option[String] }
@@ -413,7 +424,7 @@ class ToplineSummaryTest extends FlatSpec
     val expect = 1
 
     val df = ToplineSummary invokePrivate clientValues(reportData, fake_date)
-    val result = df.head().getAs[Long]("new_client")
+    val result = df.head().getAs[Long]("new_records")
 
     assert(expect == result)
   }
@@ -426,7 +437,7 @@ class ToplineSummaryTest extends FlatSpec
     val expect = 0
 
     val df = ToplineSummary invokePrivate clientValues(reportData, fake_date)
-    val result = df.head().getAs[Long]("new_client")
+    val result = df.head().getAs[Long]("new_records")
 
     assert(expect == result)
   }
@@ -442,7 +453,7 @@ class ToplineSummaryTest extends FlatSpec
     val expect = 2
 
     val df = ToplineSummary invokePrivate clientValues(reportData, fake_date)
-    val result = df.head().getAs[Long]("default_client")
+    val result = df.head().getAs[Long]("default")
 
     assert(expect == result)
   }
@@ -457,7 +468,7 @@ class ToplineSummaryTest extends FlatSpec
     val expect = 1
 
     val df = ToplineSummary invokePrivate clientValues(reportData, fake_date)
-    val result = df.head().getAs[Long]("default_client")
+    val result = df.head().getAs[Long]("default")
 
     assert(expect == result)
 
@@ -474,7 +485,7 @@ class ToplineSummaryTest extends FlatSpec
     val expect = 3
 
     val df = ToplineSummary invokePrivate clientValues(reportData, fake_date)
-    val result = df.head().getAs[Long]("active")
+    val result = df.head().getAs[Long]("actives")
 
     assert(expect == result)
   }

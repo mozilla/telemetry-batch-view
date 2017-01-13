@@ -64,20 +64,21 @@ object ToplineSummary {
     */
   private def normalize(patterns: List[Regex], labels: List[String], default: String, str: String): String = {
     @tailrec
-    def go(mapping: List[(Regex, String)]): String =
+    def go(mapping: List[(Regex, String)], str: String): String =
       mapping match {
         case Nil => default
-        case (pattern, label) :: xs => str match {
-          case pattern() => label
-          case _ => go(xs)
+        case (pattern, label) :: xs =>
+          pattern findFirstIn str match {
+          case Some(_) => label
+          case None => go(xs, str)
         }
       }
-    go(patterns zip labels)
+    go(patterns zip labels, str match {case ""|null => "" case x => x})
   }
 
   private val normalizeChannel: UserDefinedFunction = udf {
     (channel: String) => normalize(
-      List("release", "beta", "nightly|nightly-cck-.*", "aurora")
+      List("^release$", "^beta", "^nightly$|^nightly-cck-", "^aurora$")
         .map(pattern => pattern.r),
       List("release", "beta", "nightly", "aurora"),
       "Other",
@@ -86,9 +87,7 @@ object ToplineSummary {
 
   private val normalizeOS: UserDefinedFunction = udf {
     (os: String) => normalize(
-      // NOTE: (?:foo) is a non-capturing group, see also the difference between using
-      // `case pattern()` vs `case pattern(_)` in the match statement in normalize
-      List("Windows.*|WINNT", "Darwin", ".*(?:Linux|BSD|SunOS).*")
+      List("^[Windows|WINNT]", "^Darwin", "(?:Linux|BSD|SunOS)")
         .map(pattern => pattern.r),
       List("Windows", "Mac", "Linux"),
       "Other",
