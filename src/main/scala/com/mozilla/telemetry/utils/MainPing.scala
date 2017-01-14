@@ -19,6 +19,11 @@ case class Addon(id: Option[String],
                  signedState: Option[Integer],
                  isSystem: Option[Boolean])
 
+case class Attribution(source: Option[String],
+                       medium: Option[String],
+                       campaign: Option[String],
+                       content: Option[String])
+
 object MainPing{
   // Count the number of keys inside a JSON Object
   def countKeys(o: JValue): Option[Long] = {
