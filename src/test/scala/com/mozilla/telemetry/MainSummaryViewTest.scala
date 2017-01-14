@@ -919,4 +919,52 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       sc.stop
     }
   }
+
+  "Stub attribution" can "be extracted" in {
+    // Contains a single attribute
+    val json1 = parse(
+      """
+        |{
+        | "environment": {
+        |  "settings": {
+        |   "attribution": {
+        |     "source": "sample_source"
+        |   }
+        |  }
+        | }
+        |}
+      """.stripMargin)
+    MainSummaryView.getAttribution(json1 \ "environment" \ "settings" \ "attribution") should be (
+      Some(Row("sample_source", null, null, null)))
+
+    // Contains no attributes
+    val json2 = parse(
+      """
+        |{
+        | "environment": {
+        |  "settings": {}
+        | }
+        |}
+      """.stripMargin)
+    MainSummaryView.getAttribution(json2 \ "environment" \ "settings" \ "attribution") should be (None)
+
+    // Contains all attributes, in no particular order
+    val json3 = parse(
+      """
+        |{
+        | "environment": {
+        |  "settings": {
+        |   "attribution": {
+        |     "content": "sample_content",
+        |     "source": "sample_source",
+        |     "medium": "sample_medium",
+        |     "campaign": "sample_campaign"
+        |   }
+        |  }
+        | }
+        |}
+      """.stripMargin)
+    MainSummaryView.getAttribution(json3 \ "environment" \ "settings" \ "attribution") should be (
+      Some(Row("sample_source", "sample_medium", "sample_campaign", "sample_content")))
+  }
 }

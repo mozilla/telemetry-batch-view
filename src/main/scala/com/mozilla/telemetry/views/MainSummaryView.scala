@@ -8,7 +8,7 @@ import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._
 import com.mozilla.telemetry.heka.{Dataset, Message}
-import com.mozilla.telemetry.utils.{Addon, MainPing, S3Store}
+import com.mozilla.telemetry.utils.{Addon, Attribution, MainPing, S3Store}
 import org.json4s.{DefaultFormats, JValue}
 
 import scala.util.{Success, Try}
@@ -182,6 +182,25 @@ object MainSummaryView {
           addonData.updateDay.orNull,
           addonData.signedState.orNull,
           addonData.isSystem.orNull))
+      case _ => None
+    }
+  }
+
+  def getAttribution(attribution: JValue): Option[Row] = {
+    // Return value mirrors the case class Attribution. If all the columns
+    // are null, then then whole attribution field is null.
+    implicit val formats = DefaultFormats
+    Try(attribution.extract[Attribution]) match {
+      case Success(attributionData) =>
+        val row = Row(
+          attributionData.source.orNull,
+          attributionData.medium.orNull,
+          attributionData.campaign.orNull,
+          attributionData.content.orNull)
+        row match {
+          case Row(null, null, null, null) => None
+          case attrib => Some(attrib)
+        }
       case _ => None
     }
   }
@@ -404,6 +423,7 @@ object MainSummaryView {
         case JString(x) => x
         case _ => null
       },
+      getAttribution(settings \ "attribution").orNull,
       addons \ "activeExperiment" \ "id" match {
         case JString(x) => x
         case _ => null
@@ -559,6 +579,13 @@ object MainSummaryView {
       StructField("is_system",             BooleanType, nullable = true)
     ))
 
+  def buildAttributionSchema = StructType(List(
+    StructField("source",   StringType, nullable = true),
+    StructField("medium",   StringType, nullable = true),
+    StructField("campaign", StringType, nullable = true),
+    StructField("content",  StringType, nullable = true)
+  ))
+
   def buildEventSchema = StructType(List(
     StructField("timestamp",    LongType, nullable = false),
     StructField("category",     StringType, nullable = false),
@@ -616,6 +643,8 @@ object MainSummaryView {
       StructField("e10s_enabled", BooleanType, nullable = true), // environment/settings/e10sEnabled
       StructField("e10s_cohort", StringType, nullable = true), // environment/settings/e10sCohort
       StructField("locale", StringType, nullable = true), // environment/settings/locale
+      // See bug 1331082
+      StructField("attribution", buildAttributionSchema, nullable = true), // environment/settings/attribution/
 
       StructField("active_experiment_id", StringType, nullable = true), // environment/addons/activeExperiment/id
       StructField("active_experiment_branch", StringType, nullable = true), // environment/addons/activeExperiment/branch
