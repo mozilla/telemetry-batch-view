@@ -91,7 +91,8 @@ case class Longitudinal (
   val profile_creation_date: Option[Seq[String]],
   val profile_subsession_counter: Option[Seq[Long]],
   val search_counts: Option[scala.collection.Map[String, Seq[Long]]],
-  val session_id: Option[Seq[String]]
+  val session_id: Option[Seq[String]],
+  val application_name: Option[Seq[Option[String]]]
 ) {
 
   def cleanSessionLength(): Option[Seq[Option[Long]]] = {
@@ -290,6 +291,7 @@ case class CrossSectional (
   val locale_mode: Option[String],
   val version_configs: Option[Long],
   val version_max: Option[String],
+  val application_name_mode: Option[String],
   val addon_names_list: Option[Seq[Option[String]]],
   val main_ping_reason_num_aborted: Long,
   val main_ping_reason_num_end_of_day: Long,
@@ -375,6 +377,7 @@ case class CrossSectional (
       locale_mode = base.weightedMode(base.locale).flatten,
       version_configs = base.version.ifDefined(_.distinct.length),
       version_max = base.version.ifDefined(_.optMax.flatten).flatten,
+      application_name_mode = base.weightedMode(base.application_name).flatten,
       addon_names_list = base.addonNames,
       main_ping_reason_num_aborted = base.countPingReason("aborted-session"),
       main_ping_reason_num_end_of_day = base.countPingReason("daily"),
@@ -467,7 +470,8 @@ object CrossSectionalView {
         "reason", "system.memory_mb", "system_os.name as os_name",
         "system_os.version as os_version", "places_pages_count.sum as pages_count",
         "active_plugins", "previous_subsession_id", "profile_creation_date",
-        "profile_subsession_counter", "search_counts", "session_id"
+        "profile_subsession_counter", "search_counts", "session_id",
+        "build.application_name"
       )
       .as[Longitudinal]
     val output = ds.map(new CrossSectional(_))
