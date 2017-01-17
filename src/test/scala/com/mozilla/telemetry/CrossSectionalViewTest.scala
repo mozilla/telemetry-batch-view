@@ -101,7 +101,8 @@ class CrossSectionalViewTest extends FlatSpec {
       search_counts = Some(Map("dogpile" -> Seq(1l, 0l, 2l, 10l),
                                "ask_jeeves" -> Seq(20l, 0l, 0l, 0l),
                                "hooli" -> Seq(5l, 4l, 0l, 0l))),
-      session_id = Some(Seq("A", "B", "C"))
+      session_id = Some(Seq("A", "B", "C")),
+      application_name = Some(Seq(Some("firefox"), Some("firefox"), Some("firefox")))
     )
   }
 
@@ -164,6 +165,7 @@ class CrossSectionalViewTest extends FlatSpec {
       locale_mode = None,
       version_configs = Some(2),
       version_max = Some("42.0"),
+      application_name_mode = Some("firefox"),
       addon_names_list = addon_names_list,
       main_ping_reason_num_aborted = 0,
       main_ping_reason_num_end_of_day = 1,
