@@ -131,7 +131,7 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
             ("crashDate" -> dimensions("activity_date").asInstanceOf[String].substring(0, 10)) ~
             ("processType" -> "main")))
 
-
+      val histograms = ("STARTUP_CRASH_DETECTED" -> true)
       implicit val formats = DefaultFormats
 
       Map(
@@ -140,6 +140,7 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
         "geoCountry" -> dimensions("country").asInstanceOf[String],
         "normalizedChannel" -> dimensions("channel").asInstanceOf[String],
         "appName" -> dimensions("application").asInstanceOf[String],
+
         "payload.keyedHistograms" -> compact(render(keyedHistograms)),
         "payload.info" -> compact(render(info)),
         "payload" -> parse(payload),
