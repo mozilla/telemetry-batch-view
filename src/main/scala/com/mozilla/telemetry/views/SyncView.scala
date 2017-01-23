@@ -4,7 +4,6 @@ import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.utils.S3Store
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.util.LongAccumulator
 import org.apache.spark.{SparkConf, SparkContext}
 import org.joda.time.{DateTime, Days, format}
 import org.json4s.{DefaultFormats, JValue, string2JsonInput}
@@ -65,7 +64,6 @@ object SyncView {
 
       val ignoredCount = sc.longAccumulator("Number of Records Ignored")
       val processedCount = sc.longAccumulator("Number of Records Processed")
-
       val messages = Dataset("telemetry")
         .where("sourceName") {
           case "telemetry" => true
@@ -138,6 +136,7 @@ object SyncView {
 // Convert Sync pings, which are defined by the schema at:
 // https://dxr.mozilla.org/mozilla-central/source/services/sync/tests/unit/sync_ping_schema.json
 object SyncPingConverter {
+
   /*
    * The type definitions for the rows we create.
    */
@@ -187,6 +186,12 @@ object SyncPingConverter {
     StructField("failureReason", failureType, nullable = true)
   ))
 
+  // Set of strings allowed to be used as engine names.
+  private val validEngineNames = Set(
+    "addons", "bookmarks", "clients", "forms", "history",
+    "passwords", "prefs", "tabs", "extension-storage"
+  )
+
   // The schema for an engine.
   private val engineType = StructType(List(
     StructField("name", StringType, nullable = false),
@@ -227,6 +232,22 @@ object SyncPingConverter {
     StructField("devices", ArrayType(SyncPingConverter.deviceType, containsNull = false), nullable = true)
   ))
 
+  // This is not ideal, but at the moment the sync ping probably shouldn't
+  // contain any strings that don't fit in 16 bits. This exists to work around
+  // the issues described in Bug 1329023.
+  private def ensureUCS2(s: String): String = {
+    // This is convoluted...
+    val fixedCodePoints = s.codePoints.toArray.toList.map(i => {
+      // Replace unpaird surrogates, and things that don't fit in a 16 bit
+      // code unit.
+      if (i >= 0xffff || i <= 0 || Character.isSurrogate(i.asInstanceOf[Char]))
+        0xfffd
+      else
+        i
+    }).toArray
+    new String(fixedCodePoints, 0, fixedCodePoints.length)
+  }
+
  /*
  * Convert the JSON payload to rows matching the above types.
  */
@@ -235,8 +256,8 @@ object SyncPingConverter {
     case JObject(x) =>
       implicit val formats = DefaultFormats
       Row(
-        (failure \ "name").extract[String],
-        (failure \ "name").extract[String] match {
+        ensureUCS2((failure \ "name").extract[String]),
+        ensureUCS2((failure \ "name").extract[String] match {
           case "httperror" => (failure \ "code").extract[String]
           case "nserror" => (failure \ "code").extract[String]
           case "shutdownerror" => null
@@ -245,7 +266,7 @@ object SyncPingConverter {
           case "unexpectederror" => (failure \ "error").extract[String]
           case "sqlerror" => (failure \ "code").extract[String]
           case _ => null
-        }
+        })
       )
     case _ =>
       null
@@ -255,15 +276,15 @@ object SyncPingConverter {
     case JObject(d) =>
       Some(Row(
         device \ "id" match {
-          case JString(x) => x
+          case JString(x) => ensureUCS2(x)
           case _ => return None
         },
         device \ "version" match {
-          case JString(x) => x
+          case JString(x) => ensureUCS2(x)
           case _ => return None
         },
         device \ "os" match {
-          case JString(x) => x
+          case JString(x) => ensureUCS2(x)
           case _ => return None
         }
       ))
@@ -351,7 +372,7 @@ object SyncPingConverter {
     case JObject(_) =>
       Some(Row(
         problem \ "name" match {
-          case JString(x) => x
+          case JString(x) => ensureUCS2(x)
           case _ => return None
         },
         problem \ "count" match {
@@ -366,7 +387,7 @@ object SyncPingConverter {
   private def engineToRow(engine: JValue): Row = {
     Row(
       engine \ "name" match {
-        case JString(x) => x
+        case JString(x) if validEngineNames(x) => ensureUCS2(x)
         case _ => return null // engines must have a name!
       },
       engine \ "took" match {
@@ -374,7 +395,7 @@ object SyncPingConverter {
         case _ => 0L
       },
       engine \ "status" match {
-        case JString(x) => x
+        case JString(x) => ensureUCS2(x)
         case _ => null
       },
       failureReasonToRow(engine \ "failureReason"),
@@ -400,11 +421,11 @@ object SyncPingConverter {
     case JObject(_) =>
       Row(
         status \ "sync" match {
-          case JString(x) => x
+          case JString(x) => ensureUCS2(x)
           case _ => null
         },
         status \ "service" match {
-          case JString(x) => x
+          case JString(x) => ensureUCS2(x)
           case _ => null
         }
       )
@@ -436,10 +457,10 @@ object SyncPingConverter {
 
     def stringFromSyncOrPayload(s: String): String = {
       sync \ s match {
-        case JString(x) => x
+        case JString(x) => ensureUCS2(x)
         case _ =>
           payload \ s match {
-            case JString(x) => x
+            case JString(x) => ensureUCS2(x)
             case _ => null
           }
       }
@@ -448,30 +469,30 @@ object SyncPingConverter {
     val row = Row(
       // The metadata...
       application \ "buildId" match {
-        case JString(x) => x
+        case JString(x) => ensureUCS2(x)
         case _ => return None // a required field.
       },
       application \ "displayVersion" match {
-        case JString(x) => x
+        case JString(x) => ensureUCS2(x)
         case _ => return None // a required field.
       },
       application \ "name" match {
-        case JString(x) => x
+        case JString(x) => ensureUCS2(x)
         case _ => return None // a required field.
       },
       application \ "version" match {
-        case JString(x) => x
+        case JString(x) => ensureUCS2(x)
         case _ => return None // a required field.
       },
       application \ "channel" match {
-        case JString(x) => x
+        case JString(x) => ensureUCS2(x)
         case _ => return None // a required field.
       },
 
       // Info about the sync.
       stringFromSyncOrPayload("uid") match {
         case null => return None // a required field.
-        case x => x
+        case x => ensureUCS2(x)
       },
 
       stringFromSyncOrPayload("deviceID"),
@@ -487,7 +508,7 @@ object SyncPingConverter {
       failureReasonToRow(sync \ "failureReason"),
       statusToRow(sync \ "status"),
       sync \ "why" match {
-        case JString(x) => x
+        case JString(x) => ensureUCS2(x)
         case _ => null
       },
       toEnginesRows(sync \ "engines"),
