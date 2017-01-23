@@ -226,7 +226,7 @@ object CrashSummaryView {
       val processedPings = spark.sparkContext.longAccumulator("processedPings")
       val discardedPings = spark.sparkContext.longAccumulator("discardedPings")
       val crashPings = messages.records()
-        .map(x => this.transformPayload(x.fieldsAsMap(), x.payload))
+        .map(x => this.transformPayload(x.fieldsAsMap, x.payload))
       crashPings.foreach(x => {
         if (!x.isDefined) {
           discardedPings.add(1)

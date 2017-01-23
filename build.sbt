@@ -9,10 +9,11 @@ lazy val root = (project in file(".")).
     scalaVersion := "2.11.8",
     retrieveManaged := true,
     ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) },
+    libraryDependencies += "com.trueaccord.scalapb" %% "scalapb-runtime" % com.trueaccord.scalapb.compiler.Version.scalapbVersion % "protobuf",
+    libraryDependencies += "com.google.protobuf" % "protobuf-java" % "3.1.0",
     libraryDependencies += "org.apache.avro" % "avro" % "1.7.7",
     libraryDependencies += "org.apache.parquet" % "parquet-avro" % "1.7.0",
     libraryDependencies += "com.github.seratch" %% "awscala" % "0.3.+",
-    libraryDependencies += "net.sandrogrzicic" %% "scalabuff-runtime" % "1.4.0",
     libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.4",
     libraryDependencies += "org.xerial.snappy" % "snappy-java" % "1.1.2",
     libraryDependencies += "org.json4s" %% "json4s-jackson" % "3.2.10",
@@ -34,6 +35,11 @@ lazy val root = (project in file(".")).
     libraryDependencies +=  "org.scalaj" %% "scalaj-http" % "2.3.0",
     libraryDependencies +=  "org.yaml" % "snakeyaml" % "1.17"
   )
+
+  // Compile proto files
+PB.targets in Compile := Seq(
+  scalapb.gen() -> (sourceManaged in Compile).value
+)
 
 run in Compile <<= Defaults.runTask(fullClasspath in Compile, mainClass in (Compile, run), runner in (Compile, run))
 assemblyJarName in assembly := s"telemetry-batch-view-${version.value}.jar"
