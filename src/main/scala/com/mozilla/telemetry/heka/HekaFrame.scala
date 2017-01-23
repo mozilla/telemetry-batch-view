@@ -50,7 +50,7 @@ object HekaFrame{
         val uncompressedLength = Snappy.uncompressedLength(messageBuffer)
         val uncompressedMessage = new Array[Byte](uncompressedLength)
         Snappy.uncompress(messageBuffer, 0, header.messageLength, uncompressedMessage, 0)
-        Message.parseFrom(uncompressedMessage, 0, uncompressedLength)
+        Message.parseFrom(uncompressedMessage)
       } catch {
         case ex: Throwable =>
           Message.parseFrom(messageBuffer)
