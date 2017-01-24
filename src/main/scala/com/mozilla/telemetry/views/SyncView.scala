@@ -107,7 +107,7 @@ object SyncView {
         val s3prefix = s"$jobName/$schemaVersion/submission_date_s3=$currentDateString"
         val s3path = s"s3://${conf.outputBucket()}/$s3prefix"
 
-        records.write.mode("error").parquet(s3path)
+        records.repartition(10).write.mode("overwrite").parquet(s3path)
 
         // Then remove the _SUCCESS file so we don't break Spark partition discovery.
         S3Store.deleteKey(conf.outputBucket(), s"$s3prefix/_SUCCESS")
