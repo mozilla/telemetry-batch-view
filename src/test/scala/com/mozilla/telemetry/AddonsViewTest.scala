@@ -28,14 +28,10 @@ case class PartialMain(document_id: String,
 
 class AddonsViewTest extends FlatSpec with Matchers{
   "Addon records" can "be extracted from MainSummary" in {
-    val sparkConf = new SparkConf().setAppName("AddonsViewTest")
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
-    val sc = new SparkContext(sparkConf)
-    sc.setLogLevel("WARN")
-
     val spark = SparkSession
       .builder()
       .appName("AddonsViewTest")
+      .master("local[1]")
       .getOrCreate()
 
     import spark.implicits._

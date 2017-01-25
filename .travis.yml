@@ -22,6 +22,6 @@ scala:
   - 2.11.8
 sbt_args: -J-Xss2M
 script:
-  - sbt coverage slow:test
+  - sbt coverage slow:test coverageReport
 after_success:
   - bash <(curl -s https://codecov.io/bash)
