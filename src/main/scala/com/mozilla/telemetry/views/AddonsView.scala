@@ -82,8 +82,9 @@ object AddonsView {
 
       println(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
       println("=======================================================================================")
-      sc.stop()
     }
+
+    sc.stop()
   }
 
   def addonsFromMain(mainSummaryData: DataFrame): DataFrame = {
