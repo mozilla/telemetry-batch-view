@@ -43,10 +43,13 @@ lazy val root = (project in file(".")).
 */
 dependencyOverrides += "com.google.protobuf" % "protobuf-java" % "2.5.0"
 
-  // Compile proto files
+// Compile proto files
 PB.targets in Compile := Seq(
   scalapb.gen() -> (sourceManaged in Compile).value
 )
+
+// Exclude generated classes from the coverage
+coverageExcludedPackages := "com\\.mozilla\\.telemetry\\.heka\\.(Field|Message|Header)"
 
 run in Compile <<= Defaults.runTask(fullClasspath in Compile, mainClass in (Compile, run), runner in (Compile, run))
 assemblyJarName in assembly := s"telemetry-batch-view-${version.value}.jar"
@@ -59,10 +62,12 @@ mergeStrategy in assembly := {
   case x => MergeStrategy.first
 }
 
+// Disable parallel execution to avoid multiple SparkContexts
+parallelExecution in Test := false
+
 lazy val Slow = config("slow").extend(Test)
 configs(Slow)
 inConfig(Slow)(Defaults.testTasks)
 
-testOptions in Test += Tests.Argument("-l", "org.scalatest.tags.Slow")
-testOptions in Slow -= Tests.Argument("-l", "org.scalatest.tags.Slow")
-testOptions in Slow += Tests.Argument("-n", "org.scalatest.tags.Slow")
+testOptions in Test := Seq(Tests.Argument("-l", "org.scalatest.tags.Slow"))
+testOptions in Slow := Seq()
