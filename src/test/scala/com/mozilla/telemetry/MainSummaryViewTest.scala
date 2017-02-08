@@ -1,6 +1,6 @@
 package com.mozilla.telemetry
 
-import com.mozilla.telemetry.heka.HekaFrame
+import com.mozilla.telemetry.heka.File
 import com.mozilla.telemetry.utils.MainPing
 import com.mozilla.telemetry.views.MainSummaryView
 import org.apache.spark.sql.{Row, SparkSession}
@@ -500,7 +500,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       for (hekaFileName <- List("/test_main_hindsight.heka", "/test_main.snappy.heka")) {
         val hekaURL = getClass.getResource(hekaFileName)
         val input = hekaURL.openStream()
-        val rows = HekaFrame.parse(input).flatMap(MainSummaryView.messageToRow)
+        val rows = File.parse(input).flatMap(MainSummaryView.messageToRow)
 
         // Serialize this one row as Parquet
         val dataframe = spark.createDataFrame(sc.parallelize(rows.toSeq), schema)
@@ -541,7 +541,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       val schema = MainSummaryView.buildSchema
 
       var count = 0
-      for (message <- HekaFrame.parse(input)) {
+      for (message <- File.parse(input)) {
         message.timestamp should be (1460036116829920000l)
         message.`type`.get should be ("telemetry")
         message.logger.get should be ("telemetry")
