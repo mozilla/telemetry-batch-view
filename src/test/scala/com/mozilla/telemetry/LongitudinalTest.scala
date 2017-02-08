@@ -2,7 +2,6 @@ package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.parquet.ParquetFile
 import com.mozilla.telemetry.scalars._
-import com.mozilla.telemetry.views.LongitudinalView
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
 import org.apache.spark.sql.{Row, SQLContext}
