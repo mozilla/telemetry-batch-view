@@ -47,6 +47,7 @@ object ToplineSummary {
       }
   }
 
+  private val clampToPositive = udf { x: Long => if (x < 0) 0 else x }
   /**
     * Normalizes a string to a set of labels by matching them against a pattern.
     *
@@ -243,7 +244,7 @@ object ToplineSummary {
         $"channel",
         $"os",
         normalizeSearch($"search_counts.engine").alias("engine"),
-        $"search_counts.count".alias("count"))
+        clampToPositive($"search_counts.count").alias("count"))
 
     searchData
       .groupBy("country", "channel", "os")

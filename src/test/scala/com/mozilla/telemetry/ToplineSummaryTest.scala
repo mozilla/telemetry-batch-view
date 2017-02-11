@@ -339,6 +339,27 @@ class ToplineSummaryTest extends FlatSpec
     assert(expect == result)
   }
 
+  it should "handle negative values" in {
+    import sqlContext.implicits._
+    val data = createNullableDataFrame(
+      uniqueMain(Seq(
+        fake_ping,
+        fake_ping.copy(
+          search_counts = Seq(
+            SearchCounts(
+              engine = "yahoo",
+              source = "",
+              count = Some(-100))))))
+        .toDF())
+    val expect = 4
+
+    val reportData = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummary invokePrivate searchAggregates(reportData)
+    val result = df.head().getAs[Long]("yahoo")
+
+    assert(expect == result)
+  }
+
   it should "handle zero searches" in {
     import sqlContext.implicits._
     val nullify = udf { () => None: Option[Seq[SearchCounts]] }
