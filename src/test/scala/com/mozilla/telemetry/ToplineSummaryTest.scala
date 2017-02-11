@@ -16,6 +16,7 @@ case class Crashes(document_id: String,
                    channel: String,
                    os: String)
 
+
 case class SearchCounts(engine: String,
                         source: String,
                         count: Some[Long])
@@ -41,12 +42,12 @@ class ToplineSummaryTest extends FlatSpec
                             with PrivateMethodTester
                             with DataFrameSuiteBase {
   private val dateFormat = format.DateTimeFormat.forPattern("yyyyMMdd")
-  private val fake_date = "20161201"
-  private val past_date = "20161101"
-  private val future_date = "20161203"
-  private val end_period_date = "20161208"
+  private val fakeDate = "20161201"
+  private val pastDate = "20161101"
+  private val futureDate = "20161203"
+  private val endPeriodDate = "20161208"
 
-  private val fake_ping =
+  private val fakePing =
     PartialToplineMain(
       app_name = "Firefox",
       document_id = "unique_id",
@@ -67,9 +68,9 @@ class ToplineSummaryTest extends FlatSpec
           source = "awesomebar",
           count = Some(3))
       ),
-      submission_date = fake_date,
+      submission_date = fakeDate,
       subsession_length = 3600,
-      submission_date_s3 = fake_date)
+      submission_date_s3 = fakeDate)
 
   private val fake_crash =
     Crashes(
@@ -80,7 +81,7 @@ class ToplineSummaryTest extends FlatSpec
 
   /* Private methods that we will be testing. The `createReportDataset` method will be the
    * primary method of testing the UDFs, since testing them directly is neigh impossible. */
-  private val createReportDataset = PrivateMethod[DataFrame]('createReportDataset)(_: DataFrame, fake_date, end_period_date)
+  private val createReportDataset = PrivateMethod[DataFrame]('createReportDataset)(_: DataFrame, fakeDate, endPeriodDate)
   private val clientValues = PrivateMethod[DataFrame]('clientValues)
   private val easyAggregates = PrivateMethod[DataFrame]('easyAggregates)
   private val searchAggregates = PrivateMethod[DataFrame]('searchAggregates)
@@ -117,28 +118,28 @@ class ToplineSummaryTest extends FlatSpec
 
   "createReportDataset" should "rename a column that goes through a udf" in {
     import sqlContext.implicits._
-    val data = Seq(fake_ping).toDF()
+    val data = Seq(fakePing).toDF()
     val df = ToplineSummary invokePrivate createReportDataset(data)
     assert(hasColumn(df, "country"))
   }
 
   it should "not count duplicate pings" in {
     import sqlContext.implicits._
-    val data = Seq(fake_ping, fake_ping).toDF()
+    val data = Seq(fakePing, fakePing).toDF()
     val df = ToplineSummary invokePrivate createReportDataset(data)
     assert(df.count() == 1)
   }
 
   it should "not count pings after reporting period" in {
     import sqlContext.implicits._
-    val data = Seq(fake_ping.copy(submission_date_s3 = end_period_date)).toDF()
+    val data = Seq(fakePing.copy(submission_date_s3 = endPeriodDate)).toDF()
     val df = ToplineSummary invokePrivate createReportDataset(data)
     assert(df.count() == 0)
   }
 
   it should "handle empty column values" in {
     import sqlContext.implicits._
-    val data = Seq(fake_ping.copy(country = "", os = "")).toDF()
+    val data = Seq(fakePing.copy(country = "", os = "")).toDF()
     val df = ToplineSummary invokePrivate createReportDataset(data)
     var expect = "Other"
 
@@ -151,7 +152,7 @@ class ToplineSummaryTest extends FlatSpec
 
   "[UDF] convertHours" should "be a double" in {
     import sqlContext.implicits._
-    val data = Seq(fake_ping.copy(subsession_length = 1800)).toDF()
+    val data = Seq(fakePing.copy(subsession_length = 1800)).toDF()
     val expect = 0.5
 
     val df = ToplineSummary invokePrivate createReportDataset(data)
@@ -162,7 +163,7 @@ class ToplineSummaryTest extends FlatSpec
 
   it should "ignore negative numbers" in {
     import sqlContext.implicits._
-    val data = Seq(fake_ping.copy(subsession_length = -3600)).toDF()
+    val data = Seq(fakePing.copy(subsession_length = -3600)).toDF()
     val expect = 0
 
     val df = ToplineSummary invokePrivate createReportDataset(data)
@@ -173,7 +174,7 @@ class ToplineSummaryTest extends FlatSpec
 
   it should "ignore values greater than 180 days" in {
     import sqlContext.implicits._
-    val data = Seq(fake_ping.copy(subsession_length = 181 * 24 * 60 * 60)).toDF()
+    val data = Seq(fakePing.copy(subsession_length = 181 * 24 * 60 * 60)).toDF()
     val expect = 0
 
     val df = ToplineSummary invokePrivate createReportDataset(data)
@@ -185,7 +186,7 @@ class ToplineSummaryTest extends FlatSpec
   it should "handle null values" in {
     import sqlContext.implicits._
     val nullify = udf { () => None: Option[Long] }
-    val data = createNullableDataFrame(Seq(fake_ping).toDF())
+    val data = createNullableDataFrame(Seq(fakePing).toDF())
       .withColumn("subsession_length", nullify())
     val expect = 0
 
@@ -198,7 +199,7 @@ class ToplineSummaryTest extends FlatSpec
   "[UDF] convertProfileCreation" should "handle null values" in {
     import sqlContext.implicits._
     val nullify = udf { () => None: Option[Long] }
-    val data = createNullableDataFrame(Seq(fake_ping).toDF())
+    val data = createNullableDataFrame(Seq(fakePing).toDF())
       .withColumn("profile_creation_date", nullify())
     val expect = 0
 
@@ -210,7 +211,7 @@ class ToplineSummaryTest extends FlatSpec
 
   "[UDF] normalizeCountry" should "recognize valid country IDs" in {
     import sqlContext.implicits._
-    val data = Seq(fake_ping.copy(country = "US")).toDF()
+    val data = Seq(fakePing.copy(country = "US")).toDF()
     val expect = "US"
 
     val df = ToplineSummary invokePrivate createReportDataset(data)
@@ -221,7 +222,7 @@ class ToplineSummaryTest extends FlatSpec
 
   it should "handle invalid country IDs" in {
     import sqlContext.implicits._
-    val data = Seq(fake_ping.copy(country = "Atlantis")).toDF()
+    val data = Seq(fakePing.copy(country = "Atlantis")).toDF()
     val expect = "Other"
 
     val df = ToplineSummary invokePrivate createReportDataset(data)
@@ -233,7 +234,7 @@ class ToplineSummaryTest extends FlatSpec
   it should "handle null values" in {
     import sqlContext.implicits._
     val nullify = udf { () => None: Option[String] }
-    val data = createNullableDataFrame(Seq(fake_ping).toDF())
+    val data = createNullableDataFrame(Seq(fakePing).toDF())
       .withColumn("country", nullify())
     val expect = "Other"
 
@@ -245,7 +246,7 @@ class ToplineSummaryTest extends FlatSpec
 
   "[UDF] normalizeOS" should "recognize `Windows 98` as Windows" in {
     import sqlContext.implicits._
-    val data = Seq(fake_ping.copy(os = "Windows 98")).toDF()
+    val data = Seq(fakePing.copy(os = "Windows 98")).toDF()
     val expect = "Windows"
 
     val df = ToplineSummary invokePrivate createReportDataset(data)
@@ -256,7 +257,7 @@ class ToplineSummaryTest extends FlatSpec
 
   it should "recognize `FreeBSD` as Linux" in {
     import sqlContext.implicits._
-    val data = Seq(fake_ping.copy(os = "FreeBSD")).toDF()
+    val data = Seq(fakePing.copy(os = "FreeBSD")).toDF()
     val expect = "Linux"
 
     val df = ToplineSummary invokePrivate createReportDataset(data)
@@ -267,7 +268,7 @@ class ToplineSummaryTest extends FlatSpec
 
   it should "recognize `Ubuntu Linux` as Linux" in {
     import sqlContext.implicits._
-    val data = Seq(fake_ping.copy(os = "Ubuntu Linux")).toDF()
+    val data = Seq(fakePing.copy(os = "Ubuntu Linux")).toDF()
     val expect = "Linux"
 
     val df = ToplineSummary invokePrivate createReportDataset(data)
@@ -278,7 +279,7 @@ class ToplineSummaryTest extends FlatSpec
 
   it should "recognize `BeOS` as Other" in {
     import sqlContext.implicits._
-    val data = Seq(fake_ping.copy(os = "BeOS")).toDF()
+    val data = Seq(fakePing.copy(os = "BeOS")).toDF()
     val expect = "Other"
 
     val df = ToplineSummary invokePrivate createReportDataset(data)
@@ -289,7 +290,7 @@ class ToplineSummaryTest extends FlatSpec
 
   it should "recognize `ltext-Windows` as Other" in {
     import sqlContext.implicits._
-    val data = Seq(fake_ping.copy(os = "ltext-Windows")).toDF()
+    val data = Seq(fakePing.copy(os = "ltext-Windows")).toDF()
     val expect = "Other"
 
     val df = ToplineSummary invokePrivate createReportDataset(data)
@@ -301,7 +302,7 @@ class ToplineSummaryTest extends FlatSpec
   it should "handle null values" in {
     import sqlContext.implicits._
     val nullify = udf { () => None: Option[String] }
-    val data = createNullableDataFrame(Seq(fake_ping).toDF())
+    val data = createNullableDataFrame(Seq(fakePing).toDF())
       .withColumn("os", nullify())
     val expect = "Other"
 
@@ -314,7 +315,7 @@ class ToplineSummaryTest extends FlatSpec
 
   "searchAggregates" should "aggregate the number of yahoo counts" in {
     import sqlContext.implicits._
-    val main_df = uniqueMain(Seq(fake_ping, fake_ping)).toDF()
+    val main_df = uniqueMain(Seq(fakePing, fakePing)).toDF()
     val reportData = ToplineSummary invokePrivate createReportDataset(main_df)
     // 2 x (ping.yahoo = 4)
     val expect = 8
@@ -328,7 +329,8 @@ class ToplineSummaryTest extends FlatSpec
   it should "handle null values" in {
     import sqlContext.implicits._
     val data = createNullableDataFrame(
-        uniqueMain(Seq(fake_ping, fake_ping.copy(search_counts=null))
+        uniqueMain(
+          Seq(fakePing, fakePing.copy(search_counts=null))
       ).toDF())
     val expect = 4
 
@@ -343,8 +345,8 @@ class ToplineSummaryTest extends FlatSpec
     import sqlContext.implicits._
     val data = createNullableDataFrame(
       uniqueMain(Seq(
-        fake_ping,
-        fake_ping.copy(
+        fakePing,
+        fakePing.copy(
           search_counts = Seq(
             SearchCounts(
               engine = "yahoo",
@@ -363,7 +365,7 @@ class ToplineSummaryTest extends FlatSpec
   it should "handle zero searches" in {
     import sqlContext.implicits._
     val nullify = udf { () => None: Option[Seq[SearchCounts]] }
-    val data = createNullableDataFrame(Seq(fake_ping).toDF())
+    val data = createNullableDataFrame(Seq(fakePing).toDF())
       .withColumn("search_counts", nullify())
     val expect = 0
 
@@ -377,7 +379,7 @@ class ToplineSummaryTest extends FlatSpec
 
   it should "default to 0 search counts" in {
     import sqlContext.implicits._
-    val data = Seq(fake_ping).toDF()
+    val data = Seq(fakePing).toDF()
     val expect = 0
 
     val df = ToplineSummary invokePrivate searchAggregates(data)
@@ -389,7 +391,7 @@ class ToplineSummaryTest extends FlatSpec
   "easyAggregates" should "aggregate the number of total crashes" in {
     // assumes that country, channel, os are the same for groupby
     import sqlContext.implicits._
-    val reportData = ToplineSummary invokePrivate createReportDataset(Seq(fake_ping).toDF())
+    val reportData = ToplineSummary invokePrivate createReportDataset(Seq(fakePing).toDF())
     val crashData = Seq(fake_crash, fake_crash).toDF()
     val expect = 2
 
@@ -397,12 +399,11 @@ class ToplineSummaryTest extends FlatSpec
     val result = df.head().getAs[Long]("crashes")
 
     assert(expect == result)
-
   }
 
   it should "aggregate the number of hours correctly" in {
     import sqlContext.implicits._
-    val main_df = uniqueMain(Seq(fake_ping, fake_ping)).toDF()
+    val main_df = uniqueMain(Seq(fakePing, fakePing)).toDF()
     val reportData = ToplineSummary invokePrivate createReportDataset(main_df)
     val crashData = uniqueCrashes(Seq(fake_crash, fake_crash)).toDF()
     // 2 x (ping.hours = 1)
@@ -416,7 +417,7 @@ class ToplineSummaryTest extends FlatSpec
 
   it should "join the report and crash data together" in {
     import sqlContext.implicits._
-    val main_df = uniqueMain(Seq(fake_ping, fake_ping)).toDF()
+    val main_df = uniqueMain(Seq(fakePing, fakePing)).toDF()
     val reportData = ToplineSummary invokePrivate createReportDataset(main_df)
     val crashData = uniqueCrashes(Seq(fake_crash, fake_crash)).toDF()
 
@@ -427,27 +428,47 @@ class ToplineSummaryTest extends FlatSpec
     assert(df.count() == 1)
   }
 
-  it should "use an outer join" in {
+  it should "keep rows in report data not crash data" in {
     import sqlContext.implicits._
-    val main_df = uniqueMain(Seq(fake_ping.copy(country="DE"), fake_ping.copy(os="Windows"))).toDF()
+    val main_df = uniqueMain(Seq(fakePing.copy(country="DE"))).toDF()
     val reportData = ToplineSummary invokePrivate createReportDataset(main_df)
-    val crashData = uniqueCrashes(Seq(fake_crash, fake_crash)).toDF()
+    val crashData = uniqueCrashes(Seq(fake_crash)).toDF()
 
+    // assert that a value is not dropped
     val df = ToplineSummary invokePrivate easyAggregates(reportData, crashData)
+    assert(df.count() == 2)
+  }
 
-    // there should be 3 entries based on channel, os, country
+  it should "keep rows in crash data not report data" in {
+    import sqlContext.implicits._
+    val main_df = uniqueMain(Seq(fakePing)).toDF()
+    val reportData = ToplineSummary invokePrivate createReportDataset(main_df)
+    val crashData = uniqueCrashes(Seq(fake_crash.copy(country="DE"))).toDF()
+
+    // assert that a value is not dropped
+    val df = ToplineSummary invokePrivate easyAggregates(reportData, crashData)
+    assert(df.count() == 2)
+  }
+
+  it should "keep the entire set of rows" in {
+    import sqlContext.implicits._
+    val main_df = uniqueMain(Seq(fakePing, fakePing.copy(country="DE"))).toDF()
+    val reportData = ToplineSummary invokePrivate createReportDataset(main_df)
+    val crashData = uniqueCrashes(Seq(fake_crash, fake_crash.copy(country="BR"))).toDF()
+
+    // assert that a value is not dropped
+    val df = ToplineSummary invokePrivate easyAggregates(reportData, crashData)
     assert(df.count() == 3)
-    df.show()
   }
 
   "clientValues" should "count a new client" in {
     import sqlContext.implicits._
-    val future = dateFormat.parseDateTime(future_date).getMillis() / (1000 * 3600 * 24)
-    val data = Seq(fake_ping.copy(profile_creation_date = future)).toDF()
+    val future = dateFormat.parseDateTime(futureDate).getMillis() / (1000 * 3600 * 24)
+    val data = Seq(fakePing.copy(profile_creation_date = future)).toDF()
     val reportData = ToplineSummary invokePrivate createReportDataset(data)
     val expect = 1
 
-    val df = ToplineSummary invokePrivate clientValues(reportData, fake_date)
+    val df = ToplineSummary invokePrivate clientValues(reportData, fakeDate)
     val result = df.head().getAs[Long]("new_records")
 
     assert(expect == result)
@@ -455,12 +476,12 @@ class ToplineSummaryTest extends FlatSpec
 
   it should "not count a client as new" in {
     import sqlContext.implicits._
-    val past = dateFormat.parseDateTime(past_date).getMillis() / (1000 * 3600 * 24)
-    val data = Seq(fake_ping.copy(profile_creation_date = past)).toDF()
+    val past = dateFormat.parseDateTime(pastDate).getMillis() / (1000 * 3600 * 24)
+    val data = Seq(fakePing.copy(profile_creation_date = past)).toDF()
     val reportData = ToplineSummary invokePrivate createReportDataset(data)
     val expect = 0
 
-    val df = ToplineSummary invokePrivate clientValues(reportData, fake_date)
+    val df = ToplineSummary invokePrivate clientValues(reportData, fakeDate)
     val result = df.head().getAs[Long]("new_records")
 
     assert(expect == result)
@@ -469,14 +490,14 @@ class ToplineSummaryTest extends FlatSpec
   it should "count a default client" in {
     import sqlContext.implicits._
     val data = uniqueMain(Seq(
-      fake_ping.copy(client_id = "foo", is_default_browser = true),
-      fake_ping.copy(client_id = "bar", is_default_browser = true),
-      fake_ping.copy(client_id = "baz", is_default_browser = false)
+      fakePing.copy(client_id = "foo", is_default_browser = true),
+      fakePing.copy(client_id = "bar", is_default_browser = true),
+      fakePing.copy(client_id = "baz", is_default_browser = false)
     )).toDF()
     val reportData = ToplineSummary invokePrivate createReportDataset(data)
     val expect = 2
 
-    val df = ToplineSummary invokePrivate clientValues(reportData, fake_date)
+    val df = ToplineSummary invokePrivate clientValues(reportData, fakeDate)
     val result = df.head().getAs[Long]("default")
 
     assert(expect == result)
@@ -485,30 +506,29 @@ class ToplineSummaryTest extends FlatSpec
   it should "select only the most recent client" in {
     import sqlContext.implicits._
     val data = uniqueMain(Seq(
-      fake_ping.copy(client_id = "foo", is_default_browser = true),
-      fake_ping.copy(client_id = "foo", is_default_browser = true)
+      fakePing.copy(client_id = "foo", is_default_browser = true),
+      fakePing.copy(client_id = "foo", is_default_browser = true)
     )).toDF()
     val reportData = ToplineSummary invokePrivate createReportDataset(data)
     val expect = 1
 
-    val df = ToplineSummary invokePrivate clientValues(reportData, fake_date)
+    val df = ToplineSummary invokePrivate clientValues(reportData, fakeDate)
     val result = df.head().getAs[Long]("default")
 
     assert(expect == result)
-
   }
 
   it should "aggregate the number of active users" in {
     import sqlContext.implicits._
     val data = uniqueMain(Seq(
-      fake_ping.copy(client_id = "foo", is_default_browser = true),
-      fake_ping.copy(client_id = "bar", is_default_browser = true),
-      fake_ping.copy(client_id = "baz", is_default_browser = false)
+      fakePing.copy(client_id = "foo", is_default_browser = true),
+      fakePing.copy(client_id = "bar", is_default_browser = true),
+      fakePing.copy(client_id = "baz", is_default_browser = false)
     )).toDF()
     val reportData = ToplineSummary invokePrivate createReportDataset(data)
     val expect = 3
 
-    val df = ToplineSummary invokePrivate clientValues(reportData, fake_date)
+    val df = ToplineSummary invokePrivate clientValues(reportData, fakeDate)
     val result = df.head().getAs[Long]("actives")
 
     assert(expect == result)

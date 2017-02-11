@@ -29,16 +29,17 @@ object ToplineSummary {
   private val SecondsInHour: Int = 60 * 60
   private val SecondsInDay: Int = SecondsInHour * 24
 
-  /* Returns the subsession_length from seconds to hours */
+  /* Returns the number of hours represented by seconds. Ignore values that are older than
+   * 180 days, the length of time that we store any telemetry ping. */
   private val convertSecondToHours: UserDefinedFunction = udf {
-    (uptime: Double) =>
-      uptime match {
-        case ut if ut >= 0 && ut < 180 * SecondsInDay => ut / SecondsInHour
+    (seconds: Double) =>
+      seconds match {
+        case s if s >= 0 && s < 180 * SecondsInDay => s / SecondsInHour
         case _ => 0.0
       }
   }
 
-  /* Returns the profile creation date in seconds since unix epoch */
+  /* Converts days into seconds, for positive values */
   private val convertDaysToSeconds: UserDefinedFunction = udf {
     (timestamp: Long) =>
       timestamp match {
@@ -48,6 +49,7 @@ object ToplineSummary {
   }
 
   private val clampToPositive = udf { x: Long => if (x < 0) 0 else x }
+
   /**
     * Normalizes a string to a set of labels by matching them against a pattern.
     *
@@ -69,15 +71,6 @@ object ToplineSummary {
         }
       }
     go(patterns zip labels, str match {case ""|null => "" case x => x})
-  }
-
-  private val normalizeChannel: UserDefinedFunction = udf {
-    (channel: String) => normalize(
-      List("^release$", "^beta", "^nightly$|^nightly-cck-", "^aurora$")
-        .map(pattern => pattern.r),
-      List("release", "beta", "nightly", "aurora"),
-      "Other",
-      channel)
   }
 
   private val normalizeOS: UserDefinedFunction = udf {
@@ -156,7 +149,7 @@ object ToplineSummary {
   /**
     * Create the dataset required for counting the number of crashes
     *
-    * This is currently implemented by searching through the main pings. This could be done using
+    * This is currently implemented by searching through the raw pings. This could be done using
     * the crash summary dataset.
     *
     * @param startDate start date in yyyymmdd
@@ -193,7 +186,7 @@ object ToplineSummary {
       .dropDuplicates("document_id")
       .select(
         normalizeCountry($"country").alias("country"),
-        normalizeChannel($"channel").alias("channel"),
+        $"channel",
         normalizeOS($"os").alias("os"))
   }
 
@@ -209,7 +202,7 @@ object ToplineSummary {
         case x: String => x
         case _ => ""
       },
-      fields.getOrElse("appUpdateChannel", None) match {
+      fields.getOrElse("normalizedChannel", None) match {
         case x: String => x
         case _ => ""
       },
@@ -233,8 +226,6 @@ object ToplineSummary {
   private def searchAggregates(reportData: DataFrame): DataFrame = {
     val s = session
     import s.implicits._
-
-    val searchSchema = MainSummaryView.buildSearchSchema
 
     val searchData = reportData
       .where($"search_counts".isNotNull)
