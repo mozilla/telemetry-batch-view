@@ -896,12 +896,38 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     eventRows should be (
       Some(List(
         Row(533352, "navigation", "search", "urlbar", "enter", Map("engine" -> "other-StartPage - English")),
-        Row(85959, "navigation", "search", "urlbar", "enter"),
-        Row(81994404, "navigation", "search", "searchbar")
+        Row(85959, "navigation", "search", "urlbar", "enter", null),
+        Row(81994404, "navigation", "search", "searchbar", null, null)
       )
     ))
     MainSummaryView.getEvents(parse(testPayload) \ "events") should be (None)
     MainSummaryView.getEvents(parse("""[]""")) should be (None)
+
+    val eventMapTypeTest = parse(
+      """[
+           [533352, "navigation", "search", "urlbar", "enter", {
+             "string": "hello world",
+             "int": 0,
+             "float": 1.0,
+             "null": null,
+             "boolean": true}
+           ]
+         ]""")
+
+    val eventMapTypeTestRows = MainSummaryView.getEvents(eventMapTypeTest)
+
+    eventMapTypeTestRows should be (
+      Some(List(
+        Row(533352, "navigation", "search", "urlbar", "enter", Map(
+          "string" -> "hello world",
+          "int" -> "0",
+          "float" -> "1.0",
+          "null" -> "null",
+          "boolean" -> "true"
+        ))
+      ))
+    )
+
 
     // Apply events schema to event rows
     val schema = MainSummaryView.buildEventSchema
@@ -912,9 +938,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       .builder()
       .appName("MainSummary")
       .getOrCreate()
-
     try {
-      noException should be thrownBy spark.createDataFrame(sc.parallelize(eventRows.get), schema)
+      noException should be thrownBy spark.createDataFrame(sc.parallelize(eventRows.get), schema).count()
     } finally {
       sc.stop
     }
