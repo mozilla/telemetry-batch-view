@@ -262,259 +262,264 @@ object MainSummaryView {
   // Convert the given Heka message containing a "main" ping
   // to a map containing just the fields we're interested in.
   def messageToRow(message: Message): Option[Row] = {
-    val fields = message.fieldsAsMap
+    try {
+      val fields = message.fieldsAsMap
 
-    // Don't compute the expensive stuff until we need it. We may skip a record
-    // due to missing required fields.
-    lazy val addons = parse(fields.getOrElse("environment.addons", "{}").asInstanceOf[String])
-    lazy val payload = parse(message.payload.getOrElse(fields.getOrElse("submission", "{}")).asInstanceOf[String])
-    lazy val application = payload \ "application"
-    lazy val build = parse(fields.getOrElse("environment.build", "{}").asInstanceOf[String])
-    lazy val profile = parse(fields.getOrElse("environment.profile", "{}").asInstanceOf[String])
-    lazy val partner = parse(fields.getOrElse("environment.partner", "{}").asInstanceOf[String])
-    lazy val settings = parse(fields.getOrElse("environment.settings", "{}").asInstanceOf[String])
-    lazy val system = parse(fields.getOrElse("environment.system", "{}").asInstanceOf[String])
-    lazy val info = parse(fields.getOrElse("payload.info", "{}").asInstanceOf[String])
-    lazy val histograms = parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
-    lazy val keyedHistograms = parse(fields.getOrElse("payload.keyedHistograms", "{}").asInstanceOf[String])
+      // Don't compute the expensive stuff until we need it. We may skip a record
+      // due to missing required fields.
+      lazy val addons = parse(fields.getOrElse("environment.addons", "{}").asInstanceOf[String])
+      lazy val payload = parse(message.payload.getOrElse(fields.getOrElse("submission", "{}")).asInstanceOf[String])
+      lazy val application = payload \ "application"
+      lazy val build = parse(fields.getOrElse("environment.build", "{}").asInstanceOf[String])
+      lazy val profile = parse(fields.getOrElse("environment.profile", "{}").asInstanceOf[String])
+      lazy val partner = parse(fields.getOrElse("environment.partner", "{}").asInstanceOf[String])
+      lazy val settings = parse(fields.getOrElse("environment.settings", "{}").asInstanceOf[String])
+      lazy val system = parse(fields.getOrElse("environment.system", "{}").asInstanceOf[String])
+      lazy val info = parse(fields.getOrElse("payload.info", "{}").asInstanceOf[String])
+      lazy val histograms = parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
+      lazy val keyedHistograms = parse(fields.getOrElse("payload.keyedHistograms", "{}").asInstanceOf[String])
 
-    lazy val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
-    lazy val weaveDesktop = MainPing.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
-    lazy val weaveMobile = MainPing.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
-    lazy val parentScalars = payload \ "payload" \ "processes" \ "parent" \ "scalars"
-    lazy val parentEvents = payload \ "payload" \ "processes" \ "parent" \ "events"
+      lazy val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
+      lazy val weaveDesktop = MainPing.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
+      lazy val weaveMobile = MainPing.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
+      lazy val parentScalars = payload \ "payload" \ "processes" \ "parent" \ "scalars"
+      lazy val parentEvents = payload \ "payload" \ "processes" \ "parent" \ "events"
 
-    val loopActivityCounterKeys = (0 to 4).map(_.toString)
+      val loopActivityCounterKeys = (0 to 4).map(_.toString)
 
-    // Messy list of known enum values for POPUP_NOTIFICATION_STATS.
-    val popupNotificationStatsKeys = (0 to 8).union(10 to 11).union(20 to 28).union(30 to 31).map(_.toString)
+      // Messy list of known enum values for POPUP_NOTIFICATION_STATS.
+      val popupNotificationStatsKeys = (0 to 8).union(10 to 11).union(20 to 28).union(30 to 31).map(_.toString)
 
-    // Get the "sum" field from histogram h as an Int. Consider a
-    // wonky histogram (one for which the "sum" field is not a
-    // valid number) as null.
-    val hsum = (h: JValue) => h \ "sum" match {
-      case JInt(x) => x.toInt
-      case _ => null
+      // Get the "sum" field from histogram h as an Int. Consider a
+      // wonky histogram (one for which the "sum" field is not a
+      // valid number) as null.
+      val hsum = (h: JValue) => h \ "sum" match {
+        case JInt(x) => x.toInt
+        case _ => null
+      }
+
+      val row = Row(
+        // Row fields must match the structure in 'buildSchema'
+        fields.getOrElse("documentId", None) match {
+          case x: String => x
+          // documentId is required, and must be a string. If either
+          // condition is not satisfied, we skip this record.
+          case _ => return None
+        },
+        fields.getOrElse("clientId", None) match {
+          case x: String => x
+          case _ => null
+        },
+        fields.getOrElse("sampleId", None) match {
+          case x: Long => x
+          case x: Double => x.toLong
+          case _ => null
+        },
+        fields.getOrElse("appUpdateChannel", None) match {
+          case x: String => x
+          case _ => ""
+        },
+        fields.getOrElse("normalizedChannel", None) match {
+          case x: String => x
+          case _ => ""
+        },
+        fields.getOrElse("geoCountry", None) match {
+          case x: String => x
+          case _ => ""
+        },
+        fields.getOrElse("geoCity", None) match {
+          case x: String => x
+          case _ => ""
+        },
+        system \ "os" \ "name" match {
+          case JString(x) => x
+          case _ => null
+        },
+        system \ "os" \ "version" match {
+          case JString(x) => x
+          case JInt(x) => x.toString()
+          case _ => null
+        },
+        system \ "os" \ "servicePackMajor" match {
+          case JInt(x) => x.toLong
+          case _ => null
+        },
+        system \ "os" \ "servicePackMinor" match {
+          case JInt(x) => x.toLong
+          case _ => null
+        },
+        system \ "os" \ "windowsBuildNumber" match {
+          case JInt(x) => x.toLong
+          case _ => null
+        },
+        system \ "os" \ "windowsUBR" match {
+          case JInt(x) => x.toLong
+          case _ => null
+        },
+        system \ "os" \ "installYear" match {
+          case JInt(x) => x.toLong
+          case _ => null
+        },
+        profile \ "creationDate" match {
+          case JInt(x) => x.toLong
+          case _ => null
+        },
+        info \ "subsessionStartDate" match {
+          case JString(x) => x
+          case _ => null
+        },
+        info \ "subsessionLength" match {
+          case JInt(x) => x.toLong
+          case _ => null
+        },
+        partner \ "distributionId" match {
+          case JString(x) => x
+          case _ => null
+        },
+        fields.getOrElse("submissionDate", None) match {
+          case x: String => x
+          case _ => return None // required
+        },
+        weaveConfigured.orNull,
+        weaveDesktop.orNull,
+        weaveMobile.orNull,
+        application \ "buildId" match {
+          case JString(x) => x
+          case _ => null
+        },
+        application \ "displayVersion" match {
+          case JString(x) => x
+          case _ => null
+        },
+        application \ "name" match {
+          case JString(x) => x
+          case _ => null
+        },
+        application \ "version" match {
+          case JString(x) => x
+          case _ => null
+        },
+        message.timestamp, // required
+        build \ "buildId" match {
+          case JString(x) => x
+          case _ => null
+        },
+        build \ "version" match {
+          case JString(x) => x
+          case _ => null
+        },
+        build \ "architecture" match {
+          case JString(x) => x
+          case _ => null
+        },
+        settings \ "e10sEnabled" match {
+          case JBool(x) => x
+          case _ => null
+        },
+        settings \ "e10sCohort" match {
+          case JString(x) => x
+          case _ => null
+        },
+        settings \ "locale" match {
+          case JString(x) => x
+          case _ => null
+        },
+        getAttribution(settings \ "attribution").orNull,
+        addons \ "activeExperiment" \ "id" match {
+          case JString(x) => x
+          case _ => null
+        },
+        addons \ "activeExperiment" \ "branch" match {
+          case JString(x) => x
+          case _ => null
+        },
+        info \ "reason" match {
+          case JString(x) => x
+          case _ => null
+        },
+        asInt(info \ "timezoneOffset"),
+        hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "pluginhang"),
+        hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "plugin"),
+        hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "content"),
+        hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "gmplugin"),
+        hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "plugin"),
+        hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "content"),
+        hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "gmplugin"),
+        hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "main-crash"),
+        hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "content-crash"),
+        hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "plugin-crash"),
+        hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "main-crash"),
+        hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash"),
+        hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash"),
+        MainPing.countKeys(addons \ "activeAddons") match {
+          case Some(x) => x
+          case _ => null
+        },
+        MainPing.getFlashVersion(addons) match {
+          case Some(x) => x
+          case _ => null
+        },
+        application \ "vendor" match {
+          case JString(x) => x
+          case _ => null
+        },
+        settings \ "isDefaultBrowser" match {
+          case JBool(x) => x
+          case _ => null
+        },
+        settings \ "defaultSearchEngineData" \ "name" match {
+          case JString(x) => x
+          case _ => null
+        },
+        settings \ "defaultSearchEngine" match {
+          case JString(x) => x
+          case _ => null
+        },
+        MainPing.enumHistogramToRow(histograms \ "LOOP_ACTIVITY_COUNTER", loopActivityCounterKeys),
+        hsum(histograms \ "DEVTOOLS_TOOLBOX_OPENED_COUNT"),
+        fields.getOrElse("Date", None) match {
+          case x: String => x
+          case _ => null
+        },
+        MainPing.histogramToMean(histograms \ "PLACES_BOOKMARKS_COUNT").orNull,
+        MainPing.histogramToMean(histograms \ "PLACES_PAGES_COUNT").orNull,
+        hsum(histograms \ "PUSH_API_NOTIFY"),
+        hsum(histograms \ "WEB_NOTIFICATION_SHOWN"),
+
+        MainPing.keyedEnumHistogramToMap(keyedHistograms \ "POPUP_NOTIFICATION_STATS",
+          popupNotificationStatsKeys).orNull,
+
+        MainPing.getSearchCounts(keyedHistograms \ "SEARCH_COUNTS").orNull,
+
+        getActiveAddons(addons \ "activeAddons").orNull,
+        getTheme(addons \ "theme").orNull,
+        settings \ "blocklistEnabled" match {
+          case JBool(x) => x
+          case _ => null
+        },
+        settings \ "addonCompatibilityCheckEnabled" match {
+          case JBool(x) => x
+          case _ => null
+        },
+        settings \ "telemetryEnabled" match {
+          case JBool(x) => x
+          case _ => null
+        },
+        getUserPrefs(settings \ "userPrefs").orNull,
+        getBrowserEngagement(parentScalars, "max_concurrent_tab_count"),
+        getBrowserEngagement(parentScalars, "tab_open_event_count"),
+        getBrowserEngagement(parentScalars, "max_concurrent_window_count"),
+        getBrowserEngagement(parentScalars, "window_open_event_count"),
+        getBrowserEngagement(parentScalars, "total_uri_count"),
+        getBrowserEngagement(parentScalars, "unfiltered_uri_count"),
+        getBrowserEngagement(parentScalars, "unique_domains_count"),
+        getEvents(parentEvents).orNull
+      )
+      Some(row)
+    } catch {
+      case _: Exception =>
+        None
     }
-
-    val row = Row(
-      // Row fields must match the structure in 'buildSchema'
-      fields.getOrElse("documentId", None) match {
-        case x: String => x
-        // documentId is required, and must be a string. If either
-        // condition is not satisfied, we skip this record.
-        case _ => return None
-      },
-      fields.getOrElse("clientId", None) match {
-        case x: String => x
-        case _ => null
-      },
-      fields.getOrElse("sampleId", None) match {
-        case x: Long => x
-        case x: Double => x.toLong
-        case _ => null
-      },
-      fields.getOrElse("appUpdateChannel", None) match {
-        case x: String => x
-        case _ => ""
-      },
-      fields.getOrElse("normalizedChannel", None) match {
-        case x: String => x
-        case _ => ""
-      },
-      fields.getOrElse("geoCountry", None) match {
-        case x: String => x
-        case _ => ""
-      },
-      fields.getOrElse("geoCity", None) match {
-        case x: String => x
-        case _ => ""
-      },
-      system \ "os" \ "name" match {
-        case JString(x) => x
-        case _ => null
-      },
-      system \ "os" \ "version" match {
-        case JString(x) => x
-        case JInt(x) => x.toString()
-        case _ => null
-      },
-      system \ "os" \ "servicePackMajor" match {
-        case JInt(x) => x.toLong
-        case _ => null
-      },
-      system \ "os" \ "servicePackMinor" match {
-        case JInt(x) => x.toLong
-        case _ => null
-      },
-      system \ "os" \ "windowsBuildNumber" match {
-        case JInt(x) => x.toLong
-        case _ => null
-      },
-      system \ "os" \ "windowsUBR" match {
-        case JInt(x) => x.toLong
-        case _ => null
-      },
-      system \ "os" \ "installYear" match {
-        case JInt(x) => x.toLong
-        case _ => null
-      },
-      profile \ "creationDate" match {
-        case JInt(x) => x.toLong
-        case _ => null
-      },
-      info \ "subsessionStartDate" match {
-        case JString(x) => x
-        case _ => null
-      },
-      info \ "subsessionLength" match {
-        case JInt(x) => x.toLong
-        case _ => null
-      },
-      partner \ "distributionId" match {
-        case JString(x) => x
-        case _ => null
-      },
-      fields.getOrElse("submissionDate", None) match {
-        case x: String => x
-        case _ => return None // required
-      },
-      weaveConfigured.orNull,
-      weaveDesktop.orNull,
-      weaveMobile.orNull,
-      application \ "buildId" match {
-        case JString(x) => x
-        case _ => null
-      },
-      application \ "displayVersion" match {
-        case JString(x) => x
-        case _ => null
-      },
-      application \ "name" match {
-        case JString(x) => x
-        case _ => null
-      },
-      application \ "version" match {
-        case JString(x) => x
-        case _ => null
-      },
-      message.timestamp, // required
-      build \ "buildId" match {
-        case JString(x) => x
-        case _ => null
-      },
-      build \ "version" match {
-        case JString(x) => x
-        case _ => null
-      },
-      build \ "architecture" match {
-        case JString(x) => x
-        case _ => null
-      },
-      settings \ "e10sEnabled" match {
-        case JBool(x) => x
-        case _ => null
-      },
-      settings \ "e10sCohort" match {
-        case JString(x) => x
-        case _ => null
-      },
-      settings \ "locale" match {
-        case JString(x) => x
-        case _ => null
-      },
-      getAttribution(settings \ "attribution").orNull,
-      addons \ "activeExperiment" \ "id" match {
-        case JString(x) => x
-        case _ => null
-      },
-      addons \ "activeExperiment" \ "branch" match {
-        case JString(x) => x
-        case _ => null
-      },
-      info \ "reason" match {
-        case JString(x) => x
-        case _ => null
-      },
-      asInt(info \ "timezoneOffset"),
-      hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "pluginhang"),
-      hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "plugin"),
-      hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "content"),
-      hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "gmplugin"),
-      hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "plugin"),
-      hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "content"),
-      hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "gmplugin"),
-      hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "main-crash"),
-      hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "content-crash"),
-      hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "plugin-crash"),
-      hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "main-crash"),
-      hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash"),
-      hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash"),
-      MainPing.countKeys(addons \ "activeAddons") match {
-        case Some(x) => x
-        case _ => null
-      },
-      MainPing.getFlashVersion(addons) match {
-        case Some(x) => x
-        case _ => null
-      },
-      application \ "vendor" match {
-        case JString(x) => x
-        case _ => null
-      },
-      settings \ "isDefaultBrowser" match {
-        case JBool(x) => x
-        case _ => null
-      },
-      settings \ "defaultSearchEngineData" \ "name" match {
-        case JString(x) => x
-        case _ => null
-      },
-      settings \ "defaultSearchEngine" match {
-        case JString(x) => x
-        case _ => null
-      },
-      MainPing.enumHistogramToRow(histograms \ "LOOP_ACTIVITY_COUNTER", loopActivityCounterKeys),
-      hsum(histograms \ "DEVTOOLS_TOOLBOX_OPENED_COUNT"),
-      fields.getOrElse("Date", None) match {
-        case x: String => x
-        case _ => null
-      },
-      MainPing.histogramToMean(histograms \ "PLACES_BOOKMARKS_COUNT").orNull,
-      MainPing.histogramToMean(histograms \ "PLACES_PAGES_COUNT").orNull,
-      hsum(histograms \ "PUSH_API_NOTIFY"),
-      hsum(histograms \ "WEB_NOTIFICATION_SHOWN"),
-
-      MainPing.keyedEnumHistogramToMap(keyedHistograms \ "POPUP_NOTIFICATION_STATS",
-        popupNotificationStatsKeys).orNull,
-
-      MainPing.getSearchCounts(keyedHistograms \ "SEARCH_COUNTS").orNull,
-
-      getActiveAddons(addons \ "activeAddons").orNull,
-      getTheme(addons \ "theme").orNull,
-      settings \ "blocklistEnabled" match {
-        case JBool(x) => x
-        case _ => null
-      },
-      settings \ "addonCompatibilityCheckEnabled" match {
-        case JBool(x) => x
-        case _ => null
-      },
-      settings \ "telemetryEnabled" match {
-        case JBool(x) => x
-        case _ => null
-      },
-      getUserPrefs(settings \ "userPrefs").orNull,
-      getBrowserEngagement(parentScalars, "max_concurrent_tab_count"),
-      getBrowserEngagement(parentScalars, "tab_open_event_count"),
-      getBrowserEngagement(parentScalars, "max_concurrent_window_count"),
-      getBrowserEngagement(parentScalars, "window_open_event_count"),
-      getBrowserEngagement(parentScalars, "total_uri_count"),
-      getBrowserEngagement(parentScalars, "unfiltered_uri_count"),
-      getBrowserEngagement(parentScalars, "unique_domains_count"),
-      getEvents(parentEvents).orNull
-    )
-    Some(row)
   }
 
   // Type for encapsulating search counts
