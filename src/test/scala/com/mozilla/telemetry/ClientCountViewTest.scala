@@ -14,6 +14,9 @@ case class LoopActivity(open_panel: Int,
                         room_share: Int,
                         room_delete: Int)
 
+// popupNotificationStats type is 22 separate int fields -- simplifying down for this test
+case class PopupNotificationStatsDummyType(dummy_field: Int)
+
 case class Submission(client_id: String,
                       app_name: String,
                       app_version: String,
@@ -27,7 +30,10 @@ case class Submission(client_id: String,
                       os: String,
                       os_version: String,
                       devtools_toolbox_opened_count: Int,
-                      loop_activity_counter: LoopActivity)
+                      loop_activity_counter: LoopActivity,
+                      popup_notification_stats: Option[PopupNotificationStatsDummyType],
+                      web_notification_shown: Int
+                     )
 
 object Submission{
   val dimensions = Map(
@@ -46,7 +52,9 @@ object Submission{
     "devtools_toolbox_opened_count" -> List(0, 42),
     "loop_activity_counter" -> List(
       LoopActivity(0, 0, 0, 0, 0),
-      LoopActivity(42, 0, 0, 0, 0)))
+      LoopActivity(42, 0, 0, 0, 0)),
+    "popup_notification_stats" -> List(Some(PopupNotificationStatsDummyType(1)), None),
+    "web_notification_shown" -> List(5, 0))
 
   def randomList: List[Submission] = {
     for {
@@ -64,6 +72,8 @@ object Submission{
       osVersion <- dimensions("os_version")
       devtoolsToolboxOpenedCount <- dimensions("devtools_toolbox_opened_count")
       loopActivity <- dimensions("loop_activity_counter")
+      popupNotificationStats <- dimensions("popup_notification_stats")
+      webNotificationShown <- dimensions("web_notification_shown")
     } yield {
       Submission(clientId.asInstanceOf[String],
                  appName.asInstanceOf[String],
@@ -78,7 +88,10 @@ object Submission{
                  os.asInstanceOf[String],
                  osVersion.asInstanceOf[String],
                  devtoolsToolboxOpenedCount.asInstanceOf[Int],
-                 loopActivity.asInstanceOf[LoopActivity])
+                 loopActivity.asInstanceOf[LoopActivity],
+                 popupNotificationStats.asInstanceOf[Option[PopupNotificationStatsDummyType]],
+                 webNotificationShown.asInstanceOf[Int]
+      )
     }
   }
 }
