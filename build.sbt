@@ -3,6 +3,8 @@ javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint")
 resolvers += "Spark Packages Repo" at "https://dl.bintray.com/spark-packages/maven/"
 resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
 
+val sparkVersion = "2.0.2"
+
 lazy val root = (project in file(".")).
   settings(
     name := "telemetry-batch-view",
@@ -20,10 +22,10 @@ lazy val root = (project in file(".")).
     libraryDependencies += "org.apache.hadoop" % "hadoop-aws" % "2.7.1" excludeAll(ExclusionRule(organization = "javax.servlet")),
     libraryDependencies += "com.github.nscala-time" %% "nscala-time" % "2.10.0",
     libraryDependencies += "org.rogach" %% "scallop" % "1.0.2",
-    libraryDependencies += "org.apache.spark" %% "spark-core" % "2.0.0",
-    libraryDependencies += "org.apache.spark" %% "spark-sql" % "2.0.0",
-    libraryDependencies += "org.apache.spark" %% "spark-mllib" % "2.0.0",
-    libraryDependencies += "org.apache.spark" %% "spark-hive" % "2.0.0",
+    libraryDependencies += "org.apache.spark" %% "spark-core" % sparkVersion,
+    libraryDependencies += "org.apache.spark" %% "spark-sql" % sparkVersion,
+    libraryDependencies += "org.apache.spark" %% "spark-mllib" % sparkVersion,
+    libraryDependencies += "org.apache.spark" %% "spark-hive" % sparkVersion,
     libraryDependencies += "org.apache.hbase" % "hbase-server" % "1.2.3",
     libraryDependencies += "org.apache.hbase" % "hbase-common" % "1.2.3",
     libraryDependencies += "org.apache.hbase" % "hbase-hadoop-compat" % "1.2.3",
