@@ -27,6 +27,7 @@ case class Submission(client_id: String,
                       os: String,
                       os_version: String,
                       devtools_toolbox_opened_count: Int,
+                      distribution_id: String,
                       loop_activity_counter: LoopActivity)
 
 object Submission{
@@ -44,6 +45,7 @@ object Submission{
     "os" -> List("Windows", "Darwin"),
     "os_version" -> List("1.0", "1.1"),
     "devtools_toolbox_opened_count" -> List(0, 42),
+    "distribution_id" -> List("canonical", "MozillaOnline", "yandex", "foo", "bar"),
     "loop_activity_counter" -> List(
       LoopActivity(0, 0, 0, 0, 0),
       LoopActivity(42, 0, 0, 0, 0)))
@@ -63,6 +65,7 @@ object Submission{
       os <- dimensions("os")
       osVersion <- dimensions("os_version")
       devtoolsToolboxOpenedCount <- dimensions("devtools_toolbox_opened_count")
+      distributionId <- dimensions("distribution_id")
       loopActivity <- dimensions("loop_activity_counter")
     } yield {
       Submission(clientId.asInstanceOf[String],
@@ -78,12 +81,13 @@ object Submission{
                  os.asInstanceOf[String],
                  osVersion.asInstanceOf[String],
                  devtoolsToolboxOpenedCount.asInstanceOf[Int],
+                 distributionId.asInstanceOf[String],
                  loopActivity.asInstanceOf[LoopActivity])
     }
   }
 }
 
-class ClientCountViewTest extends FlatSpec with Matchers{
+class ClientCountViewTest extends FlatSpec with Matchers {
   "Dataset" can "be aggregated" in {
     val sparkConf = new SparkConf().setAppName("KPI")
     sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
@@ -114,6 +118,13 @@ class ClientCountViewTest extends FlatSpec with Matchers{
 
       count.length should be (1)
       count(0)(0) should be (Submission.dimensions("client_id").count(x => x != null))
+
+      val distributionIdCount = aggregates
+        .groupBy("top_distribution_id")
+        .agg(countDistinct($"top_distribution_id"))
+        .collect()
+
+      distributionIdCount.length should be (4)
     } finally {
       sc.stop()
     }

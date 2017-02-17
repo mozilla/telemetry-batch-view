@@ -36,9 +36,16 @@ object ClientCountView {
     "substr(subsession_start_date, 0, 10) as activity_date" ::
     "devtools_toolbox_opened_count > 0 as devtools_toolbox_opened" ::
     "loop_activity_counter.open_panel > 0 as loop_activity_open_panel" ::
+    "case when distribution_id in ('canonical', 'MozillaOnline', 'yandex') " +
+      "then distribution_id else null end as top_distribution_id" ::
     base
 
-  val dimensions = "activity_date" :: "devtools_toolbox_opened" :: "loop_activity_open_panel" :: base
+  val dimensions =
+    "activity_date" ::
+    "devtools_toolbox_opened" ::
+    "loop_activity_open_panel" ::
+    "top_distribution_id" ::
+    base
 
   def aggregate(frame: DataFrame): DataFrame = {
     frame
