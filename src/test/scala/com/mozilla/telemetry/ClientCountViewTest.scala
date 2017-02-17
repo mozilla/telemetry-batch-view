@@ -3,10 +3,9 @@ package com.mozilla.telemetry
 import com.mozilla.spark.sql.hyperloglog.aggregates._
 import com.mozilla.spark.sql.hyperloglog.functions._
 import com.mozilla.telemetry.views.ClientCountView
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
-import org.apache.spark.{SparkConf, SparkContext}
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 case class LoopActivity(open_panel: Int,
                         open_conversation: Int,
@@ -87,46 +86,49 @@ object Submission{
   }
 }
 
-class ClientCountViewTest extends FlatSpec with Matchers {
-  "Dataset" can "be aggregated" in {
-    val sparkConf = new SparkConf().setAppName("KPI")
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
-    val sc = new SparkContext(sparkConf)
-    sc.setLogLevel("WARN")
-    try {
-      val sqlContext = new SQLContext(sc)
-      sqlContext.udf.register("hll_create", hllCreate _)
-      sqlContext.udf.register("hll_cardinality", hllCardinality _)
-      import sqlContext.implicits._
+class ClientCountViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
+  private val spark = SparkSession
+    .builder()
+    .appName("ClientCountViewTest")
+    .master("local[*]")
+    .getOrCreate()
 
-      val dataset = sc.parallelize(Submission.randomList).toDF()
-      val aggregates = ClientCountView.aggregate(dataset)
+  spark.udf.register("hll_create", hllCreate _)
+  spark.udf.register("hll_cardinality", hllCardinality _)
+  import spark.implicits._
 
-      val dimensions = Set(ClientCountView.dimensions: _*) -- Set("client_id")
-      (Set(aggregates.columns: _*) -- Set("client_id", "hll", "sum")) should be (dimensions)
+  private val dataset = spark.sparkContext.parallelize(Submission.randomList).toDF()
+  private val aggregates = ClientCountView.aggregate(dataset)
 
-      val estimates = aggregates.select(expr("hll_cardinality(hll)")).collect()
-      estimates.foreach { x =>
-        x(0) should be (Submission.dimensions("client_id").count(x => x != null))
-      }
+  "Input data" can "be aggregated" in {
+    val dimensions = Set(ClientCountView.dimensions: _*) -- Set("client_id")
+    (Set(aggregates.columns: _*) -- Set("client_id", "hll", "sum")) should be (dimensions)
 
-      val hllMerge = new HyperLogLogMerge
-      val count = aggregates
-        .select(col("hll"))
-        .agg(hllMerge(col("hll")).as("hll"))
-        .select(expr("hll_cardinality(hll)")).collect()
-
-      count.length should be (1)
-      count(0)(0) should be (Submission.dimensions("client_id").count(x => x != null))
-
-      val distributionIdCount = aggregates
-        .groupBy("top_distribution_id")
-        .agg(countDistinct($"top_distribution_id"))
-        .collect()
-
-      distributionIdCount.length should be (4)
-    } finally {
-      sc.stop()
+    val estimates = aggregates.select(expr("hll_cardinality(hll)")).collect()
+    estimates.foreach { x =>
+      x(0) should be (Submission.dimensions("client_id").count(x => x != null))
     }
+
+    val hllMerge = new HyperLogLogMerge
+    val count = aggregates
+      .select(col("hll"))
+      .agg(hllMerge(col("hll")).as("hll"))
+      .select(expr("hll_cardinality(hll)")).collect()
+
+    count.length should be (1)
+    count(0)(0) should be (Submission.dimensions("client_id").count(x => x != null))
+  }
+
+  "Only top distributions" should "be considered" in {
+    val distributionIdCount = aggregates
+      .groupBy("top_distribution_id")
+      .agg(countDistinct($"top_distribution_id"))
+      .collect()
+
+    distributionIdCount.length should be (4)
+  }
+
+  override def afterAll() = {
+    spark.stop()
   }
 }
