@@ -7,12 +7,6 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
-case class LoopActivity(open_panel: Int,
-                        open_conversation: Int,
-                        room_open: Int,
-                        room_share: Int,
-                        room_delete: Int)
-
 case class Submission(client_id: String,
                       app_name: String,
                       app_version: String,
@@ -26,8 +20,7 @@ case class Submission(client_id: String,
                       os: String,
                       os_version: String,
                       devtools_toolbox_opened_count: Int,
-                      distribution_id: String,
-                      loop_activity_counter: LoopActivity)
+                      distribution_id: String)
 
 object Submission{
   val dimensions = Map(
@@ -44,10 +37,7 @@ object Submission{
     "os" -> List("Windows", "Darwin"),
     "os_version" -> List("1.0", "1.1"),
     "devtools_toolbox_opened_count" -> List(0, 42),
-    "distribution_id" -> List("canonical", "MozillaOnline", "yandex", "foo", "bar"),
-    "loop_activity_counter" -> List(
-      LoopActivity(0, 0, 0, 0, 0),
-      LoopActivity(42, 0, 0, 0, 0)))
+    "distribution_id" -> List("canonical", "MozillaOnline", "yandex", "foo", "bar"))
 
   def randomList: List[Submission] = {
     for {
@@ -65,7 +55,6 @@ object Submission{
       osVersion <- dimensions("os_version")
       devtoolsToolboxOpenedCount <- dimensions("devtools_toolbox_opened_count")
       distributionId <- dimensions("distribution_id")
-      loopActivity <- dimensions("loop_activity_counter")
     } yield {
       Submission(clientId.asInstanceOf[String],
                  appName.asInstanceOf[String],
@@ -80,8 +69,7 @@ object Submission{
                  os.asInstanceOf[String],
                  osVersion.asInstanceOf[String],
                  devtoolsToolboxOpenedCount.asInstanceOf[Int],
-                 distributionId.asInstanceOf[String],
-                 loopActivity.asInstanceOf[LoopActivity])
+                 distributionId.asInstanceOf[String])
     }
   }
 }
