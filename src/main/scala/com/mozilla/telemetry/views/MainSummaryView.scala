@@ -216,21 +216,25 @@ object MainSummaryView {
             method:    String,
             obj:       String,
             strValue:  String,
-            mapValues: Map[String @unchecked, String @unchecked])
-            => List(Row(timestamp.toLong, category, method, obj, strValue, mapValues))
+            mapValues: Map[String @unchecked, Any @unchecked])
+            => List(Row(timestamp.toLong, category, method, obj, strValue, mapValues.map { // Bug 1339130
+                case (k: String, null) => (k, "null")
+                case (k: String, v: Any) => (k, v.toString())
+              }
+            ))
           case _ @ List(
             timestamp: BigInt,
             category:  String,
             method:    String,
             obj:       String,
             strValue:  String)
-            => List(Row(timestamp.toLong, category, method, obj, strValue))
+            => List(Row(timestamp.toLong, category, method, obj, strValue, null))
           case _ @ List(
             timestamp: BigInt,
             category:  String,
             method:    String,
             obj:       String)
-            => List(Row(timestamp.toLong, category, method, obj))
+            => List(Row(timestamp.toLong, category, method, obj, null, null))
           case _ => None
         }
         rows match {
