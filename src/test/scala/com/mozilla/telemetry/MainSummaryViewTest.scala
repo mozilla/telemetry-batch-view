@@ -992,4 +992,33 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     MainSummaryView.getAttribution(json3 \ "environment" \ "settings" \ "attribution") should be (
       Some(Row("sample_source", "sample_medium", "sample_campaign", "sample_content")))
   }
+
+  // bug 1331702
+  "Wow64" can "be extracted" in {
+    // Ping contains wow64
+    val json1 = parse(
+      """
+        |{
+        | "environment": {
+        |  "system": {
+        |   "isWow64": true
+        |  }
+        | }
+        |}
+      """.stripMargin)
+
+    MainSummaryView.getWow64(json1 \ "environment" \ "system") should be (Some(Row(true)))
+
+    // Ping does not contain wow64
+    val json2 = parse(
+      """
+        |{
+        | "environment": {
+        |  "system": {
+        |  }
+        | }
+        |}
+      """.stripMargin)
+    MainSummaryView.getWow64(json2 \ "environment" \ "system") should be (None)
+  }
 }

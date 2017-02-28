@@ -258,6 +258,13 @@ object MainSummaryView {
     asInt(scalars \ (prefix + engagementMetric))
   }
 
+  def getWow64(system: JValue): Option[Row] = {
+    system \ "isWow64" match {
+      case JBool(wow64) => Some(Row(wow64))
+      case _ => None
+    }
+  }
+
   def asInt(v: JValue): Integer = v match {
     case JInt(x) => x.toInt
     case _ => null
@@ -364,6 +371,7 @@ object MainSummaryView {
           case JInt(x) => x.toLong
           case _ => null
         },
+        getWow64(system).orNull,
         profile \ "creationDate" match {
           case JInt(x) => x.toLong
           case _ => null
@@ -627,6 +635,7 @@ object MainSummaryView {
 
       // Note: Windows only!
       StructField("install_year", LongType, nullable = true), // environment/system/os/installYear
+      StructField("is_wow64", BooleanType, nullable = true), // environment/system/isWow64
 
       // TODO: use proper 'date' type for date columns.
       StructField("profile_creation_date", LongType, nullable = true), // environment/profile/creationDate
