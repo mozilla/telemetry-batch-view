@@ -682,7 +682,7 @@ object MainSummaryView {
       StructField("crash_submit_success_main", IntegerType, nullable = true), // PROCESS_CRASH_SUBMIT_SUCCESS / main-crash
       StructField("crash_submit_success_content", IntegerType, nullable = true), // PROCESS_CRASH_SUBMIT_SUCCESS / content-crash
       StructField("crash_submit_success_plugin", IntegerType, nullable = true), // PROCESS_CRASH_SUBMIT_SUCCESS / plugin-crash
-      StructField("shutdown_kill, IntegerType, nullable = true), // SUBPROCESS_KILL_HARD / ShutDownKill
+      StructField("shutdown_kill", IntegerType, nullable = true), // SUBPROCESS_KILL_HARD / ShutDownKill
       
       StructField("active_addons_count", LongType, nullable = true), // number of keys in environment/addons/activeAddons
 
