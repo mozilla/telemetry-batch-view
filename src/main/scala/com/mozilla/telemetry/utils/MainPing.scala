@@ -147,6 +147,17 @@ object MainPing{
       Row.fromSeq(values)
   }
 
+  // Return a map of (keys -> counts), where keys are
+  def enumHistogramToMap(histogram: JValue, keys: IndexedSeq[String]): Map[String, Int] = {
+    histogram \ "values" match {
+      case JNothing => null
+      case v => keys.flatMap(key => v \ key match {
+        case JInt(count) if count > 0 => Some(key -> count.toInt)
+        case _ => None
+      }).toMap
+    }
+  }
+
   // Return a map of histogram keys to rows with the bucket values for the given set of keys as fields.
   def keyedEnumHistogramToMap(histogram: JValue, keys: IndexedSeq[String]): Option[Map[String,Row]] = {
     val enums = Map[String, Row]() ++ (for {
@@ -174,6 +185,30 @@ object MainPing{
     buckets match {
       case x if x.nonEmpty => Some(x.max)
       case _ => None
+    }
+  }
+
+  // Get the count of a specific histogram bucket
+  def enumHistogramBucketCount(h: JValue, bucket: String): Option[Int] = {
+    h \ "values" match {
+      case JNothing => None
+      case v => v \ bucket match {
+        case JInt(count) => Some(count.toInt)
+        case _ => None
+      }
+      case _=> None
+    }
+  }
+
+  // Sum all counts in a histogram with the given keys
+  def enumHistogramSumCounts(histogram: JValue, keys: IndexedSeq[String]): Int = {
+    histogram \ "values" match {
+      case JNothing => 0
+      case v =>
+        keys.map(key => v \ key match {
+          case JInt(n) => n.toInt
+          case _ => 0
+        }).sum
     }
   }
 
