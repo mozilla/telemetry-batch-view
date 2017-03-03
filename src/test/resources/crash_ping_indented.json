@@ -24,7 +24,8 @@
    "environment.system": "{\"memoryMB\":724,\"os\":{\"locale\":\"pt-BR\",\"kernelVersion\":\"2.6.36.3\",\"version\":13,\"name\":\"Linux\"},\"device\":{\"hardware\":\"p3\",\"manufacturer\":\"samsung\",\"isTablet\":true,\"model\":\"GT-P7300\"},\"cpu\":{\"count\":2,\"extensions\":[\"hasEDSP\",\"hasARMv6\",\"hasARMv7\"]},\"hdd\":{\"profile\":{},\"binary\":{},\"system\":{}},\"gfx\":{\"features\": {\"compositor\":\"opengl\"},\"adapters\":[{\"deviceID\":\"NVIDIA Tegra\",\"description\":\"Model: GT-P7300, Product: GT-P7300, Manufacturer: samsung, Hardware: p3, OpenGL: NVIDIA Corporation -- NVIDIA Tegra -- OpenGL ES 2.0\",\"GPUActive\":true,\"driverVersion\":\"OpenGL ES 2.0\",\"vendorID\":\"NVIDIA Corporation\"}]}}",
    "sampleId": 26.0,
    "Host": "incoming.telemetry.mozilla.org",
-   "docType": "crash"
+   "docType": "crash",
+   "environment.profile": "{\"creationDate\": 16446, \"resetDate\": 16446}"
   },
   "payload": {
     "creationDate": "2017-01-05T04:41:27.796Z",
