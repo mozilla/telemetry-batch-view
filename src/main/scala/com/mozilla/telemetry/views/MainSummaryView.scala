@@ -459,8 +459,7 @@ object MainSummaryView {
         hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "main-crash"),
         hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash"),
         hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash"),
-        hsum(keyedHistograms \ "SUBPROCESS_KILL_HARD" \ "ShutDownKill"),
-        
+        hsum(keyedHistograms \ "SUBPROCESS_KILL_HARD" \ "ShutDownKill"),        
         MainPing.countKeys(addons \ "activeAddons") match {
           case Some(x) => x
           case _ => null
