@@ -459,6 +459,7 @@ object MainSummaryView {
         hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "main-crash"),
         hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash"),
         hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash"),
+        hsum(keyedHistograms \ "SUBPROCESS_KILL_HARD" \ "ShutDownKill"),        
         MainPing.countKeys(addons \ "activeAddons") match {
           case Some(x) => x
           case _ => null
@@ -680,7 +681,8 @@ object MainSummaryView {
       StructField("crash_submit_success_main", IntegerType, nullable = true), // PROCESS_CRASH_SUBMIT_SUCCESS / main-crash
       StructField("crash_submit_success_content", IntegerType, nullable = true), // PROCESS_CRASH_SUBMIT_SUCCESS / content-crash
       StructField("crash_submit_success_plugin", IntegerType, nullable = true), // PROCESS_CRASH_SUBMIT_SUCCESS / plugin-crash
-
+      StructField("shutdown_kill", IntegerType, nullable = true), // SUBPROCESS_KILL_HARD / ShutDownKill
+      
       StructField("active_addons_count", LongType, nullable = true), // number of keys in environment/addons/activeAddons
 
       // See https://github.com/mozilla-services/data-pipeline/blob/master/hindsight/modules/fx/ping.lua#L82
