@@ -103,6 +103,7 @@ class CrashSummaryViewTest extends FlatSpec with Matchers {
       assert(x.e10s_cohort == Some("test"))
       assert(x.e10s_enabled == Some(true))
       assert(x.gfx_compositor == Some("opengl"))
+      assert(x.profile_created == Some(16446))
       assert(x.payload.processType == Some("main"))
     })
   }
