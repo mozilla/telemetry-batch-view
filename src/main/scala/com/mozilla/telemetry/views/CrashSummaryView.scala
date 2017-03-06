@@ -183,7 +183,8 @@ object CrashSummaryView {
     val meta = jsonObj transformField {
       case JField(key, JString(s)) if jsonFieldNames contains key => (key, parse(s))
     }
-    val jsonPayload = payload match {
+    val submission = if(payload.isDefined) payload else fields.get("submission")
+    val jsonPayload = submission match {
       case Some(value: String) => parse(value) ++ JObject(List(JField("meta", meta)))
       case _ => JObject()
     }
