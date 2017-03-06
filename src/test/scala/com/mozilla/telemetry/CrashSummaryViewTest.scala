@@ -20,22 +20,33 @@ class CrashSummaryViewTest extends FlatSpec with Matchers {
         case Some(m: Map[_,_]) => m.asInstanceOf[Map[String,Any]]
         case _  => Map[String, Any]()
       }
+      val payload = ping.getOrElse("payload", Map[String, Any]())
+      val payloadStr = compact(render(Extraction.decompose(payload)))
     }
   }
 
   "A well formed ping" should "return a CrashPing" in {
-    val maybeCrashPing = CrashSummaryView.transformPayload(fixture.fields)
+    val maybeCrashPing = CrashSummaryView.transformPayload(
+      fixture.fields,
+      Some(fixture.payloadStr)
+    )
     assert(maybeCrashPing.isDefined)
   }
 
   "A malformed ping" should "return an undefined option" in {
     val malformedFields = fixture.fields - "geoCountry"
-    val maybeCrashPing = CrashSummaryView.transformPayload(malformedFields)
+    val maybeCrashPing = CrashSummaryView.transformPayload(
+      malformedFields,
+      Some(fixture.payloadStr)
+    )
     assert(! maybeCrashPing.isDefined)
   }
 
   "A CrashSummary" can "be created from a CrashPing" in {
-    val maybeCrashPing = CrashSummaryView.transformPayload(fixture.fields)
+    val maybeCrashPing = CrashSummaryView.transformPayload(
+      fixture.fields,
+      Some(fixture.payloadStr)
+    )
     assert(maybeCrashPing.isDefined)
     val crashSummary = maybeCrashPing match {
       case Some(ping: CrashPing) => Some(new CrashSummary(ping))

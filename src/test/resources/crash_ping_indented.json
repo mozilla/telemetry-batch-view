@@ -24,7 +24,40 @@
    "environment.system": "{\"memoryMB\":724,\"os\":{\"locale\":\"pt-BR\",\"kernelVersion\":\"2.6.36.3\",\"version\":13,\"name\":\"Linux\"},\"device\":{\"hardware\":\"p3\",\"manufacturer\":\"samsung\",\"isTablet\":true,\"model\":\"GT-P7300\"},\"cpu\":{\"count\":2,\"extensions\":[\"hasEDSP\",\"hasARMv6\",\"hasARMv7\"]},\"hdd\":{\"profile\":{},\"binary\":{},\"system\":{}},\"gfx\":{\"features\": {\"compositor\":\"opengl\"},\"adapters\":[{\"deviceID\":\"NVIDIA Tegra\",\"description\":\"Model: GT-P7300, Product: GT-P7300, Manufacturer: samsung, Hardware: p3, OpenGL: NVIDIA Corporation -- NVIDIA Tegra -- OpenGL ES 2.0\",\"GPUActive\":true,\"driverVersion\":\"OpenGL ES 2.0\",\"vendorID\":\"NVIDIA Corporation\"}]}}",
    "sampleId": 26.0,
    "Host": "incoming.telemetry.mozilla.org",
-   "docType": "crash",
-   "submission": "{\"clientId\": \"my-client-id\", \"payload\": {\"processType\": \"main\", \"metadata\": {\"IsGarbageCollecting\": \"1\", \"SecondsSinceLastCrash\": \"868004\", \"ProductName\": \"Fennec\", \"BuildID\": \"20150702172253\", \"Version\": \"40.0\", \"EventLoopNestingLevel\": \"1\", \"ReleaseChannel\": \"beta\", \"ProductID\": \"{aa3c5121-dab2-40e2-81ca-7ea25febc110}\"}, \"crashDate\": \"2017-01-05\", \"version\": 1, \"hasCrashEnvironment\": true}, \"environment\": {}, \"application\": {\"vendor\": \"Mozilla\", \"name\": \"Fennec\", \"buildId\": \"20150702172253\", \"version\": \"40.0\", \"architecture\": \"arm\", \"platformVersion\": \"40.0\", \"xpcomAbi\": \"arm-eabi-gcc3\", \"channel\": \"beta\"}, \"version\": 4, \"creationDate\": \"2017-01-05T04:41:27.796Z\", \"type\": \"crash\", \"id\": \"482183c3-7281-4d96-a464-8d033f0c27e2\"}"
+   "docType": "crash"
+  },
+  "payload": {
+    "creationDate": "2017-01-05T04:41:27.796Z",
+    "type": "crash",
+    "version": 4,
+    "payload": {
+      "hasCrashEnvironment": true,
+      "metadata": {
+        "EventLoopNestingLevel": "1",
+        "IsGarbageCollecting": "1",
+        "Version": "40.0",
+        "ReleaseChannel": "beta",
+        "BuildID": "20150702172253",
+        "ProductName": "Fennec",
+        "ProductID": "{aa3c5121-dab2-40e2-81ca-7ea25febc110}",
+        "SecondsSinceLastCrash": "868004"
+      },
+      "version": 1,
+      "crashDate": "2017-01-05",
+      "processType": "main"
+    },
+    "id": "482183c3-7281-4d96-a464-8d033f0c27e2",
+    "environment": {},
+    "clientId": "my-client-id",
+    "application": {
+      "platformVersion": "40.0",
+      "xpcomAbi": "arm-eabi-gcc3",
+      "name": "Fennec",
+      "channel": "beta",
+      "version": "40.0",
+      "buildId": "20150702172253",
+      "vendor": "Mozilla",
+      "architecture": "arm"
+    }
   }
 }
