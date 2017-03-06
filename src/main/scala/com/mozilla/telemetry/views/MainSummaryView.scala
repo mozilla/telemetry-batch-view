@@ -8,7 +8,7 @@ import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._
 import com.mozilla.telemetry.heka.{Dataset, Message}
-import com.mozilla.telemetry.utils.{Addon, Attribution, MainPing, S3Store}
+import com.mozilla.telemetry.utils.{Addon, Attribution, MainPing, S3Store, Events}
 import org.json4s.{DefaultFormats, JValue}
 
 import scala.util.{Success, Try}
@@ -201,47 +201,6 @@ object MainSummaryView {
           case Row(null, null, null, null) => None
           case attrib => Some(attrib)
         }
-      case _ => None
-    }
-  }
-
-  def getEvents(events: JValue): Option[List[Row]] = {
-    implicit val formats = DefaultFormats
-    Try(events.extract[List[List[Any]]]) match {
-      case Success(eventList) => {
-        val rows = eventList.flatMap {
-          case _ @ List(
-            timestamp: BigInt,
-            category:  String,
-            method:    String,
-            obj:       String,
-            strValue:  String,
-            mapValues: Map[String @unchecked, Any @unchecked])
-            => List(Row(timestamp.toLong, category, method, obj, strValue, mapValues.map { // Bug 1339130
-                case (k: String, null) => (k, "null")
-                case (k: String, v: Any) => (k, v.toString())
-              }
-            ))
-          case _ @ List(
-            timestamp: BigInt,
-            category:  String,
-            method:    String,
-            obj:       String,
-            strValue:  String)
-            => List(Row(timestamp.toLong, category, method, obj, strValue, null))
-          case _ @ List(
-            timestamp: BigInt,
-            category:  String,
-            method:    String,
-            obj:       String)
-            => List(Row(timestamp.toLong, category, method, obj, null, null))
-          case _ => None
-        }
-        rows match {
-          case Nil => None
-          case x => Some(x)
-        }
-      }
       case _ => None
     }
   }
@@ -523,7 +482,7 @@ object MainSummaryView {
         getBrowserEngagement(parentScalars, "total_uri_count"),
         getBrowserEngagement(parentScalars, "unfiltered_uri_count"),
         getBrowserEngagement(parentScalars, "unique_domains_count"),
-        getEvents(parentEvents).orNull,
+        Events.getEvents(parentEvents).orNull,
 
         // bug 1339655
         MainPing.enumHistogramBucketCount(histograms \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.head).orNull,
@@ -604,15 +563,6 @@ object MainSummaryView {
     StructField("medium",   StringType, nullable = true),
     StructField("campaign", StringType, nullable = true),
     StructField("content",  StringType, nullable = true)
-  ))
-
-  def buildEventSchema = StructType(List(
-    StructField("timestamp",    LongType, nullable = false),
-    StructField("category",     StringType, nullable = false),
-    StructField("method",       StringType, nullable = false),
-    StructField("object",       StringType, nullable = false),
-    StructField("string_value", StringType, nullable = true),
-    StructField("map_values",   MapType(StringType, StringType), nullable = true)
   ))
 
   // Data for user prefs
@@ -744,7 +694,7 @@ object MainSummaryView {
       StructField("total_uri_count", IntegerType, nullable = true),
       StructField("unfiltered_uri_count", IntegerType, nullable = true),
       StructField("unique_domains_count", IntegerType, nullable = true),
-      StructField("events", ArrayType(buildEventSchema, containsNull = false), nullable = true), // payload.processes.parent.events
+      StructField("events", ArrayType(Events.buildEventSchema, containsNull = false), nullable = true), // payload.processes.parent.events
 
       // bug 1339655
       StructField("ssl_handshake_result_success", IntegerType, nullable = true),
