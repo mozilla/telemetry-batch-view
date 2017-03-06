@@ -1,7 +1,7 @@
 package com.mozilla.telemetry
 
 import com.mozilla.telemetry.heka.File
-import com.mozilla.telemetry.utils.MainPing
+import com.mozilla.telemetry.utils.{MainPing, Events}
 import com.mozilla.telemetry.views.MainSummaryView
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
@@ -938,70 +938,6 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     // Has a scalars section containing unexpected data.
     val jBogusScalars = parse("""[10, "ten"]""")
     MainSummaryView.getBrowserEngagement(jBogusScalars, "anything") should be (null)
-  }
-
-  "Events" can "be extracted" in {
-    val events = parse(
-      """[
-           [533352, "navigation", "search", "urlbar", "enter", {"engine": "other-StartPage - English"}],
-           [533352, "navigation", "search", "urlbar", "enter", {"engine": "other-StartPage - English"}, "random extra"],
-           [85959, "navigation", "search", "urlbar", "enter"],
-           [81994404, "navigation", "search", "searchbar"],
-           ["malformed"]
-         ]""")
-
-    val eventRows = MainSummaryView.getEvents(events)
-
-    eventRows should be (
-      Some(List(
-        Row(533352, "navigation", "search", "urlbar", "enter", Map("engine" -> "other-StartPage - English")),
-        Row(85959, "navigation", "search", "urlbar", "enter", null),
-        Row(81994404, "navigation", "search", "searchbar", null, null)
-      )
-    ))
-    MainSummaryView.getEvents(parse(testPayload) \ "events") should be (None)
-    MainSummaryView.getEvents(parse("""[]""")) should be (None)
-
-    val eventMapTypeTest = parse(
-      """[
-           [533352, "navigation", "search", "urlbar", "enter", {
-             "string": "hello world",
-             "int": 0,
-             "float": 1.0,
-             "null": null,
-             "boolean": true}
-           ]
-         ]""")
-
-    val eventMapTypeTestRows = MainSummaryView.getEvents(eventMapTypeTest)
-
-    eventMapTypeTestRows should be (
-      Some(List(
-        Row(533352, "navigation", "search", "urlbar", "enter", Map(
-          "string" -> "hello world",
-          "int" -> "0",
-          "float" -> "1.0",
-          "null" -> "null",
-          "boolean" -> "true"
-        ))
-      ))
-    )
-
-
-    // Apply events schema to event rows
-    val schema = MainSummaryView.buildEventSchema
-    val sparkConf = new SparkConf().setAppName("MainSummary")
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
-    val sc = new SparkContext(sparkConf)
-    val spark = SparkSession
-      .builder()
-      .appName("MainSummary")
-      .getOrCreate()
-    try {
-      noException should be thrownBy spark.createDataFrame(sc.parallelize(eventRows.get), schema).count()
-    } finally {
-      sc.stop
-    }
   }
 
   "Stub attribution" can "be extracted" in {
