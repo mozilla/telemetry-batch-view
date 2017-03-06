@@ -170,7 +170,7 @@ object CrashSummaryView {
     verify()
   }
 
-  def transformPayload(fields: Map[String, Any]): Option[CrashPing] = {
+  def transformPayload(fields: Map[String, Any], payload: Option[String]): Option[CrashPing] = {
     implicit val formats = DefaultFormats
     val jsonFieldNames = List(
     "environment.build",
@@ -183,7 +183,7 @@ object CrashSummaryView {
     val meta = jsonObj transformField {
       case JField(key, JString(s)) if jsonFieldNames contains key => (key, parse(s))
     }
-    val jsonPayload = fields.get("submission") match {
+    val jsonPayload = payload match {
       case Some(value: String) => parse(value) ++ JObject(List(JField("meta", meta)))
       case _ => JObject()
     }
@@ -226,7 +226,7 @@ object CrashSummaryView {
       val processedPings = spark.sparkContext.longAccumulator("processedPings")
       val discardedPings = spark.sparkContext.longAccumulator("discardedPings")
       val crashPings = messages.records()
-        .map(x => this.transformPayload(x.fieldsAsMap))
+        .map(x => this.transformPayload(x.fieldsAsMap, x.payload))
       crashPings.foreach(x => {
         if (!x.isDefined) {
           discardedPings.add(1)
