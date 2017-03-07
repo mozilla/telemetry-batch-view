@@ -33,12 +33,13 @@ Notes:
 Schemas and Making Queries
 --------------------------
 
-As of 2016-10-27, the current version of the `addons` dataset is `v2`, and has a schema as follows:
+As of 2017-03-16, the current version of the `addons` dataset is `v2`, and has a schema as follows:
 ```
 root
  |-- document_id: string (nullable = true)
  |-- client_id: string (nullable = true)
  |-- subsession_start_date: string (nullable = true)
+ |-- normalized_channel: string (nullable = true)
  |-- addon_id: string (nullable = true)
  |-- blocklisted: boolean (nullable = true)
  |-- name: string (nullable = true)

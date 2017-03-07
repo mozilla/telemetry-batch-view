@@ -90,7 +90,7 @@ object AddonsView {
   def addonsFromMain(mainSummaryData: DataFrame): DataFrame = {
     val addonSchema = MainSummaryView.buildAddonSchema
     val records = mainSummaryData
-      .select("document_id", "client_id", "sample_id", "subsession_start_date", "active_addons")
+      .select("document_id", "client_id", "sample_id", "subsession_start_date", "active_addons", "normalized_channel")
       .where("client_id is not null")
 
     // Explode the addon entries, including a null row for the record if there
@@ -100,7 +100,7 @@ object AddonsView {
       explode(when(size(col("active_addons")).gt(0), col("active_addons"))
         .otherwise(array(lit(null).cast(addonSchema)))))
 
-    exploded.selectExpr("document_id", "client_id", "sample_id", "subsession_start_date",
+    exploded.selectExpr("document_id", "client_id", "sample_id", "subsession_start_date", "normalized_channel",
       // Flatten nested addon fields.
       "active_addons.addon_id as addon_id",
       "active_addons.blocklisted as blocklisted",
