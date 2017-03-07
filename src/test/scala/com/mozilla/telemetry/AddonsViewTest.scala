@@ -24,6 +24,7 @@ case class PartialMain(document_id: String,
                        client_id: String,
                        sample_id: Long,
                        subsession_start_date: String,
+                       normalized_channel: String,
                        active_addons: Seq[Addon])
 
 class AddonsViewTest extends FlatSpec with Matchers{
@@ -38,12 +39,12 @@ class AddonsViewTest extends FlatSpec with Matchers{
 
     try {
       val mains = Seq(
-        PartialMain("doc1", "client1", 1l, "2016-10-01T00:00:00", Seq(
+        PartialMain("doc1", "client1", 1l, "2016-10-01T00:00:00", "release", Seq(
           Addon("addon1", true, "addon1name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, true),
           Addon("addon2", true, "addon2name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false))),
-        PartialMain("doc2", "client2", 2l, "2016-10-01T00:00:00", null),
-        PartialMain("doc3", "client2", 2l, "2016-10-01T00:00:00", Seq()),
-        PartialMain("doc4", "client3", 3l, "2016-10-01T00:00:00", Seq(
+        PartialMain("doc2", "client2", 2l, "2016-10-01T00:00:00", "release", null),
+        PartialMain("doc3", "client2", 2l, "2016-10-01T00:00:00", "release", Seq()),
+        PartialMain("doc4", "client3", 3l, "2016-10-01T00:00:00", "release", Seq(
           Addon("addon1", true, "addon1name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, true),
           Addon("addon3", true, "addon3name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false),
           Addon("addon4", true, "addon4name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false)))
