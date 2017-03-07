@@ -88,6 +88,7 @@ root
  |-- crash_submit_success_main: integer (nullable = true)
  |-- crash_submit_success_content: integer (nullable = true)
  |-- crash_submit_success_plugin: integer (nullable = true)
+ |-- shutdown_kill: integer (nullable = true)
  |-- active_addons_count: long (nullable = true)
  |-- flash_version: string (nullable = true)
  |-- vendor: string (nullable = true)

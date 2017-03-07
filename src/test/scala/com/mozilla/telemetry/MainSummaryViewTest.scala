@@ -659,6 +659,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "crash_submit_success_main"         -> null,
             "crash_submit_success_content"      -> null,
             "crash_submit_success_plugin"       -> null,
+            "shutdown_kill"                     -> null,
             "active_addons_count"               -> 3l,
             "flash_version"                     -> null,
             "vendor"                            -> "Mozilla",
