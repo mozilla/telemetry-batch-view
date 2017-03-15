@@ -15,7 +15,7 @@ case class EnumeratedHistogram(keyed: Boolean, nValues: Int) extends HistogramDe
 case class LinearHistogram(keyed: Boolean, low: Int, high: Int, nBuckets: Int) extends HistogramDefinition
 case class ExponentialHistogram(keyed: Boolean, low: Int, high: Int, nBuckets: Int) extends HistogramDefinition
 
-object Histograms {
+class HistogramsClass {
   private val processTypes = List("content", "gpu")
   private case class HistogramLocation(path: List[String], suffix: String)
   private def generateLocations(histogramKey: String)(processType: String): HistogramLocation = {
@@ -26,7 +26,7 @@ object Histograms {
   }
 
   // Locations for non-keyed histograms
-  private val histogramLocations = 
+  private val histogramLocations =
     HistogramLocation(List("payload.histograms"), "") ::
     processTypes.map(generateLocations("histograms"))
 
@@ -34,7 +34,10 @@ object Histograms {
     HistogramLocation(List("payload.keyedHistograms"), "") ::
     processTypes.map(generateLocations("keyedHistograms"))
 
-  private val suffixes = (histogramLocations ++ keyedHistogramLocations).map(_.suffix).distinct
+  private val suffixes =
+    (histogramLocations ++ keyedHistogramLocations)
+    .map( (hl: HistogramLocation) => hl.suffix )
+    .distinct
 
   private def parseHistogramLocation[HistogramFormat : Manifest](
     payload: Map[String, Any],
@@ -66,7 +69,10 @@ object Histograms {
   val stripHistograms = stripPayload[RawHistogram](histogramLocations) _
   val stripKeyedHistograms = stripPayload[Map[String, RawHistogram]](keyedHistogramLocations) _
 
-  val definitions = {
+  // mock[io.Source] wasn't working with scalamock, so we'll just use the function
+  protected val getURL: (String, String) => scala.io.BufferedSource = Source.fromURL
+
+  def definitions(includeOptin: Boolean = false): Map[String, HistogramDefinition] = {
     implicit val formats = DefaultFormats
 
     val uris = Map("release" -> "https://hg.mozilla.org/releases/mozilla-release/raw-file/tip/toolkit/components/telemetry/Histograms.json",
@@ -75,7 +81,7 @@ object Histograms {
                    "nightly" -> "https://hg.mozilla.org/mozilla-central/raw-file/tip/toolkit/components/telemetry/Histograms.json")
 
     val parsed = uris.map{ case (key, value) =>
-      val json = parse(Source.fromURL(value, "UTF8").mkString)
+      val json = parse(getURL(value, "UTF8").mkString)
       val result = MMap[String, MMap[String, Option[Any]]]()
 
       /* Unfortunately the histogram definition file does not respect a proper schema and
@@ -118,9 +124,13 @@ object Histograms {
         }
       }
 
+      def includeHistogram(definition: MMap[String, Option[Any]]) = {
+        includeOptin || (definition.getOrElse("releaseChannelCollection", "opt-in") == Some("opt-out"))
+      }
+
       val pretty = for {
         (k, v) <- result
-        if v.getOrElse("releaseChannelCollection", Some("opt-in")) == Some("opt-out")
+        if includeHistogram(v)
       } yield {
         val kind = v("kind").get.asInstanceOf[String]
         val keyed = v.getOrElse("keyed", Some(false)).get.asInstanceOf[Boolean]
@@ -129,8 +139,8 @@ object Histograms {
         val high = v.getOrElse("high", None).asInstanceOf[Option[Int]]
         val nBuckets = v.getOrElse("n_buckets", None).asInstanceOf[Option[Int]]
 
-        def addSuffixes(key: String, histogram: HistogramDefinition): List[(String, HistogramDefinition)] = {
-          suffixes.map(suffix => (key + suffix, histogram))
+        def addSuffixes(key: String, definition: HistogramDefinition): List[(String, HistogramDefinition)] = {
+            suffixes.map(suffixType => (key + suffixType, definition))
         }
 
         (kind, nValues, high, nBuckets) match {
@@ -202,3 +212,5 @@ object Histograms {
   private val memoLinearBuckets = MMap[(Float, Float, Int), Array[Int]]()
   private val memoExponentialBuckets = MMap[(Float, Float, Int), Array[Int]]()
 }
+
+object Histograms extends HistogramsClass

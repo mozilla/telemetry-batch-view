@@ -1,0 +1,101 @@
+{
+  "BROWSER_IS_USER_DEFAULT": {
+    "description": "The result of the startup default desktop browser check.",
+    "expires_in_version": "never",
+    "kind": "boolean",
+    "releaseChannelCollection": "opt-out"
+  },
+  "FIPS_ENABLED": {
+    "alert_emails": ["seceng@mozilla.org"],
+    "bug_numbers": [1241317],
+    "description": "Has FIPS mode been enabled?",
+    "expires_in_version": "54",
+    "kind": "flag",
+    "releaseChannelCollection": "opt-out"
+  },
+  "FX_MIGRATION_ERRORS": {
+    "bug_numbers": [731025],
+    "alert_emails": ["gijs@mozilla.com"],
+    "expires_in_version": "57",
+    "kind": "enumerated",
+    "keyed": true,
+    "n_values": 12,
+    "releaseChannelCollection": "opt-out",
+    "description": "Errors encountered during migration in buckets defined by the datatype, keyed by the string description of the browser."
+  },
+  "FX_MIGRATION_LOGINS_IMPORT_MS": {
+    "bug_numbers": [1289436],
+    "alert_emails": ["gijs@mozilla.com"],
+    "expires_in_version": "57",
+    "kind": "exponential",
+    "n_buckets": 70,
+    "high": 100000,
+    "releaseChannelCollection": "opt-out",
+    "keyed": true,
+    "description": "How long it took to import logins (passwords) from another browser, keyed by the name of the browser."
+  },
+  "FX_TAB_SWITCH_TOTAL_MS": {
+    "description": "Firefox: Time in ms till a tab switch is complete including the first paint",
+    "expires_in_version": "56",
+    "high": 1000,
+    "kind": "exponential",
+    "n_buckets": 20,
+    "releaseChannelCollection": "opt-out"
+  },
+  "GC_MS": {
+    "alert_emails": ["dev-telemetry-gc-alerts@mozilla.org"],
+    "description": "Time spent running JS GC (ms)",
+    "expires_in_version": "never",
+    "high": 10000,
+    "kind": "exponential",
+    "n_buckets": 50},
+  "GFX_CRASH": {
+    "description": "Graphics Crash Reason (...)",
+    "expires_in_version": "never",
+    "kind": "enumerated",
+    "n_values": 100,
+    "releaseChannelCollection": "opt-out"
+  },
+  "MOCK_OPTIN": {
+    "alert_emails": ["telemetry-client-dev@mozilla.com"],
+    "expires_in_version": "never",
+    "kind": "linear",
+    "high": "10",
+    "n_buckets": 10,
+    "releaseChannelCollection": "opt-in",
+    "description": "a testing histogram; not meant to be touched"
+  },
+  "MOCK_OPTOUT": {
+    "alert_emails": ["telemetry-client-dev@mozilla.com"],
+    "expires_in_version": "never",
+    "kind": "linear",
+    "high": "10",
+    "n_buckets": 10,
+    "releaseChannelCollection": "opt-out",
+    "description": "a testing histogram; not meant to be touched"
+  },
+  "PUSH_API_NOTIFY": {
+    "alert_emails": ["push@mozilla.com"],
+    "description": "Number of push messages that were successfully decrypted and delivered to a ServiceWorker.",
+    "expires_in_version": "60",
+    "kind": "count",
+    "releaseChannelCollection": "opt-out"
+  },
+  "SEARCH_SERVICE_ENGINE_COUNT": {
+    "alert_emails": ["florian@mozilla.com"],
+    "bug_numbers": [1268424],
+    "description": "Recorded once per session near startup: records the search plugin count, including both built-in plugins (including the ones the user has hidden) and user-installed plugins.",
+    "expires_in_version": "55",
+    "high": 200,
+    "kind": "linear",
+    "n_buckets": 50,
+    "releaseChannelCollection": "opt-out"
+  },
+  "SEARCH_COUNTS": {
+    "expires_in_version": "never",
+    "kind": "count",
+    "keyed": true,
+    "releaseChannelCollection": "opt-out",
+    "description": "Record the search counts for search engines"
+  }
+}

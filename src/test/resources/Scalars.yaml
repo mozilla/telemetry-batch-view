@@ -1,0 +1,262 @@
+telemetry.test:
+  unsigned_int_kind:
+    bug_numbers:
+      - 1276190
+    description: >
+      This is a test uint type with a really long description, maybe spanning even multiple
+      lines, to just prove a point: everything works just fine.
+    expires: never
+    kind: uint
+    notification_emails:
+      - telemetry-client-dev@mozilla.com
+    record_in_processes:
+      - 'main'
+
+  string_kind:
+    bug_numbers:
+      - 1276190
+    description: A string test type with a one line comment that works just fine!
+    expires: never
+    kind: string
+    notification_emails:
+      - telemetry-client-dev@mozilla.com
+    record_in_processes:
+      - 'main'
+
+  boolean_kind:
+    bug_numbers:
+      - 1281214
+    description: A boolean test type with a one line comment that works just fine!
+    expires: never
+    kind: boolean
+    notification_emails:
+      - telemetry-client-dev@mozilla.com
+    record_in_processes:
+      - 'main'
+
+  expired:
+    bug_numbers:
+      - 1276190
+    description: This is an expired testing scalar; not meant to be touched.
+    expires: 4.0a1
+    kind: uint
+    notification_emails:
+      - telemetry-client-dev@mozilla.com
+    record_in_processes:
+      - 'main'
+
+  unexpired:
+    bug_numbers:
+      - 1276190
+    description: This is an unexpired testing scalar; not meant to be touched.
+    expires: "375.0"
+    kind: uint
+    notification_emails:
+      - telemetry-client-dev@mozilla.com
+    record_in_processes:
+      - 'main'
+
+  release_optin:
+    bug_numbers:
+      - 1276190
+    description: A testing scalar; not meant to be touched.
+    expires: never
+    kind: uint
+    notification_emails:
+      - telemetry-client-dev@mozilla.com
+    release_channel_collection: opt-in
+    record_in_processes:
+      - 'main'
+
+  release_optout:
+    bug_numbers:
+      - 1276190
+    description: A testing scalar; not meant to be touched.
+    expires: never
+    kind: uint
+    notification_emails:
+      - telemetry-client-dev@mozilla.com
+    release_channel_collection: opt-out
+    record_in_processes:
+      - 'main'
+
+  keyed_release_optin:
+    bug_numbers:
+      - 1277806
+    description: A testing scalar; not meant to be touched.
+    expires: never
+    kind: uint
+    keyed: true
+    notification_emails:
+      - telemetry-client-dev@mozilla.com
+    release_channel_collection: opt-in
+    record_in_processes:
+      - 'main'
+
+  keyed_release_optout:
+    bug_numbers:
+      - 1277806
+    description: A testing scalar; not meant to be touched.
+    expires: never
+    kind: uint
+    keyed: true
+    notification_emails:
+      - telemetry-client-dev@mozilla.com
+    release_channel_collection: opt-out
+    record_in_processes:
+      - 'main'
+
+  keyed_expired:
+    bug_numbers:
+      - 1277806
+    description: This is an expired testing scalar; not meant to be touched.
+    expires: 4.0a1
+    kind: uint
+    keyed: true
+    notification_emails:
+      - telemetry-client-dev@mozilla.com
+    record_in_processes:
+      - 'main'
+
+  keyed_unsigned_int:
+    bug_numbers:
+      - 1277806
+    description: A testing keyed uint scalar; not meant to be touched.
+    expires: never
+    kind: uint
+    keyed: true
+    notification_emails:
+      - telemetry-client-dev@mozilla.com
+    record_in_processes:
+      - 'main'
+
+  keyed_boolean_kind:
+    bug_numbers:
+      - 1277806
+    description: A testing keyed boolean scalar; not meant to be touched.
+    expires: never
+    kind: boolean
+    keyed: true
+    notification_emails:
+      - telemetry-client-dev@mozilla.com
+    record_in_processes:
+      - 'main'
+      - 'content'
+
+  content_only_uint:
+    bug_numbers:
+      - 1278556
+    description: A testing uint scalar; not meant to be touched.
+    expires: never
+    kind: uint
+    notification_emails:
+      - telemetry-client-dev@mozilla.com
+    record_in_processes:
+      - 'content'
+
+  all_processes_uint:
+    bug_numbers:
+      - 1278556
+    description: A testing uint scalar; not meant to be touched.
+    expires: never
+    kind: uint
+    notification_emails:
+      - telemetry-client-dev@mozilla.com
+    record_in_processes:
+      - 'all'
+
+  all_child_processes_string:
+    bug_numbers:
+      - 1278556
+    description: A testing string scalar; not meant to be touched.
+    expires: never
+    kind: string
+    notification_emails:
+      - telemetry-client-dev@mozilla.com
+    record_in_processes:
+      - 'all_childs'
+
+mock:
+  scalar.uint:
+    bug_numbers:
+      - 1318709
+    description: A mocked scalar; not meant to be touched.
+    expires: never
+    kind: uint
+    notification_emails:
+      - noop@mozilla.com
+    release_channel_collection: opt-out
+
+  scalar.bool:
+    bug_numbers:
+      - 1318709
+    description: A mocked scalar; not meant to be touched.
+    expires: never
+    kind: boolean
+    notification_emails:
+      - noop@mozilla.com
+    release_channel_collection: opt-out
+
+  scalar.string:
+    bug_numbers:
+      - 1318709
+    description: A mocked scalar; not meant to be touched.
+    expires: never
+    kind: string
+    notification_emails:
+      - noop@mozilla.com
+    release_channel_collection: opt-out
+
+  keyed.scalar.uint:
+    bug_numbers:
+      - 1318709
+    description: A mocked scalar; not meant to be touched.
+    expires: never
+    kind: uint
+    keyed: true
+    notification_emails:
+      - noop@mozilla.com
+    release_channel_collection: opt-out
+
+  keyed.scalar.bool:
+    bug_numbers:
+      - 1318709
+    description: A mocked scalar; not meant to be touched.
+    expires: never
+    kind: boolean 
+    keyed: true
+    notification_emails:
+      - noop@mozilla.com
+    release_channel_collection: opt-out
+
+  keyed.scalar.string:
+    bug_numbers:
+      - 1318709
+    description: A mocked scalar; not meant to be touched.
+    expires: never
+    kind: string
+    keyed: true
+    notification_emails:
+      - noop@mozilla.com
+    release_channel_collection: opt-out
+
+  uint.optout:
+    bug_numbers:
+      - 1318709
+    description: A mocked scalar; not meant to be touched.
+    expires: never
+    kind: uint
+    release_channel_collection: opt-out
+    notification_emails:
+      - noop@mozilla.com
+
+  uint.optin:
+    bug_numbers:
+      - 1318709
+    description: A mocked scalar; not meant to be touched.
+    expires: never
+    kind: uint
+    release_channel_collection: opt-in
+    notification_emails:
+      - noop@mozilla.com
+
