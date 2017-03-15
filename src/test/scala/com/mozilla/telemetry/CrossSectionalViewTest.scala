@@ -4,7 +4,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.SQLContext
 import com.mozilla.telemetry.views._
 import CrossSectionalView._
-import org.scalatest.{FlatSpec, TestFailedException}
+import org.scalatest.FlatSpec
 import org.apache.spark.sql.Dataset
 
 class CrossSectionalViewTest extends FlatSpec {
