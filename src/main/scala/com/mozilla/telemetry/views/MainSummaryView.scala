@@ -290,6 +290,7 @@ object MainSummaryView {
       lazy val parentEvents = payload \ "payload" \ "processes" \ "parent" \ "events"
 
       val loopActivityCounterKeys = (0 to 4).map(_.toString)
+      val sslHandshakeResultKeys = (0 to 671).map(_.toString)
 
       // Messy list of known enum values for POPUP_NOTIFICATION_STATS.
       val popupNotificationStatsKeys = (0 to 8).union(10 to 11).union(20 to 28).union(30 to 31).map(_.toString)
@@ -459,6 +460,7 @@ object MainSummaryView {
         hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "main-crash"),
         hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash"),
         hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash"),
+        hsum(keyedHistograms \ "SUBPROCESS_KILL_HARD" \ "ShutDownKill"),        
         MainPing.countKeys(addons \ "activeAddons") match {
           case Some(x) => x
           case _ => null
@@ -521,7 +523,12 @@ object MainSummaryView {
         getBrowserEngagement(parentScalars, "total_uri_count"),
         getBrowserEngagement(parentScalars, "unfiltered_uri_count"),
         getBrowserEngagement(parentScalars, "unique_domains_count"),
-        getEvents(parentEvents).orNull
+        getEvents(parentEvents).orNull,
+
+        // bug 1339655
+        MainPing.enumHistogramBucketCount(histograms \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.head).orNull,
+        MainPing.enumHistogramSumCounts(histograms \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.tail),
+        MainPing.enumHistogramToMap(histograms \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys)
       )
       Some(row)
     } catch {
@@ -680,7 +687,8 @@ object MainSummaryView {
       StructField("crash_submit_success_main", IntegerType, nullable = true), // PROCESS_CRASH_SUBMIT_SUCCESS / main-crash
       StructField("crash_submit_success_content", IntegerType, nullable = true), // PROCESS_CRASH_SUBMIT_SUCCESS / content-crash
       StructField("crash_submit_success_plugin", IntegerType, nullable = true), // PROCESS_CRASH_SUBMIT_SUCCESS / plugin-crash
-
+      StructField("shutdown_kill", IntegerType, nullable = true), // SUBPROCESS_KILL_HARD / ShutDownKill
+      
       StructField("active_addons_count", LongType, nullable = true), // number of keys in environment/addons/activeAddons
 
       // See https://github.com/mozilla-services/data-pipeline/blob/master/hindsight/modules/fx/ping.lua#L82
@@ -736,7 +744,12 @@ object MainSummaryView {
       StructField("total_uri_count", IntegerType, nullable = true),
       StructField("unfiltered_uri_count", IntegerType, nullable = true),
       StructField("unique_domains_count", IntegerType, nullable = true),
-      StructField("events", ArrayType(buildEventSchema, containsNull = false), nullable = true) // payload.processes.parent.events
+      StructField("events", ArrayType(buildEventSchema, containsNull = false), nullable = true), // payload.processes.parent.events
+
+      // bug 1339655
+      StructField("ssl_handshake_result_success", IntegerType, nullable = true),
+      StructField("ssl_handshake_result_failure", IntegerType, nullable = true),
+      StructField("ssl_handshake_result", MapType(StringType, IntegerType), nullable = true) // SSL_HANDSHAKE_RESULT
     ))
   }
 }

@@ -448,6 +448,64 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       |}""".stripMargin)
     MainPing.enumHistogramToRow(example \ "H1", (0 to 3).map(_.toString)) should be (Row(1, 2, 0, 4))
   }
+  it can "be converted to a Map" in {
+    val example = parse(
+      """{
+        |  "H1": {
+        |    "bucket_count": 5,
+        |    "histogram_type": 1,
+        |    "sum": 30798,
+        |    "values": {
+        |      "0": 1,
+        |      "1": 2,
+        |      "3": 4,
+        |      "4": 0
+        |    }
+        |  }
+        |}""".stripMargin)
+    MainPing.enumHistogramToMap(example \ "H1", (0 to 4).map(_.toString)) should be (
+      Map("0" -> 1, "1" -> 2, "3" -> 4))
+
+  }
+
+  it can "be counted by individual buckets" in {
+    val example = parse(
+      """{
+        |  "H1": {
+        |    "bucket_count": 5,
+        |    "histogram_type": 1,
+        |    "sum": 30798,
+        |    "values": {
+        |      "0": 1,
+        |      "1": 2,
+        |      "3": 4,
+        |      "4": 0
+        |    }
+        |  }
+        |}""".stripMargin)
+    MainPing.enumHistogramBucketCount(example \ "H1", "3") should be (Some(4))
+    MainPing.enumHistogramBucketCount(example \ "H1", "42") should be (None)
+    MainPing.enumHistogramBucketCount(example \ "H42", "0") should be (None)
+  }
+
+  it can "be summed over keys" in {
+    val example = parse(
+      """{
+        |  "H1": {
+        |    "bucket_count": 5,
+        |    "histogram_type": 1,
+        |    "sum": 30798,
+        |    "values": {
+        |      "0": 1,
+        |      "1": 2,
+        |      "3": 4,
+        |      "4": 0
+        |    }
+        |  }
+        |}""".stripMargin)
+    MainPing.enumHistogramSumCounts(example \ "H1", (0 to 4).map(_.toString)) should be (7)
+    MainPing.enumHistogramSumCounts(example \ "H1", IndexedSeq("3", "1")) should be (6)
+  }
 
   "Keyed Enum Histograms" can "be converted to Maps of Rows" in {
     val example = parse("""{
@@ -601,6 +659,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "crash_submit_success_main"         -> null,
             "crash_submit_success_content"      -> null,
             "crash_submit_success_plugin"       -> null,
+            "shutdown_kill"                     -> null,
             "active_addons_count"               -> 3l,
             "flash_version"                     -> null,
             "vendor"                            -> "Mozilla",
