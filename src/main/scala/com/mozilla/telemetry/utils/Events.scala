@@ -27,33 +27,46 @@ case class Event(timestamp: Long,
 
 object Event {
   def fromList(event: List[Any]): Option[Event] = {
+    // TODO: this is getting really ugly -- maybe try a per-param match?
     event match {
-      case _@List(
-      timestamp: BigInt,
-      category: String,
-      method: String,
-      obj: String,
-      strValue: String,
-      mapValues: Map[String@unchecked, Any@unchecked])
-      => Some(Event(timestamp.toLong, category, method, obj, Some(strValue), Some(mapValues.map {
-        // Bug 1339130
-        case (k: String, null) => (k, "null")
-        case (k: String, v: Any) => (k, v.toString)
-      })
+      case _ @ List(
+        timestamp: BigInt,
+        category: String,
+        method: String,
+        obj: String,
+        strValue: String,
+        mapValues: Map[String@unchecked, Any@unchecked])
+        => Some(Event(timestamp.toLong, category, method, obj, Some(strValue), Some(mapValues.map {
+          // Bug 1339130
+          case (k: String, null) => (k, "null")
+          case (k: String, v: Any) => (k, v.toString)
+        })
       ))
-      case _@List(
-      timestamp: BigInt,
-      category: String,
-      method: String,
-      obj: String,
-      strValue: String)
-      => Some(Event(timestamp.toLong, category, method, obj, Some(strValue)))
-      case _@List(
-      timestamp: BigInt,
-      category: String,
-      method: String,
-      obj: String)
-      => Some(Event(timestamp.toLong, category, method, obj))
+      case _ @ List(
+        timestamp: BigInt,
+        category: String,
+        method: String,
+        obj: String,
+        null,
+        mapValues: Map[String@unchecked, Any@unchecked])
+        => Some(Event(timestamp.toLong, category, method, obj, None, Some(mapValues.map {
+          case (k: String, null) => (k, "null")
+          case (k: String, v: Any) => (k, v.toString)
+        })
+      ))
+      case _ @ List(
+        timestamp: BigInt,
+        category: String,
+        method: String,
+        obj: String,
+        strValue: String)
+        => Some(Event(timestamp.toLong, category, method, obj, Some(strValue)))
+      case _ @ List(
+        timestamp: BigInt,
+        category: String,
+        method: String,
+        obj: String)
+        => Some(Event(timestamp.toLong, category, method, obj))
       case _ => None
     }
   }

@@ -14,6 +14,7 @@ class EventsTest extends FlatSpec with Matchers{
            [533352, "navigation", "search", "urlbar", "enter", {"engine": "other-StartPage - English"}, "random extra"],
            [85959, "navigation", "search", "urlbar", "enter"],
            [81994404, "navigation", "search", "searchbar"],
+           [1234, "navigation", "search", "urlbar", null, {"engine": "other-StartPage - English"}],
            ["malformed"]
          ]""")
 
@@ -23,7 +24,8 @@ class EventsTest extends FlatSpec with Matchers{
       Some(List(
         Row(533352, "navigation", "search", "urlbar", "enter", Map("engine" -> "other-StartPage - English")),
         Row(85959, "navigation", "search", "urlbar", "enter", null),
-        Row(81994404, "navigation", "search", "searchbar", null, null)
+        Row(81994404, "navigation", "search", "searchbar", null, null),
+        Row(1234, "navigation", "search", "urlbar", null, Map("engine" -> "other-StartPage - English"))
       )
       ))
     Events.getEvents(parse("{}") \ "events") should be (None)
