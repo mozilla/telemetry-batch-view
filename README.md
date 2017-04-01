@@ -35,7 +35,7 @@ sbt "run-main com.mozilla.telemetry.views.LongitudinalView --from 20160101 --to 
 For distributed execution we pack all of the classes together into a single JAR and submit it to the cluster:
 ```bash
 sbt assembly
-spark-submit --master yarn-client --class com.mozilla.telemetry.views.LongitudinalView target/scala-2.10/telemetry-batch-view-*.jar --from 20160101 --to 20160701 --bucket telemetry-test-bucket
+spark-submit --master yarn --deploy-mode client --class com.mozilla.telemetry.views.LongitudinalView target/scala-2.11/telemetry-batch-view-*.jar --from 20160101 --to 20160701 --bucket telemetry-test-bucket
 ```
 
 ### Caveats
