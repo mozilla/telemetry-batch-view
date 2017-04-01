@@ -97,9 +97,12 @@ object AddonRecommender {
   private def recommend(inputDir: String, addons: Set[String]) = {
     val mapping: List[(Int, String)] = for {
       JObject(a) <- parse(Source.fromFile(s"$inputDir/addon_mapping.json").mkString)
-      JField(k, JString(v)) <- a
+      JField(k, JObject(v)) <- a
     } yield {
-      (k.toInt, v)
+      (k.toInt, v.toMap.get("name") match {
+        case Some(s) => s.extract[String]
+        case None => "Unknown"
+      })
     }
     val addonMapping = mapping.toMap
 
@@ -190,13 +193,16 @@ object AddonRecommender {
 
     // Serialize add-on mapping
     val addonMapping = clientAddons
-      .map{ case (_, addonId, _, hashedAddonId) => (hashedAddonId, AMODatabase.getAddonNameById(addonId))}
+      .map{ case (_, addonId, _, hashedAddonId) => (hashedAddonId, addonId)}
       .distinct
       .cache()
       .collect()
       .toMap
 
-    val serializedMapping = pretty(render(addonMapping.map {case (k, v) => (k.toString, v)}))
+    val serializedMapping = pretty(render(addonMapping.map {
+      case (k, addonId) =>
+        (k.toString, Map("name" -> AMODatabase.getAddonNameById(addonId).getOrElse("Unknown"), "id" -> addonId).toMap)
+    }))
     val addonMappingPath = Paths.get(s"$localOutputDir/addon_mapping.json")
     val privateS3prefix = s"telemetry-ml/addon_recommender/${runDate}"
     val publicS3prefix = "telemetry-ml/addon_recommender"
