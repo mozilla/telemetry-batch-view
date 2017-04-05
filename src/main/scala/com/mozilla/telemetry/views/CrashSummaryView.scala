@@ -38,7 +38,7 @@ case class SystemGfx(
     features: Option[SystemGfxFeatures])
 
 
-case class System(os: SystemOs, gfx: Option[SystemGfx])
+case class SystemData(os: SystemOs, gfx: Option[SystemGfx])
 
 case class ActiveExperiment(id: String, branch: String)
 
@@ -78,7 +78,7 @@ case class Meta(
     telemetryEnabled: Option[Boolean],
     `environment.build`: Build,
     `environment.settings`: Settings,
-    `environment.system`: System,
+    `environment.system`: SystemData,
     `environment.addons`: Addons)
 
 case class Payload(
