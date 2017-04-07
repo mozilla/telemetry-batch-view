@@ -52,6 +52,10 @@ case class Settings(
     locale: String,
     telemetryEnabled: Boolean)
 
+case class Profile(
+    creationDate: Option[Int],
+    resetDate: Option[Int])
+
 case class Meta(
     Host: Option[String],
     Hostname: Option[String],
@@ -79,6 +83,7 @@ case class Meta(
     `environment.build`: Build,
     `environment.settings`: Settings,
     `environment.system`: System,
+    `environment.profile`: Profile,
     `environment.addons`: Addons)
 
 case class Payload(
@@ -115,6 +120,7 @@ case class CrashSummary (
     e10s_enabled: Option[Boolean],
     e10s_cohort: Option[String],
     gfx_compositor: Option[String],
+    profile_created: Option[Int],
     payload: Payload) {
 
   def this(ping: CrashPing) = {
@@ -142,6 +148,7 @@ case class CrashSummary (
         y <-  x.features
         z <- y.compositor
       } yield z,
+      profile_created = ping.meta.`environment.profile`.creationDate,
       payload = ping.payload
     )
   }
@@ -176,6 +183,7 @@ object CrashSummaryView {
     "environment.build",
     "environment.settings",
     "environment.system",
+    "environment.profile",
     "environment.addons"
     )
     val jsonObj = Extraction.decompose(fields)

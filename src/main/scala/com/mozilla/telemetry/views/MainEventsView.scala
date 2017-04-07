@@ -1,6 +1,6 @@
 package com.mozilla.telemetry.views
 
-import com.mozilla.telemetry.utils.S3Store
+import com.mozilla.telemetry.utils.{S3Store, Events}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.{SparkConf, SparkContext}
@@ -88,7 +88,7 @@ object MainEventsView {
   }
 
   def eventsFromMain(mainSummaryData: DataFrame, sampleId: Option[String]): DataFrame = {
-    val eventsSchema = MainSummaryView.buildEventSchema
+    val eventsSchema = Events.buildEventSchema
     val partialDataFrame = mainSummaryData
       .select("document_id", "client_id", "normalized_channel", "country", "locale", "app_name", "app_version", "os",
         "os_version", "e10s_enabled", "e10s_cohort", "subsession_start_date", "subsession_length", "sync_configured",
