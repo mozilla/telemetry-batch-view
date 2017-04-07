@@ -104,9 +104,14 @@ object LongitudinalView {
   }
 
   private class Opts(args: Array[String]) extends ScallopConf(args) {
-    val from = opt[String]("from", descr = "From submission date", required = false)
+    val from = opt[String]("from", descr = "From submission date. Defaults to 6 months before `to`.", required = false)
     val to = opt[String]("to", descr = "To submission date", required = true)
     val outputBucket = opt[String]("bucket", descr = "bucket", required = true)
+    val optinOnly = opt[String]("optin-only", descr = "Boolean, whether to include opt-in data only. Defaults to false.", required = false)
+    val processType = opt[String]("process-type", descr = "String, which process type to include. Defaults to all.", required = false)
+    val channels = opt[String]("channels", descr = "Comma separated string, which channels to include. Defaults to the four main channels.", required = false)
+    val samples = opt[String]("samples", descr = "Comma separated string, which samples to include. Defaults to 42.", required = false)
+    val telemetrySource = opt[String]("source", descr = "Source for Dataset.from_source. Defaults to telemetry-sample.", required = false)
     verify()
   }
 
@@ -120,21 +125,38 @@ object LongitudinalView {
       case _ => fmt.print(fmt.parseDateTime(to).minusMonths(6))
     }
 
+    val channels = opts.channels.get match {
+        case Some(c) => c.split(",")
+        case _ => Array("nightly", "aurora", "beta", "release")
+    }
+
+    val samples = opts.samples.get match {
+        case Some(s) => s.split(",")
+        case _ => Array("42")
+    }
+
+    val telemetrySource = opts.telemetrySource.get match {
+        case Some(ts) => ts
+        case _ => "telemetry-sample"
+    }
+
     val sparkConf = new SparkConf().setAppName("Longitudinal")
     sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
     implicit val sc = new SparkContext(sparkConf)
 
-    val messages = Dataset("telemetry-sample")
-      .where("sourceName") {
-        case "telemetry" => true
-      }.where("sourceVersion") {
+    val messages = Dataset(telemetrySource)
+    .where("sourceName") {
+      case "telemetry" => true
+    }.where("sourceVersion") {
       case "4" => true
     }.where("docType") {
       case "main" => true
     }.where("submissionDate") {
       case date if date <= to && date >= from => true
     }.where("sampleId") {
-      case "42" => true
+      case sample if samples.contains(sample) => true
+    }.where("appUpdateChannel") {
+      case channel if channels.contains(channel) => true
     }
 
     run(opts: Opts, messages)
@@ -146,6 +168,11 @@ object LongitudinalView {
     val prefix = s"${clsName}/v${opts.to()}"
     val outputBucket = opts.outputBucket()
     val lockfileName = "RUNNING"
+
+    val optinOnly = opts.optinOnly.get match {
+        case Some(v) => v.toBoolean // fail loudly on invalid string
+        case _ => false
+    }
 
     require(S3Store.isPrefixEmpty(outputBucket, prefix), s"s3://${outputBucket}/${prefix} already exists!")
 
@@ -182,14 +209,17 @@ object LongitudinalView {
        to keep all workers busy. Since the cluster typically used for this job has
        8 workers and 20 executors, 320 partitions provide a good compromise. */
 
+    val histogramDefinitions = Histograms.definitions(optinOnly, opts.processType.get)
+    val scalarDefinitions = Scalars.definitions(optinOnly, opts.processType.get)
+
     val partitionCounts = clientMessages
       .mapPartitions{ case it =>
         val clientIterator = new ClientIterator(it)
-        val schema = buildSchema
+        val schema = buildSchema(histogramDefinitions, scalarDefinitions, opts.processType.get)
 
         val allRecords = for {
           client <- clientIterator
-          record = buildRecord(client, schema)
+          record = buildRecord(client, schema, histogramDefinitions, scalarDefinitions, optinOnly, opts.processType.get)
         } yield record
 
         var ignoredCount = 0
@@ -222,7 +252,7 @@ object LongitudinalView {
     S3Store.deleteKey(outputBucket,  s"${prefix}/${lockfileName}")
   }
 
-  private def buildSchema: Schema = {
+  private def buildSchema(histogramDefinitions: Map[String, HistogramDefinition], scalarDefinitions: Map[String, ScalarDefinition], processType: Option[String]): Schema = {
     // The $PROJECT_ROOT/scripts/generate-ping-schema.py script can be used to
     // generate these SchemaBuilder definitions, and the output of that script is
     // combined with data from http://gecko.readthedocs.org/en/latest/toolkit/components/telemetry/telemetry
@@ -501,7 +531,7 @@ object LongitudinalView {
         .name("thread_hang_stacks").`type`().optional().array().items().map().values().map().values(histogramType)
         .name("simple_measurements").`type`().optional().array().items(simpleMeasurementsType)
 
-    Histograms.definitions.foreach{ case (k, value) =>
+    histogramDefinitions.foreach{ case (k, value) =>
       val key = k.toLowerCase
       value match {
         case h: FlagHistogram if !h.keyed =>
@@ -533,8 +563,8 @@ object LongitudinalView {
       }
     }
 
-    Scalars.definitions.foreach{ case (k, value) =>
-      val key = getParquetFriendlyScalarName(k.toLowerCase, "parent")
+    scalarDefinitions.foreach{ case (k, value) =>
+      val key = getParquetFriendlyScalarName(k.toLowerCase, processType)
       value match {
         case s: UintScalar if !s.keyed =>
           // TODO: After migrating to Spark 2.1.0, change this and the next
@@ -684,21 +714,36 @@ object LongitudinalView {
     root.set(avroField, fieldValues.asJava)
   }
 
+  def getStandardHistogramSchema(schema: Schema, optinOnly: Boolean, processType: Option[String]): Schema = {
+    /* Because we now have multiple datasets possible - per opt-status, and per-process type, we need
+        to make sure the schema includes the histogram we try and retrieve here.
+    */
+
+    val histogramNameBase = if (optinOnly) "gc_ms" else "fx_tab_switch_total_ms"
+    val histogramName = processType match {
+        case Some("parent") => histogramNameBase
+        case Some(x) => histogramNameBase + "_" + x
+        case None => histogramNameBase
+    }
+
+    getElemType(schema, histogramName)
+  }
+
   def getElemType(schema: Schema, field: String): Schema = {
     schema.getField(field).schema.getTypes.get(1).getElementType
   }
 
-  private def keyedHistograms2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
+  private def keyedHistograms2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema, histogramDefinitions: Map[String, HistogramDefinition], optinOnly: Boolean, processType: Option[String]) {
     val histogramsList = payloads.map(Histograms.stripKeyedHistograms)
 
     val uniqueKeys = histogramsList.flatMap(x => x.keys).distinct.toSet
 
     val validKeys = for {
       key <- uniqueKeys
-      definition <- Histograms.definitions.get(key)
+      definition <- histogramDefinitions.get(key)
     } yield (key, definition)
 
-    val histogramSchema = getElemType(schema, "fx_tab_switch_total_ms")
+    val histogramSchema = getStandardHistogramSchema(schema, optinOnly, processType)
 
     for ((key, definition) <- validKeys) {
       val keyedHistogramsList = histogramsList.map{x =>
@@ -718,17 +763,17 @@ object LongitudinalView {
     }
   }
 
-  private def histograms2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
+  private def histograms2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema, histogramDefinitions: Map[String, HistogramDefinition], optinOnly: Boolean, processType: Option[String]) {
     val histogramsList = payloads.map(Histograms.stripHistograms)
-        
+
     val uniqueKeys = histogramsList.flatMap(x => x.keys).distinct.toSet
 
     val validKeys = for {
       key <- uniqueKeys
-      definition <- Histograms.definitions.get(key)
+      definition <- histogramDefinitions.get(key)
     } yield (key, definition)
 
-    val histogramSchema = getElemType(schema, "fx_tab_switch_total_ms")
+    val histogramSchema = getStandardHistogramSchema(schema, optinOnly, processType)
 
     for ((key, definition) <- validKeys) {
       root.set(key.toLowerCase, vectorizeHistogram(key, definition, histogramsList, histogramSchema))
@@ -787,15 +832,15 @@ object LongitudinalView {
     }
   }
 
-  private def getParquetFriendlyScalarName(scalarName: String, processName: String): String = {
+  private def getParquetFriendlyScalarName(scalarName: String, processName: Option[String] = Some("parent")): String = {
     // Scalar group and probe names can contain dots ('.'). But we don't
     // want them to get into the Parquet column names, so replace them with
     // underscores ('_'). Additionally, to prevent name clashing, we prefix
     // all scalars.
-    ScalarColumnNamePrefix + (processName + '_' + scalarName).replace('.', '_')
+    ScalarColumnNamePrefix + (processName.getOrElse("parent") + '_' + scalarName).replace('.', '_')
   }
 
-  private def scalars2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder) {
+  private def scalars2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, scalarDefinitions: Map[String, ScalarDefinition], processType: Option[String]) {
     implicit val formats = DefaultFormats
 
     // Get a list of the scalars in the ping.
@@ -819,16 +864,16 @@ object LongitudinalView {
     // ... and that the keys (scalar names) are valid.
     val validKeys = for {
       key <- uniqueKeys
-      definition <- Scalars.definitions.get(key)
+      definition <- scalarDefinitions.get(key)
     } yield (key, definition)
 
     for ((key, definition) <- validKeys) {
-      val prefixedKeyName = getParquetFriendlyScalarName(key.toLowerCase, "parent")
+      val prefixedKeyName = getParquetFriendlyScalarName(key.toLowerCase, processType)
       root.set(prefixedKeyName, vectorizeScalar(key, definition, scalarList))
     }
   }
 
-  private def keyedScalars2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder) {
+  private def keyedScalars2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, scalarDefinitions: Map[String, ScalarDefinition], processType: Option[String]) {
     implicit val formats = DefaultFormats
 
     val scalarsList = payloads.map{ case (x) =>
@@ -843,7 +888,7 @@ object LongitudinalView {
 
     val validKeys = for {
       key <- uniqueKeys
-      definition <- Scalars.definitions.get(key)
+      definition <- scalarDefinitions.get(key)
     } yield (key, definition)
 
     for ((key, definition) <- validKeys) {
@@ -860,7 +905,7 @@ object LongitudinalView {
         vector = vectorizeScalar(label, definition, keyedScalarsList)
       } yield (label, vector)
 
-      val prefixedKeyName = getParquetFriendlyScalarName(key.toLowerCase, "parent")
+      val prefixedKeyName = getParquetFriendlyScalarName(key.toLowerCase, processType)
       root.set(prefixedKeyName, vectorized.toMap.asJava)
     }
   }
@@ -918,7 +963,7 @@ object LongitudinalView {
     }
   }
 
-  private def buildRecord(history: Iterable[Map[String, Any]], schema: Schema): Option[GenericRecord] = {
+  private def buildRecord(history: Iterable[Map[String, Any]], schema: Schema, histogramDefinitions: Map[String, HistogramDefinition], scalarDefinitions: Map[String, ScalarDefinition], optinOnly: Boolean = false, processType: Option[String] = None): Option[GenericRecord] = {
     // De-dupe records
     val sorted = history.foldLeft((List[Map[String, Any]](), Set[String]()))(
       { case ((submissions, seen), current) =>
@@ -974,10 +1019,10 @@ object LongitudinalView {
       JSON2Avro("payload.info",               List("subsessionId"),             "subsession_id", sorted, root, schema)
       JSON2Avro("payload.info",               List("subsessionLength"),         "subsession_length", sorted, root, schema)
       JSON2Avro("payload.info",               List("timezoneOffset"),           "timezone_offset", sorted, root, schema)
-      histograms2Avro(sorted, root, schema)
-      keyedHistograms2Avro(sorted, root, schema)
-      scalars2Avro(sorted, root)
-      keyedScalars2Avro(sorted, root)
+      histograms2Avro(sorted, root, schema, histogramDefinitions, optinOnly, processType)
+      keyedHistograms2Avro(sorted, root, schema, histogramDefinitions, optinOnly, processType)
+      scalars2Avro(sorted, root, scalarDefinitions, processType)
+      keyedScalars2Avro(sorted, root, scalarDefinitions, processType)
       subsessionStartDate2Avro(sorted, root, schema)
       profileDates2Avro(sorted, root, schema)
     } catch {
