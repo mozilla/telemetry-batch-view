@@ -1,30 +1,12 @@
 sudo: required
-language: scala
-jdk:
-  - oraclejdk8
-# These directories are cached to S3 at the end of the build
-cache:
-  directories:
-    - $HOME/.ivy2/cache
-    - $HOME/.sbt/boot/
-before_cache:
-  # Tricks to avoid unnecessary cache updates
-  - find $HOME/.ivy2 -name "ivydata-*.properties" -delete
-  - find $HOME/.sbt -name "*.lock" -delete
-install:
-  - wget https://archive.apache.org/dist/hbase/1.2.3/hbase-1.2.3-bin.tar.gz
-  - tar xzf hbase-1.2.3-bin.tar.gz
-  - hbase-1.2.3/bin/start-hbase.sh
-  - hbase-1.2.3/bin/hbase-daemon.sh start thrift
-env:
- - _JAVA_OPTIONS="-Xms4G -Xmx4G -Xss4M -XX:MaxMetaspaceSize=256M"
-scala:
-  - 2.11.8
-sbt_args: -J-Xss2M
+services:
+  - docker
+before_install:
+  - env | grep TRAVIS > .travis-env
+  - CI_ENV=`bash <(curl -s https://codecov.io/env)`
+  - docker build -t telemetry-batch-view .
 script:
-  - sbt coverage slow:test coverageReport
-after_success:
-  - bash <(curl -s https://codecov.io/bash)
+  - docker run -v $PWD:/telemetry-batch-view $CI_ENV --env-file .travis-env telemetry-batch-view ./runtests.sh coverage slow:test coverageReport
 branches:
   only:
     - master

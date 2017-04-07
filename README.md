@@ -16,7 +16,20 @@ See the [views](https://github.com/mozilla/telemetry-batch-view/tree/master/src/
 See the [docs](https://github.com/mozilla/telemetry-batch-view/tree/master/docs) folder for more information about the individual derived datasets.
 
 ### Development
-Before importing the project in IntelliJ IDEA, apply the following changes to `Preferences` -> `Languages & Frameworks` -> `Scala Compile Server`:
+There are two possible workflows for hacking on telemetry-batch-view: you can either create a docker container for building the package and running tests, or import the project into IntelliJ's IDEA.
+
+To run the docker tests, just use the provided `Dockerfile` to build a container, then use the `runtests.sh` script to run tests inside it:
+
+    docker build -t telemetry-batch-view .
+    ./runtests.sh
+
+You may need to increase the amount of memory allocated to Docker for this to work, as some of the tests are very memory hungry at present. At least 4 gigabytes is recommended.
+
+You can also pass arguments to sbt (the scala build tool we use for running the tests) through the runtests.sh. For example, to run only the addon tests, try:
+
+    ./runtests.sh "test-only com.mozilla.telemetry.AddonsViewTest"
+
+If you wish to import the project into IntelliJ IDEA, apply the following changes to `Preferences` -> `Languages & Frameworks` -> `Scala Compile Server`:
 
 - JVM maximum heap size, MB: `2048`
 - JVM parameters: `-server -Xmx2G -Xss4M`
@@ -45,7 +58,7 @@ export _JAVA_OPTIONS="-Xms4G -Xmx4G -Xss4M -XX:MaxMetaspaceSize=256M"
 ```
 
 **Slow tests**
-By default slow tests are not run when using `sbt test`. To run slow tests use `sbt slow:test`.
+By default slow tests are not run when using `sbt test`. To run slow tests use `./runtests.sh slow:test` (or just `sbt slow:test` outside of the Docker environment).
 
 **Running on Windows**
 
