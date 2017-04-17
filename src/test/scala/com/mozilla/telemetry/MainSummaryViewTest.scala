@@ -682,7 +682,12 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "window_open_event_count"           -> null,
             "total_uri_count"                   -> null,
             "unfiltered_uri_count"              -> null,
-            "unique_domains_count"              -> null
+            "unique_domains_count"              -> null,
+            "active_ticks"                      -> 17354,
+            "main"                              -> 199,
+            "first_paint"                       -> 1999,
+            "session_restored"                  -> 3289,
+            "total_time"                        -> 1027690
           )
 
           val actual = r.getValuesMap(expected.keys.toList)
