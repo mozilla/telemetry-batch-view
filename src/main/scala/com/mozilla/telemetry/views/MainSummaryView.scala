@@ -241,6 +241,7 @@ object MainSummaryView {
       lazy val info = parse(fields.getOrElse("payload.info", "{}").asInstanceOf[String])
       lazy val histograms = parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
       lazy val keyedHistograms = parse(fields.getOrElse("payload.keyedHistograms", "{}").asInstanceOf[String])
+      lazy val simpleMeasures = parse(fields.getOrElse("payload.simpleMeasurements", "{}").asInstanceOf[String])
 
       lazy val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
       lazy val weaveDesktop = MainPing.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
@@ -487,7 +488,14 @@ object MainSummaryView {
         // bug 1339655
         MainPing.enumHistogramBucketCount(histograms \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.head).orNull,
         MainPing.enumHistogramSumCounts(histograms \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.tail),
-        MainPing.enumHistogramToMap(histograms \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys)
+        MainPing.enumHistogramToMap(histograms \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys),
+
+        // bug 1353114 - payload.simpleMeasurements.*
+        asInt(simpleMeasures \ "activeTicks"),
+        asInt(simpleMeasures \ "main"),
+        asInt(simpleMeasures \ "firstPaint"),
+        asInt(simpleMeasures \ "sessionRestored"),
+        asInt(simpleMeasures \ "totalTime")
       )
       Some(row)
     } catch {
@@ -699,7 +707,14 @@ object MainSummaryView {
       // bug 1339655
       StructField("ssl_handshake_result_success", IntegerType, nullable = true),
       StructField("ssl_handshake_result_failure", IntegerType, nullable = true),
-      StructField("ssl_handshake_result", MapType(StringType, IntegerType), nullable = true) // SSL_HANDSHAKE_RESULT
+      StructField("ssl_handshake_result", MapType(StringType, IntegerType), nullable = true), // SSL_HANDSHAKE_RESULT
+
+      // bug 1353114 - payload.simpleMeasurements.*
+      StructField("active_ticks", IntegerType, nullable = true),
+      StructField("main", IntegerType, nullable = true),
+      StructField("first_paint", IntegerType, nullable = true),
+      StructField("session_restored", IntegerType, nullable = true),
+      StructField("total_time", IntegerType, nullable = true)
     ))
   }
 }
