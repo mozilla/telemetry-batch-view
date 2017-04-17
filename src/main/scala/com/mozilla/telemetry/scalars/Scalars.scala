@@ -16,8 +16,7 @@ class ScalarsClass {
   protected val getURL: (String, String) => scala.io.BufferedSource = Source.fromURL
 
   def definitions(includeOptin: Boolean = false): Map[String, ScalarDefinition] = {
-    // TODO: Scalars are not on release yet! Uncomment the line below once they hit Release.
-    val uris = Map(// "https://hg.mozilla.org/releases/mozilla-release/raw-file/tip/toolkit/components/telemetry/Scalars.yaml",
+    val uris = Map("release" -> "https://hg.mozilla.org/releases/mozilla-release/raw-file/tip/toolkit/components/telemetry/Scalars.yaml",
                    "beta" -> "https://hg.mozilla.org/releases/mozilla-beta/raw-file/tip/toolkit/components/telemetry/Scalars.yaml",
                    "aurora" -> "https://hg.mozilla.org/releases/mozilla-aurora/raw-file/tip/toolkit/components/telemetry/Scalars.yaml",
                    "nightly" -> "https://hg.mozilla.org/mozilla-central/raw-file/tip/toolkit/components/telemetry/Scalars.yaml")
