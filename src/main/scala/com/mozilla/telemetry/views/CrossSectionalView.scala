@@ -34,23 +34,6 @@ object Implicits {
 
 import Implicits._
 
-case class ActiveAddon (
-  val blocklisted: Option[Boolean],
-  val description: Option[String],
-  val name: Option[String],
-  val user_disabled: Option[Boolean],
-  val app_disabled: Option[Boolean],
-  val version: Option[String],
-  val scope: Option[Long],
-  val `type`: Option[String],
-  val foreign_install: Option[Boolean],
-  val has_binary_components: Option[Boolean],
-  val install_day: Option[Long],
-  val update_day: Option[Long],
-  val signed_state: Option[Long],
-  val is_system: Option[Boolean]
-)
-
 case class ActivePlugin (
   val name: Option[String],
   val version: Option[String],
@@ -75,7 +58,7 @@ case class Longitudinal (
   val default_search_engine: Option[Seq[Option[String]]],
   val locale: Option[Seq[Option[String]]],
   val architecture: Option[Seq[Option[String]]],
-  val active_addons: Option[Seq[Map[String, ActiveAddon]]],
+  val active_addons: Option[Seq[Map[String, ParquetAddon]]],
   val bookmarks_sum: Option[Seq[Option[Long]]],
   val cpu_count: Option[Seq[Option[Long]]],
   val channel: Option[Seq[Option[String]]],
@@ -131,9 +114,9 @@ case class Longitudinal (
     aggregation.weightedMode(cleanPairs)
   }
 
-  def addonNames(): Option[Seq[Option[String]]] = {
+  def addonNames(): Option[Seq[String]] = {
     this.active_addons.ifDefined(
-      _.foldLeft(Seq[Option[String]]())((acc, x) => acc ++ x.values.map(_.name)).distinct
+      _.foldLeft(Seq[String]())((acc, x) => acc ++ x.values.map(_.name)).distinct
     )
   }
 
@@ -141,10 +124,10 @@ case class Longitudinal (
     this.active_addons.ifDefined(_.map(x => Some(x.size.toLong)))
   }
 
-  def foreignAddons(): Option[Seq[Map[String, ActiveAddon]]] = {
+  def foreignAddons(): Option[Seq[Map[String, ParquetAddon]]] = {
     this.active_addons.ifDefined(
       _.map( // for each ping
-        _.filter(_._2.foreign_install.getOrElse(false))
+        _.filter(_._2.foreign_install)
       )
     )
   }
@@ -292,7 +275,7 @@ case class CrossSectional (
   val version_configs: Option[Long],
   val version_max: Option[String],
   val application_name_mode: Option[String],
-  val addon_names_list: Option[Seq[Option[String]]],
+  val addon_names_list: Option[Seq[String]],
   val main_ping_reason_num_aborted: Long,
   val main_ping_reason_num_end_of_day: Long,
   val main_ping_reason_num_env_change: Long,

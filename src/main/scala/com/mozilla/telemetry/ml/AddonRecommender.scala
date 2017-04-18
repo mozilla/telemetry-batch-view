@@ -5,7 +5,7 @@ import java.nio.file.{Files, Paths}
 
 import breeze.linalg.{DenseMatrix, DenseVector}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
-import com.mozilla.telemetry.utils.S3Store
+import com.mozilla.telemetry.utils.{Addon, S3Store}
 import org.apache.spark.ml.evaluation.NaNRegressionEvaluator
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
@@ -25,20 +25,6 @@ import scala.sys.process._
 
 private case class Rating(clientId: Int, addonId: Int, rating: Float)
 private case class Addons(client_id: Option[String], active_addons: Option[Map[String, Addon]])
-private case class Addon(blocklisted: Option[Boolean],
-                         description: Option[String],
-                         name: Option[String],
-                         user_disabled: Option[Boolean],
-                         app_disabled: Option[Boolean],
-                         version: Option[String],
-                         scope: Option[Int],
-                         `type`: Option[String],
-                         foreign_install: Option[Boolean],
-                         has_binary_components: Option[Boolean],
-                         install_day: Option[Long],
-                         update_day: Option[Long],
-                         signed_state: Option[Int],
-                         is_system: Option[Boolean])
 
 private case class ItemFactors(id: Int, features: Array[Float])
 
@@ -147,9 +133,9 @@ object AddonRecommender {
              AMODatabase.contains(addonId)
           addonName <- meta.name
           blocklisted <- meta.blocklisted
-          signedState <- meta.signed_state
-          userDisabled <- meta.user_disabled
-          appDisabled <- meta.app_disabled
+          signedState <- meta.signedState
+          userDisabled <- meta.userDisabled
+          appDisabled <- meta.appDisabled
           addonType <- meta.`type`
           if !blocklisted && (addonType != "extension" || signedState == 2) && !userDisabled && !appDisabled
         } yield {

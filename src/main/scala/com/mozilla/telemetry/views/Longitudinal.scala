@@ -19,6 +19,22 @@ import com.mozilla.telemetry.histograms._
 import com.mozilla.telemetry.scalars._
 import com.mozilla.telemetry.utils._
 
+// this represents add-on data as serialized by the longitudinal view
+case class ParquetAddon(addon_id: String,
+                        blocklisted: Boolean,
+                        name: String,
+                        user_disabled: Boolean,
+                        app_disabled: Boolean,
+                        version: String,
+                        scope: Integer,
+                        `type`: String,
+                        foreign_install: Boolean,
+                        has_binary_components: Boolean,
+                        install_day: Integer,
+                        update_day: Integer,
+                        signed_state: Integer,
+                        is_system: Boolean)
+
 protected class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHistorySize: Int = 1000) extends Iterator[List[Map[String, Any]]] {
   // Less than 1% of clients in a sampled dataset over a 3 months period has more than 1000 fragments.
   var buffer = ListBuffer[Map[String, Any]]()
