@@ -1,5 +1,6 @@
 package com.mozilla.telemetry.utils
 
+import com.mozilla.telemetry.scalars._
 import org.apache.spark.sql.Row
 import org.json4s.JsonAST._
 
@@ -238,6 +239,57 @@ object MainPing{
       case (_, true) => Some(false)
       case _ => None
     }
+  }
+
+  def asInt(v: JValue): Option[Integer] = v match {
+    case JInt(x) => Some(x.toInt)
+    case _ => None
+  }
+
+  def asBool(v: JValue): Option[Boolean] = v match {
+    case JBool(x) => Some(x)
+    case _ => None
+  }
+
+  def asString(v: JValue): Option[String] = v match {
+    case JString(x) => Some(x)
+    case JInt(x) => Some(x.toString())
+    case _ => None
+  }
+
+  def asMap[ValueType >: Null](f: JValue => Option[ValueType])(v: JValue): Option[Map[String, ValueType]] = {
+    val keys = Map[String, ValueType]() ++ (for {
+      JObject(x) <- v
+      (key, scalar) <- x
+      scalarVal = f(scalar).orNull
+      if scalarVal != null
+    } yield (key, scalarVal))
+
+    if (keys.isEmpty)
+      None
+    else
+      Some(keys)
+  }
+
+  def scalarsToRow(scalars: JValue, definitions: List[(String, ScalarDefinition)]): Row = {
+    val values = definitions.map{
+      case (name, definition) =>
+        definition match {
+          case UintScalar(keyed) => (name, keyed, asInt _)
+          case BooleanScalar(keyed) => (name, keyed, asBool _)
+          case StringScalar(keyed) => (name, keyed, asString _)
+        }
+    }.map{
+      case (name, keyed, func) =>
+        keyed match {
+          case true => (name, asMap(func) _)
+          case false => (name, func)
+        }
+    }.map{
+        case (name, applyFunc) => applyFunc(scalars \ name).orNull
+    }
+
+    Row.fromSeq(values)
   }
 
   // Check if a json value contains a number greater than zero.

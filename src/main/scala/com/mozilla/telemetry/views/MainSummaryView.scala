@@ -10,6 +10,7 @@ import org.rogach.scallop._
 import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.utils.{Addon, Attribution, MainPing, S3Store, Events}
 import org.json4s.{DefaultFormats, JValue}
+import com.mozilla.telemetry.scalars._
 
 import scala.util.{Success, Try}
 
@@ -72,7 +73,8 @@ object MainSummaryView {
       if (filterVersion.nonEmpty)
         println(s" Filtering for version = '${filterVersion.get}'")
 
-      val schema = buildSchema
+      val scalarDefinitions = Scalars.definitions(includeOptin = true).toList.sortBy(_._1)
+      val schema = buildSchema(scalarDefinitions)
       val ignoredCount = sc.accumulator(0, "Number of Records Ignored")
       val processedCount = sc.accumulator(0, "Number of Records Processed")
       val messages = Dataset("telemetry")
@@ -93,7 +95,7 @@ object MainSummaryView {
         }.records(conf.limit.get)
 
       val rowRDD = messages.flatMap(m => {
-        messageToRow(m) match {
+        messageToRow(m, scalarDefinitions) match {
           case None =>
             ignoredCount += 1
             None
@@ -212,11 +214,6 @@ object MainSummaryView {
     }
   }
 
-  def getBrowserEngagement(scalars: JValue, engagementMetric: String): Integer = {
-    val prefix = "browser.engagement."
-    asInt(scalars \ (prefix + engagementMetric))
-  }
-
   def asInt(v: JValue): Integer = v match {
     case JInt(x) => x.toInt
     case _ => null
@@ -224,7 +221,7 @@ object MainSummaryView {
 
   // Convert the given Heka message containing a "main" ping
   // to a map containing just the fields we're interested in.
-  def messageToRow(message: Message): Option[Row] = {
+  def messageToRow(message: Message, scalarDefinitions: List[(String, ScalarDefinition)]): Option[Row] = {
     try {
       val fields = message.fieldsAsMap
 
@@ -476,13 +473,6 @@ object MainSummaryView {
           case _ => null
         },
         getUserPrefs(settings \ "userPrefs").orNull,
-        getBrowserEngagement(parentScalars, "max_concurrent_tab_count"),
-        getBrowserEngagement(parentScalars, "tab_open_event_count"),
-        getBrowserEngagement(parentScalars, "max_concurrent_window_count"),
-        getBrowserEngagement(parentScalars, "window_open_event_count"),
-        getBrowserEngagement(parentScalars, "total_uri_count"),
-        getBrowserEngagement(parentScalars, "unfiltered_uri_count"),
-        getBrowserEngagement(parentScalars, "unique_domains_count"),
         Events.getEvents(parentEvents).orNull,
 
         // bug 1339655
@@ -497,7 +487,10 @@ object MainSummaryView {
         asInt(simpleMeasures \ "sessionRestored"),
         asInt(simpleMeasures \ "totalTime")
       )
-      Some(row)
+
+      val scalarRow = MainPing.scalarsToRow(parentScalars, scalarDefinitions)
+
+      Some(Row.merge(row, scalarRow))
     } catch {
       case _: Exception =>
         None
@@ -578,7 +571,28 @@ object MainSummaryView {
     StructField("dom_ipc_process_count", IntegerType, nullable = true) // dom.ipc.processCount
   ))
 
-  def buildSchema: StructType = {
+  def buildScalarSchema(scalarDefinitions: List[(String, ScalarDefinition)]): List[StructField] = {
+    scalarDefinitions.map{
+        case (name, definition) =>
+            definition match {
+                case UintScalar(keyed) => (name, keyed, LongType)
+                case BooleanScalar(keyed) => (name, keyed, BooleanType)
+                case StringScalar(keyed) => (name, keyed, StringType)
+            }
+    }.map{
+        case (name, keyed, parquetType) =>
+            keyed match {
+                case true => StructField(Scalars.getParquetFriendlyScalarName(name, "parent"),
+                                    MapType(StringType, parquetType), 
+                                    nullable = true)
+                case false => StructField(Scalars.getParquetFriendlyScalarName(name, "parent"), 
+                                     parquetType, 
+                                     nullable = true)
+            }
+    }
+  }
+
+  def buildSchema(scalarDefinitions: List[(String, ScalarDefinition)]): StructType = {
     StructType(List(
       StructField("document_id", StringType, nullable = false), // id
       StructField("client_id", StringType, nullable = true), // clientId
@@ -691,17 +705,6 @@ object MainSummaryView {
       StructField("telemetry_enabled", BooleanType, nullable = true), // environment.settings.telemetryEnabled
       StructField("user_prefs", buildUserPrefsSchema, nullable = true), // environment.settings.userPrefs
 
-      // Engagement measures per Bug 1315663, taken from
-      //  payload.processes.parent.scalars["browser.engagement.*"]
-      // For more information, see the Scalars definitions at
-      //  https://dxr.mozilla.org/mozilla-central/source/toolkit/components/telemetry/Scalars.yaml
-      StructField("max_concurrent_tab_count", IntegerType, nullable = true),
-      StructField("tab_open_event_count", IntegerType, nullable = true),
-      StructField("max_concurrent_window_count", IntegerType, nullable = true),
-      StructField("window_open_event_count", IntegerType, nullable = true),
-      StructField("total_uri_count", IntegerType, nullable = true),
-      StructField("unfiltered_uri_count", IntegerType, nullable = true),
-      StructField("unique_domains_count", IntegerType, nullable = true),
       StructField("events", ArrayType(Events.buildEventSchema, containsNull = false), nullable = true), // payload.processes.parent.events
 
       // bug 1339655
@@ -715,6 +718,6 @@ object MainSummaryView {
       StructField("first_paint", IntegerType, nullable = true),
       StructField("session_restored", IntegerType, nullable = true),
       StructField("total_time", IntegerType, nullable = true)
-    ))
+    ) ++ buildScalarSchema(scalarDefinitions))
   }
 }
