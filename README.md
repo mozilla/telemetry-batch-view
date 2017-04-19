@@ -16,12 +16,38 @@ See the [views](https://github.com/mozilla/telemetry-batch-view/tree/master/src/
 See the [docs](https://github.com/mozilla/telemetry-batch-view/tree/master/docs) folder for more information about the individual derived datasets.
 
 ### Development
+You need to install IntelliJ IDEA to develop and test your changes. During this process you should select defaults for all plugins, then select `Scala` from featured plugins.
+
 Before importing the project in IntelliJ IDEA, apply the following changes to `Preferences` -> `Languages & Frameworks` -> `Scala Compile Server`:
 
 - JVM maximum heap size, MB: `2048`
 - JVM parameters: `-server -Xmx2G -Xss4M`
 
+To import the project, select `import`, then select the root directory of this project. Then select `Import project from external mode` and `SBT`.
+
 Note that the first time the project is opened it takes some time to download all the dependencies.
+
+#### Windows issues
+If you are using Windows, you probably need to run the 64bit version of IDEA or you may strike memory errors. Note that although no shortcut to this is installed, you can find `idea64.exe` in the installed `bin` directory.
+You may also need to manually install a 64bit version of the Java JDK to get things going.
+
+When running the code, you are likely to see a stack in the console along the lines of:
+<pre>
+java.io.IOException: Could not locate executable null\bin\winutils.exe in the Hadoop binaries.
+...
+WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+</pre>
+
+Rather than ignoring it you should add this to the "main" function for your script/test script:
+
+<pre>
+// TODO REMOVE ME - TEST ONLY CODE -
+if (System.getProperty("os.name").toLowerCase().startsWith("windows"))
+  System.setProperty("hadoop.home.dir", "C:\\some-path\\hadoop-common-2.2.0-bin-master")
+// TODO END REMOVE ME
+</pre>
+
+where some-path is where you have unzipped https://github.com/srccodes/hadoop-common-2.2.0-bin/archive/master.zip
 
 ### Generating Datasets
 
