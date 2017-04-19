@@ -4,6 +4,7 @@ import com.mozilla.telemetry.views.CrashAggregateView
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
 import org.json4s.JsonAST.JValue
+import org.joda.time._
 import org.json4s.JsonDSL._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -28,7 +29,8 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
     ("experiment_branch", List("control", "experiment")),
     ("e10s",              List(true, false)),
     ("e10s_cohort",       List("control", "test")),
-    ("gfx_compositor",    List("simple", "none", null))
+    ("gfx_compositor",    List("simple", "none", null)),
+    ("profile_created",   List("17107" /*Nov 2, 2016*/))
   )
 
   var sc: Option[SparkContext] = None
@@ -126,6 +128,8 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
         "activeExperiment" ->
           ("id" -> dimensions("experiment_id").asInstanceOf[String]) ~
           ("branch" -> dimensions("experiment_branch").asInstanceOf[String])
+      val profile =
+        "creationDate" -> dimensions("profile_created").asInstanceOf[String].toInt
       val payload = if (isMain) "{}" else compact(render(
           "payload" ->
             ("crashDate" -> dimensions("activity_date").asInstanceOf[String].substring(0, 10)) ~
@@ -146,7 +150,8 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
         "environment.system" -> compact(render(system)),
         "environment.settings" -> compact(render(settings)),
         "environment.build" -> compact(render(build)),
-        "environment.addons" -> compact(render(addons))
+        "environment.addons" -> compact(render(addons)),
+        "environment.profile" -> compact(render(profile))
       )
     }
 
@@ -195,6 +200,14 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
 
   "dimensions" must "be converted correctly" in {
     val dimensionValues = pingDimensions.toMap
+    val validActivityDateStrings = List(
+      "2016-03-02", "2016-06-01", // these are directly from the dataset
+      "2016-03-05", "2016-05-31" // these are bounded to be around the submission date
+    )
+    val validActivityDates = validActivityDateStrings
+      .map(dateString => format.DateTimeFormat.forPattern("yyyy-MM-dd").withZone(DateTimeZone.UTC).parseDateTime(dateString).withMillisOfDay(0))
+    val profile_ages = validActivityDates
+      .map(date => Math.min(Math.max(-1, Math.round(Days.daysBetween(new DateTime(0).plusDays(dimensionValues("profile_created")(0).asInstanceOf[String].toInt), date).getDays() / 7)), 53).toString)
     for (row <- fixture.records.select("dimensions").collect()) {
       val dimensions = row.getJavaMap[String, String](0)
       assert(dimensionValues("build_version")     contains dimensions.getOrElse("build_version", null))
@@ -210,6 +223,7 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
       assert(List("True", "False")                contains dimensions.getOrElse("e10s_enabled", null))
       assert(dimensionValues("e10s_cohort")       contains dimensions.getOrElse("e10s_cohort", null))
       assert(dimensionValues("gfx_compositor")    contains dimensions.getOrElse("gfx_compositor", null))
+      assert(profile_ages                         contains dimensions.getOrElse("profile_age", null))
     }
   }
 
