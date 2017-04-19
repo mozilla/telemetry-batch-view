@@ -12,8 +12,18 @@ case class BooleanScalar(keyed: Boolean) extends ScalarDefinition
 case class StringScalar(keyed: Boolean) extends ScalarDefinition
 
 class ScalarsClass {
+  val ScalarColumnNamePrefix = "scalar"
+
   // mock[io.Source] wasn't working with scalamock, so now we'll just use the function
   protected val getURL: (String, String) => scala.io.BufferedSource = Source.fromURL
+
+  def getParquetFriendlyScalarName(scalarName: String, processName: String): String = {
+    // Scalar group and probe names can contain dots ('.'). But we don't
+    // want them to get into the Parquet column names, so replace them with
+    // underscores ('_'). Additionally, to prevent name clashing, we prefix
+    // all scalars.
+    ScalarColumnNamePrefix + '_' + (processName + '_' + scalarName).replace('.', '_')
+  }
 
   def definitions(includeOptin: Boolean = false): Map[String, ScalarDefinition] = {
     val uris = Map("release" -> "https://hg.mozilla.org/releases/mozilla-release/raw-file/tip/toolkit/components/telemetry/Scalars.yaml",

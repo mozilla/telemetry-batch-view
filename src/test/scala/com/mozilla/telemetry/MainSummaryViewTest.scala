@@ -3,14 +3,24 @@ package com.mozilla.telemetry
 import com.mozilla.telemetry.heka.File
 import com.mozilla.telemetry.utils.{MainPing, Events}
 import com.mozilla.telemetry.views.MainSummaryView
+import com.mozilla.telemetry.scalars._
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.{SparkConf, SparkContext}
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{FlatSpec, Matchers}
+import scala.io.Source
 
 class MainSummaryViewTest extends FlatSpec with Matchers{
+  val scalarUrlMock = (a: String, b: String) => Source.fromFile("src/test/resources/Scalars.yaml")
+
+  val scalars =  new ScalarsClass {
+    override protected val getURL = scalarUrlMock
+  }
+
+  val scalarDefs = scalars.definitions(true).toList.sortBy(_._1)
+
   val testPayload = """
 {
  "environment": {
@@ -550,7 +560,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       .getOrCreate()
 
     try {
-      val schema = MainSummaryView.buildSchema
+      val schema = MainSummaryView.buildSchema(scalarDefs)
 
       // Use an example framed-heka message. It is based on test_main.json.gz,
       // submitted with a URL of
@@ -558,7 +568,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       for (hekaFileName <- List("/test_main_hindsight.heka", "/test_main.snappy.heka")) {
         val hekaURL = getClass.getResource(hekaFileName)
         val input = hekaURL.openStream()
-        val rows = File.parse(input).flatMap(MainSummaryView.messageToRow)
+        val rows = File.parse(input).flatMap(i => MainSummaryView.messageToRow(i, scalarDefs))
 
         // Serialize this one row as Parquet
         val dataframe = spark.createDataFrame(sc.parallelize(rows.toSeq), schema)
@@ -596,7 +606,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       val hekaURL = getClass.getResource(hekaFileName)
       val input = hekaURL.openStream()
 
-      val schema = MainSummaryView.buildSchema
+      val schema = MainSummaryView.buildSchema(scalarDefs)
 
       var count = 0
       for (message <- File.parse(input)) {
@@ -604,7 +614,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         message.`type`.get should be ("telemetry")
         message.logger.get should be ("telemetry")
 
-        for (summary <- MainSummaryView.messageToRow(message)) {
+        for (summary <- MainSummaryView.messageToRow(message, scalarDefs)) {
           // Apply our schema to a generic Row object
           val r = applySchema(summary, schema)
 
@@ -676,18 +686,19 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "addon_compatibility_check_enabled" -> true,
             "telemetry_enabled"                 -> true,
             "user_prefs"                        -> null,
-            "max_concurrent_tab_count"          -> null,
-            "tab_open_event_count"              -> null,
-            "max_concurrent_window_count"       -> null,
-            "window_open_event_count"           -> null,
-            "total_uri_count"                   -> null,
-            "unfiltered_uri_count"              -> null,
-            "unique_domains_count"              -> null,
             "active_ticks"                      -> 17354,
             "main"                              -> 199,
             "first_paint"                       -> 1999,
             "session_restored"                  -> 3289,
-            "total_time"                        -> 1027690
+            "total_time"                        -> 1027690,
+            "scalar_parent_mock_keyed_scalar_bool"   -> null,
+            "scalar_parent_mock_keyed_scalar_string" -> null,
+            "scalar_parent_mock_keyed_scalar_uint"   -> null,
+            "scalar_parent_mock_scalar_bool"         -> null,
+            "scalar_parent_mock_scalar_string"       -> null,
+            "scalar_parent_mock_scalar_uint"         -> null,
+            "scalar_parent_mock_uint_optin"          -> null,
+            "scalar_parent_mock_uint_optout"         -> null
           )
 
           val actual = r.getValuesMap(expected.keys.toList)
@@ -886,7 +897,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     // Doesn't have scalars
     val jNoScalars = parse(
       """{}""")
-    MainSummaryView.getBrowserEngagement(jNoScalars, "anything") should be (null)
+    MainPing.scalarsToRow(jNoScalars, scalarDefs) should be (Row(null, null, null, null, null, null, null, null))
 
     // Has scalars, but none of the expected ones
     val jUnexpectedScalars = parse(
@@ -894,55 +905,63 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |  "example1": 249,
         |  "example2": 2
         |}""".stripMargin)
-    MainSummaryView.getBrowserEngagement(jUnexpectedScalars, "missing") should be (null)
-    // Missing its prefix, so it shouldn't be found.
-    MainSummaryView.getBrowserEngagement(jUnexpectedScalars, "example2") should be (null)
+    MainPing.scalarsToRow(jUnexpectedScalars, scalarDefs) should be (Row(null, null, null, null, null, null, null, null))
 
     // Has scalars, and some of the expected ones
     val jSomeExpectedScalars = parse(
       """{
-        |  "browser.engagement.max_concurrent_window_count": 2,
-        |  "nonexistent1": 97,
-        |  "nonexistent2": 11,
-        |  "browser.engagement.total_uri_count": 93
+        |  "mock.scalar.uint": 2,
+        |  "mock.uint.optin": 97
         |}""".stripMargin)
-    MainSummaryView.getBrowserEngagement(jSomeExpectedScalars, "max_concurrent_window_count") should be (2)
-    MainSummaryView.getBrowserEngagement(jSomeExpectedScalars, "total_uri_count") should be (93)
-    MainSummaryView.getBrowserEngagement(jSomeExpectedScalars, "unique_domains_count") should be (null)
+    MainPing.scalarsToRow(jSomeExpectedScalars, scalarDefs) should be (Row(null, null, null, null, null, 2, 97, null))
+
+    // Keyed scalars convert correctly
+    val jKeyedScalar = parse(
+      """{
+        |  "mock.keyed.scalar.uint": {"a": 1, "b": 2}
+        |}""".stripMargin)
+    MainPing.scalarsToRow(jKeyedScalar, scalarDefs) should be (Row(null, null, Map("a" -> 1, "b" -> 2), null, null, null, null, null))
+
 
     // Has scalars, all of the expected ones
     val jAllScalars = parse(
       """{
-        |  "browser.engagement.max_concurrent_tab_count": 249,
-        |  "browser.engagement.max_concurrent_window_count": 2,
-        |  "browser.engagement.unfiltered_uri_count": 97,
-        |  "browser.engagement.tab_open_event_count": 11,
-        |  "browser.engagement.unique_domains_count": 10,
-        |  "browser.engagement.total_uri_count": 93,
-        |  "browser.engagement.window_open_event_count": 1
+        |  "mock.keyed.scalar.bool": {"a": true, "b": false},
+        |  "mock.keyed.scalar.string": {"a": "hello", "b": "world"},
+        |  "mock.keyed.scalar.uint": {"a": 1, "b": 2},
+        |  "mock.scalar.bool": false,
+        |  "mock.scalar.string": "hello world",
+        |  "mock.scalar.uint": 93,
+        |  "mock.uint.optin": 1,
+        |  "mock.uint.optout": 42
         |}""".stripMargin)
-    MainSummaryView.getBrowserEngagement(jAllScalars, "max_concurrent_tab_count") should be (249)
-    MainSummaryView.getBrowserEngagement(jAllScalars, "max_concurrent_window_count") should be (2)
-    MainSummaryView.getBrowserEngagement(jAllScalars, "unfiltered_uri_count") should be (97)
-    MainSummaryView.getBrowserEngagement(jAllScalars, "tab_open_event_count") should be (11)
-    MainSummaryView.getBrowserEngagement(jAllScalars, "unique_domains_count") should be (10)
-    MainSummaryView.getBrowserEngagement(jAllScalars, "total_uri_count") should be (93)
-    MainSummaryView.getBrowserEngagement(jAllScalars, "window_open_event_count") should be (1)
+
+    val expected = Row(
+        Map("a" -> true, "b" -> false),
+        Map("a" -> "hello", "b" -> "world"),
+        Map("a" -> 1, "b" -> 2),
+        false,
+        "hello world",
+        93,
+        1,
+        42
+    )
+
+    MainPing.scalarsToRow(jAllScalars, scalarDefs) should be (expected)
 
     // Has scalars with weird data
     val jWeirdScalars = parse(
       """{
-        |  "browser.engagement.max_concurrent_tab_count": "two hundred and something",
-        |  "browser.engagement.max_concurrent_window_count": false,
-        |  "browser.engagement.unfiltered_uri_count": [9, 7]
+        |  "mock.keyed.scalar.bool": {"a": 3, "b": "hello"},
+        |  "mock.scalar.uint": false,
+        |  "mock.uint.optin": [9, 7],
+        |  "mock.uint.optout": "hello, world"
         |}""".stripMargin)
-    MainSummaryView.getBrowserEngagement(jWeirdScalars, "max_concurrent_tab_count") should be (null)
-    MainSummaryView.getBrowserEngagement(jWeirdScalars, "max_concurrent_window_count") should be (null)
-    MainSummaryView.getBrowserEngagement(jWeirdScalars, "unfiltered_uri_count") should be (null)
+    MainPing.scalarsToRow(jWeirdScalars, scalarDefs) should be (Row(null, null, null, null, null, null, null, null))
 
     // Has a scalars section containing unexpected data.
     val jBogusScalars = parse("""[10, "ten"]""")
-    MainSummaryView.getBrowserEngagement(jBogusScalars, "anything") should be (null)
+    MainPing.scalarsToRow(jBogusScalars, scalarDefs) should be (Row(null, null, null, null, null, null, null, null))
   }
 
   "Stub attribution" can "be extracted" in {
