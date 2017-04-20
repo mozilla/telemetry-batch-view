@@ -57,6 +57,7 @@ assemblyMergeStrategy in assembly := {
 
 // Disable parallel execution to avoid multiple SparkContexts
 parallelExecution in Test := false
+logBuffered in Test := false
 
 lazy val Slow = config("slow").extend(Test)
 configs(Slow)
