@@ -334,8 +334,9 @@ object ToplineSummary {
     val mode = opts.mode()
     val bucket = opts.outputBucket()
     val prefix = opts.outputPrefix()
+    val version = "v1"
 
-    val s3path = s"s3://$bucket/$prefix/mode=$mode/report_start=$reportStart"
+    val s3path = s"s3://$bucket/$prefix/$version/mode=$mode/report_start=$reportStart"
 
     // find the date range for the report
     val formatter = DateTimeFormat.forPattern("yyyyMMdd")
