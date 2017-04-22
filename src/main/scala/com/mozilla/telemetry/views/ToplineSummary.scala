@@ -321,7 +321,7 @@ object ToplineSummary {
     val reportStart = opt[String]("report_start", descr = "Start day of the reporting period (YYYYMMDD)", required = true)
     val mode = opt[String]("mode", descr = "Report mode: weekly or monthly", default = Some("monthly"), required = true)
     val outputBucket = opt[String]("bucket", descr = "bucket", required = true)
-    val outputPrefix = opt[String]("prefix", descr = "prefix", required = true)
+    val outputPrefix = opt[String]("prefix", descr = "prefix", required = false)
     verify()
   }
 
@@ -333,10 +333,16 @@ object ToplineSummary {
     val reportStart = opts.reportStart()
     val mode = opts.mode()
     val bucket = opts.outputBucket()
-    val prefix = opts.outputPrefix()
-    val version = "v1"
 
-    val s3path = s"s3://$bucket/$prefix/$version/mode=$mode/report_start=$reportStart"
+    val prefix = opts.outputPrefix.get match {
+      case Some(prefix) => prefix
+      case None => {
+        val version = "v1"
+        s"topline_summary/$version"
+      }
+    }
+
+    val s3path = s"s3://$bucket/$prefix/mode=$mode/report_start=$reportStart"
 
     // find the date range for the report
     val formatter = DateTimeFormat.forPattern("yyyyMMdd")
