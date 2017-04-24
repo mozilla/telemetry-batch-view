@@ -33,6 +33,13 @@ class SyncEventViewTest extends FlatSpec with Matchers{
       |    "deviceID": "2222222222222222222222222222222222222222222222222222222222222222",
       |    "syncs": [
       |      {
+      |        "devices": [
+      |          {
+      |            "os": "WINNT",
+      |            "version": "55.0a1",
+      |            "id": "3333333333333333333333333333333333333333333333333333333333333333"
+      |          }
+      |        ],
       |        "when": 1473313854446,
       |        "took": 2277,
       |        "engines": [
@@ -91,6 +98,13 @@ class SyncEventViewTest extends FlatSpec with Matchers{
       |      {
       |        "when": 1473313890947,
       |        "took": 484,
+      |        "devices": [
+      |          {
+      |            "os": "iOS",
+      |            "version": "7.1",
+      |            "id": "4444444444444444444444444444444444444444444444444444444444444444"
+      |          }
+      |        ],
       |        "engines": [
       |          {
       |            "name": "clients",
@@ -174,6 +188,8 @@ class SyncEventViewTest extends FlatSpec with Matchers{
       checkRow.getAs[Map[String, String]]("event_map_values") should be (event(5).extract[Map[String, String]])
       checkRow.getAs[String]("event_device_id") should be ((event(5) \ "deviceID").extract[String])
       checkRow.getAs[String]("event_flow_id") should be ((event(5) \ "flowID").extract[String])
+      checkRow.getAs[String]("event_device_version") should be ("55.0a1")
+      checkRow.getAs[String]("event_device_os") should be ("WINNT")
     } finally {
       sc.stop()
     }
