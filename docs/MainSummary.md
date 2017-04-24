@@ -36,11 +36,12 @@ Notes:
 Schemas and Making Queries
 --------------------------
 
-As of 2016-07-05, the current version of the `main_summary` dataset is `v3`, and has a schema as follows:
+As of 2017-04-24, the current version of the `main_summary` dataset is `v3`, and has a schema as follows:
 ```
 root
- |-- document_id: string (nullable = true)
+ |-- document_id: string (nullable = false)
  |-- client_id: string (nullable = true)
+ |-- sample_id: long (nullable = true)
  |-- channel: string (nullable = true)
  |-- normalized_channel: string (nullable = true)
  |-- country: string (nullable = true)
@@ -52,11 +53,12 @@ root
  |-- windows_build_number: long (nullable = true)
  |-- windows_ubr: long (nullable = true)
  |-- install_year: long (nullable = true)
+ |-- is_wow64: boolean (nullable = true)
  |-- profile_creation_date: long (nullable = true)
  |-- subsession_start_date: string (nullable = true)
  |-- subsession_length: long (nullable = true)
  |-- distribution_id: string (nullable = true)
- |-- submission_date: string (nullable = true)
+ |-- submission_date: string (nullable = false)
  |-- sync_configured: boolean (nullable = true)
  |-- sync_count_desktop: integer (nullable = true)
  |-- sync_count_mobile: integer (nullable = true)
@@ -64,13 +66,18 @@ root
  |-- app_display_version: string (nullable = true)
  |-- app_name: string (nullable = true)
  |-- app_version: string (nullable = true)
- |-- timestamp: long (nullable = true)
+ |-- timestamp: long (nullable = false)
  |-- env_build_id: string (nullable = true)
  |-- env_build_version: string (nullable = true)
  |-- env_build_arch: string (nullable = true)
  |-- e10s_enabled: boolean (nullable = true)
  |-- e10s_cohort: string (nullable = true)
  |-- locale: string (nullable = true)
+ |-- attribution: struct (nullable = true)
+ |    |-- source: string (nullable = true)
+ |    |-- medium: string (nullable = true)
+ |    |-- campaign: string (nullable = true)
+ |    |-- content: string (nullable = true)
  |-- active_experiment_id: string (nullable = true)
  |-- active_experiment_branch: string (nullable = true)
  |-- reason: string (nullable = true)
@@ -133,13 +140,13 @@ root
  |    |    |-- reopen_open_submenu: integer (nullable = true)
  |    |    |-- reopen_learn_more: integer (nullable = true)
  |-- search_counts: array (nullable = true)
- |    |-- element: struct (containsNull = true)
+ |    |-- element: struct (containsNull = false)
  |    |    |-- engine: string (nullable = true)
  |    |    |-- source: string (nullable = true)
  |    |    |-- count: long (nullable = true)
  |-- active_addons: array (nullable = true)
- |    |-- element: struct (containsNull = true)
- |    |    |-- addon_id: string (nullable = true)
+ |    |-- element: struct (containsNull = false)
+ |    |    |-- addon_id: string (nullable = false)
  |    |    |-- blocklisted: boolean (nullable = true)
  |    |    |-- name: string (nullable = true)
  |    |    |-- user_disabled: boolean (nullable = true)
@@ -154,7 +161,7 @@ root
  |    |    |-- signed_state: integer (nullable = true)
  |    |    |-- is_system: boolean (nullable = true)
  |-- active_theme: struct (nullable = true)
- |    |-- addon_id: string (nullable = true)
+ |    |-- addon_id: string (nullable = false)
  |    |-- blocklisted: boolean (nullable = true)
  |    |-- name: string (nullable = true)
  |    |-- user_disabled: boolean (nullable = true)
@@ -173,17 +180,8 @@ root
  |-- telemetry_enabled: boolean (nullable = true)
  |-- user_prefs: struct (nullable = true)
  |    |-- dom_ipc_process_count: integer (nullable = true)
- |-- max_concurrent_tab_count: integer (nullable = true)
- |-- tab_open_event_count: integer (nullable = true)
- |-- max_concurrent_window_count: integer (nullable = true)
- |-- window_open_event_count: integer (nullable = true)
- |-- total_uri_count: integer (nullable = true)
- |-- unfiltered_uri_count: integer (nullable = true)
- |-- unique_domains_count: integer (nullable = true)
- |-- submission_date_s3: string (nullable = true)
- |-- sample_id: string (nullable = true)
  |-- events: array (nullable = true)
- |    |-- element: struct (containsNull = true)
+ |    |-- element: struct (containsNull = false)
  |    |    |-- timestamp: long (nullable = false)
  |    |    |-- category: string (nullable = false)
  |    |    |-- method: string (nullable = false)
@@ -191,8 +189,27 @@ root
  |    |    |-- string_value: string (nullable = true)
  |    |    |-- map_values: map (nullable = true)
  |    |    |    |-- key: string
- |    |    |    |-- value: string
+ |    |    |    |-- value: string (valueContainsNull = true)
+ |-- ssl_handshake_result_success: integer (nullable = true)
+ |-- ssl_handshake_result_failure: integer (nullable = true)
+ |-- ssl_handshake_result: map (nullable = true)
+ |    |-- key: string
+ |    |-- value: integer (valueContainsNull = true)
+ |-- active_ticks: integer (nullable = true)
+ |-- main: integer (nullable = true)
+ |-- first_paint: integer (nullable = true)
+ |-- session_restored: integer (nullable = true)
+ |-- total_time: integer (nullable = true)
+ <SCALARS>
 ```
+
+### Scalars
+Parent scalars are automatically added to the dataset, and as such, there is no longer a fixed schema.
+They are ordered by the name of the scalar, which is composed of <namespace>.<scalar_name> (e.g. 
+browser.engagement.max_concurrent_tab_count). The full schema name is scalar_<process>_<namespace>_<scalar> 
+(e.g. scalars_parent_browser_engagement_max_concurrent_tab_count), where currently only parent process scalars are
+available.
+
 For more detail on where these fields come from in the
 [raw data](https://gecko.readthedocs.io/en/latest/toolkit/components/telemetry/telemetry/data/main-ping.html),
 please look [in the MainSummaryView code](src/main/scala/views/MainSummaryView.scala)
