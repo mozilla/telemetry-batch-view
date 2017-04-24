@@ -156,8 +156,10 @@ object SyncEventConverter {
   ) ++ eventFields
     ++ List(
       StructField("event_device_id", StringType, nullable = true), // present in most events
-      StructField("event_flow_id", StringType, nullable = true) // present in most events
-    )
+      StructField("event_flow_id", StringType, nullable = true), // present in most events
+      StructField("event_device_version", StringType, nullable = true), // present in most events
+      StructField("event_device_os", StringType, nullable = true) // present in most events
+  )
   )
 
   def pingToRows(ping: JValue): List[Row] = {
@@ -219,13 +221,55 @@ object SyncEventConverter {
       case None => return None
       case Some(x) => x
     }
+    val devices: Map[String, (String, String)] = payload \ "syncs" match {
+      case JArray(l) => {
+        val deviceMaps = l.flatMap(v => v \ "devices" match {
+          case JArray(devs) => {
+            devs.flatMap(dev => {
+              val devID = dev \ "id" match {
+                case JString(x) => x
+                case _ => null
+              }
+              val devVer = dev \ "version" match {
+                case JString(x) => x
+                case _ => null
+              }
+              val devOS = dev \ "os" match {
+                case JString(x) => x
+                case _ => null
+              }
+              if (devID != null && devVer != null && devOS != null) {
+                Some(Map[String, (String, String)]((devID, (devVer, devOS))))
+              } else {
+                None
+              }
+            })
+          }
+          case _ => List()
+        }) ++ List(Map.empty[String, (String, String)]) // ensure deviceMaps is not empty
+        deviceMaps.reduce((a, b) => a ++ b)
+      }
+      case _ => Map()
+    }
 
     val values = eventObject.mapValues match {
-      case Some(x: Map[String, String]) => List(
-        x getOrElse ("deviceID", null),
-        x getOrElse ("flowID", null)
-      )
-      case _ => List(null, null)
+      case Some(x: Map[String, String]) => {
+        val deviceID = x getOrElse ("deviceID", null)
+        val (deviceVersion, deviceOS) =
+          if (deviceID == null) {
+            (null, null)
+          } else {
+            devices getOrElse(deviceID, (null, null))
+          }
+
+        List(
+          deviceID,
+          x getOrElse ("flowID", null),
+          deviceVersion,
+          deviceOS
+        )
+      }
+      case _ => List(null, null, null, null)
     }
 
     Some(Row.fromSeq(common ++ eventObject.toList ++ values))
