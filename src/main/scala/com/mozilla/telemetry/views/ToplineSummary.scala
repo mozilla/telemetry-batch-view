@@ -373,10 +373,8 @@ object ToplineSummary {
       val reportData = createReportDataset(dataset, from, to)
       val crashData = createCrashDataset(from, to)
 
-      val reportFormat = format.DateTimeFormat.forPattern("yyyy-mm-dd")
       val finalReport = easyAggregates(reportData, crashData)
         .join(clientValues(reportData, from), Seq("country", "channel", "os"), "outer")
-        .withColumn("date", lit(reportFormat.print(fromDate)))
         .withColumnRenamed("country", "geo")
         // replace nulls in outer joins
         .na.fill(0, Seq("hours", "crashes", "google", "bing", "yahoo", "other", "actives", "new_records", "default"))
