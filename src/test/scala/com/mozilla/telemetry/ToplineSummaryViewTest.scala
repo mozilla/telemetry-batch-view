@@ -1,6 +1,6 @@
 package com.mozilla.telemetry
 
-import com.mozilla.telemetry.views.ToplineSummary
+import com.mozilla.telemetry.views.ToplineSummaryView
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.udf
@@ -37,7 +37,7 @@ case class PartialToplineMain(app_name: String,
                               submission_date_s3: String)
 
 
-class ToplineSummaryTest extends FlatSpec
+class ToplineSummaryViewTest extends FlatSpec
                             with Matchers
                             with PrivateMethodTester
                             with DataFrameSuiteBase {
@@ -119,28 +119,28 @@ class ToplineSummaryTest extends FlatSpec
   "createReportDataset" should "rename a column that goes through a udf" in {
     import sqlContext.implicits._
     val data = Seq(fakePing).toDF()
-    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate createReportDataset(data)
     assert(hasColumn(df, "country"))
   }
 
   it should "not count duplicate pings" in {
     import sqlContext.implicits._
     val data = Seq(fakePing, fakePing).toDF()
-    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate createReportDataset(data)
     assert(df.count() == 1)
   }
 
   it should "not count pings after reporting period" in {
     import sqlContext.implicits._
     val data = Seq(fakePing.copy(submission_date_s3 = endPeriodDate)).toDF()
-    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate createReportDataset(data)
     assert(df.count() == 0)
   }
 
   it should "handle empty column values" in {
     import sqlContext.implicits._
     val data = Seq(fakePing.copy(country = "", os = "")).toDF()
-    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate createReportDataset(data)
     var expect = "Other"
 
     val cols = Seq("country", "os")
@@ -155,7 +155,7 @@ class ToplineSummaryTest extends FlatSpec
     val data = Seq(fakePing.copy(subsession_length = 1800)).toDF()
     val expect = 0.5
 
-    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate createReportDataset(data)
     val result = df.head().getAs[Double]("hours")
 
     assert(expect == result)
@@ -166,7 +166,7 @@ class ToplineSummaryTest extends FlatSpec
     val data = Seq(fakePing.copy(subsession_length = -3600)).toDF()
     val expect = 0
 
-    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate createReportDataset(data)
     val result = df.head().getAs[Double]("hours")
 
     assert(expect == result)
@@ -177,7 +177,7 @@ class ToplineSummaryTest extends FlatSpec
     val data = Seq(fakePing.copy(subsession_length = 181 * 24 * 60 * 60)).toDF()
     val expect = 0
 
-    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate createReportDataset(data)
     val result = df.head().getAs[Double]("hours")
 
     assert(expect == result)
@@ -190,7 +190,7 @@ class ToplineSummaryTest extends FlatSpec
       .withColumn("subsession_length", nullify())
     val expect = 0
 
-    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate createReportDataset(data)
     val result = df.head().getAs[Double]("hours")
 
     assert(expect == result)
@@ -203,7 +203,7 @@ class ToplineSummaryTest extends FlatSpec
       .withColumn("profile_creation_date", nullify())
     val expect = 0
 
-    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate createReportDataset(data)
     val result = df.head().getAs[Long]("profile_creation_date")
 
     assert(expect == result)
@@ -214,7 +214,7 @@ class ToplineSummaryTest extends FlatSpec
     val data = Seq(fakePing.copy(country = "US")).toDF()
     val expect = "US"
 
-    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate createReportDataset(data)
     val result = df.head().getAs[String]("country")
 
     assert(expect == result)
@@ -225,7 +225,7 @@ class ToplineSummaryTest extends FlatSpec
     val data = Seq(fakePing.copy(country = "Atlantis")).toDF()
     val expect = "Other"
 
-    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate createReportDataset(data)
     val result = df.head().getAs[String]("country")
 
     assert(expect == result)
@@ -238,7 +238,7 @@ class ToplineSummaryTest extends FlatSpec
       .withColumn("country", nullify())
     val expect = "Other"
 
-    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate createReportDataset(data)
     val result = df.head().getAs[String]("country")
 
     assert(expect == result)
@@ -249,7 +249,7 @@ class ToplineSummaryTest extends FlatSpec
     val data = Seq(fakePing.copy(os = "Windows 98")).toDF()
     val expect = "Windows"
 
-    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate createReportDataset(data)
     val result = df.head().getAs[String]("os")
 
     assert(expect == result)
@@ -260,7 +260,7 @@ class ToplineSummaryTest extends FlatSpec
     val data = Seq(fakePing.copy(os = "FreeBSD")).toDF()
     val expect = "Linux"
 
-    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate createReportDataset(data)
     val result = df.head().getAs[String]("os")
 
     assert(expect == result)
@@ -271,7 +271,7 @@ class ToplineSummaryTest extends FlatSpec
     val data = Seq(fakePing.copy(os = "Ubuntu Linux")).toDF()
     val expect = "Linux"
 
-    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate createReportDataset(data)
     val result = df.head().getAs[String]("os")
 
     assert(expect == result)
@@ -282,7 +282,7 @@ class ToplineSummaryTest extends FlatSpec
     val data = Seq(fakePing.copy(os = "BeOS")).toDF()
     val expect = "Other"
 
-    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate createReportDataset(data)
     val result = df.head().getAs[String]("os")
 
     assert(expect == result)
@@ -293,7 +293,7 @@ class ToplineSummaryTest extends FlatSpec
     val data = Seq(fakePing.copy(os = "ltext-Windows")).toDF()
     val expect = "Other"
 
-    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate createReportDataset(data)
     val result = df.head().getAs[String]("os")
 
     assert(expect == result)
@@ -306,7 +306,7 @@ class ToplineSummaryTest extends FlatSpec
       .withColumn("os", nullify())
     val expect = "Other"
 
-    val df = ToplineSummary invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate createReportDataset(data)
     val result = df.head().getAs[String]("os")
 
     assert(expect == result)
@@ -316,11 +316,11 @@ class ToplineSummaryTest extends FlatSpec
   "searchAggregates" should "aggregate the number of yahoo counts" in {
     import sqlContext.implicits._
     val main_df = uniqueMain(Seq(fakePing, fakePing)).toDF()
-    val reportData = ToplineSummary invokePrivate createReportDataset(main_df)
+    val reportData = ToplineSummaryView invokePrivate createReportDataset(main_df)
     // 2 x (ping.yahoo = 4)
     val expect = 8
 
-    val df = ToplineSummary invokePrivate searchAggregates(reportData)
+    val df = ToplineSummaryView invokePrivate searchAggregates(reportData)
     val result = df.head().getAs[Long]("yahoo")
 
     assert(expect == result)
@@ -334,8 +334,8 @@ class ToplineSummaryTest extends FlatSpec
       ).toDF())
     val expect = 4
 
-    val reportData = ToplineSummary invokePrivate createReportDataset(data)
-    val df = ToplineSummary invokePrivate searchAggregates(reportData)
+    val reportData = ToplineSummaryView invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate searchAggregates(reportData)
     val result = df.head().getAs[Long]("yahoo")
 
     assert(expect == result)
@@ -355,8 +355,8 @@ class ToplineSummaryTest extends FlatSpec
         .toDF())
     val expect = 4
 
-    val reportData = ToplineSummary invokePrivate createReportDataset(data)
-    val df = ToplineSummary invokePrivate searchAggregates(reportData)
+    val reportData = ToplineSummaryView invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate searchAggregates(reportData)
     val result = df.head().getAs[Long]("yahoo")
 
     assert(expect == result)
@@ -369,8 +369,8 @@ class ToplineSummaryTest extends FlatSpec
       .withColumn("search_counts", nullify())
     val expect = 0
 
-    val reportData = ToplineSummary invokePrivate createReportDataset(data)
-    val df = ToplineSummary invokePrivate searchAggregates(reportData)
+    val reportData = ToplineSummaryView invokePrivate createReportDataset(data)
+    val df = ToplineSummaryView invokePrivate searchAggregates(reportData)
     val result = df.count()
 
     assert(expect == result)
@@ -382,7 +382,7 @@ class ToplineSummaryTest extends FlatSpec
     val data = Seq(fakePing).toDF()
     val expect = 0
 
-    val df = ToplineSummary invokePrivate searchAggregates(data)
+    val df = ToplineSummaryView invokePrivate searchAggregates(data)
     val result = df.head().getAs[Long]("bing")
 
     assert(expect == result)
@@ -391,11 +391,11 @@ class ToplineSummaryTest extends FlatSpec
   "easyAggregates" should "aggregate the number of total crashes" in {
     // assumes that country, channel, os are the same for groupby
     import sqlContext.implicits._
-    val reportData = ToplineSummary invokePrivate createReportDataset(Seq(fakePing).toDF())
+    val reportData = ToplineSummaryView invokePrivate createReportDataset(Seq(fakePing).toDF())
     val crashData = Seq(fake_crash, fake_crash).toDF()
     val expect = 2
 
-    val df = ToplineSummary invokePrivate easyAggregates(reportData, crashData)
+    val df = ToplineSummaryView invokePrivate easyAggregates(reportData, crashData)
     val result = df.head().getAs[Long]("crashes")
 
     assert(expect == result)
@@ -404,12 +404,12 @@ class ToplineSummaryTest extends FlatSpec
   it should "aggregate the number of hours correctly" in {
     import sqlContext.implicits._
     val main_df = uniqueMain(Seq(fakePing, fakePing)).toDF()
-    val reportData = ToplineSummary invokePrivate createReportDataset(main_df)
+    val reportData = ToplineSummaryView invokePrivate createReportDataset(main_df)
     val crashData = uniqueCrashes(Seq(fake_crash, fake_crash)).toDF()
     // 2 x (ping.hours = 1)
     val expect = 2
 
-    val df = ToplineSummary invokePrivate easyAggregates(reportData, crashData)
+    val df = ToplineSummaryView invokePrivate easyAggregates(reportData, crashData)
     val result = df.head().getAs[Double]("hours")
 
     assert(expect == result)
@@ -418,10 +418,10 @@ class ToplineSummaryTest extends FlatSpec
   it should "join the report and crash data together" in {
     import sqlContext.implicits._
     val main_df = uniqueMain(Seq(fakePing, fakePing)).toDF()
-    val reportData = ToplineSummary invokePrivate createReportDataset(main_df)
+    val reportData = ToplineSummaryView invokePrivate createReportDataset(main_df)
     val crashData = uniqueCrashes(Seq(fake_crash, fake_crash)).toDF()
 
-    val df = ToplineSummary invokePrivate easyAggregates(reportData, crashData)
+    val df = ToplineSummaryView invokePrivate easyAggregates(reportData, crashData)
 
     assert(hasColumn(df, "crashes") && hasColumn(df, "hours") && hasColumn(df, "yahoo"))
     // assert that the pings and crashes are in the same bucket
@@ -431,33 +431,33 @@ class ToplineSummaryTest extends FlatSpec
   it should "keep rows in report data not crash data" in {
     import sqlContext.implicits._
     val main_df = uniqueMain(Seq(fakePing.copy(country="DE"))).toDF()
-    val reportData = ToplineSummary invokePrivate createReportDataset(main_df)
+    val reportData = ToplineSummaryView invokePrivate createReportDataset(main_df)
     val crashData = uniqueCrashes(Seq(fake_crash)).toDF()
 
     // assert that a value is not dropped
-    val df = ToplineSummary invokePrivate easyAggregates(reportData, crashData)
+    val df = ToplineSummaryView invokePrivate easyAggregates(reportData, crashData)
     assert(df.count() == 2)
   }
 
   it should "keep rows in crash data not report data" in {
     import sqlContext.implicits._
     val main_df = uniqueMain(Seq(fakePing)).toDF()
-    val reportData = ToplineSummary invokePrivate createReportDataset(main_df)
+    val reportData = ToplineSummaryView invokePrivate createReportDataset(main_df)
     val crashData = uniqueCrashes(Seq(fake_crash.copy(country="DE"))).toDF()
 
     // assert that a value is not dropped
-    val df = ToplineSummary invokePrivate easyAggregates(reportData, crashData)
+    val df = ToplineSummaryView invokePrivate easyAggregates(reportData, crashData)
     assert(df.count() == 2)
   }
 
   it should "keep the entire set of rows" in {
     import sqlContext.implicits._
     val main_df = uniqueMain(Seq(fakePing, fakePing.copy(country="DE"))).toDF()
-    val reportData = ToplineSummary invokePrivate createReportDataset(main_df)
+    val reportData = ToplineSummaryView invokePrivate createReportDataset(main_df)
     val crashData = uniqueCrashes(Seq(fake_crash, fake_crash.copy(country="BR"))).toDF()
 
     // assert that a value is not dropped
-    val df = ToplineSummary invokePrivate easyAggregates(reportData, crashData)
+    val df = ToplineSummaryView invokePrivate easyAggregates(reportData, crashData)
     assert(df.count() == 3)
   }
 
@@ -465,10 +465,10 @@ class ToplineSummaryTest extends FlatSpec
     import sqlContext.implicits._
     val future = dateFormat.parseDateTime(futureDate).getMillis() / (1000 * 3600 * 24)
     val data = Seq(fakePing.copy(profile_creation_date = future)).toDF()
-    val reportData = ToplineSummary invokePrivate createReportDataset(data)
+    val reportData = ToplineSummaryView invokePrivate createReportDataset(data)
     val expect = 1
 
-    val df = ToplineSummary invokePrivate clientValues(reportData, fakeDate)
+    val df = ToplineSummaryView invokePrivate clientValues(reportData, fakeDate)
     val result = df.head().getAs[Long]("new_records")
 
     assert(expect == result)
@@ -478,10 +478,10 @@ class ToplineSummaryTest extends FlatSpec
     import sqlContext.implicits._
     val past = dateFormat.parseDateTime(pastDate).getMillis() / (1000 * 3600 * 24)
     val data = Seq(fakePing.copy(profile_creation_date = past)).toDF()
-    val reportData = ToplineSummary invokePrivate createReportDataset(data)
+    val reportData = ToplineSummaryView invokePrivate createReportDataset(data)
     val expect = 0
 
-    val df = ToplineSummary invokePrivate clientValues(reportData, fakeDate)
+    val df = ToplineSummaryView invokePrivate clientValues(reportData, fakeDate)
     val result = df.head().getAs[Long]("new_records")
 
     assert(expect == result)
@@ -494,10 +494,10 @@ class ToplineSummaryTest extends FlatSpec
       fakePing.copy(client_id = "bar", is_default_browser = true),
       fakePing.copy(client_id = "baz", is_default_browser = false)
     )).toDF()
-    val reportData = ToplineSummary invokePrivate createReportDataset(data)
+    val reportData = ToplineSummaryView invokePrivate createReportDataset(data)
     val expect = 2
 
-    val df = ToplineSummary invokePrivate clientValues(reportData, fakeDate)
+    val df = ToplineSummaryView invokePrivate clientValues(reportData, fakeDate)
     val result = df.head().getAs[Long]("default")
 
     assert(expect == result)
@@ -509,10 +509,10 @@ class ToplineSummaryTest extends FlatSpec
       fakePing.copy(client_id = "foo", is_default_browser = true),
       fakePing.copy(client_id = "foo", is_default_browser = true)
     )).toDF()
-    val reportData = ToplineSummary invokePrivate createReportDataset(data)
+    val reportData = ToplineSummaryView invokePrivate createReportDataset(data)
     val expect = 1
 
-    val df = ToplineSummary invokePrivate clientValues(reportData, fakeDate)
+    val df = ToplineSummaryView invokePrivate clientValues(reportData, fakeDate)
     val result = df.head().getAs[Long]("default")
 
     assert(expect == result)
@@ -525,10 +525,10 @@ class ToplineSummaryTest extends FlatSpec
       fakePing.copy(client_id = "bar", is_default_browser = true),
       fakePing.copy(client_id = "baz", is_default_browser = false)
     )).toDF()
-    val reportData = ToplineSummary invokePrivate createReportDataset(data)
+    val reportData = ToplineSummaryView invokePrivate createReportDataset(data)
     val expect = 3
 
-    val df = ToplineSummary invokePrivate clientValues(reportData, fakeDate)
+    val df = ToplineSummaryView invokePrivate clientValues(reportData, fakeDate)
     val result = df.head().getAs[Long]("actives")
 
     assert(expect == result)
