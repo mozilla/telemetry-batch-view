@@ -380,7 +380,9 @@ object ToplineSummaryView {
         .na.fill(0, Seq("hours", "crashes", "google", "bing", "yahoo", "other", "actives", "new_records", "default"))
 
       println(s"Saving report to $s3path")
-      finalReport.write.mode("overwrite").parquet(s3path)
+
+      // The size of the dataset is < 1mb, so coalesce into 1 partition.
+      finalReport.coalesce(1).write.mode("overwrite").parquet(s3path)
       println(s"Topline Report completed for $reportStart")
     } finally {
       s.stop()
