@@ -15,7 +15,7 @@ import scala.annotation.tailrec
 import scala.util.matching.Regex
 import scala.util.Random
 
-object ToplineSummary {
+object ToplineSummaryView {
   private val MainSummaryURL: String = "s3://telemetry-parquet/main_summary/v3"
 
   private val sparkConf: SparkConf = new SparkConf().setAppName("ToplineSummary")
