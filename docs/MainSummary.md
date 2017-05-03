@@ -29,14 +29,14 @@ Notes:
 
 * This dataset is updated daily via the [telemetry-airflow](https://github.com/mozilla/telemetry-airflow) infrastructure.
 * The job DAG runs every day shortly after midnight UTC.
-* The job saves the resulting data to S3 as [Parquet](https://parquet.apache.org/)-serialized [DataFrames](https://spark.apache.org/docs/latest/api/java/org/apache/spark/sql/DataFrame.html), under prefixes of the form `main_summary/v3/submission_date_s3=(YYYYMMDD SUBMISSION DATE)/sample_id=(INT VALUE)` in the `telemetry-parquet` bucket.
+* The job saves the resulting data to S3 as [Parquet](https://parquet.apache.org/)-serialized [DataFrames](https://spark.apache.org/docs/latest/api/java/org/apache/spark/sql/DataFrame.html), under prefixes of the form `main_summary/v4/submission_date_s3=(YYYYMMDD SUBMISSION DATE)/sample_id=(INT VALUE)` in the `telemetry-parquet` bucket.
 * Each of these prefixes is a partition. There is a partition for each `submissionDate` + `sampleId`. Records without a `clientId` will not have a `sampleId` either, and will end up with a sample_id partition of `__HIVE_DEFAULT_PARTITION__`.
 * The Main Summary data can be accessed [from Spark](https://gist.github.com/mreid-moz/518f7515aac54cd246635c333683ecce) via clusters launched at [analysis.telemetry.mozilla.org](https://analysis.telemetry.mozilla.org/) or via [Presto](https://prestodb.io/) at `sql.telemetry.mozillla.org`. The table is called `main_summary`.
 
 Schemas and Making Queries
 --------------------------
 
-As of 2017-04-24, the current version of the `main_summary` dataset is `v3`, and has a schema as follows:
+As of 2017-05-07, the current version of the `main_summary` dataset is `v4`, and has a schema as follows:
 ```
 root
  |-- document_id: string (nullable = false)
