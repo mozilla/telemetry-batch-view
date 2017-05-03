@@ -15,7 +15,7 @@ import com.mozilla.telemetry.scalars._
 import scala.util.{Success, Try}
 
 object MainSummaryView {
-  def schemaVersion: String = "v3"
+  def schemaVersion: String = "v4"
   def jobName: String = "main_summary"
 
   // Configuration for command line arguments
