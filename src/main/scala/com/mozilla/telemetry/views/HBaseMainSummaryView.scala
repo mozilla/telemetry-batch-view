@@ -106,7 +106,7 @@ object HBaseMainSummaryView {
     implicit val spark = SparkSession.builder().master("yarn").appName("HBaseMainSummaryView").getOrCreate()
 
     createHBaseTable()
-    etl(from, to, date => spark.read.parquet(s"s3://telemetry-parquet/main_summary/v3/submission_date_s3=$date"))
+    etl(from, to, date => spark.read.parquet(s"s3://telemetry-parquet/main_summary/${MainSummaryView.schemaVersion}/submission_date_s3=$date"))
 
     spark.stop()
   }
