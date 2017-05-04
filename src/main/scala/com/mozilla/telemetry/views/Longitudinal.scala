@@ -108,7 +108,7 @@ object LongitudinalView {
     val to = opt[String]("to", descr = "To submission date", required = true)
     val outputBucket = opt[String]("bucket", descr = "bucket", required = true)
     val includeOptin = opt[String]("optin-only", descr = "Boolean, whether to include opt-in data only. Defaults to false.", required = false)
-    val channels = opt[String]("channels", descr = "Comma separated string, which channels to include. Defaults to the four main channels.", required = false)
+    val channels = opt[String]("channels", descr = "Comma separated string, which channels to include. Defaults to all channels.", required = false)
     val samples = opt[String]("samples", descr = "Comma separated string, which samples to include. Defaults to 42.", required = false)
     val telemetrySource = opt[String]("source", descr = "Source for Dataset.from_source. Defaults to telemetry-sample.", required = false)
     verify()
@@ -124,10 +124,7 @@ object LongitudinalView {
       case _ => fmt.print(fmt.parseDateTime(to).minusMonths(6))
     }
 
-    val channels = opts.channels.get match {
-        case Some(c) => c.split(",")
-        case _ => Array("nightly", "aurora", "beta", "release")
-    }
+    val channels = opts.channels.get.map(_.split(","))
 
     val samples = opts.samples.get match {
         case Some(s) => s.split(",")
@@ -155,7 +152,7 @@ object LongitudinalView {
       }.where("sampleId") {
         case sample if samples.contains(sample) => true
       }.where("appUpdateChannel") {
-        case channel if channels.contains(channel) => true
+        case channel if channels.map(_.contains(channel)).getOrElse(true) => true
       }
 
     run(opts: Opts, messages)
