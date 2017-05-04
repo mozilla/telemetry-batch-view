@@ -27,11 +27,11 @@ root
  |-- app_version: string (nullable = true)
  |-- app_channel: string (nullable = true)
  |-- uid: string
- |-- deviceID: string (nullable = true)
+ |-- device_id: string (nullable = true)
  |-- when: integer
  |-- took: integer
  |-- why: string (nullable = true)
- |-- failureReason: struct (nullable = true)
+ |-- failure_reason: struct (nullable = true)
  |    |-- name: string
  |    |-- value: string (nullable = true)
  |-- status: struct (nullable = true)
@@ -47,13 +47,13 @@ root
  |    |    |-- name: string
  |    |    |-- took: integer
  |    |    |-- status: string (nullable = true)
- |    |    |-- failureReason: struct (nullable = true)
+ |    |    |-- failure_reason: struct (nullable = true)
  |    |    |    |-- name: string
  |    |    |    |-- value: string (nullable = true)
  |    |    |-- incoming: struct (nullable = true)
  |    |    |    |-- applied: integer
  |    |    |    |-- failed: integer
- |    |    |    |-- newFailed: integer
+ |    |    |    |-- new_failed: integer
  |    |    |    |-- reconciled: integer
  |    |    |-- outgoing: array (nullable = true)
  |    |    |    |-- element: struct (containsNull = false)
@@ -63,7 +63,7 @@ root
  |    |    |    |-- version: integer
  |    |    |    |-- checked: integer
  |    |    |    |-- took: integer
- |    |    |    |-- failureReason: struct (nullable = true)
+ |    |    |    |-- failure_reason: struct (nullable = true)
  |    |    |    |    |-- name: string
  |    |    |    |    |-- value: string (nullable = true)
  |    |    |    |-- problems: array (nullable = true)

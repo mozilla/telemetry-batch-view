@@ -143,7 +143,7 @@ class SyncViewTest extends FlatSpec with Matchers{
       engine.getAs[Long]("took") should be ((jsonengine \ "took").extractOrElse[Long](0))
       engine.getAs[String]("status") should be ((jsonengine \ "status").extractOrElse[String](null))
       // failureReason can be null or a row with "name" and "value
-      engine.getAs[GenericRowWithSchema]("failureReason") match {
+      engine.getAs[GenericRowWithSchema]("failure_reason") match {
         case null =>
           (jsonengine \ "failureReason") should be (JNothing)
         case reason =>
@@ -185,7 +185,7 @@ class SyncViewTest extends FlatSpec with Matchers{
     val firstPing = (ping \ "payload" \ "syncs")(0)
     firstSync.getAs[Long]("when") should be ((firstPing \ "when").extract[Long])
     firstSync.getAs[String]("uid") should be ((firstPing \ "uid").extract[String])
-    firstSync.getAs[String]("deviceID") should be ((firstPing \ "deviceID").extract[String])
+    firstSync.getAs[String]("device_id") should be ((firstPing \ "deviceID").extract[String])
     firstSync.getAs[Long]("took") should be ((firstPing \ "took").extract[Long])
 
     firstSync.getAs[GenericRowWithSchema]("status") should be (null)
@@ -206,7 +206,7 @@ class SyncViewTest extends FlatSpec with Matchers{
 
     secondSync.getAs[Long]("when") should be ((secondPing \ "when").extract[Long])
     secondSync.getAs[String]("uid") should be ((secondPing \ "uid").extract[String])
-    secondSync.getAs[String]("deviceID") should be ((secondPing \ "deviceID").extract[String])
+    secondSync.getAs[String]("device_id") should be ((secondPing \ "deviceID").extract[String])
     secondSync.getAs[Long]("took") should be ((secondPing \ "took").extract[Long])
 
     secondSync.getAs[GenericRowWithSchema]("status") should be (null)

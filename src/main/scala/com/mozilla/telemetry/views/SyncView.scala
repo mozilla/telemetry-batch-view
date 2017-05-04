@@ -13,7 +13,7 @@ import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._ // Just for my attempted mocks below.....
 
 object SyncView {
-  def schemaVersion: String = "v1"
+  def schemaVersion: String = "v2"
   def jobName: String = "sync_summary"
 
   // Configuration for command line arguments
@@ -61,7 +61,7 @@ object SyncView {
       val currentDateString = currentDate.toString("yyyyMMdd")
 
       println("=======================================================================================")
-      println(s"BEGINNING JOB $jobName FOR $currentDateString")
+      println(s"BEGINNING JOB $jobName $schemaVersion FOR $currentDateString")
 
       val ignoredCount = sc.longAccumulator("Number of Records Ignored")
       val processedCount = sc.longAccumulator("Number of Records Processed")
@@ -153,7 +153,7 @@ object SyncPingConverter {
   private val incomingType = StructType(List(
     StructField("applied", LongType, nullable = false),
     StructField("failed", LongType, nullable = false),
-    StructField("newFailed", LongType, nullable = false),
+    StructField("new_failed", LongType, nullable = false),
     StructField("reconciled", LongType, nullable = false)
   ))
 
@@ -184,7 +184,7 @@ object SyncPingConverter {
     StructField("took", LongType, nullable = false), // milliseconds
     StructField("problems", ArrayType(validationProblemType, containsNull = false), nullable = true),
     // present if the validator failed for some reason.
-    StructField("failureReason", failureType, nullable = true)
+    StructField("failure_reason", failureType, nullable = true)
   ))
 
   // The schema for an engine.
@@ -192,7 +192,7 @@ object SyncPingConverter {
     StructField("name", StringType, nullable = false),
     StructField("took", LongType, nullable = false),
     StructField("status", StringType, nullable = true),
-    StructField("failureReason", failureType, nullable = true),
+    StructField("failure_reason", failureType, nullable = true),
     StructField("incoming", incomingType, nullable = true),
     StructField("outgoing", ArrayType(outgoingType, containsNull = false), nullable = true),
     StructField("validation", validationType, nullable = true)
@@ -216,10 +216,10 @@ object SyncPingConverter {
 
     // These fields are unique to the sync pings.
     StructField("uid", StringType, nullable = false),
-    StructField("deviceID", StringType, nullable = true), // should always exists, but old pings didn't record it.
+    StructField("device_id", StringType, nullable = true), // should always exists, but old pings didn't record it.
     StructField("when", LongType, nullable = false),
     StructField("took", LongType, nullable = false),
-    StructField("failureReason", failureType, nullable = true),
+    StructField("failure_reason", failureType, nullable = true),
     StructField("status", statusType, nullable = true),
     // "why" is defined in the client-side schema but currently never populated.
     StructField("why", StringType, nullable = true),
