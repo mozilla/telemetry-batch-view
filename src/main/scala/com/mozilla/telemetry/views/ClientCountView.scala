@@ -76,7 +76,7 @@ object ClientCountView {
     hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
     sqlContext.udf.register("hll_create", hllCreate _)
 
-    val df = sqlContext.read.load("s3://telemetry-parquet/main_summary/v3")
+    val df = sqlContext.read.load(s"s3://telemetry-parquet/main_summary/${MainSummaryView.schemaVersion}")
     val subset = df.where(s"submission_date_s3 >= $from and submission_date_s3 <= $to")
     val aggregates = aggregate(subset).coalesce(32)
 
