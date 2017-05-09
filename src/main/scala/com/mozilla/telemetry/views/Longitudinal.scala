@@ -895,19 +895,22 @@ object LongitudinalView {
     }
   }
 
-  private def subsessionStartDate2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
+  private def sessionStartDates2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
     implicit val formats = DefaultFormats
 
-    val fieldValues = payloads.map{ case (x) =>
-      parse(x.getOrElse("payload.info", return).asInstanceOf[String]) \ "subsessionStartDate" match {
-        case JString(value) =>
-          normalizeISOTimestamp(value)
-        case _ =>
-          return
-      }
+    def extractTimestamps(field: String): java.util.Collection[String] = {
+      payloads.flatMap{ _.get("payload.info") }
+        .flatMap{ x => parse(x.asInstanceOf[String]) \ field match {
+          case JString(value) =>
+            Some(normalizeISOTimestamp(value))
+          case _ =>
+            None
+        }
+      }.asJavaCollection
     }
 
-    root.set("subsession_start_date", fieldValues.asJavaCollection)
+    root.set("subsession_start_date", extractTimestamps("subsessionStartDate"))
+    root.set("session_start_date", extractTimestamps("sessionStartDate"))
   }
 
   private def profileDates2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
@@ -1008,7 +1011,7 @@ object LongitudinalView {
       keyedHistograms2Avro(sorted, root, schema, histogramDefinitions)
       scalars2Avro(sorted, root, scalarDefinitions)
       keyedScalars2Avro(sorted, root, scalarDefinitions)
-      subsessionStartDate2Avro(sorted, root, schema)
+      sessionStartDates2Avro(sorted, root, schema)
       profileDates2Avro(sorted, root, schema)
     } catch {
       case e : Throwable =>
