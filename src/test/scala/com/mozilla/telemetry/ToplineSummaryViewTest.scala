@@ -10,13 +10,6 @@ import org.scalatest._
 
 import scala.util.Try
 
-
-case class Crashes(document_id: String,
-                   country: String,
-                   channel: String,
-                   os: String)
-
-
 case class SearchCounts(engine: String,
                         source: String,
                         count: Some[Long])
@@ -72,13 +65,6 @@ class ToplineSummaryViewTest extends FlatSpec
       subsession_length = 3600,
       submission_date_s3 = fakeDate)
 
-  private val fake_crash =
-    Crashes(
-      document_id = "unique_id",
-      country = "US",
-      channel = "beta",
-      os = "Linux")
-
   /* Private methods that we will be testing. The `createReportDataset` method will be the
    * primary method of testing the UDFs, since testing them directly is neigh impossible. */
   private val createReportDataset = PrivateMethod[DataFrame]('createReportDataset)(_: DataFrame, fakeDate, endPeriodDate)
@@ -111,9 +97,6 @@ class ToplineSummaryViewTest extends FlatSpec
   private def hasColumn(df: DataFrame, column_name: String): Boolean = Try(df(column_name)).isSuccess
   private def uniqueMain(main: Seq[PartialToplineMain]): Seq[PartialToplineMain] = {
     main.zip(1 to main.length).map({ case (ping, id) => ping.copy(document_id = id.toString)})
-  }
-  private def uniqueCrashes(crashes: Seq[Crashes]): Seq[Crashes] = {
-    crashes.zip(1 to crashes.length).map({ case (ping, id) => ping.copy(document_id = id.toString)})
   }
 
   "createReportDataset" should "rename a column that goes through a udf" in {
@@ -388,77 +371,29 @@ class ToplineSummaryViewTest extends FlatSpec
     assert(expect == result)
   }
 
-  "easyAggregates" should "aggregate the number of total crashes" in {
-    // assumes that country, channel, os are the same for groupby
-    import sqlContext.implicits._
-    val reportData = ToplineSummaryView invokePrivate createReportDataset(Seq(fakePing).toDF())
-    val crashData = Seq(fake_crash, fake_crash).toDF()
-    val expect = 2
-
-    val df = ToplineSummaryView invokePrivate easyAggregates(reportData, crashData)
-    val result = df.head().getAs[Long]("crashes")
-
-    assert(expect == result)
-  }
-
-  it should "aggregate the number of hours correctly" in {
+  "easyAggregates" should "aggregate the number of hours correctly" in {
     import sqlContext.implicits._
     val main_df = uniqueMain(Seq(fakePing, fakePing)).toDF()
     val reportData = ToplineSummaryView invokePrivate createReportDataset(main_df)
-    val crashData = uniqueCrashes(Seq(fake_crash, fake_crash)).toDF()
     // 2 x (ping.hours = 1)
     val expect = 2
 
-    val df = ToplineSummaryView invokePrivate easyAggregates(reportData, crashData)
+    val df = ToplineSummaryView invokePrivate easyAggregates(reportData)
     val result = df.head().getAs[Double]("hours")
 
     assert(expect == result)
   }
 
-  it should "join the report and crash data together" in {
+  it should "join the report and search aggregates" in {
     import sqlContext.implicits._
     val main_df = uniqueMain(Seq(fakePing, fakePing)).toDF()
     val reportData = ToplineSummaryView invokePrivate createReportDataset(main_df)
-    val crashData = uniqueCrashes(Seq(fake_crash, fake_crash)).toDF()
 
-    val df = ToplineSummaryView invokePrivate easyAggregates(reportData, crashData)
+    val df = ToplineSummaryView invokePrivate easyAggregates(reportData)
 
-    assert(hasColumn(df, "crashes") && hasColumn(df, "hours") && hasColumn(df, "yahoo"))
+    assert(hasColumn(df, "hours") && hasColumn(df, "yahoo"))
     // assert that the pings and crashes are in the same bucket
     assert(df.count() == 1)
-  }
-
-  it should "keep rows in report data not crash data" in {
-    import sqlContext.implicits._
-    val main_df = uniqueMain(Seq(fakePing.copy(country="DE"))).toDF()
-    val reportData = ToplineSummaryView invokePrivate createReportDataset(main_df)
-    val crashData = uniqueCrashes(Seq(fake_crash)).toDF()
-
-    // assert that a value is not dropped
-    val df = ToplineSummaryView invokePrivate easyAggregates(reportData, crashData)
-    assert(df.count() == 2)
-  }
-
-  it should "keep rows in crash data not report data" in {
-    import sqlContext.implicits._
-    val main_df = uniqueMain(Seq(fakePing)).toDF()
-    val reportData = ToplineSummaryView invokePrivate createReportDataset(main_df)
-    val crashData = uniqueCrashes(Seq(fake_crash.copy(country="DE"))).toDF()
-
-    // assert that a value is not dropped
-    val df = ToplineSummaryView invokePrivate easyAggregates(reportData, crashData)
-    assert(df.count() == 2)
-  }
-
-  it should "keep the entire set of rows" in {
-    import sqlContext.implicits._
-    val main_df = uniqueMain(Seq(fakePing, fakePing.copy(country="DE"))).toDF()
-    val reportData = ToplineSummaryView invokePrivate createReportDataset(main_df)
-    val crashData = uniqueCrashes(Seq(fake_crash, fake_crash.copy(country="BR"))).toDF()
-
-    // assert that a value is not dropped
-    val df = ToplineSummaryView invokePrivate easyAggregates(reportData, crashData)
-    assert(df.count() == 3)
   }
 
   "clientValues" should "count a new client" in {
