@@ -26,6 +26,10 @@ object GeneralizedLongitudinalView {
       "to",
        descr = "To submission date",
        required = true)
+    val where = opt[String](
+      "where",
+      descr = "Where SQL clause, filtering input data. E.g. \"normalized_channel = 'nightly'\"",
+      required = false)
     val groupingColumn = opt[String](
       "grouping-column",
       descr = "Column to group data by. Defaults to client_id",
@@ -66,6 +70,11 @@ object GeneralizedLongitudinalView {
       case _ => fmt.print(fmt.parseDateTime(to).minusMonths(6))
     }
 
+    val where = opts.where.get match {
+      case Some(f) => s"AND $f"
+      case _ => ""
+    }
+
     val groupingColumn = opts.groupingColumn.get match {
       case Some(gc) => gc
       case _ => "client_id"
@@ -98,6 +107,7 @@ object GeneralizedLongitudinalView {
       FROM $inputTablename
       WHERE $from <= $submissionDateCol
         AND $submissionDateCol <= $to
+        $where
     """)
 
     val numParquetFiles = opts.numParquetFiles.get match {
