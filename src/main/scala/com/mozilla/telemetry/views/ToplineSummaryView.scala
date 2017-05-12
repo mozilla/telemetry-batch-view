@@ -146,50 +146,6 @@ object ToplineSummaryView {
         convertSecondToHours($"subsession_length".cast(DoubleType)).alias("hours"))
   }
 
-  /**
-    * Create the dataset required for counting the number of crashes
-    *
-    * This is currently implemented by searching through the raw pings. This could be done using
-    * the crash summary dataset.
-    *
-    * @param startDate start date in yyyymmdd
-    * @param endDate end date in yyyymmdd
-    * @return Dataset where every row represents a single crash
-    */
-  private def createCrashDataset(startDate: String, endDate: String): DataFrame = {
-    val s = session
-    import s.implicits._
-
-    val CrashSchema = StructType(List(
-      StructField("document_id", StringType, nullable = false),
-      StructField("country", StringType, nullable = true),
-      StructField("channel", StringType, nullable = true),
-      StructField("os", StringType, nullable = true)))
-
-    implicit val sc = SparkContext.getOrCreate(sparkConf)
-    val messages: RDD[Message] = Dataset("telemetry")
-      .where("docType") { case "crash" => true }
-      .where("appName") { case "Firefox" => true }
-      .where("submissionDate") { case date => startDate <= date && date < endDate }
-      .records()
-
-
-    val crashRDD = messages.flatMap(m => {
-      messageToRow(m) match {
-        case None => None
-        case x => x
-      }
-    })
-    val crashData = s.createDataFrame(crashRDD, CrashSchema)
-
-    crashData
-      .dropDuplicates("document_id")
-      .select(
-        normalizeCountry($"country").alias("country"),
-        $"channel",
-        normalizeOS($"os").alias("os"))
-  }
-
   private def messageToRow(message: Message): Option[Row] = {
     val fields = message.fieldsAsMap
 
@@ -248,14 +204,9 @@ object ToplineSummaryView {
     * Create the easy aggregates: total running hours, crashes, and search counts per country, os, and channel.
     *
     * @param reportData dataframe containing information for hours and searches
-    * @param crashData dataframe containing information for crashes
     * @return dataframe with aggregated values
     */
-  private def easyAggregates(reportData: DataFrame, crashData: DataFrame): DataFrame = {
-    val crashAggregate: DataFrame = crashData
-      .groupBy("country", "channel", "os")
-      .agg(count("*").alias("crashes"))
-
+  private def easyAggregates(reportData: DataFrame): DataFrame = {
     val searchAggregate = searchAggregates(reportData)
 
     val hourAggregate = reportData
@@ -265,7 +216,6 @@ object ToplineSummaryView {
 
     val groups = Seq("country", "channel", "os")
     hourAggregate
-      .join(crashAggregate, groups, "outer")
       .join(searchAggregate, groups, "outer")
   }
 
@@ -371,11 +321,13 @@ object ToplineSummaryView {
       val dataset: DataFrame = s.read.parquet(MainSummaryURL)
 
       val reportData = createReportDataset(dataset, from, to)
-      val crashData = createCrashDataset(from, to)
 
-      val finalReport = easyAggregates(reportData, crashData)
+      val finalReport = easyAggregates(reportData)
         .join(clientValues(reportData, from), Seq("country", "channel", "os"), "outer")
         .withColumnRenamed("country", "geo")
+        // Bug 1364617 removed generating crash aggregates.
+        // This column defaults to 0 to maintain the schema, but it is just a dummy value.
+        .withColumn("crashes", lit(0))
         // replace nulls in outer joins
         .na.fill(0, Seq("hours", "crashes", "google", "bing", "yahoo", "other", "actives", "new_records", "default"))
 
