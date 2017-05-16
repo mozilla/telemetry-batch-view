@@ -5,7 +5,7 @@ import com.mozilla.telemetry.utils.CollectList
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.{DataFrame}
 import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 
 import com.github.nscala_time.time.Imports._
