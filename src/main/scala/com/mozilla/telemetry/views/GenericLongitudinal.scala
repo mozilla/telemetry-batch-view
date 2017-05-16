@@ -30,6 +30,11 @@ object GenericLongitudinalView {
       "to",
        descr = "To submission date",
        required = true)
+    val selection = opt[String](
+      "select",
+      descr = "Select statement to retrieve data with; e.g. \"substr(subsession_start_date, 0, 10) as activity_date\". " +
+                "If none given, defaults to all input columns",
+      required = false)
     val where = opt[String](
       "where",
       descr = "Where SQL clause, filtering input data. E.g. \"normalized_channel = 'nightly'\"",
@@ -88,6 +93,11 @@ object GenericLongitudinalView {
       case _ => fmt.print(fmt.parseDateTime(to).minusMonths(6))
     }
 
+    val selection = opts.selection.get match {
+      case Some(s) => s
+      case _ => "*"
+    }
+
     val where = opts.where.get match {
       case Some(f) => s"AND $f"
       case _ => ""
@@ -113,7 +123,7 @@ object GenericLongitudinalView {
     val outputPath = opts.outputPath()
 
     val data = hiveContext.sql(s"""
-      SELECT *
+      SELECT $selection
       FROM $tempTableName
       WHERE $from <= $submissionDateCol
         AND $submissionDateCol <= $to
