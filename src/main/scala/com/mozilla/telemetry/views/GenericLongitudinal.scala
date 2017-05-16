@@ -80,7 +80,7 @@ object GenericLongitudinalView {
       case _ => "client_id"
     }
 
-    val submissionDateCol = opts.groupingColumn.get match {
+    val submissionDateCol = opts.submissionDateCol.get match {
       case Some(sd) => sd
       case _ => "submission_date_s3"
     }
