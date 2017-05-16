@@ -63,6 +63,10 @@ object GenericLongitudinalView {
       "num-parquet-files",
       descr = "Number of parquet files to output. Defaults to the number of input files",
       required = false)
+    val version = opt[String](
+      "version",
+      descr = "The version for the output. Defaults to v<from><to>",
+      required = false)
     requireOne(inputTablename, inputFiles)
     verify()
   }
@@ -135,10 +139,15 @@ object GenericLongitudinalView {
       case _ => data.rdd.getNumPartitions
     }
 
+    val version = opts.version.get match {
+      case Some(v) => v
+      case _ => s"v$from$to"
+    }
+
     group(data, groupingColumn, orderingColumns, maxArrayLength)
       .repartition(numParquetFiles)
       .write
-      .parquet(s"s3://$outputPath")
+      .parquet(s"s3://$outputPath/$version")
 
     sc.stop()
   }
