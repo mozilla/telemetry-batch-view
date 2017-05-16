@@ -18,6 +18,10 @@ object GenericLongitudinalView {
       "tablename",
       descr = "Table to pull data from",
       required = true)
+    val inputFiles = opt[String](
+      "files",
+      descr = "s3 location to pull data from. Cannot be used with --tablename",
+      required = false)
     val from = opt[String](
       "from",
        descr = "From submission date. Defaults to 6 months before `to`.",
@@ -54,17 +58,31 @@ object GenericLongitudinalView {
       "num-parquet-files",
       descr = "Number of parquet files to output. Defaults to the number of input files",
       required = false)
+    requireOne(inputTablename, inputFiles)
     verify()
   }
 
   def main(args: Array[String]): Unit = {
+    val sparkConf = new SparkConf().setAppName(this.getClass.getName)
+    sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
+
+    val sc = new SparkContext(sparkConf)
+    val hiveContext = new HiveContext(sc)
+
+    import hiveContext.implicits._
+
     val opts = new Opts(args)
     val fmt = DateTimeFormat.forPattern("yyyyMMdd")
 
-    val inputTablename = opts.inputTablename()
+    val df = opts.inputTablename.get match {
+      case Some(t) => hiveContext.sql(s"SELECT * FROM $t")
+      case _ => hiveContext.read.load(opts.inputFiles())
+    }
+
+    val tempTableName = "genericLongitudinalTempTable"
+    df.registerTempTable(tempTableName)
 
     val to = opts.to()
-
     val from = opts.from.get match {
       case Some(f) => f
       case _ => fmt.print(fmt.parseDateTime(to).minusMonths(6))
@@ -94,17 +112,9 @@ object GenericLongitudinalView {
 
     val outputPath = opts.outputPath()
 
-    val sparkConf = new SparkConf().setAppName(this.getClass.getName)
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
-
-    val sc = new SparkContext(sparkConf)
-    val hiveContext = new HiveContext(sc)
-
-    import hiveContext.implicits._
-
     val data = hiveContext.sql(s"""
       SELECT *
-      FROM $inputTablename
+      FROM $tempTableName
       WHERE $from <= $submissionDateCol
         AND $submissionDateCol <= $to
         $where
