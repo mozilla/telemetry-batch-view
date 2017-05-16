@@ -4,11 +4,11 @@ import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.types._
 import org.scalatest.FlatSpec
 
-class GeneralizedLongitudinalTest extends FlatSpec {
+class GenericLongitudinalTest extends FlatSpec {
   val fixture = {
     new {
       private val spark = SparkSession.builder()
-        .appName("Generalized Longitudinal Test")
+        .appName("Generic Longitudinal Test")
         .master("local[1]")
         .getOrCreate()
 
@@ -25,14 +25,14 @@ class GeneralizedLongitudinalTest extends FlatSpec {
       )
 
       private val df = data.toDF(colNames: _*)
-      private val groupedDf = GeneralizedLongitudinalView.group(df, maxLength=Some(3))
+      private val groupedDf = GenericLongitudinalView.group(df, maxLength=Some(3))
 
       val longitudinal = groupedDf.collect()
       val fieldIndex: String => Integer = longitudinal.head.fieldIndex
 
-      val intOrdering = GeneralizedLongitudinalView.group(df, orderColumns=List("ordering")).collect()
-      val secondaryOrdering = GeneralizedLongitudinalView.group(df, orderColumns=List("os", "ordering")).collect()
-      val alternateGrouping = GeneralizedLongitudinalView.group(df, groupColumn="os").collect()
+      val intOrdering = GenericLongitudinalView.group(df, orderColumns=List("ordering")).collect()
+      val secondaryOrdering = GenericLongitudinalView.group(df, orderColumns=List("os", "ordering")).collect()
+      val alternateGrouping = GenericLongitudinalView.group(df, groupColumn="os").collect()
 
       private val nestedDataColNames = List("group", "order", "nest1", "nest2", "map")
       val nestedData = List(
@@ -40,7 +40,7 @@ class GeneralizedLongitudinalTest extends FlatSpec {
         (1, 1, ("world", 84), ("world", 84), Map("answer" -> "42"))
       )
 
-      val nestedGroup = GeneralizedLongitudinalView.group(
+      val nestedGroup = GenericLongitudinalView.group(
         nestedData.toDF(nestedDataColNames: _*),
         groupColumn="group",
         orderColumns=List("order")
@@ -56,7 +56,7 @@ class GeneralizedLongitudinalTest extends FlatSpec {
           StructField("ordering", IntegerType, nullable = false)))
 
       private val longDF = spark.createDataFrame(longRDD, longSchema)
-      val groupedLongDF = GeneralizedLongitudinalView.group(
+      val groupedLongDF = GenericLongitudinalView.group(
         longDF,
         orderColumns=List("long_val")
       ).collect()

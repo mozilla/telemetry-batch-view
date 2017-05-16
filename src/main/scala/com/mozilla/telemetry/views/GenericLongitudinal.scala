@@ -11,7 +11,7 @@ import org.apache.spark.sql.types.StructType
 import com.github.nscala_time.time.Imports._
 import org.rogach.scallop._
 
-object GeneralizedLongitudinalView {
+object GenericLongitudinalView {
 
   private class Opts(args: Array[String]) extends ScallopConf(args) {
     val inputTablename = opt[String](
