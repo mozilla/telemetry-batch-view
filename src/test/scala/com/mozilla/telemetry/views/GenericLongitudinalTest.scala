@@ -1,10 +1,71 @@
 package com.mozilla.telemetry.views
 
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.types._
 import org.scalatest.FlatSpec
 
 class GenericLongitudinalTest extends FlatSpec {
+  val tablename = "test_table"
+  val colNames = List("random_data", "client_id", "submission_date_s3", "os", "ordering")
+  val data = List(
+    (201742, "1", "20170101", "Android", 1),
+    (199,"1", "20170103", "Android", 3),
+    (42, "1", "20170102", "iOS", 2),
+    (44, "1", "20171212", "nothing", 4),
+    (4242, "2", "20160102", "Android", 1),
+    (2424, "2", "20160101", null, 2)
+  )
+
+  val baseArgs =
+    "--tablename" :: tablename ::
+    "--from" :: "20160101" ::
+    "--to" :: "20171212" ::
+    "--output-path" :: "missing-bucket" :: Nil
+
+  val args =
+    "--max-array-length" :: "3" :: baseArgs
+
+  val intOrderingArgs =
+    "--ordering-columns" :: "ordering" :: baseArgs
+
+  val secondaryOrderingArgs =
+    "--ordering-columns" :: "os,ordering" :: baseArgs
+
+  val alternateGroupingArgs =
+    "--grouping-column" :: "os" :: baseArgs
+
+  val nestedDataTableName = "nested_table"
+  val nestedDataColNames = List("group", "order", "nest1", "nest2", "map", "submission_date_s3")
+  val nestedData = List(
+    (1, 2, ("hello", 42), ("hello", 42), Map("hello" -> "world"), "20170101"),
+    (1, 1, ("world", 84), ("world", 84), Map("answer" -> "42"), "20170101")
+  )
+
+  val nestedArgs =
+    "--tablename" :: nestedDataTableName ::
+    "--to" :: "20170201" ::
+    "--output-path" :: "missing-bucket" ::
+    "--grouping-column" :: "group" ::
+    "--ordering-columns" :: "order" :: Nil
+
+  val longTempTableName = "longTempTable"
+  val longData = List(Row("a", null, 2, "1"), Row("a", 1: Long, 1, "2"))
+  val longSchema =
+    StructType(List(
+      StructField("client_id", StringType, nullable = false),
+      StructField("long_val", LongType, nullable = true),
+      StructField("ordering", IntegerType, nullable = false),
+      StructField("submission", StringType, nullable = false)))
+
+  val longArgs =
+    "--tablename" :: longTempTableName ::
+    "--from" :: "0" ::
+    "--to" :: "4" ::
+    "--submission-date-col" :: "submission" ::
+    "--output-path" :: "missing-bucket" ::
+    "--ordering-columns" :: "long_val" :: Nil
+
   val fixture = {
     new {
       private val spark = SparkSession.builder()
@@ -12,53 +73,44 @@ class GenericLongitudinalTest extends FlatSpec {
         .master("local[1]")
         .getOrCreate()
 
+      private val sc = spark.sparkContext
+      private val hiveContext = new HiveContext(sc)
+
       import spark.implicits._
-      private val colNames = List("random_data", "client_id", "submission_date_s3", "os", "ordering")
+      data.toDF(colNames: _*).registerTempTable(tablename)
 
-      val data = List(
-        (201742, "1", "20170101", "Android", 1),
-        (199,"1", "20170103", "Android", 3),
-        (42, "1", "20170102", "iOS", 2),
-        (44, "1", "20171212", "nothing", 4),
-        (4242, "2", "20160101", "Android", 1),
-        (2424, "2", null, null, 2)
-      )
-
-      private val df = data.toDF(colNames: _*)
-      private val groupedDf = GenericLongitudinalView.group(df, maxLength=Some(3))
+      private val opts = new GenericLongitudinalView.Opts(args.toArray)
+      private val groupedDf = GenericLongitudinalView.run(hiveContext, opts)
 
       val longitudinal = groupedDf.collect()
       val fieldIndex: String => Integer = longitudinal.head.fieldIndex
 
-      val intOrdering = GenericLongitudinalView.group(df, orderColumns=List("ordering")).collect()
-      val secondaryOrdering = GenericLongitudinalView.group(df, orderColumns=List("os", "ordering")).collect()
-      val alternateGrouping = GenericLongitudinalView.group(df, groupColumn="os").collect()
+      val intOrdering = GenericLongitudinalView.run(
+        hiveContext,
+        new GenericLongitudinalView.Opts(intOrderingArgs.toArray)
+      ).collect()
 
-      private val nestedDataColNames = List("group", "order", "nest1", "nest2", "map")
-      val nestedData = List(
-        (1, 2, ("hello", 42), ("hello", 42), Map("hello" -> "world")),
-        (1, 1, ("world", 84), ("world", 84), Map("answer" -> "42"))
-      )
+      val secondaryOrdering = GenericLongitudinalView.run(
+        hiveContext,
+        new GenericLongitudinalView.Opts(secondaryOrderingArgs.toArray)
+      ).collect()
 
-      val nestedGroup = GenericLongitudinalView.group(
-        nestedData.toDF(nestedDataColNames: _*),
-        groupColumn="group",
-        orderColumns=List("order")
+      val alternateGrouping = GenericLongitudinalView.run(
+        hiveContext,
+        new GenericLongitudinalView.Opts(alternateGroupingArgs.toArray)
+      ).collect()
+
+      nestedData.toDF(nestedDataColNames: _*).registerTempTable(nestedDataTableName)
+      val nestedGroup = GenericLongitudinalView.run(
+        hiveContext,
+        new GenericLongitudinalView.Opts(nestedArgs.toArray)
       ).collect()
 
       // Test Long sorting - can't use List.toDF for nulled Long
-      private val longVal: Long = 1
-      private val longRDD = spark.sparkContext.parallelize(List(Row("a", null, 2), Row("a", longVal, 1)))
-      private val longSchema =
-        StructType(List(
-          StructField("client_id", StringType, nullable = false),
-          StructField("long_val", LongType, nullable = true),
-          StructField("ordering", IntegerType, nullable = false)))
-
-      private val longDF = spark.createDataFrame(longRDD, longSchema)
-      val groupedLongDF = GenericLongitudinalView.group(
-        longDF,
-        orderColumns=List("long_val")
+      spark.createDataFrame(sc.parallelize(longData), longSchema).registerTempTable(longTempTableName)
+      val groupedLongDF = GenericLongitudinalView.run(
+        hiveContext,
+        new GenericLongitudinalView.Opts(longArgs.toArray)
       ).collect()
 
       spark.stop()
@@ -106,13 +158,13 @@ class GenericLongitudinalTest extends FlatSpec {
       .map(if(_) 1 else 0)
       .reduce(_ + _)
 
-    assert(numNulls == 2)
+    assert(numNulls == 1)
   }
 
   "longitudinal" must "sort null last" in {
-    val row = fixture.longitudinal
+    val row = fixture.secondaryOrdering
               .filter(_.get(fixture.fieldIndex("client_id")) == "2")
-              .map(_.getSeq[String](fixture.fieldIndex("submission_date_s3")))
+              .map(_.getSeq[String](fixture.fieldIndex("os")))
               .head
 
     assert(row.indexOf(null) == row.length - 1)
@@ -153,8 +205,8 @@ class GenericLongitudinalTest extends FlatSpec {
     val mapCol = fixture.nestedGroup
                  .head.getSeq[Map[String, String]](4)
 
-    assert(mapCol(0) == fixture.nestedData(0)._5)
-    assert(mapCol(1) == fixture.nestedData(1)._5)
+    assert(mapCol(0) == nestedData(0)._5)
+    assert(mapCol(1) == nestedData(1)._5)
   }
 
   "Long type" must "handle nulls correctly" in {
