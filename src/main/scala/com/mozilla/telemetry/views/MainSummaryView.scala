@@ -252,6 +252,8 @@ object MainSummaryView {
       // Messy list of known enum values for POPUP_NOTIFICATION_STATS.
       val popupNotificationStatsKeys = (0 to 8).union(10 to 11).union(20 to 28).union(30 to 31).map(_.toString)
 
+      val pluginNotificationUserActionKeys = (0 to 2).map(_.toString)
+
       // Get the "sum" field from histogram h as an Int. Consider a
       // wonky histogram (one for which the "sum" field is not a
       // valid number) as null.
@@ -509,7 +511,15 @@ object MainSummaryView {
         asInt(simpleMeasures \ "main"),
         asInt(simpleMeasures \ "firstPaint"),
         asInt(simpleMeasures \ "sessionRestored"),
-        asInt(simpleMeasures \ "totalTime")
+        asInt(simpleMeasures \ "totalTime"),
+
+        // bug 1362520 - plugin notifications
+        hsum(histograms \ "PLUGINS_NOTIFICATION_SHOWN"),
+        MainPing.enumHistogramToRow(histograms \ "PLUGINS_NOTIFICATION_USER_ACTION", pluginNotificationUserActionKeys),
+        hsum(histograms \ "PLUGINS_INFOBAR_SHOWN"),
+        hsum(histograms \ "PLUGINS_INFOBAR_BLOCK"),
+        hsum(histograms \ "PLUGINS_INFOBAR_ALLOW")
+
       )
 
       val scalarRow = MainPing.scalarsToRow(parentScalars, scalarDefinitions)
@@ -616,6 +626,12 @@ object MainSummaryView {
     }
   }
 
+  def buildPluginNotificationUserActionSchema = StructType(List(
+    StructField("allow_now", IntegerType, nullable = true),
+    StructField("allow_always", IntegerType, nullable = true),
+    StructField("block", IntegerType, nullable = true)
+  ))
+
   def buildSchema(scalarDefinitions: List[(String, ScalarDefinition)]): StructType = {
     StructType(List(
       StructField("document_id", StringType, nullable = false), // id
@@ -650,6 +666,7 @@ object MainSummaryView {
       StructField("sync_configured", BooleanType, nullable = true), // WEAVE_CONFIGURED
       StructField("sync_count_desktop", IntegerType, nullable = true), // WEAVE_DEVICE_COUNT_DESKTOP
       StructField("sync_count_mobile", IntegerType, nullable = true), // WEAVE_DEVICE_COUNT_MOBILE
+
       StructField("app_build_id", StringType, nullable = true), // application/buildId
       StructField("app_display_version", StringType, nullable = true), // application/displayVersion
       StructField("app_name", StringType, nullable = true), // application/name
@@ -748,7 +765,15 @@ object MainSummaryView {
       StructField("main", IntegerType, nullable = true),
       StructField("first_paint", IntegerType, nullable = true),
       StructField("session_restored", IntegerType, nullable = true),
-      StructField("total_time", IntegerType, nullable = true)
+      StructField("total_time", IntegerType, nullable = true),
+
+      // bug 1362520 - plugin notifications
+      StructField("plugins_notification_shown", IntegerType, nullable = true),
+      StructField("plugins_notification_user_action", buildPluginNotificationUserActionSchema, nullable = true),
+      StructField("plugins_infobar_shown", IntegerType, nullable = true),
+      StructField("plugins_infobar_block", IntegerType, nullable = true),
+      StructField("plugins_infobar_allow", IntegerType, nullable = true)
+
     ) ++ buildScalarSchema(scalarDefinitions))
   }
 }

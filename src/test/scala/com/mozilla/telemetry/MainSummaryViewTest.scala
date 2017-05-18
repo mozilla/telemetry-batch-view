@@ -1,6 +1,6 @@
 package com.mozilla.telemetry
 
-import com.mozilla.telemetry.heka.File
+import com.mozilla.telemetry.heka.{File, RichMessage}
 import com.mozilla.telemetry.utils.{MainPing, Events}
 import com.mozilla.telemetry.views.MainSummaryView
 import com.mozilla.telemetry.scalars._
@@ -586,6 +586,69 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     }
   }
 
+  "MainSummary plugin counts" can "be summarized" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.histograms" -> """{
+    "PLUGINS_NOTIFICATION_SHOWN":{
+      "range":[1,2],
+      "histogram_type":2,
+      "values":{"1":3,"0":0,"2":0},
+      "bucket_count":3,
+      "sum":3
+    },
+    "PLUGINS_NOTIFICATION_USER_ACTION":{
+      "range":[1,3],
+      "histogram_type":1,
+      "values":{"1":0,"0":3},
+      "bucket_count":4,
+      "sum":0
+    },
+    "PLUGINS_INFOBAR_SHOWN": {
+       "range": [1,2],
+       "histogram_type": 2,
+       "values":{"1":12,"0":0,"2":0},
+       "bucket_count":3,
+       "sum":12
+    },
+    "PLUGINS_INFOBAR_ALLOW":{
+      "range":[1,2],
+      "histogram_type":2,
+      "values":{"1":2,"0":0,"2":0},
+      "bucket_count":3,
+      "sum":2
+    },
+    "PLUGINS_INFOBAR_BLOCK":{
+      "range":[1,2],
+      "histogram_type":2,
+      "values":{"1":1,"0":0,"2":0},
+      "bucket_count":3,
+      "sum":1
+    }
+  }"""),
+      None);
+    val summary = MainSummaryView.messageToRow(message, scalarDefs)
+
+    val expected = Map(
+      "document_id" -> "foo",
+      "plugins_notification_shown" -> 3,
+      "plugins_notification_user_action" -> Row(3, 0, 0),
+      "plugins_infobar_shown" -> 12,
+      "plugins_infobar_allow" -> 2,
+      "plugins_infobar_block" -> 1
+    )
+    val actual = applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs))
+      .getValuesMap(expected.keys.toList)
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+    actual should be (expected)
+  }
+
   // Apply the given schema to the given potentially-generic Row.
   def applySchema(row: Row, schema: StructType): Row = new GenericRowWithSchema(row.toSeq.toArray, schema)
 
@@ -698,6 +761,11 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "first_paint"                       -> 1999,
             "session_restored"                  -> 3289,
             "total_time"                        -> 1027690,
+            "plugins_notification_shown"        -> null,
+            "plugins_notification_user_action"  -> null,
+            "plugins_infobar_shown"             -> null,
+            "plugins_infobar_block"             -> null,
+            "plugins_infobar_allow"             -> null,
             "scalar_parent_mock_keyed_scalar_bool"   -> null,
             "scalar_parent_mock_keyed_scalar_string" -> null,
             "scalar_parent_mock_keyed_scalar_uint"   -> null,
