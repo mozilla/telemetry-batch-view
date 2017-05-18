@@ -206,6 +206,14 @@ root
  |-- first_paint: integer (nullable = true)
  |-- session_restored: integer (nullable = true)
  |-- total_time: integer (nullable = true)
+ |-- plugins_notification_shown: integer (nullable = true)
+ |-- plugins_notification_user_action: struct (nullable = true)
+ |    |-- allow_now: integer (nullable = true)
+ |    |-- allow_always: integer (nullable = true)
+ |    |-- block: integer (nullable = true)
+ |-- plugins_infobar_shown: integer (nullable = true)
+ |-- plugins_infobar_block: integer (nullable = true)
+ |-- plugins_infobar_allow: integer (nullable = true)
  <SCALARS>
 ```
 
