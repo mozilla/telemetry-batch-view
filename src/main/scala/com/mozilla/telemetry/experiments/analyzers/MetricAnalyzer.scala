@@ -11,6 +11,8 @@ import scala.util.{Failure, Success, Try}
 
 
 abstract class MetricAnalyzer(name: String, md: MetricDefinition, df: DataFrame) extends java.io.Serializable {
+  type AggregateType
+
   val reducer: UserDefinedAggregateFunction
   def handleKeys: Column
   val keyedUDF: UserDefinedFunction
@@ -67,15 +69,38 @@ abstract class MetricAnalyzer(name: String, md: MetricDefinition, df: DataFrame)
 
   def runSummaryStatistics(rows: List[Row]): List[List[Row]] = {
     // TODO: fill me in!
-    List()
+    List.fill(rows.length)(List())
   }
 
   def runTestStatistics(filtered: DataFrame, rows: List[Row]): List[List[Row]] = {
     // TODO: fill me in!
-    List()
+    List.fill(rows.length)(List())
   }
 
-  def toFinalSchema(rows: List[Row], summary_stats: List[List[Row]], test_stats: List[List[Row]]): List[Row]
+  def aggToMap(values: AggregateType): Map[Long, Row]
+
+  def toFinalSchema(rows: List[Row], summary_stats: List[List[Row]], test_stats: List[List[Row]]): List[Row] = {
+    println(rows)
+    (rows zip summary_stats zip test_stats).map {
+      case (((row, row_summary_stats), row_test_stats)) => {
+        println(row)
+        val stats = (row_summary_stats ++ row_test_stats) match {
+          case Nil => null
+          case x => x
+        }
+        row match {
+          case Row(experiment:    String,
+                   branch:        String,
+                   subgroup:      String,
+                   n:             Long,
+                   histogram_seq: AggregateType,
+                   metric_name:   String,
+                   metric_type:   String) => {println(histogram_seq); Row(experiment, branch, subgroup, n, metric_name,
+                                               metric_type, aggToMap(histogram_seq), stats)}
+        }
+      }
+    }
+  }
 }
 
 object MetricAnalyzer {

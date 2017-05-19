@@ -13,6 +13,7 @@ sealed abstract class ScalarAnalyzer(name: String, sd: ScalarDefinition, df: Dat
 }
 
 class UintScalarAnalyzer(name: String, sd: UintScalar, df: DataFrame) extends ScalarAnalyzer(name, sd, df) {
+  override type AggregateType = Map[Long, Long]
   val reducer = new AggregateScalars[Long](LongType)
   lazy val keyedUDF: UserDefinedFunction = udf(collapseKeys _)
 
@@ -26,27 +27,17 @@ class UintScalarAnalyzer(name: String, sd: UintScalar, df: DataFrame) extends Sc
     }
   }
 
-  def toFinalSchema(rows: List[Row], summary_stats: List[List[Row]], test_stats: List[List[Row]]): List[Row] = {
-    def aggToMap(values: Map[Long, Long]): Map[Long, Row] = {
-      val sum = values.toSeq.map(_._2).sum.toDouble
-      // Histograms are output as Key -> Row(prob dist (pdf), count, label)
-      values.map {case (k: Long, v: Long) => k -> Row(v.toDouble / sum, v, null)}
-    }
-
-    rows.map {
-      case Row(experiment:    String,
-               branch:        String,
-               subgroup:      String,
-               n:             Long,
-               histogram_seq: Map[Long, Long],
-               metric_name:   String,
-               metric_type:   String) => Row(experiment, branch, subgroup, n, metric_name, metric_type,
-                                             aggToMap(histogram_seq), summary_stats ++ test_stats)
+  def aggToMap(values: AggregateType): Map[Long, Row] = {
+    val sum = values.toSeq.map(_._2).sum.toDouble
+    // Histograms are output as Key -> Row(prob dist (pdf), count, label)
+    values.map {
+      case (k: Long, v: Long) => k -> Row(v.toDouble / sum, v, null)
     }
   }
 }
 
 class StringScalarAnalyzer(name: String, sd: StringScalar, df: DataFrame) extends ScalarAnalyzer(name, sd, df) {
+  override type AggregateType = Map[String, Long]
   val reducer = new AggregateScalars[String](StringType)
 
   def collapseKeys(m: Map[String, Seq[Row]]): Seq[String] = {
@@ -61,26 +52,13 @@ class StringScalarAnalyzer(name: String, sd: StringScalar, df: DataFrame) extend
 
   lazy val keyedUDF: UserDefinedFunction = udf(collapseKeys _)
 
-  def toFinalSchema(rows: List[Row], summary_stats: List[List[Row]], test_stats: List[List[Row]]): List[Row] = {
-    def aggToMap(values: Map[String, Long]): Map[Long, Row] = {
-      val sum = values.toSeq.map(_._2).sum.toDouble
-      // Sort the string keys by number of occurrences and assign each an index to fit the schema
-      values.toSeq.sortWith(_._2 > _._2).zipWithIndex.map {
-        // Histograms are output as Key -> Row(prob dist (pdf), count, label)
-        case ((k: String, v: Long), i: Int) => i.toLong -> Row(v.toDouble / sum, v, k)
-      }.toMap
-    }
-
-    rows.map {
-      case Row(experiment:    String,
-               branch:        String,
-               subgroup:      String,
-               n:             Long,
-               histogram_seq: Map[String, Long],
-               metric_name:   String,
-               metric_type:   String) => Row(experiment, branch, subgroup, n, metric_name, metric_type,
-                                             aggToMap(histogram_seq), summary_stats ++ test_stats)
-    }
+  def aggToMap(values: AggregateType): Map[Long, Row] = {
+    val sum = values.toSeq.map(_._2).sum.toDouble
+    // Histograms are output as Key -> Row(prob dist (pdf), count, label)
+    values.toSeq.sortWith(_._2 > _._2).zipWithIndex.map {
+      // Histograms are output as Key -> Row(prob dist (pdf), count, label)
+      case ((k: String, v: Long), i: Int) => i.toLong -> Row(v.toDouble / sum, v, k)
+    }.toMap
   }
 }
 

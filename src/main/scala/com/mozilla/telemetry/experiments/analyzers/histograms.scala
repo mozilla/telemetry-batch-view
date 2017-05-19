@@ -8,6 +8,7 @@ import org.apache.spark.sql.functions._
 
 
 sealed abstract class HistogramAnalyzer(name: String, hd: HistogramDefinition, df: DataFrame) extends MetricAnalyzer(name, hd, df) {
+  override type AggregateType = Seq[Long]
   val reducer: AggregateHistograms
   val keys: List[Int]
 
@@ -25,25 +26,12 @@ sealed abstract class HistogramAnalyzer(name: String, hd: HistogramDefinition, d
     MetricAggregate(histogram_agg, keys).getSchematizedSummaryStats
   }
 
-  def toFinalSchema(rows: List[Row], summary_stats: List[List[Row]], test_stats: List[List[Row]]): List[Row] = {
-    def aggToMap(values: Seq[Long]): Map[Long, Row] = {
-      val n = values.sum.toDouble
-      // Histograms are output as Key -> Row(prob dist (pdf), count, label)
-      // Labels are none for histograms for now (meant for string scalars) -- may be useful for enum histograms
-      // in the future
-      (keys zip values).map { case (k, v) => k.toLong -> Row(v.toDouble / n, v, null) }.toMap
-    }
-
-    rows.map {
-      case Row(experiment:    String,
-               branch:        String,
-               subgroup:      String,
-               n:             Long,
-               histogram_seq: Seq[Long],
-               metric_name:   String,
-               metric_type:   String) => Row(experiment, branch, subgroup, n, metric_name, metric_type,
-                                             aggToMap(histogram_seq), summary_stats ++ test_stats)
-    }
+  def aggToMap(values: AggregateType): Map[Long, Row] = {
+    val n = values.sum.toDouble
+    // Histograms are output as Key -> Row(prob dist (pdf), count, label)
+    // Labels are none for histograms for now (meant for string scalars) -- may be useful for enum histograms
+    // in the future
+    (keys zip values).map { case (k, v) => k.toLong -> Row(v.toDouble / n, v, null) }.toMap
   }
 }
 
