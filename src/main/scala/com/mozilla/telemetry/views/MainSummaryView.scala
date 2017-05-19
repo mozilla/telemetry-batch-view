@@ -326,6 +326,10 @@ object MainSummaryView {
           case JBool(x) => x
           case _ => null
         },
+        system \ "memoryMB" match {
+          case JInt(x) => x.toInt
+          case _ => null
+        },
         profile \ "creationDate" match {
           case JInt(x) => x.toLong
           case _ => null
@@ -336,6 +340,14 @@ object MainSummaryView {
         },
         info \ "subsessionLength" match {
           case JInt(x) => x.toLong
+          case _ => null
+        },
+        info \ "subsessionCounter" match {
+          case JInt(x) => x.toInt
+          case _ => null
+        },
+        info \ "profileSubsessionCounter" match {
+          case JInt(x) => x.toInt
           case _ => null
         },
         partner \ "distributionId" match {
@@ -435,6 +447,18 @@ object MainSummaryView {
           case _ => null
         },
         settings \ "defaultSearchEngineData" \ "name" match {
+          case JString(x) => x
+          case _ => null
+        },
+        settings \ "defaultSearchEngineData" \ "loadPath" match {
+          case JString(x) => x
+          case _ => null
+        },
+        settings \ "defaultSearchEngineData" \ "origin" match {
+          case JString(x) => x
+          case _ => null
+        },
+        settings \ "defaultSearchEngineData" \ "submissionURL" match {
           case JString(x) => x
           case _ => null
         },
@@ -612,10 +636,14 @@ object MainSummaryView {
       StructField("install_year", LongType, nullable = true), // environment/system/os/installYear
       StructField("is_wow64", BooleanType, nullable = true), // environment/system/isWow64
 
+      StructField("memory_mb", IntegerType, nullable = true), // environment/system/memoryMB
+
       // TODO: use proper 'date' type for date columns.
       StructField("profile_creation_date", LongType, nullable = true), // environment/profile/creationDate
       StructField("subsession_start_date", StringType, nullable = true), // info/subsessionStartDate
       StructField("subsession_length", LongType, nullable = true), // info/subsessionLength
+      StructField("subsession_counter", IntegerType, nullable = true), // info/subsessionCounter
+      StructField("profile_subsession_counter", IntegerType, nullable = true), // info/profileSubsessionCounter
       StructField("distribution_id", StringType, nullable = true), // environment/partner/distributionId
       StructField("submission_date", StringType, nullable = false), // YYYYMMDD version of 'timestamp'
       // See bug 1232050
@@ -668,6 +696,9 @@ object MainSummaryView {
       StructField("vendor", StringType, nullable = true), // application/vendor
       StructField("is_default_browser", BooleanType, nullable = true), // environment/settings/isDefaultBrowser
       StructField("default_search_engine_data_name", StringType, nullable = true), // environment/settings/defaultSearchEngineData/name
+      StructField("default_search_engine_data_load_path", StringType, nullable = true), // environment/settings/defaultSearchEngineData/loadPath
+      StructField("default_search_engine_data_origin", StringType, nullable = true), // environment/settings/defaultSearchEngineData/origin
+      StructField("default_search_engine_data_submission_url", StringType, nullable = true), // environment/settings/defaultSearchEngineData/submissionURL
       StructField("default_search_engine", StringType, nullable = true), // environment/settings/defaultSearchEngine
 
       // LOOP_ACTIVITY_COUNTER histogram per bug 1261829
