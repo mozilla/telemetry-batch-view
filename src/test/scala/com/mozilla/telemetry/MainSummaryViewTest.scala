@@ -39,7 +39,9 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "hasBinaryComponents": false,
       "installDay": 16861,
       "updateDay": 16875,
-      "isSystem": true
+      "isSystem": true,
+      "isWebExtension": false,
+      "multiprocessCompatible": true
     },
     "addon 2": {
       "blocklisted": false,
@@ -54,7 +56,9 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "hasBinaryComponents": false,
       "installDay": 16862,
       "updateDay": 16880,
-      "isSystem": false
+      "isSystem": false,
+      "isWebExtension": true,
+      "multiprocessCompatible": true
     },
     "addon 3": {
       "blocklisted": false,
@@ -69,7 +73,9 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "hasBinaryComponents": false,
       "installDay": 16865,
       "updateDay": 16890,
-      "isSystem": false
+      "isSystem": false,
+      "isWebExtension": true,
+      "multiprocessCompatible": false
     }
    },
    "activePlugins": [
@@ -815,7 +821,9 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "install_day"           -> 16861,
             "update_day"            -> 16875,
             "signed_state"          -> null,
-            "is_system"             -> null
+            "is_system"             -> null,
+            "is_web_extension"      -> null,
+            "multiprocess_compatible" -> null
           ))
 
           val addons = r.getSeq[Row](r.fieldIndex("active_addons"))
@@ -839,7 +847,9 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
                 "install_day"           -> 16865,
                 "update_day"            -> 16875,
                 "signed_state"          -> null,
-                "is_system"             -> true
+                "is_system"             -> true,
+                "is_web_extension"      -> null,
+                "multiprocess_compatible" -> null
               ))
               case "firefox@getpocket.com" => checkAddonValues(addon, addonSchema, Map(
                 "addon_id"              -> "firefox@getpocket.com",
@@ -855,7 +865,9 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
                 "install_day"           -> 16861,
                 "update_day"            -> 16875,
                 "signed_state"          -> null,
-                "is_system"             -> true
+                "is_system"             -> true,
+                "is_web_extension"      -> null,
+                "multiprocess_compatible" -> null
               ))
               case "loop@mozilla.org" => checkAddonValues(addon, addonSchema, Map(
                 "addon_id"              -> "loop@mozilla.org",
@@ -871,7 +883,9 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
                 "install_day"           -> 16861,
                 "update_day"            -> 16875,
                 "signed_state"          -> null,
-                "is_system"             -> true
+                "is_system"             -> true,
+                "is_web_extension"      -> null,
+                "multiprocess_compatible" -> null
               ))
               case x => x should be ("Should not have happened")
             }

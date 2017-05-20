@@ -158,7 +158,9 @@ object MainSummaryView {
               addonData.installDay.orNull,
               addonData.updateDay.orNull,
               addonData.signedState.orNull,
-              addonData.isSystem.orNull)
+              addonData.isSystem.orNull,
+              addonData.isWebExtension.orNull,
+              addonData.multiprocessCompatible.orNull)
         }
         Some(rows.toList)
       }
@@ -183,7 +185,9 @@ object MainSummaryView {
           addonData.installDay.orNull,
           addonData.updateDay.orNull,
           addonData.signedState.orNull,
-          addonData.isSystem.orNull))
+          addonData.isSystem.orNull,
+          addonData.isWebExtension.orNull,
+          addonData.multiprocessCompatible.orNull))
       case _ => None
     }
   }
@@ -594,7 +598,9 @@ object MainSummaryView {
       StructField("install_day",           IntegerType, nullable = true),
       StructField("update_day",            IntegerType, nullable = true),
       StructField("signed_state",          IntegerType, nullable = true),
-      StructField("is_system",             BooleanType, nullable = true)
+      StructField("is_system",             BooleanType, nullable = true),
+      StructField("is_web_extension",      BooleanType, nullable = true),
+      StructField("multiprocess_compatible", BooleanType, nullable = true)
     ))
 
   def buildAttributionSchema = StructType(List(

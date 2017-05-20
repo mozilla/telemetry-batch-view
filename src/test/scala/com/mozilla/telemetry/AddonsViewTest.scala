@@ -18,7 +18,9 @@ case class Addon(addon_id: String,
                  install_day: Integer,
                  update_day: Integer,
                  signed_state: Integer,
-                 is_system: Boolean)
+                 is_system: Boolean,
+                 is_web_extension: Boolean,
+                 multiprocess_compatible: Boolean)
 
 case class PartialMain(document_id: String,
                        client_id: String,
@@ -40,14 +42,14 @@ class AddonsViewTest extends FlatSpec with Matchers{
     try {
       val mains = Seq(
         PartialMain("doc1", "client1", 1l, "2016-10-01T00:00:00", "release", Seq(
-          Addon("addon1", true, "addon1name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, true),
-          Addon("addon2", true, "addon2name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false))),
+          Addon("addon1", true, "addon1name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, true, false, true),
+          Addon("addon2", true, "addon2name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false, true, true))),
         PartialMain("doc2", "client2", 2l, "2016-10-01T00:00:00", "release", null),
         PartialMain("doc3", "client2", 2l, "2016-10-01T00:00:00", "release", Seq()),
         PartialMain("doc4", "client3", 3l, "2016-10-01T00:00:00", "release", Seq(
-          Addon("addon1", true, "addon1name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, true),
-          Addon("addon3", true, "addon3name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false),
-          Addon("addon4", true, "addon4name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false)))
+          Addon("addon1", true, "addon1name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, true, false, true),
+          Addon("addon3", true, "addon3name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false, true, false),
+          Addon("addon4", true, "addon4name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false, false, false)))
       ).toDS().toDF()
 
       mains.count() should be(4)
