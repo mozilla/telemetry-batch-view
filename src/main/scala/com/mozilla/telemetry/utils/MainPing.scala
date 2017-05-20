@@ -18,7 +18,9 @@ case class Addon(id: Option[String],
                  installDay: Option[Integer],
                  updateDay: Option[Integer],
                  signedState: Option[Integer],
-                 isSystem: Option[Boolean])
+                 isSystem: Option[Boolean],
+                 isWebExtension: Option[Boolean],
+                 multiprocessCompatible: Option[Boolean])
 
 case class Attribution(source: Option[String],
                        medium: Option[String],
