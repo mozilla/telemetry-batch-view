@@ -13,7 +13,9 @@ Defining a derived [Parquet](https://parquet.apache.org/) dataset, which uses a 
 
 See the [views](https://github.com/mozilla/telemetry-batch-view/tree/master/src/main/scala/views) folder for examples of jobs that create derived datasets.
 
-See the [docs](https://github.com/mozilla/telemetry-batch-view/tree/master/docs) folder for more information about the individual derived datasets.
+See the [Firefox Data Documentation](https://mozilla.github.io/firefox-data-docs/datasets/reference.html) for more information about the individual derived datasets.
+For help finding the right dataset for your analysis, see
+[Choosing a Dataset](https://mozilla.github.io/firefox-data-docs/concepts/choosing_a_dataset.html).
 
 ### Development
 There are two possible workflows for hacking on telemetry-batch-view: you can either create a docker container for building the package and running tests, or import the project into IntelliJ's IDEA.
