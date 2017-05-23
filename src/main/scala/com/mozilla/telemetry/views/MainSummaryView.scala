@@ -163,6 +163,7 @@ object MainSummaryView {
 
   def getActiveAddons(activeAddons: JValue): Option[List[Row]] = {
     implicit val formats = DefaultFormats
+
     Try(activeAddons.extract[Map[String, Addon]]) match {
       case Success(addons) => {
         val rows = addons.map { case (addonId, addonData) =>
@@ -211,6 +212,44 @@ object MainSummaryView {
           addonData.multiprocessCompatible.orNull))
       case _ => None
     }
+  }
+
+  def getQuantumReady(e10sStatus: JValue, addons: JValue, theme: JValue): Boolean = {
+    val e10sEnabled = e10sStatus match {
+      case JBool(e10sStatus) => e10sStatus
+      case _ => false
+    }
+
+    val allowedAddons = getActiveAddons(addons) match {
+      case Some(l) => l.map(row => {
+          val isSystem = row.get(13) match {
+            case b: Boolean => b
+            case _ => false
+          }
+          val isWebExtension = row.get(14) match {
+            case b: Boolean => b
+            case _ => false
+          }
+          isSystem && isWebExtension
+        }).reduce(_ && _)
+      case _ => false
+    }
+
+    val disallowedThemes = List(
+      "{972ce4c6-7e08-4474-a285-3208198ce6fd}",
+      "firefox-compact-light@mozilla.org",
+      "firefox-compact-dark@mozilla.org"
+    )
+
+    val allowedTheme = getTheme(theme) match {
+      case Some(t) => t.get(0) match {
+        case id: String => !disallowedThemes.contains(id)
+        case _ => false
+      }
+      case _ => false
+    }
+
+    e10sEnabled && allowedAddons && allowedTheme
   }
 
   def getAttribution(attribution: JValue): Option[Row] = {
@@ -295,6 +334,8 @@ object MainSummaryView {
       lazy val parentKeyedScalars = payload \ "payload" \ "processes" \ "parent" \ "keyedScalars"
       lazy val parentEvents = payload \ "payload" \ "processes" \ "parent" \ "events"
       lazy val experiments = parse(fields.getOrElse("environment.experiments", "{}").asInstanceOf[String])
+      lazy val childHistograms = payload \ "payload" \ "processes" \ "content" \ "histograms"
+      lazy val childKeyedHistograms = payload \ "payload" \ "processes" \ "content" \ "keyedHistograms"
 
       val loopActivityCounterKeys = (0 to 4).map(_.toString)
       val sslHandshakeResultKeys = (0 to 671).map(_.toString)
@@ -580,7 +621,46 @@ object MainSummaryView {
         settings \ "searchCohort" match {
           case JString(x) => x
           case _ => null
-        }
+        },
+
+        // bug 1366838 - Quantum Release Criteria
+        system \ "gfx" \ "features" \ "compositor" match {
+          case JString(x) => x
+          case _ => null
+        },
+
+        getQuantumReady(
+          settings \ "e10sEnabled",
+          addons \ "activeAddons",
+          addons \ "theme"
+        ),
+
+        MainPing.histogramToThresholdCount(histograms \ "GC_MAX_PAUSE_MS", 150),
+        MainPing.histogramToThresholdCount(histograms \ "GC_MAX_PAUSE_MS", 250),
+        MainPing.histogramToThresholdCount(histograms \ "GC_MAX_PAUSE_MS", 2500),
+
+        MainPing.histogramToThresholdCount(childHistograms \ "GC_MAX_PAUSE_MS", 150),
+        MainPing.histogramToThresholdCount(childHistograms \ "GC_MAX_PAUSE_MS", 250),
+        MainPing.histogramToThresholdCount(childHistograms \ "GC_MAX_PAUSE_MS", 2500),
+
+        MainPing.histogramToThresholdCount(histograms \ "CYCLE_COLLECTOR_MAX_PAUSE", 150),
+        MainPing.histogramToThresholdCount(histograms \ "CYCLE_COLLECTOR_MAX_PAUSE", 250),
+        MainPing.histogramToThresholdCount(histograms \ "CYCLE_COLLECTOR_MAX_PAUSE", 2500),
+
+        MainPing.histogramToThresholdCount(childHistograms \ "CYCLE_COLLECTOR_MAX_PAUSE", 150),
+        MainPing.histogramToThresholdCount(childHistograms \ "CYCLE_COLLECTOR_MAX_PAUSE", 250),
+        MainPing.histogramToThresholdCount(childHistograms \ "CYCLE_COLLECTOR_MAX_PAUSE", 2500),
+
+        MainPing.histogramToThresholdCount(histograms \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 150),
+        MainPing.histogramToThresholdCount(histograms \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 250),
+        MainPing.histogramToThresholdCount(histograms \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 2500),
+
+        MainPing.histogramToThresholdCount(childHistograms \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 150),
+        MainPing.histogramToThresholdCount(childHistograms \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 250),
+        MainPing.histogramToThresholdCount(childHistograms \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 2500),
+
+        MainPing.histogramToThresholdCount(histograms \ "GHOST_WINDOWS", 1),
+        MainPing.histogramToThresholdCount(childHistograms \ "GHOST_WINDOWS", 1)
       )
 
       val scalarRow = MainPing.scalarsToRow(
@@ -888,7 +968,38 @@ object MainSummaryView {
       // bug 1366253 - active experiments
       StructField("experiments", MapType(StringType, StringType), nullable = true), // experiment id->branchname
 
-      StructField("search_cohort", StringType, nullable = true)
+      StructField("search_cohort", StringType, nullable = true),
+
+      // bug 1366838 - Quantum Release Criteria
+      StructField("gfx_compositor", StringType, nullable = true),
+      StructField("quantum_ready", BooleanType, nullable = true),
+
+      StructField("gc_max_pause_ms_main_above_150", LongType, nullable = true),
+      StructField("gc_max_pause_ms_main_above_250", LongType, nullable = true),
+      StructField("gc_max_pause_ms_main_above_2500", LongType, nullable = true),
+
+      StructField("gc_max_pause_ms_content_above_150", LongType, nullable = true),
+      StructField("gc_max_pause_ms_content_above_250", LongType, nullable = true),
+      StructField("gc_max_pause_ms_content_above_2500", LongType, nullable = true),
+
+      StructField("cycle_collector_max_pause_main_above_150", LongType, nullable = true),
+      StructField("cycle_collector_max_pause_main_above_250", LongType, nullable = true),
+      StructField("cycle_collector_max_pause_main_above_2500", LongType, nullable = true),
+
+      StructField("cycle_collector_max_pause_content_above_150", LongType, nullable = true),
+      StructField("cycle_collector_max_pause_content_above_250", LongType, nullable = true),
+      StructField("cycle_collector_max_pause_content_above_2500", LongType, nullable = true),
+
+      StructField("input_event_response_coalesced_ms_main_above_150", LongType, nullable = true),
+      StructField("input_event_response_coalesced_ms_main_above_250", LongType, nullable = true),
+      StructField("input_event_response_coalesced_ms_main_above_2500", LongType, nullable = true),
+
+      StructField("input_event_response_coalesced_ms_content_above_150", LongType, nullable = true),
+      StructField("input_event_response_coalesced_ms_content_above_250", LongType, nullable = true),
+      StructField("input_event_response_coalesced_ms_content_above_2500", LongType, nullable = true),
+
+      StructField("ghost_windows_main_above_1", LongType, nullable = true),
+      StructField("ghost_windows_content_above_1", LongType, nullable = true)
     ) ++ buildScalarSchema(scalarDefinitions)
       ++ buildHistogramSchema(histogramDefinitions))
   }

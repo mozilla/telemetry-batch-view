@@ -810,6 +810,17 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "plugins_infobar_block"             -> null,
             "plugins_infobar_allow"             -> null,
             "search_cohort"                     -> null,
+            "gfx_compositor"                    -> "none",
+            "gc_max_pause_ms_main_above_150"                        -> 526,
+            "gc_max_pause_ms_content_above_2500"                    -> 0,
+            "cycle_collector_max_pause_main_above_150"              -> 1416,
+            "cycle_collector_max_pause_content_above_2500"          -> 0,
+            "input_event_response_coalesced_ms_main_above_250"      -> 0,
+            "input_event_response_coalesced_ms_main_above_2500"     -> 0,
+            "input_event_response_coalesced_ms_content_above_250"   -> 0,
+            "input_event_response_coalesced_ms_content_above_2500"  -> 0,
+            "ghost_windows_main_above_1"                            -> 0,
+            "ghost_windows_content_above_1"                         -> 0,
             "scalar_parent_mock_keyed_scalar_bool"   -> null,
             "scalar_parent_mock_keyed_scalar_string" -> null,
             "scalar_parent_mock_keyed_scalar_uint"   -> null,
@@ -1613,7 +1624,6 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     for ((f, v) <- expected) {
       withClue(s"$f:") { actual.get(f) should be (Some(v)) }
     }
-
     actual should be (expected)
 
     spark.stop()
@@ -1629,4 +1639,233 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     allHistogramDefs should be (expectedDefs)
   }
+
+  "histogram to threshold count" can "extract correct counts" in {
+    val json1 = parse(
+      """
+        |{
+        |}
+      """.stripMargin)
+    MainPing.histogramToThresholdCount(json1, 3) should be (0)
+    MainPing.histogramToThresholdCount(json1 \ "GC_MAX_PAUSE_MS", 3) should be (0)
+
+    val json2 = parse(
+      """
+        |{
+        | "values": {
+        |  "1": 1,
+        |  "2": 10
+        | }
+        |}
+      """.stripMargin)
+    MainPing.histogramToThresholdCount(json2, 3) should be (0)
+
+    val json3 = parse(
+      """
+        |{
+        | "values": {
+        |  "1": 1,
+        |  "2": 10,
+        |  "3": 10
+        | }
+        |}
+      """.stripMargin)
+    MainPing.histogramToThresholdCount(json3, 3) should be (10)
+
+    val json4 = parse(
+      """
+        |{
+        | "values": {
+        |  "1": 1,
+        |  "2": 10,
+        |  "3": 10,
+        |  "5": 10,
+        |  "100": 10
+        | }
+        |}
+      """.stripMargin)
+    MainPing.histogramToThresholdCount(json4, 3) should be (30)
+  }
+
+  "histogram to threshold count" can "handle improper data" in {
+    val json1 = parse(
+      """
+        |{
+        |  "hello": "world"
+        |}
+      """.stripMargin)
+    MainPing.histogramToThresholdCount(json1, 3) should be (0)
+    MainPing.histogramToThresholdCount(json1 \ "GC_MAX_PAUSE_MS", 3) should be (0)
+
+    val json2 = parse(
+      """
+        |{
+        |  "values": "world"
+        |}
+      """.stripMargin)
+    MainPing.histogramToThresholdCount(json2, 3) should be (0)
+    MainPing.histogramToThresholdCount(json2 \ "GC_MAX_PAUSE_MS", 3) should be (0)
+
+    val json3 = parse(
+      """
+        |{
+        |  "values": {
+        |     "a": 2
+        |   }
+        |}
+      """.stripMargin)
+    MainPing.histogramToThresholdCount(json3, 3) should be (0)
+    MainPing.histogramToThresholdCount(json3 \ "GC_MAX_PAUSE_MS", 3) should be (0)
+  }
+
+  "Quantum Ready" should "be correct for a ping" in {
+    val json0e10s = parse("true")
+    val json0addons = parse("""
+      {
+        "addon1": {
+          "isSystem": true,
+          "isWebExtension": true
+        },
+        "addon2": {
+          "isSystem": true,
+          "isWebExtension": true
+        }
+      }"""
+    )
+
+    val json0theme = parse("""{"id": "okayid"}""")
+
+    MainSummaryView.getQuantumReady(json0e10s, json0addons, json0theme) should be (true)
+
+    // not quantum ready with no e10s
+    val json1e10s = parse("false")
+    val json1addons = parse("""
+    | {
+    |   "addon1": {
+    |     "isSystem": true,
+    |     "isWebExtension": true
+    |   },
+    |   "addon2": {
+    |     "isSystem": true,
+    |     "isWebExtension": true
+    |   }
+    | }""".stripMargin
+    )
+
+    val json1theme = parse("""{"id": "okayid"}""")
+
+    MainSummaryView.getQuantumReady(json1e10s, json1addons, json1theme) should be (false)
+
+    // not quantum ready with non-system addon
+    val json2e10s = parse("true")
+    val json2addons = parse("""
+    | {
+    |   "addon1": {
+    |      "isSystem": true,
+    |      "isWebExtension": true
+    |    },
+    |    "addon2": {
+    |      "isSystem": false,
+    |      "isWebExtension": true
+    |    }
+    | }""".stripMargin
+    )
+
+    val json2theme = parse("""{"id": "okayid"}""")
+
+    MainSummaryView.getQuantumReady(json2e10s, json2addons, json2theme) should be (false)
+
+    // not quantum ready with non-webextension addon
+    val json3e10s = parse("true")
+    val json3addons = parse("""
+    | {
+    |   "addon1": {
+    |     "isSystem": true,
+    |     "isWebExtension": false
+    |   },
+    |   "addon2": {
+    |     "isSystem": true,
+    |     "isWebExtension": true
+    |   }
+    | }""".stripMargin
+    )
+
+    val json3theme = parse("""{"id": "okayid"}""")
+
+    MainSummaryView.getQuantumReady(json3e10s, json3addons, json3theme) should be (false)
+
+    // not quantum ready with old-style theme
+    val json4e10s = parse("true")
+    val json4addons = parse("""
+    | {
+    |   "addon1": {
+    |     "isSystem": true,
+    |     "isWebExtension": true
+    |   },
+    |   "addon2": {
+    |     "isSystem": true,
+    |     "isWebExtension": true
+    |   }
+    | }""".stripMargin
+    )
+
+    val json4theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
+
+    MainSummaryView.getQuantumReady(json4e10s, json4addons, json4theme) should be (false)
+  }
+
+  "Quantum Readiness" can "be properly parsed" in {
+    val spark = SparkSession.builder()
+        .appName("test quantum readiness")
+        .master("local[1]")
+        .getOrCreate()
+
+    val sc = spark.sparkContext
+    import spark.implicits._
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.settings" -> """{
+          "e10sEnabled": true
+        }""",
+        "environment.addons" -> """{
+          "activeAddons": {
+            "spicemustflow": {
+              "isSystem": true,
+              "isWebExtension": true
+            },
+            "gom-jabbar": {
+              "isSystem": true,
+              "isWebExtension": true
+            }
+          },
+          "theme": {
+            "id": "shai-hulud"
+          }
+        }"""),
+      None);
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+
+    val expected = Map(
+      "quantum_ready" -> true
+    )
+
+    val actual = spark
+      .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      .first
+      .getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+
+    actual should be (expected)
+
+    spark.stop()
+  }
+
 }

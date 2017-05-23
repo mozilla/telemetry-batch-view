@@ -8,6 +8,8 @@ import org.apache.spark.sql.Row
 
 import scala.util.{Success, Failure, Try}
 
+import scala.util.{Success, Try}
+
 case class Addon(id: Option[String],
                  blocklisted: Option[Boolean],
                  description: Option[String],
@@ -164,6 +166,34 @@ object MainPing{
         case JInt(count) if count > 0 => Some(key -> count.toInt)
         case _ => None
       }).toMap
+    }
+  }
+
+  /*  Return the number of recorded observations greater than threshold 
+   *  for the histogram.
+   *
+   *  CAUTION: Does not count any buckets that have any values
+   *   less than the threshold. For example, a bucket with range
+   *   (1, 10) will not be counted for a threshold of 2. Use
+   *   threshold that are not bucket boundaries with caution.
+   *
+   *  Example:
+   *  >> histogramToThresholdCount({"values": """{"1": 0, "2": 4, "8": 1}"""}, 3)
+   *  1
+   */
+  def histogramToThresholdCount(histogram: JValue, threshold: Int): Long = {
+    implicit val formats = org.json4s.DefaultFormats
+
+    histogram \ "values" match {
+      case JNothing => 0
+      case v => Try(v.extract[Map[String, Int]]) match {
+        case Success(m) => 
+          m.filterKeys(s => toInt(s) match {
+            case Some(key) => key >= threshold
+            case None => false
+          }).foldLeft(0)(_ + _._2)
+        case _ => 0
+      }
     }
   }
 
