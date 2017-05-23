@@ -27,6 +27,8 @@ case class Attribution(source: Option[String],
                        campaign: Option[String],
                        content: Option[String])
 
+case class Experiment(branch: Option[String])
+
 object MainPing{
   // Count the number of keys inside a JSON Object
   def countKeys(o: JValue): Option[Long] = {
