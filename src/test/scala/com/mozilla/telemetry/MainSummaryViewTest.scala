@@ -655,6 +655,32 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     actual should be (expected)
   }
 
+  "MainSummary experiments" can "be summarized" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.experiments" -> """{
+          "experiment1": { "branch": "alpha" },
+          "experiment2": { "branch": "beta" }
+        }"""),
+      None);
+    val summary = MainSummaryView.messageToRow(message, scalarDefs)
+
+    val expected = Map(
+      "document_id" -> "foo",
+      "experiments" -> Map("experiment1" -> "alpha", "experiment2" -> "beta")
+    )
+    val actual = applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs))
+      .getValuesMap(expected.keys.toList)
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+    actual should be (expected)
+  }
+
   // Apply the given schema to the given potentially-generic Row.
   def applySchema(row: Row, schema: StructType): Row = new GenericRowWithSchema(row.toSeq.toArray, schema)
 
@@ -779,7 +805,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "scalar_parent_mock_scalar_string"       -> null,
             "scalar_parent_mock_scalar_uint"         -> null,
             "scalar_parent_mock_uint_optin"          -> null,
-            "scalar_parent_mock_uint_optout"         -> null
+            "scalar_parent_mock_uint_optout"         -> null,
+            "experiments"                            -> null
           )
 
           val actual = r.getValuesMap(expected.keys.toList)
