@@ -200,6 +200,11 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
         ("profileSubsessionCounter" -> (1000 - idx)) ~
         ("reason" -> "shutdown")
 
+      val experiments = Map(
+        "experiment1" -> Map("branch" -> "branch1"),
+        "experiment2" -> Map("branch" -> "control")
+      )
+
       Map("clientId" -> "26c9d181-b95b-4af5-bb35-84ebf0da795d",
         "os" -> "Windows_NT",
         "normalizedChannel" -> "aurora",
@@ -221,7 +226,8 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
         "environment.profile" -> compact(render(profile)),
         "environment.settings" -> compact(render(settings)),
         "environment.system" -> compact(render(system)),
-        "environment.addons" -> compact(render(addons)))
+        "environment.addons" -> compact(render(addons)),
+        "environment.experiments" -> compact(render(experiments)))
     }
 
     new {
@@ -254,8 +260,8 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       private val optoutHistogramDefs = histograms.definitions(includeOptin = false)
       private val optoutScalarDefs = scalars.definitions(includeOptin = false)
 
-      private val optoutSchema = LongitudinalView invokePrivate buildSchema(optoutHistogramDefs, optoutScalarDefs)
-      private val optoutRecord = (LongitudinalView  invokePrivate buildRecord(payloads ++ dupes, optoutSchema, optoutHistogramDefs, optoutScalarDefs)).get
+      private val optoutSchema = LongitudinalView invokePrivate buildSchema(optoutHistogramDefs, optoutScalarDefs, None)
+      private val optoutRecord = (LongitudinalView  invokePrivate buildRecord(payloads ++ dupes, optoutSchema, optoutHistogramDefs, optoutScalarDefs, None)).get
       private val optoutPath = ParquetFile.serialize(List(optoutRecord).toIterator, optoutSchema)
       private val optoutFilename = optoutPath.toString.replace("file:", "")
 
@@ -266,13 +272,21 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       private val optinHistogramDefs = histograms.definitions(includeOptin = true)
       private val optinScalarDefs = scalars.definitions(includeOptin = true)
 
-      private val optinSchema = LongitudinalView invokePrivate buildSchema(optinHistogramDefs, optinScalarDefs)
-      private val optinRecord = (LongitudinalView  invokePrivate buildRecord(payloads ++ dupes, optinSchema, optinHistogramDefs, optinScalarDefs)).get
+      private val optinSchema = LongitudinalView invokePrivate buildSchema(optinHistogramDefs, optinScalarDefs, None)
+      private val optinRecord = (LongitudinalView  invokePrivate buildRecord(payloads ++ dupes, optinSchema, optinHistogramDefs, optinScalarDefs, None)).get
       private val optinPath = ParquetFile.serialize(List(optinRecord).toIterator, optinSchema)
       private val optinFilename = optinPath.toString.replace("file:", "")
 
       val optinRows = sqlContext.read.load(optinFilename).collect()
       val optinRow =  optinRows(0)
+
+      private val experimentsSchema = LongitudinalView invokePrivate buildSchema(optoutHistogramDefs, optoutScalarDefs, Some("experiment1"))
+      private val experimentsRecord = (LongitudinalView  invokePrivate buildRecord(payloads ++ dupes, experimentsSchema, optoutHistogramDefs, optoutScalarDefs, Some("experiment1"))).get
+      private val experimentsPath = ParquetFile.serialize(List(experimentsRecord).toIterator, experimentsSchema)
+      private val experimentsFilename = experimentsPath.toString.replace("file:", "")
+
+      val experimentsRows = sqlContext.read.load(experimentsFilename).collect()
+      val experimentsRow =  experimentsRows(0)
 
       sc.stop()
     }
@@ -726,5 +740,19 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
         case None => assert(index == 0)
       }
     }
+  }
+
+  "No experiments column" must "be present in normal longitudinal dataset" in {
+    intercept[IllegalArgumentException] {
+      fixture.optoutRow.getAs[String]("experiment_id")
+    }
+    intercept[IllegalArgumentException] {
+      fixture.optoutRow.getAs[String]("experiment_branch")
+    }
+  }
+
+  "Experiments column" must "be added to experiments dataset" in {
+    assert(fixture.experimentsRow.getAs[String]("experiment_id") == "experiment1")
+    assert(fixture.experimentsRow.getAs[String]("experiment_branch") == "branch1")
   }
 }
