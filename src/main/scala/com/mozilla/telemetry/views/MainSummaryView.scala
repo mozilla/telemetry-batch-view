@@ -244,6 +244,7 @@ object MainSummaryView {
       lazy val weaveDesktop = MainPing.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
       lazy val weaveMobile = MainPing.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
       lazy val parentScalars = payload \ "payload" \ "processes" \ "parent" \ "scalars"
+      lazy val parentKeyedScalars = payload \ "payload" \ "processes" \ "parent" \ "keyedScalars"
       lazy val parentEvents = payload \ "payload" \ "processes" \ "parent" \ "events"
 
       val loopActivityCounterKeys = (0 to 4).map(_.toString)
@@ -522,7 +523,10 @@ object MainSummaryView {
 
       )
 
-      val scalarRow = MainPing.scalarsToRow(parentScalars, scalarDefinitions)
+      val scalarRow = MainPing.scalarsToRow(
+        parentScalars merge parentKeyedScalars,
+        scalarDefinitions
+      )
 
       Some(Row.merge(row, scalarRow))
     } catch {
