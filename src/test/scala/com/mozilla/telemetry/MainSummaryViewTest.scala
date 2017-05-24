@@ -1039,6 +1039,47 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     MainPing.scalarsToRow(jBogusScalars, scalarDefs) should be (Row(null, null, null, null, null, null, null, null))
   }
 
+  "Keyed Scalars" can "be properly shown" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "submission" -> """{
+  "payload": {
+    "processes": {
+      "parent": {
+        "keyedScalars": {
+          "mock.keyed.scalar.uint": {
+            "search_enter": 1,
+            "search_suggestion": 2
+          }
+        }
+      }
+    }
+  }
+}"""),
+      None);
+    val summary = MainSummaryView.messageToRow(message, scalarDefs)
+
+    val expected = Map(
+      "scalar_parent_mock_keyed_scalar_uint" -> Map(
+        "search_enter" -> 1,
+        "search_suggestion" -> 2
+      )
+    )
+
+    val actual =
+      applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs))
+      .getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+    actual should be (expected)
+  }
+
   "Stub attribution" can "be extracted" in {
     // Contains a single attribute
     val json1 = parse(
