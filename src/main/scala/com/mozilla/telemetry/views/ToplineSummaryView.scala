@@ -16,7 +16,7 @@ import scala.util.matching.Regex
 import scala.util.Random
 
 object ToplineSummaryView {
-  private val MainSummaryURL: String = "s3://telemetry-parquet/main_summary/v3"
+  private val MainSummaryURL: String = "s3://telemetry-parquet/main_summary/v4"
 
   private val sparkConf: SparkConf = new SparkConf().setAppName("ToplineSummary")
   sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
