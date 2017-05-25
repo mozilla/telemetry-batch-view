@@ -97,5 +97,34 @@
     "keyed": true,
     "releaseChannelCollection": "opt-out",
     "description": "Record the search counts for search engines"
+  },
+  "MOCK_EXPONENTIAL_OPTOUT": {
+    "alert_emails": ["telemetry-client-dev@mozilla.com"],
+    "expires_in_version": "never",
+    "kind": "exponential",
+    "high": "100",
+    "n_buckets": 10,
+    "releaseChannelCollection": "opt-out",
+    "description": "a testing histogram; not meant to be touched"
+  },
+  "MOCK_KEYED_LINEAR": {
+    "alert_emails": ["telemetry-client-dev@mozilla.com"],
+    "expires_in_version": "never",
+    "keyed": true,
+    "kind": "linear",
+    "high": "10",
+    "n_buckets": 10,
+    "releaseChannelCollection": "opt-out",
+    "description": "a testing histogram; not meant to be touched"
+  },
+  "MOCK_KEYED_EXPONENTIAL": {
+    "alert_emails": ["telemetry-client-dev@mozilla.com"],
+    "expires_in_version": "never",
+    "keyed": true,
+    "kind": "exponential",
+    "high": "100",
+    "n_buckets": 10,
+    "releaseChannelCollection": "opt-out",
+    "description": "a testing histogram; not meant to be touched"
   }
 }

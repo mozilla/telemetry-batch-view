@@ -4,6 +4,8 @@ import com.mozilla.telemetry.heka.{File, RichMessage}
 import com.mozilla.telemetry.utils.{MainPing, Events}
 import com.mozilla.telemetry.views.MainSummaryView
 import com.mozilla.telemetry.metrics._
+import com.mozilla.telemetry.utils.{Events, MainPing}
+import com.mozilla.telemetry.views.{MainSummaryView}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.types.StructType
@@ -20,6 +22,14 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   }
 
   val scalarDefs = scalars.definitions(true).toList.sortBy(_._1)
+
+  val histogramUrlMock = (a: String, b: String) => Source.fromFile("src/test/resources/ShortHistograms.json")
+
+  val histograms = new HistogramsClass {
+    override protected val getURL = histogramUrlMock
+  }
+
+  val histogramDefs = MainSummaryView.filterHistogramDefinitions(histograms.definitions(true))
 
   val testPayload = """
 {
@@ -566,7 +576,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       .getOrCreate()
 
     try {
-      val schema = MainSummaryView.buildSchema(scalarDefs)
+      val schema = MainSummaryView.buildSchema(scalarDefs, histogramDefs)
 
       // Use an example framed-heka message. It is based on test_main.json.gz,
       // submitted with a URL of
@@ -574,7 +584,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       for (hekaFileName <- List("/test_main_hindsight.heka", "/test_main.snappy.heka")) {
         val hekaURL = getClass.getResource(hekaFileName)
         val input = hekaURL.openStream()
-        val rows = File.parse(input).flatMap(i => MainSummaryView.messageToRow(i, scalarDefs))
+        val rows = File.parse(input).flatMap(i => MainSummaryView.messageToRow(i, scalarDefs, histogramDefs))
 
         // Serialize this one row as Parquet
         val dataframe = spark.createDataFrame(sc.parallelize(rows.toSeq), schema)
@@ -636,7 +646,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     }
   }"""),
       None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs)
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
 
     val expected = Map(
       "document_id" -> "foo",
@@ -646,7 +656,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "plugins_infobar_allow" -> 2,
       "plugins_infobar_block" -> 1
     )
-    val actual = applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs))
+    val actual = applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
       .getValuesMap(expected.keys.toList)
     for ((f, v) <- expected) {
       withClue(s"$f:") { actual.get(f) should be (Some(v)) }
@@ -666,13 +676,13 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           "experiment2": { "branch": "beta" }
         }"""),
       None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs)
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
 
     val expected = Map(
       "document_id" -> "foo",
       "experiments" -> Map("experiment1" -> "alpha", "experiment2" -> "beta")
     )
-    val actual = applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs))
+    val actual = applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
       .getValuesMap(expected.keys.toList)
     for ((f, v) <- expected) {
       withClue(s"$f:") { actual.get(f) should be (Some(v)) }
@@ -701,7 +711,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       val hekaURL = getClass.getResource(hekaFileName)
       val input = hekaURL.openStream()
 
-      val schema = MainSummaryView.buildSchema(scalarDefs)
+      val schema = MainSummaryView.buildSchema(scalarDefs, histogramDefs)
 
       var count = 0
       for (message <- File.parse(input)) {
@@ -709,7 +719,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         message.`type`.get should be ("telemetry")
         message.logger.get should be ("telemetry")
 
-        for (summary <- MainSummaryView.messageToRow(message, scalarDefs)) {
+        for (summary <- MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)) {
           // Apply our schema to a generic Row object
           val r = applySchema(summary, schema)
 
@@ -1139,7 +1149,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   }
 }"""),
       None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs)
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
 
     val expected = Map(
       "scalar_parent_mock_keyed_scalar_uint" -> Map(
@@ -1149,7 +1159,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     )
 
     val actual =
-      applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs))
+      applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
       .getValuesMap(expected.keys.toList)
 
     for ((f, v) <- expected) {
@@ -1217,14 +1227,14 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           "searchCohort": "helloworld"
         }"""),
       None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs)
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
 
     val expected = Map(
       "search_cohort" -> "helloworld"
     )
 
     val actual =
-      applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs))
+      applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
       .getValuesMap(expected.keys.toList)
 
     for ((f, v) <- expected) {
@@ -1254,7 +1264,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           }
         }"""),
       None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs)
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
 
     val expected = Map(
       "dom_ipc_process_count" -> 2,
@@ -1263,7 +1273,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val actual =
       spark
-      .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs))
+      .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs, histogramDefs))
       .first
       .getAs[Row]("user_prefs")
       .getValuesMap(expected.keys.toList)
@@ -1296,7 +1306,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           }
         }"""),
       None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs)
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
 
     val expected = Map(
       "dom_ipc_process_count" -> null,
@@ -1305,7 +1315,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val actual =
       spark
-      .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs))
+      .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs, histogramDefs))
       .first
       .getAs[Row]("user_prefs")
       .getValuesMap(expected.keys.toList)
@@ -1318,4 +1328,304 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     spark.stop()
   }
 
+  "Histograms" can "be stored" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.histograms" -> """{
+    "MOCK_EXPONENTIAL_OPTOUT": {
+        "range": [1,100],
+        "bucket_count": 10,
+        "histogram_type": 0,
+        "values": {
+          "1": 0,
+          "16": 1,
+          "54": 1
+        },
+        "sum": 64
+      },
+    "MOCK_OPTOUT": {
+      "range": [1,10],
+      "bucket_count": 10,
+      "histogram_type": 2,
+      "values": {
+        "1": 0,
+        "3": 1,
+        "9": 1
+      },
+      "sum": 12
+    }
+  }"""),
+      None);
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+
+    val mock_exp_vals = Map(
+      1 -> 0,
+      16 -> 1,
+      54 -> 1
+    )
+
+    val mock_lin_vals = Map(
+      1 -> 0,
+      3 -> 1,
+      9 -> 1
+    )
+
+    val expected = Map(
+      "histogram_parent_mock_exponential_optout" -> mock_exp_vals,
+      "histogram_parent_mock_optout" -> mock_lin_vals
+    )
+
+    val actual = applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      .getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+    actual should be (expected)
+  }
+
+  "Keyed Histograms" can "be stored" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.keyedHistograms" -> """
+{
+  "MOCK_KEYED_LINEAR": {
+    "hello": {
+      "range": [1,10],
+      "bucket_count": 10,
+      "histogram_type": 0,
+      "values": {
+        "1": 0,
+        "3": 1,
+        "9": 1
+      },
+      "sum": 12
+    },
+    "world": {
+      "range": [1,10],
+      "bucket_count": 10,
+      "histogram_type": 0,
+      "values": {
+        "1": 0,
+        "2": 1
+      },
+      "sum": 2
+    }
+  },
+  "MOCK_KEYED_EXPONENTIAL": {
+    "foo": {
+      "range": [1,100],
+      "bucket_count": 10,
+      "histogram_type": 0,
+      "values": {
+        "1": 0,
+        "16": 1,
+        "54": 1
+      },
+      "sum": 64
+    },
+    "42": {
+      "range": [1,100],
+      "bucket_count": 10,
+      "histogram_type": 0,
+      "values": {
+        "1": 1
+      },
+      "sum": 0
+    }
+  }
+}"""),
+      None);
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+
+    val mock_lin_vals = Map(
+      "hello" -> Map(1->0, 3->1, 9->1),
+      "world" -> Map(1->0, 2->1)
+    )
+
+    val mock_exp_vals = Map(
+      "foo" -> Map(1->0, 16->1, 54->1),
+      "42" -> Map(1->1)
+    )
+
+    val expected = Map(
+      "histogram_parent_mock_keyed_linear" -> mock_lin_vals,
+      "histogram_parent_mock_keyed_exponential" -> mock_exp_vals
+    )
+
+    val actual = applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      .getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+    actual should be (expected)
+  }
+
+  "Bad histograms" can "be handled" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.keyedHistograms" -> """
+{
+  "MOCK_KEYED_LINEAR": {
+    "hello": {
+      "theempiredidnothingwrong": true,
+      "histogram_type": 0,
+      "valuess": {
+        "1": 0,
+        "3": 1,
+        "9": 1
+      },
+      "summ": 12
+    }
+  },
+  "NONCURRENT_KEYED_HISTOGRAM": {
+    "foo": {
+      "range": [1,100],
+      "bucket_count": 10,
+      "histogram_type": 0,
+      "values": {
+        "1": 0,
+        "16": 1,
+        "54": 1
+      },
+      "sum": 64
+    },
+    "42": {
+      "range": [1,100],
+      "bucket_count": 10,
+      "histogram_type": 0,
+      "values": {
+        "1": 1
+      },
+      "sum": 0
+    }
+  }
+}"""),
+      None);
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+
+    val expected = Map(
+      "histogram_parent_mock_keyed_linear" -> Map("hello" -> null)
+    )
+
+    val actualWithSchema = applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+    val actual = actualWithSchema.getValuesMap(expected.keys.toList)
+
+    intercept[IllegalArgumentException] {
+      actualWithSchema.fieldIndex("noncurrent_histogram")
+    }
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+    actual should be (expected)
+  }
+
+  "All possible histograms" can "be included" in {
+    val spark = SparkSession.builder()
+       .appName("")
+       .master("local[1]")
+       .getOrCreate()
+
+    val sc = spark.sparkContext
+    import spark.implicits._
+
+    val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(Histograms.definitions(includeOptin = false), useWhitelist = true)
+
+    val fakeHisto = """{
+          "sum": 100,
+          "values": {"1": 0, "2": 10, "40": 100, "50": 1000, "100": 1002},
+          "bucketCount": 100,
+          "range": [0, 100],
+          "histogramType": 2
+        }"""
+
+    val histosData = allHistogramDefs.map{
+      case (name, definition) =>
+        definition match {
+          case LinearHistogram(keyed, _, _, _) => (name, keyed)
+          case ExponentialHistogram(keyed, _, _, _) => (name, keyed)
+          case EnumeratedHistogram(keyed, _) => (name, keyed)
+          case BooleanHistogram(keyed) => (name, keyed)
+          case other =>
+            throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
+        }
+    }.filter(!_._2).map{
+      case (name, _) => s""""$name": $fakeHisto"""
+    }.mkString(",")
+
+    val keyedHistosData = allHistogramDefs.map{
+      case (name, definition) =>
+        definition match {
+          case LinearHistogram(keyed, _, _, _) => (name, keyed)
+          case ExponentialHistogram(keyed, _, _, _) => (name, keyed)
+          case EnumeratedHistogram(keyed, _) => (name, keyed)
+          case BooleanHistogram(keyed) => (name, keyed)
+          case other =>
+            throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
+        }
+    }.filter(_._2).map{
+      case (name, _) =>
+        s"""
+        "$name": {
+          "key1": $fakeHisto,
+          "key2": $fakeHisto,
+          "key3": $fakeHisto
+        }"""
+    }.mkString(",")
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.histograms" -> s"{$histosData}",
+        "payload.keyedHistograms" -> s"{$keyedHistosData}"
+      ),
+      None);
+
+    val expected = MainPing
+      .histogramsToRow(parse(s"{$histosData}") merge parse(s"{$keyedHistosData}"), allHistogramDefs)
+      .toSeq.zip(allHistogramDefs.map(e => MainSummaryView.getHistogramName(e._1, "parent")).toList)
+      .map(_.swap).toMap
+
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, allHistogramDefs)
+
+    val actual = spark
+          .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs, allHistogramDefs))
+          .first
+          .getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+    }
+
+    actual should be (expected)
+
+    spark.stop()
+  }
+
+  "Histogram filter" can "include all whitelisted histograms" in {
+    val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(
+      Histograms.definitions(includeOptin = true),
+      useWhitelist = true
+    ).map(_._1).toSet
+
+    val expectedDefs = MainSummaryView.histogramsWhitelist.toSet
+
+    allHistogramDefs should be (expectedDefs)
+  }
 }

@@ -1,8 +1,12 @@
 package com.mozilla.telemetry.utils
 
 import com.mozilla.telemetry.metrics._
-import org.apache.spark.sql.Row
+import org.json4s.jackson.JsonMethods._
+import org.json4s.DefaultFormats
 import org.json4s.JsonAST._
+import org.apache.spark.sql.Row
+
+import scala.util.{Success, Failure, Try}
 
 case class Addon(id: Option[String],
                  blocklisted: Option[Boolean],
@@ -308,5 +312,42 @@ object MainPing{
     } catch {
       case e: Exception => None
     }
+  }
+
+  def extractHistogramMap(histogram: JValue): Map[Integer, Integer] = {
+    implicit val formats = DefaultFormats
+
+    Try((histogram \ "values").extract[Map[Integer, Integer]]) match {
+      case Success(h) => h
+      case _ => null
+    }
+  }
+
+  def histogramsToRow(histograms: JValue, definitions: List[(String, HistogramDefinition)]): Row = {
+    implicit val formats = DefaultFormats
+
+    val values = definitions.map{
+      case (name, definition) =>
+        definition match {
+          case LinearHistogram(keyed, low, high, nBuckets) => (name, keyed)
+          case ExponentialHistogram(keyed, low, high, nBuckets) => (name, keyed)
+          case EnumeratedHistogram(keyed, _) => (name, keyed)
+          case BooleanHistogram(keyed) => (name, keyed)
+          case other =>
+            throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
+        }
+    }.map{
+      case (name, keyed) =>
+        keyed match {
+          case true =>
+            Try((histograms \ name).extract[Map[String,JValue]].mapValues(extractHistogramMap _).map(identity)) match {
+              case Success(keyedHistogram) => keyedHistogram
+              case _ => null
+          }
+          case false => extractHistogramMap(histograms \ name)
+        }
+    }
+
+    Row.fromSeq(values)
   }
 }

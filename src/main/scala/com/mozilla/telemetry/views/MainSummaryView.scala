@@ -15,8 +15,18 @@ import com.mozilla.telemetry.metrics._
 import scala.util.{Success, Try}
 
 object MainSummaryView {
+  def HistogramPrefix = "histogram"
+
   def schemaVersion: String = "v4"
   def jobName: String = "main_summary"
+
+  val histogramsWhitelist =
+    "GC_MAX_PAUSE_MS" ::
+    "GC_MAX_PAUSE_MS_2" ::
+    "CYCLE_COLLECTOR_MAX_PAUSE" ::
+    "INPUT_EVENT_RESPONSE_COALESCED_MS" ::
+    "GHOST_WINDOWS" :: Nil
+
 
   // Configuration for command line arguments
   private class Conf(args: Array[String]) extends ScallopConf(args) {
@@ -74,7 +84,10 @@ object MainSummaryView {
         println(s" Filtering for version = '${filterVersion.get}'")
 
       val scalarDefinitions = Scalars.definitions(includeOptin = true).toList.sortBy(_._1)
-      val schema = buildSchema(scalarDefinitions)
+
+      val histogramDefinitions = filterHistogramDefinitions(Histograms.definitions(includeOptin = true), useWhitelist = true)
+
+      val schema = buildSchema(scalarDefinitions, histogramDefinitions)
       val ignoredCount = sc.accumulator(0, "Number of Records Ignored")
       val processedCount = sc.accumulator(0, "Number of Records Processed")
       val messages = Dataset("telemetry")
@@ -95,7 +108,7 @@ object MainSummaryView {
         }.records(conf.limit.get)
 
       val rowRDD = messages.flatMap(m => {
-        messageToRow(m, scalarDefinitions) match {
+        messageToRow(m, scalarDefinitions, histogramDefinitions) match {
           case None =>
             ignoredCount += 1
             None
@@ -248,7 +261,7 @@ object MainSummaryView {
 
   // Convert the given Heka message containing a "main" ping
   // to a map containing just the fields we're interested in.
-  def messageToRow(message: Message, scalarDefinitions: List[(String, ScalarDefinition)]): Option[Row] = {
+  def messageToRow(message: Message, scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String, HistogramDefinition)]): Option[Row] = {
     try {
       val fields = message.fieldsAsMap
 
@@ -563,7 +576,12 @@ object MainSummaryView {
         scalarDefinitions
       )
 
-      Some(Row.merge(row, scalarRow))
+      val histogramRow = MainPing.histogramsToRow(
+        histograms merge keyedHistograms,
+        histogramDefinitions
+      )
+
+      Some(Row.merge(row, scalarRow, histogramRow))
     } catch {
       case _: Exception =>
         None
@@ -668,13 +686,51 @@ object MainSummaryView {
     }
   }
 
+  def getHistogramName(name: String, process: String): String = {
+    s"${HistogramPrefix}_${process}_${name.toLowerCase}"
+  }
+
+  val HistogramSchema = MapType(IntegerType, IntegerType, true)
+
+  def filterHistogramDefinitions(definitions: Map[String, HistogramDefinition], useWhitelist: Boolean = false): List[(String, HistogramDefinition)] = {
+    definitions.toList.filter(_._2 match {
+      case _: LinearHistogram => true
+      case _: ExponentialHistogram => true
+      case _: EnumeratedHistogram => true
+      case _: BooleanHistogram => true
+      case _ => false
+    }).filter(
+      entry => !useWhitelist || histogramsWhitelist.contains(entry._1)
+    ).sortBy(_._1)
+  }
+
+  def buildHistogramSchema(histogramDefinitions: List[(String, HistogramDefinition)]): List[StructField] = {
+    histogramDefinitions.map{
+      case (name, definition) =>
+        definition match {
+          case LinearHistogram(keyed, _, _, _) => (name, keyed)
+          case ExponentialHistogram(keyed, _, _, _) => (name, keyed)
+          case EnumeratedHistogram(keyed, _) => (name, keyed)
+          case BooleanHistogram(keyed) => (name, keyed)
+          case other =>
+            throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
+        }
+    }.map{
+      case (name, keyed) =>
+        keyed match {
+          case true => StructField(getHistogramName(name, "parent"), MapType(StringType, HistogramSchema), nullable = true)
+          case false => StructField(getHistogramName(name, "parent"), HistogramSchema, nullable = true)
+        }
+    }
+  }
+
   def buildPluginNotificationUserActionSchema = StructType(List(
     StructField("allow_now", IntegerType, nullable = true),
     StructField("allow_always", IntegerType, nullable = true),
     StructField("block", IntegerType, nullable = true)
   ))
 
-  def buildSchema(scalarDefinitions: List[(String, ScalarDefinition)]): StructType = {
+  def buildSchema(scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String, HistogramDefinition)]): StructType = {
     StructType(List(
       StructField("document_id", StringType, nullable = false), // id
       StructField("client_id", StringType, nullable = true), // clientId
@@ -820,6 +876,7 @@ object MainSummaryView {
       StructField("experiments", MapType(StringType, StringType), nullable = true), // experiment id->branchname
 
       StructField("search_cohort", StringType, nullable = true)
-    ) ++ buildScalarSchema(scalarDefinitions))
+    ) ++ buildScalarSchema(scalarDefinitions)
+      ++ buildHistogramSchema(histogramDefinitions))
   }
 }
