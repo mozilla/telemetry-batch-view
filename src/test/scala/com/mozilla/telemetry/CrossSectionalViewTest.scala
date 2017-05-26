@@ -48,10 +48,8 @@ class CrossSectionalViewTest extends FlatSpec {
   }
 
   def getExampleActiveAddon(foreign: Boolean = false, name: String = "Name") = {
-    new ActiveAddon(
-      Some(false), Some("Description"), Some(name), Some(false),
-      Some(false), Some("Version"), Some(1), Some("Type"), Some(foreign),
-      Some(false), Some(1), Some(1), Some(1), Some(false)
+    new ParquetAddon(
+      "addonid", false, name, false, false, "version", 1, "type", foreign, false, 1, 1, 1, false
     )
   }
 
@@ -64,7 +62,7 @@ class CrossSectionalViewTest extends FlatSpec {
 
   def getExampleLongitudinal(
     client_id: String,
-    active_addons: Option[Seq[Map[String, ActiveAddon]]] = None
+    active_addons: Option[Seq[Map[String, ParquetAddon]]] = None
   ) = {
     new Longitudinal(
       client_id = client_id,
@@ -114,7 +112,7 @@ class CrossSectionalViewTest extends FlatSpec {
     addon_count_avg: Option[Double] = None,
     addon_count_configs: Option[Long] = None,
     addon_count_mode: Option[Long] = None,
-    addon_names_list: Option[Seq[Option[String]]] = None
+    addon_names_list: Option[Seq[String]] = None
   ) = {
     new CrossSectional(
       client_id = client_id,
@@ -227,11 +225,7 @@ class CrossSectionalViewTest extends FlatSpec {
 
   it must "summarize active_addons properly" in {
     def getExampleActiveAddon(foreign: Boolean = false, name: String = "Name") = {
-      new ActiveAddon(
-        Some(false), Some("Description"), Some(name), Some(false),
-        Some(false), Some("Version"), Some(1), Some("Type"), Some(foreign),
-        Some(false), Some(1), Some(1), Some(1), Some(false)
-      )
+      ParquetAddon("id", false, name, false, false, "Version", 1, "Type", foreign, false, 1, 1, 1, false)
     }
     val actual = new CrossSectional(getExampleLongitudinal(
       client_id = "a",
@@ -250,7 +244,7 @@ class CrossSectionalViewTest extends FlatSpec {
       addon_count_avg = Some(2.0),
       addon_count_configs = Some(1),
       addon_count_mode = Some(2),
-      addon_names_list = Some(Seq(Some("Name"), Some("Test")))
+      addon_names_list = Some(Seq("Name", "Test"))
     )
 
     assert(actual compare expected)
@@ -274,7 +268,7 @@ class CrossSectionalViewTest extends FlatSpec {
       addon_count_avg = Some(2.0),
       addon_count_configs = Some(1),
       addon_count_mode = Some(2),
-      addon_names_list = Some(Seq(Some("Name"), Some("UBloCKer Plus Plus")))
+      addon_names_list = Some(Seq("Name", "UBloCKer Plus Plus"))
     )
 
     assert(actual compare expected)
