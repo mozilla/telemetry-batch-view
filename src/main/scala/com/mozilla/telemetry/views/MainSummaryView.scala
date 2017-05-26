@@ -541,8 +541,12 @@ object MainSummaryView {
         hsum(histograms \ "PLUGINS_INFOBAR_ALLOW"),
 
         // bug 1366253 - active experiments
-        getExperiments(experiments).orNull
+        getExperiments(experiments).orNull,
 
+        settings \ "searchCohort" match {
+          case JString(x) => x
+          case _ => null
+        }
       )
 
       val scalarRow = MainPing.scalarsToRow(
@@ -803,9 +807,9 @@ object MainSummaryView {
       StructField("plugins_infobar_allow", IntegerType, nullable = true),
 
       // bug 1366253 - active experiments
-      StructField("experiments", MapType(StringType, StringType), nullable = true) // experiment id->branchname
+      StructField("experiments", MapType(StringType, StringType), nullable = true), // experiment id->branchname
 
-
+      StructField("search_cohort", StringType, nullable = true)
     ) ++ buildScalarSchema(scalarDefinitions))
   }
 }

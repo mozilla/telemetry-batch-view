@@ -798,6 +798,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "plugins_infobar_shown"             -> null,
             "plugins_infobar_block"             -> null,
             "plugins_infobar_allow"             -> null,
+            "search_cohort"                     -> null,
             "scalar_parent_mock_keyed_scalar_bool"   -> null,
             "scalar_parent_mock_keyed_scalar_string" -> null,
             "scalar_parent_mock_keyed_scalar_uint"   -> null,
@@ -1168,4 +1169,33 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     MainSummaryView.getAttribution(json3 \ "environment" \ "settings" \ "attribution") should be (
       Some(Row("sample_source", "sample_medium", "sample_campaign", "sample_content")))
   }
+
+  "Search cohort" can "be properly shown" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.settings" -> """{
+          "searchCohort": "helloworld"
+        }"""),
+      None);
+    val summary = MainSummaryView.messageToRow(message, scalarDefs)
+
+    val expected = Map(
+      "search_cohort" -> "helloworld"
+    )
+
+    val actual =
+      applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs))
+      .getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+    actual should be (expected)
+  }
+
+
 }
