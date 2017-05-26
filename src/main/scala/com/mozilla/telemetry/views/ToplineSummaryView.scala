@@ -327,9 +327,24 @@ object ToplineSummaryView {
         .withColumnRenamed("country", "geo")
         // Bug 1364617 removed generating crash aggregates.
         // This column defaults to 0 to maintain the schema, but it is just a dummy value.
-        .withColumn("crashes", lit(0))
+        .withColumn("crashes", lit(0l))
         // replace nulls in outer joins
-        .na.fill(0, Seq("hours", "crashes", "google", "bing", "yahoo", "other", "actives", "new_records", "default"))
+        .na.fill(0)
+        // preserve final column ordering
+        .select(
+          $"geo",
+          $"channel",
+          $"os",
+          $"hours",
+          $"crashes",
+          $"google",
+          $"bing",
+          $"yahoo",
+          $"other",
+          $"actives",
+          $"new_records",
+          $"default"
+        )
 
       println(s"Saving report to $s3path")
 
