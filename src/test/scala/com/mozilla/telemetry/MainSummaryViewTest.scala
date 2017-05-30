@@ -933,7 +933,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   }
 
   "User prefs" can "be extracted" in {
-    // Contains prefs, but not dom.ipc.processCount:
+    // Contains prefs, but not dom.ipc.processCount or extensions.allow-non-mpc-extensions:
     val json1 = parse(
       """
         |{
@@ -963,7 +963,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       """.stripMargin)
     MainSummaryView.getUserPrefs(json2 \ "environment" \ "settings" \ "userPrefs") should be (None)
 
-    // Contains prefs, including dom.ipc.processCount
+    // Contains prefs, including dom.ipc.processCount and extensions.allow-non-mpc-extensions
     val json3 = parse(
       """
         |{
@@ -972,15 +972,16 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |   "userPrefs": {
         |    "dom.ipc.processCount": 2,
         |    "browser.newtabpage.enhanced": true,
-        |    "browser.startup.page": 3
+        |    "browser.startup.page": 3,
+        |    "extensions.allow-non-mpc-extensions": true
         |   }
         |  }
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getUserPrefs(json3 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(2)))
+    MainSummaryView.getUserPrefs(json3 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(2, true)))
 
-    // Contains dom.ipc.processCount with a bogus data type
+    // Contains dom.ipc.processCount and extensions.allow-non-mpc-extensions with bogus data types
     val json4 = parse(
       """
         |{
@@ -989,7 +990,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |   "userPrefs": {
         |    "dom.ipc.processCount": "2",
         |    "browser.newtabpage.enhanced": true,
-        |    "browser.startup.page": 3
+        |    "browser.startup.page": 3,
+        |    "extensions.allow-non-mpc-extensions": 1
         |   }
         |  }
         | }
@@ -1008,7 +1010,42 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |}
       """.stripMargin)
     MainSummaryView.getUserPrefs(json5 \ "environment" \ "settings" \ "userPrefs") should be (None)
-  }
+
+  // Contains dom.ipc.processCount but not extensions.allow-non-mpc-extensions
+  val json6 = parse(
+    """
+      |{
+      | "environment": {
+      |  "settings": {
+      |   "userPrefs": {
+      |    "dom.ipc.processCount": 4,
+      |    "browser.newtabpage.enhanced": true,
+      |    "browser.startup.page": 3
+      |   }
+      |  }
+      | }
+      |}
+    """.stripMargin)
+  MainSummaryView.getUserPrefs(json6 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(4, None)))
+
+    // Contains extensions.allow-non-mpc-extensions but not dom.ipc.processCount
+    val json7 = parse(
+      """
+        |{
+        | "environment": {
+        |  "settings": {
+        |   "userPrefs": {
+        |    "browser.newtabpage.enhanced": true,
+        |    "browser.startup.page": 3,
+        |    "extensions.allow-non-mpc-extensions": false
+        |   }
+        |  }
+        | }
+        |}
+      """.stripMargin)
+    MainSummaryView.getUserPrefs(json7 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(None, false)))
+
+}
 
   "Engagement measures" can "be extracted" in {
     // Doesn't have scalars
