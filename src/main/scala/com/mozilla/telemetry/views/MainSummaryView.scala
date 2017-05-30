@@ -8,7 +8,7 @@ import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._
 import com.mozilla.telemetry.heka.{Dataset, Message}
-import com.mozilla.telemetry.utils.{Addon, Attribution, MainPing, S3Store, Events}
+import com.mozilla.telemetry.utils.{Addon, Attribution, Experiment, MainPing, S3Store, Events}
 import org.json4s.{DefaultFormats, JValue}
 import com.mozilla.telemetry.scalars._
 
@@ -227,6 +227,20 @@ object MainSummaryView {
     }
   }
 
+  def getExperiments(experiments: JValue): Option[Map[String, String]] = {
+    implicit val formats = DefaultFormats
+    Try(experiments.extract[Map[String, Experiment]]) match {
+      case Success(experiments) => {
+        if (experiments.size > 0) {
+          Some(experiments.map { case (id, data) => id -> data.branch.orNull })
+        } else {
+          None
+        }
+      }
+      case _ => None
+    }
+  }
+
   def asInt(v: JValue): Integer = v match {
     case JInt(x) => x.toInt
     case _ => null
@@ -259,6 +273,7 @@ object MainSummaryView {
       lazy val parentScalars = payload \ "payload" \ "processes" \ "parent" \ "scalars"
       lazy val parentKeyedScalars = payload \ "payload" \ "processes" \ "parent" \ "keyedScalars"
       lazy val parentEvents = payload \ "payload" \ "processes" \ "parent" \ "events"
+      lazy val experiments = parse(fields.getOrElse("environment.experiments", "{}").asInstanceOf[String])
 
       val loopActivityCounterKeys = (0 to 4).map(_.toString)
       val sslHandshakeResultKeys = (0 to 671).map(_.toString)
@@ -532,7 +547,10 @@ object MainSummaryView {
         MainPing.enumHistogramToRow(histograms \ "PLUGINS_NOTIFICATION_USER_ACTION", pluginNotificationUserActionKeys),
         hsum(histograms \ "PLUGINS_INFOBAR_SHOWN"),
         hsum(histograms \ "PLUGINS_INFOBAR_BLOCK"),
-        hsum(histograms \ "PLUGINS_INFOBAR_ALLOW")
+        hsum(histograms \ "PLUGINS_INFOBAR_ALLOW"),
+
+        // bug 1366253 - active experiments
+        getExperiments(experiments).orNull
 
       )
 
@@ -792,7 +810,11 @@ object MainSummaryView {
       StructField("plugins_notification_user_action", buildPluginNotificationUserActionSchema, nullable = true),
       StructField("plugins_infobar_shown", IntegerType, nullable = true),
       StructField("plugins_infobar_block", IntegerType, nullable = true),
-      StructField("plugins_infobar_allow", IntegerType, nullable = true)
+      StructField("plugins_infobar_allow", IntegerType, nullable = true),
+
+      // bug 1366253 - active experiments
+      StructField("experiments", MapType(StringType, StringType), nullable = true) // experiment id->branchname
+
 
     ) ++ buildScalarSchema(scalarDefinitions))
   }
