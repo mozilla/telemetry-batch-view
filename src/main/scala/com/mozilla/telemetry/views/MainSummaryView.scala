@@ -218,11 +218,11 @@ object MainSummaryView {
     }
     val anme = prefs \ "extensions.allow-non-mpc-extensions" match {
       case JBool(x) => x
-      case _ => None
+      case _ => null
     }
     val row = Row(pc, anme)
     row match {
-      case Row(None, None) => None
+      case Row(None, null) => None
       case nonempty => Some(nonempty)
     }
   }
