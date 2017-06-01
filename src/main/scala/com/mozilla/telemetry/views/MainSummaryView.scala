@@ -42,25 +42,25 @@ object MainSummaryView {
     }
 
     // Set up Spark
-    val sparkConf = new SparkConf().setAppName(jobName)
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
-    implicit val sc = new SparkContext(sparkConf)
-    val sqlContext = new SQLContext(sc)
-    val hadoopConf = sc.hadoopConfiguration
-    hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
-
-    // We want to end up with reasonably large parquet files on S3.
-    val parquetSize = 512 * 1024 * 1024
-    hadoopConf.setInt("parquet.block.size", parquetSize)
-    hadoopConf.setInt("dfs.blocksize", parquetSize)
-    // Don't write metadata files, because they screw up partition discovery.
-    // This is fixed in Spark 2.0, see:
-    //   https://issues.apache.org/jira/browse/SPARK-13207
-    //   https://issues.apache.org/jira/browse/SPARK-15454
-    //   https://issues.apache.org/jira/browse/SPARK-15895
-    hadoopConf.set("parquet.enable.summary-metadata", "false")
-
     for (offset <- 0 to Days.daysBetween(from, to).getDays) {
+      val sparkConf = new SparkConf().setAppName(jobName)
+      sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
+      implicit val sc = new SparkContext(sparkConf)
+      val sqlContext = new SQLContext(sc)
+      val hadoopConf = sc.hadoopConfiguration
+      hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
+
+      // We want to end up with reasonably large parquet files on S3.
+      val parquetSize = 512 * 1024 * 1024
+      hadoopConf.setInt("parquet.block.size", parquetSize)
+      hadoopConf.setInt("dfs.blocksize", parquetSize)
+      // Don't write metadata files, because they screw up partition discovery.
+      // This is fixed in Spark 2.0, see:
+      //   https://issues.apache.org/jira/browse/SPARK-13207
+      //   https://issues.apache.org/jira/browse/SPARK-15454
+      //   https://issues.apache.org/jira/browse/SPARK-15895
+      hadoopConf.set("parquet.enable.summary-metadata", "false")
+
       val currentDate = from.plusDays(offset)
       val currentDateString = currentDate.toString("yyyyMMdd")
       val filterChannel = conf.channel.get
@@ -124,10 +124,9 @@ object MainSummaryView {
       // Repartition the dataframe by sample_id before saving.
       val partitioned = records.repartition(100, records.col("sample_id"))
 
-      // Then write to S3 using the given fields as path name partitions. If any
-      // data already exists for the target day, cowardly refuse to run. In
-      // that case, go delete the data from S3 and try again.
-      partitioned.write.partitionBy("sample_id").mode("error").parquet(s3path)
+      // Then write to S3 using the given fields as path name partitions. Overwrites
+      // existing data.
+      partitioned.write.partitionBy("sample_id").mode("overwrite").parquet(s3path)
 
       // Then remove the _SUCCESS file so we don't break Spark partition discovery.
       S3Store.deleteKey(conf.outputBucket(), s"$s3prefix/_SUCCESS")
@@ -136,8 +135,9 @@ object MainSummaryView {
       println("     RECORDS SEEN:    %d".format(ignoredCount.value + processedCount.value))
       println("     RECORDS IGNORED: %d".format(ignoredCount.value))
       println("=======================================================================================")
+
+      sc.stop()
     }
-    sc.stop()
   }
 
   def getActiveAddons(activeAddons: JValue): Option[List[Row]] = {
@@ -214,15 +214,15 @@ object MainSummaryView {
   def getUserPrefs(prefs: JValue): Option[Row] = {
     val pc = prefs \ "dom.ipc.processCount" match {
       case JInt(pc) => pc.toInt
-      case _ => None
+      case _ => null 
     }
     val anme = prefs \ "extensions.allow-non-mpc-extensions" match {
       case JBool(x) => x
-      case _ => None
+      case _ => null
     }
     val row = Row(pc, anme)
     row match {
-      case Row(None, None) => None
+      case Row(null, null) => None
       case nonempty => Some(nonempty)
     }
   }

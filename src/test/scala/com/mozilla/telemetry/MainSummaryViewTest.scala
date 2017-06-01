@@ -1026,7 +1026,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       | }
       |}
     """.stripMargin)
-  MainSummaryView.getUserPrefs(json6 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(4, None)))
+  MainSummaryView.getUserPrefs(json6 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(4, null)))
 
     // Contains extensions.allow-non-mpc-extensions but not dom.ipc.processCount
     val json7 = parse(
@@ -1043,7 +1043,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getUserPrefs(json7 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(None, false)))
+    MainSummaryView.getUserPrefs(json7 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(null, false)))
 
 }
 
@@ -1234,5 +1234,88 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     actual should be (expected)
   }
 
+  "User prefs" can "be properly shown" in {
+    val spark = SparkSession.builder()
+        .appName("Generic Longitudinal Test")
+        .master("local[1]")
+        .getOrCreate()
+
+    val sc = spark.sparkContext
+    import spark.implicits._
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.settings" -> """{
+          "userPrefs": {
+            "dom.ipc.processCount": 2
+          }
+        }"""),
+      None);
+    val summary = MainSummaryView.messageToRow(message, scalarDefs)
+
+    val expected = Map(
+      "dom_ipc_process_count" -> 2,
+      "extensions_allow_non_mpc_extensions" -> null
+    )
+
+    val actual =
+      spark
+      .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs))
+      .first
+      .getAs[Row]("user_prefs")
+      .getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+    actual should be (expected)
+    spark.stop()
+  }
+
+  "User prefs" can "handle null" in {
+    val spark = SparkSession.builder()
+        .appName("Generic Longitudinal Test")
+        .master("local[1]")
+        .getOrCreate()
+
+    val sc = spark.sparkContext
+    import spark.implicits._
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.settings" -> """{
+          "userPrefs": {
+            "extensions.allow-non-mpc-extensions": true
+          }
+        }"""),
+      None);
+    val summary = MainSummaryView.messageToRow(message, scalarDefs)
+
+    val expected = Map(
+      "dom_ipc_process_count" -> null,
+      "extensions_allow_non_mpc_extensions" -> true 
+    )
+
+    val actual =
+      spark
+      .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs))
+      .first
+      .getAs[Row]("user_prefs")
+      .getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+    actual should be (expected)
+    spark.stop()
+  }
 
 }
