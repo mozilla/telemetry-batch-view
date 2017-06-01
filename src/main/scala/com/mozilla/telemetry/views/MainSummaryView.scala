@@ -214,7 +214,7 @@ object MainSummaryView {
   def getUserPrefs(prefs: JValue): Option[Row] = {
     val pc = prefs \ "dom.ipc.processCount" match {
       case JInt(pc) => pc.toInt
-      case _ => None
+      case _ => null 
     }
     val anme = prefs \ "extensions.allow-non-mpc-extensions" match {
       case JBool(x) => x
@@ -222,7 +222,7 @@ object MainSummaryView {
     }
     val row = Row(pc, anme)
     row match {
-      case Row(None, null) => None
+      case Row(null, null) => None
       case nonempty => Some(nonempty)
     }
   }
