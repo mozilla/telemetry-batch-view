@@ -4,7 +4,9 @@ import com.mozilla.telemetry.views.ExperimentSummaryView
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.col
 import org.scalatest.{FlatSpec, Matchers}
+import org.json4s.jackson.JsonMethods.parse
 
+import scala.io.Source
 
 case class ExperimentMainSummary(document_id: String, client_id: String,
                                  experiments: Option[scala.collection.Map[String, String]])
@@ -42,8 +44,9 @@ class ExperimentSummaryViewTest extends FlatSpec with Matchers{
       pings.write.parquet(testMainLocation)
 
       val testExperimentsLocation = com.mozilla.telemetry.utils.temporaryFileName().toString.replace("file:", "")
+      val testExperimentsList = List("experiment1")
 
-      ExperimentSummaryView.writeExperiments(testMainLocation, testExperimentsLocation, "20170101", spark)
+      ExperimentSummaryView.writeExperiments(testMainLocation, testExperimentsLocation, "20170101", testExperimentsList, spark)
 
       val actual = spark.read.parquet(testExperimentsLocation)
         .orderBy(col("document_id"), col("experiment_id"))
@@ -59,13 +62,6 @@ class ExperimentSummaryViewTest extends FlatSpec with Matchers{
           "experiment1",
           20170101),
         Row(
-          "6609b4d8-94d4-4e87-9f6f-80183079ff1b",
-          "25a00eb7-2fd8-47fd-8d3f-223af3e5c68f",
-          Map("experiment1" -> "branch1", "experiment2" -> "branch2"),
-          "branch2",
-          "experiment2",
-          20170101),
-        Row(
           "72062950-3daf-450e-adfd-58eda3151a97",
           "baedfe78-676e-440e-98b4-a4066657ded1",
           Map("experiment1" -> "branch2"),
@@ -78,5 +74,16 @@ class ExperimentSummaryViewTest extends FlatSpec with Matchers{
     } finally {
       spark.stop()
     }
+  }
+
+  "Experiment recipe list" can "be extracted" in {
+    val apiFixturePath = getClass.getResource("/normandy_api_result.json").getPath()
+    val json = parse(Source.fromFile(apiFixturePath).mkString)
+
+    val expected = List("shield-public-infobar-display-bug1368141",
+                        "shield-lazy-client-classify",
+                        "pref-flip-test-nightly-1")
+
+    assert(ExperimentSummaryView.getExperimentList(json) == expected)
   }
 }

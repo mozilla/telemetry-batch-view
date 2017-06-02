@@ -1,0 +1,205 @@
+[
+  {
+    "id": 184,
+    "last_updated": "2017-06-01T20:15:56.250994Z",
+    "name": "Preference Experiment: SHIELD Public Infobar Display (Bug 1368141)",
+    "enabled": true,
+    "is_approved": true,
+    "revision_id": "e817dcb3744f05bdc46403d548bd32c136bf1d68d485f9228e153ae13b38cde8",
+    "action": "preference-experiment",
+    "arguments": {
+      "branches": [
+        {
+          "ratio": 1,
+          "slug": "remember",
+          "value": true
+        },
+        {
+          "ratio": 1,
+          "slug": "control",
+          "value": false
+        }
+      ],
+      "experimentDocumentUrl": "https://bugzilla.mozilla.org/show_bug.cgi?id=1368141",
+      "preferenceBranchType": "default",
+      "preferenceName": "plugins.remember_infobar_dismissal",
+      "preferenceType": "boolean",
+      "slug": "shield-public-infobar-display-bug1368141"
+    },
+    "channels": [],
+    "countries": [],
+    "locales": [],
+    "extra_filter_expression": "normandy.channel == 'nightly' &&\n[normandy.userId, normandy.recipe.id]|stableSample(1.0)",
+    "filter_expression": "normandy.channel == 'nightly' &&\n[normandy.userId, normandy.recipe.id]|stableSample(1.0)",
+    "latest_revision_id": "e817dcb3744f05bdc46403d548bd32c136bf1d68d485f9228e153ae13b38cde8",
+    "approved_revision_id": "e817dcb3744f05bdc46403d548bd32c136bf1d68d485f9228e153ae13b38cde8",
+    "approval_request": {
+      "id": 52,
+      "created": "2017-06-01T20:17:15.631395Z",
+      "creator": {
+        "id": 6,
+        "first_name": "",
+        "last_name": "",
+        "email": "jgaunt@mozilla.com"
+      },
+      "approved": true,
+      "approver": {
+        "id": 5,
+        "first_name": "",
+        "last_name": "",
+        "email": "glind@mozilla.com"
+      },
+      "comment": "I think this looks good.  100%.  BDS is the requestor, follow up with him with questions."
+    }
+  },
+  {
+    "id": 183,
+    "last_updated": "2017-05-30T20:50:11.118357Z",
+    "name": "Firefox: Content Discovery (Evaluation and Follow-Up Actions)",
+    "enabled": true,
+    "is_approved": true,
+    "revision_id": "ff49f699ac98be8e3caf2d7d41574c899b9d34f29536802936f0939cbbde8830",
+    "action": "show-heartbeat",
+    "arguments": {
+      "engagementButtonLabel": "Take Survey",
+      "includeTelemetryUUID": true,
+      "learnMoreMessage": "Learn More",
+      "learnMoreUrl": "https://wiki.mozilla.org/Firefox/Shield/Heartbeat",
+      "message": "Would you like to share feedback about Firefox?",
+      "postAnswerUrl": "http://www.surveygizmo.com/s3/3590662/Content-Discovery",
+      "surveyId": "firefox-content-discovery-evaluation-followup-actions-1",
+      "thanksMessage": "Thank you!"
+    },
+    "channels": [],
+    "countries": [],
+    "locales": [],
+    "extra_filter_expression": "(\n    [normandy.userId]|bucketSample(263, 1, 1000)\n    && normandy.locale in ['en-US', 'en-AU', 'en-CA', 'en-GB', 'en-NZ', 'en-ZA']\n    && normandy.channel == 'release'\n)",
+    "filter_expression": "(\n    [normandy.userId]|bucketSample(263, 1, 1000)\n    && normandy.locale in ['en-US', 'en-AU', 'en-CA', 'en-GB', 'en-NZ', 'en-ZA']\n    && normandy.channel == 'release'\n)",
+    "latest_revision_id": "ff49f699ac98be8e3caf2d7d41574c899b9d34f29536802936f0939cbbde8830",
+    "approved_revision_id": "ff49f699ac98be8e3caf2d7d41574c899b9d34f29536802936f0939cbbde8830",
+    "approval_request": {
+      "id": 51,
+      "created": "2017-05-30T22:57:50.683584Z",
+      "creator": {
+        "id": 11,
+        "first_name": "Kamyar",
+        "last_name": "Ardekani",
+        "email": "kardekani@mozilla.com"
+      },
+      "approved": true,
+      "approver": {
+        "id": 6,
+        "first_name": "",
+        "last_name": "",
+        "email": "jgaunt@mozilla.com"
+      },
+      "comment": "Compared this to firefox-content-discovery-page-interactions-1, another Jason survey, and saw no difference besides bucket selection.  Approved."
+    }
+  },
+  {
+    "id": 172,
+    "last_updated": "2017-05-23T06:45:20.560639Z",
+    "name": "Preference Experiment: SHIELD Lazy Client Classification (Bug 1365680)",
+    "enabled": true,
+    "is_approved": true,
+    "revision_id": "6712954cc1509a0d60b2dd1bb7fd2af1d2ae406747ba606322064d099de29b2d",
+    "action": "preference-experiment",
+    "arguments": {
+      "branches": [
+        {
+          "ratio": 1,
+          "slug": "default",
+          "value": true
+        }
+      ],
+      "experimentDocumentUrl": "https://bugzilla.mozilla.org/show_bug.cgi?id=1365680",
+      "preferenceBranchType": "user",
+      "preferenceName": "extensions.shield-recipe-client.experiments.lazy_classify",
+      "preferenceType": "boolean",
+      "slug": "shield-lazy-client-classify"
+    },
+    "channels": [],
+    "countries": [],
+    "locales": [],
+    "extra_filter_expression": "normandy.channel == 'nightly'",
+    "filter_expression": "normandy.channel == 'nightly'",
+    "latest_revision_id": "6712954cc1509a0d60b2dd1bb7fd2af1d2ae406747ba606322064d099de29b2d",
+    "approved_revision_id": "6712954cc1509a0d60b2dd1bb7fd2af1d2ae406747ba606322064d099de29b2d",
+    "approval_request": {
+      "id": 40,
+      "created": "2017-05-23T06:45:24.705898Z",
+      "creator": {
+        "id": 2,
+        "first_name": "",
+        "last_name": "",
+        "email": "mkelly@mozilla.com"
+      },
+      "approved": true,
+      "approver": {
+        "id": 3,
+        "first_name": "",
+        "last_name": "",
+        "email": "mgrimes@mozilla.com"
+      },
+      "comment": "Looks good. Bombs away!"
+    }
+  },
+  {
+    "id": 162,
+    "last_updated": "2017-05-05T20:29:58.889566Z",
+    "name": "Pref-flip: test.normandy.prefflip.defaultpref",
+    "enabled": false,
+    "is_approved": false,
+    "revision_id": "c17359e19a123c2897a6f8d04579d85d9adaec11886ab0aceada27898ac64490",
+    "action": "preference-experiment",
+    "arguments": {
+      "branches": [
+        {
+          "ratio": 3,
+          "slug": "control",
+          "value": 0
+        },
+        {
+          "ratio": 2,
+          "slug": "versionA",
+          "value": 1
+        },
+        {
+          "ratio": 1,
+          "slug": "versionB",
+          "value": 2
+        }
+      ],
+      "experimentDocumentUrl": "https://github.com/mozilla/normandy/issues/734",
+      "preferenceBranchType": "default",
+      "preferenceName": "test.normandy.prefflip.defaultpref",
+      "preferenceType": "integer",
+      "slug": "pref-flip-test-nightly-1"
+    },
+    "channels": [],
+    "countries": [],
+    "locales": [],
+    "extra_filter_expression": "normandy.channel == 'nightly' && [normandy.userId, normandy.recipe.id]|stableSample(0.01)",
+    "filter_expression": "normandy.channel == 'nightly' && [normandy.userId, normandy.recipe.id]|stableSample(0.01)",
+    "latest_revision_id": "c17359e19a123c2897a6f8d04579d85d9adaec11886ab0aceada27898ac64490",
+    "approved_revision_id": null,
+    "approval_request": {
+      "id": 23,
+      "created": "2017-05-05T20:30:00.602388Z",
+      "creator": {
+        "id": 5,
+        "first_name": "",
+        "last_name": "",
+        "email": "glind@mozilla.com"
+      },
+      "approved": true,
+      "approver": {
+        "id": 6,
+        "first_name": "",
+        "last_name": "",
+        "email": "jgaunt@mozilla.com"
+      },
+      "comment": "looks good to me"
+    }
+  }
+]

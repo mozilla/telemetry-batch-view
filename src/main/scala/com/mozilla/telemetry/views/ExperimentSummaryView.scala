@@ -4,10 +4,23 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.SparkSession
 import org.joda.time.{DateTime, Days, format}
 import org.rogach.scallop._
+import org.json4s.jackson.JsonMethods._
+import org.json4s._
+
+import scalaj.http.Http
+import scala.util.{Try, Success}
 
 object ExperimentSummaryView {
   def schemaVersion: String = "v1"
   def jobName: String = "experiments"
+  def experimentsUrl: String = "https://normandy.services.mozilla.com/api/v1/recipe/"
+  def experimentsUrlParams = List(("latest_revision__action", "3"), ("format", "json"))
+  def experimentsQualifyingAction = "preference-experiment"
+  private case class NormandyRecipeBranch(ratio: Int, slug: String, value: Any)
+  private case class NormandyRecipeArguments(branches: List[NormandyRecipeBranch], slug: String)
+  private case class NormandyRecipe(id: Long, enabled: Boolean, action: String, arguments: NormandyRecipeArguments)
+  case class NormandyException(private val message: String = "",
+                               private val cause: Throwable = None.orNull) extends Exception(message, cause)
 
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getSimpleName)
 
@@ -51,7 +64,9 @@ object ExperimentSummaryView {
       val s3prefix = s"$jobName/$schemaVersion/"
       val output = s"s3://$outputBucket/$s3prefix"
 
-      writeExperiments(input, output, currentDateString, spark)
+      val experiments = getExperimentList(getExperimentRecipes())
+
+      writeExperiments(input, output, currentDateString, experiments, spark)
 
       logger.info(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
       logger.info("=======================================================================================")
@@ -72,17 +87,35 @@ object ExperimentSummaryView {
     return spark
   }
 
-  def writeExperiments(input: String, output: String, date: String, spark: SparkSession): Unit = {
+  def writeExperiments(input: String, output: String, date: String, experiments: List[String], spark: SparkSession): Unit = {
     val mainSummary = spark.read.parquet(input)
     mainSummary
       .select(col("*"), explode(col("experiments")).as(Array("experiment_id", "experiment_branch")))
+      .where(col("experiment_id").isin(experiments:_*))
       .withColumn("submission_date_s3", lit(date))
       .repartition(col("experiment_id"))
       .write
       // Usage characteristics will most likely be "get all pings from an experiment for all days"
       .partitionBy("experiment_id", "submission_date_s3")
-      .mode("error")
+      .mode("append")
       .parquet(output)
+  }
+
+  def getExperimentRecipes(): JValue = {
+    parse(Http(experimentsUrl).params(experimentsUrlParams).asString.body)
+  }
+
+  def getExperimentList(json: JValue): List[String] = {
+    implicit val formats = DefaultFormats
+    json match {
+      case JArray(x) => x.flatMap(v =>
+        Try(v.extract[NormandyRecipe]) match {
+          case Success(r) => if (r.action == experimentsQualifyingAction) List(r.arguments.slug) else List()
+          case _ => List()
+        }
+      )
+      case _ => throw NormandyException("Unexpected response format from experiment recipe server")
+    }
   }
 }
 
