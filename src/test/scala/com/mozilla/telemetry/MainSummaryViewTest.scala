@@ -745,6 +745,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "subsession_length"                 -> 14557l,
             "subsession_counter"                -> 12,
             "profile_subsession_counter"        -> 43,
+            "creation_date"                     -> "2016-03-28T16:02:52.676Z",
             "distribution_id"                   -> null,
             "submission_date"                   -> "20160407",
             "sync_configured"                   -> false,

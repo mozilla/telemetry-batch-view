@@ -394,6 +394,10 @@ object MainSummaryView {
           case JInt(x) => x.toInt
           case _ => null
         },
+        payload \ "creationDate" match {
+          case JString(x) => x
+          case _ => null
+        },
         partner \ "distributionId" match {
           case JString(x) => x
           case _ => null
@@ -758,6 +762,7 @@ object MainSummaryView {
       StructField("subsession_length", LongType, nullable = true), // info/subsessionLength
       StructField("subsession_counter", IntegerType, nullable = true), // info/subsessionCounter
       StructField("profile_subsession_counter", IntegerType, nullable = true), // info/profileSubsessionCounter
+      StructField("creation_date", StringType, nullable = true), // creationDate
       StructField("distribution_id", StringType, nullable = true), // environment/partner/distributionId
       StructField("submission_date", StringType, nullable = false), // YYYYMMDD version of 'timestamp'
       // See bug 1232050
