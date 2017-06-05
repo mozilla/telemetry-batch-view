@@ -10,7 +10,7 @@ import org.rogach.scallop._
 import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.utils.{Addon, Attribution, Experiment, MainPing, S3Store, Events}
 import org.json4s.{DefaultFormats, JValue}
-import com.mozilla.telemetry.scalars._
+import com.mozilla.telemetry.metrics._
 
 import scala.util.{Success, Try}
 

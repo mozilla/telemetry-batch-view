@@ -1,4 +1,4 @@
-import com.mozilla.telemetry.scalars.ScalarsClass
+import com.mozilla.telemetry.metrics.ScalarsClass
 
 import scala.io.Source
 import org.scalatest.{FlatSpec, Matchers, PrivateMethodTester}

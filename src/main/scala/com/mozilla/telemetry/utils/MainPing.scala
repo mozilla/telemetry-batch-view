@@ -1,6 +1,6 @@
 package com.mozilla.telemetry.utils
 
-import com.mozilla.telemetry.scalars._
+import com.mozilla.telemetry.metrics._
 import org.apache.spark.sql.Row
 import org.json4s.JsonAST._
 

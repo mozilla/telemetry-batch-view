@@ -1,4 +1,4 @@
-import com.mozilla.telemetry.histograms.HistogramsClass
+import com.mozilla.telemetry.metrics.HistogramsClass
 
 import scala.io.Source
 import org.scalatest.{FlatSpec, Matchers, PrivateMethodTester}

@@ -15,8 +15,7 @@ import scala.reflect.ClassTag
 import com.mozilla.telemetry.parquet.ParquetFile
 import com.mozilla.telemetry.avro
 import com.mozilla.telemetry.heka.{Dataset, Message}
-import com.mozilla.telemetry.histograms._
-import com.mozilla.telemetry.scalars._
+import com.mozilla.telemetry.metrics._
 import com.mozilla.telemetry.utils._
 
 protected class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHistorySize: Int = 1000) extends Iterator[List[Map[String, Any]]] {
