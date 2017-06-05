@@ -3,7 +3,7 @@ package com.mozilla.telemetry
 import com.mozilla.telemetry.heka.{File, RichMessage}
 import com.mozilla.telemetry.utils.{MainPing, Events}
 import com.mozilla.telemetry.views.MainSummaryView
-import com.mozilla.telemetry.scalars._
+import com.mozilla.telemetry.metrics._
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.types.StructType
