@@ -233,11 +233,11 @@ object MainPing{
   def enumHistogramBucketCount(h: JValue, bucket: String): Option[Int] = {
     h \ "values" match {
       case JNothing => None
-      case v => v \ bucket match {
+      case v: JValue => v \ bucket match {
         case JInt(count) => Some(count.toInt)
         case _ => None
       }
-      case _=> None
+      case _ => None
     }
   }
 
