@@ -1,13 +1,15 @@
 package com.mozilla.telemetry.histograms
 
+import com.mozilla.telemetry.utils.MetricDefinition
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
+
 import scala.collection.mutable.{Map => MMap}
 import scala.io.Source
 
 case class RawHistogram(values: Map[String, Int], sum: Long)
 
-sealed abstract class HistogramDefinition
+sealed abstract class HistogramDefinition extends MetricDefinition
 case class FlagHistogram(keyed: Boolean) extends HistogramDefinition
 case class BooleanHistogram(keyed: Boolean) extends HistogramDefinition
 case class CountHistogram(keyed: Boolean) extends HistogramDefinition

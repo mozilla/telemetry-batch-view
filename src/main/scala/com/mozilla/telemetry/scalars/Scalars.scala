@@ -2,11 +2,13 @@ package com.mozilla.telemetry.scalars
 
 import java.util
 
+import com.mozilla.telemetry.utils.MetricDefinition
 import org.yaml.snakeyaml.Yaml
+
 import collection.JavaConversions._
 import scala.io.Source
 
-sealed abstract class ScalarDefinition
+sealed abstract class ScalarDefinition extends MetricDefinition
 case class UintScalar(keyed: Boolean) extends ScalarDefinition
 case class BooleanScalar(keyed: Boolean) extends ScalarDefinition
 case class StringScalar(keyed: Boolean) extends ScalarDefinition
