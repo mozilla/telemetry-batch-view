@@ -113,42 +113,44 @@ object MainSummaryView {
           case v => filterVersion.isEmpty || v == filterVersion.get
         }.records(conf.limit.get)
 
-      val rowRDD = messages.flatMap(m => {
-        messageToRow(m, scalarDefinitions, histogramDefinitions) match {
-          case None =>
-            ignoredCount += 1
-            None
-          case x =>
-            processedCount += 1
-            x
-        }
-      })
+      if(!messages.isEmpty()){
+        val rowRDD = messages.flatMap(m => {
+          messageToRow(m, scalarDefinitions, histogramDefinitions) match {
+            case None =>
+              ignoredCount += 1
+              None
+            case x =>
+              processedCount += 1
+              x
+          }
+        })
 
-      val records = sqlContext.createDataFrame(rowRDD, schema)
+        val records = sqlContext.createDataFrame(rowRDD, schema)
 
-      // Note we cannot just use 'partitionBy' below to automatically populate
-      // the submission_date partition, because none of the write modes do
-      // quite what we want:
-      //  - "overwrite" causes the entire vX partition to be deleted and replaced with
-      //    the current day's data, so doesn't work with incremental jobs
-      //  - "append" would allow us to generate duplicate data for the same day, so
-      //    we would need to add some manual checks before running
-      //  - "error" (the default) causes the job to fail after any data is
-      //    loaded, so we can't do single day incremental updates.
-      //  - "ignore" causes new data not to be saved.
-      // So we manually add the "submission_date_s3" parameter to the s3path.
-      val s3prefix = s"$jobName/$schemaVersion/submission_date_s3=$currentDateString"
-      val s3path = s"s3://${conf.outputBucket()}/$s3prefix"
+        // Note we cannot just use 'partitionBy' below to automatically populate
+        // the submission_date partition, because none of the write modes do
+        // quite what we want:
+        //  - "overwrite" causes the entire vX partition to be deleted and replaced with
+        //    the current day's data, so doesn't work with incremental jobs
+        //  - "append" would allow us to generate duplicate data for the same day, so
+        //    we would need to add some manual checks before running
+        //  - "error" (the default) causes the job to fail after any data is
+        //    loaded, so we can't do single day incremental updates.
+        //  - "ignore" causes new data not to be saved.
+        // So we manually add the "submission_date_s3" parameter to the s3path.
+        val s3prefix = s"$jobName/$schemaVersion/submission_date_s3=$currentDateString"
+        val s3path = s"s3://${conf.outputBucket()}/$s3prefix"
 
-      // Repartition the dataframe by sample_id before saving.
-      val partitioned = records.repartition(100, records.col("sample_id"))
+        // Repartition the dataframe by sample_id before saving.
+        val partitioned = records.repartition(100, records.col("sample_id"))
 
-      // Then write to S3 using the given fields as path name partitions. Overwrites
-      // existing data.
-      partitioned.write.partitionBy("sample_id").mode("overwrite").parquet(s3path)
+        // Then write to S3 using the given fields as path name partitions. Overwrites
+        // existing data.
+        partitioned.write.partitionBy("sample_id").mode("overwrite").parquet(s3path)
 
-      // Then remove the _SUCCESS file so we don't break Spark partition discovery.
-      S3Store.deleteKey(conf.outputBucket(), s"$s3prefix/_SUCCESS")
+        // Then remove the _SUCCESS file so we don't break Spark partition discovery.
+        S3Store.deleteKey(conf.outputBucket(), s"$s3prefix/_SUCCESS")
+      }
 
       println(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
       println("     RECORDS SEEN:    %d".format(ignoredCount.value + processedCount.value))
