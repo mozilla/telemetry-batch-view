@@ -25,7 +25,8 @@ object MainSummaryView {
     "GC_MAX_PAUSE_MS_2" ::
     "CYCLE_COLLECTOR_MAX_PAUSE" ::
     "INPUT_EVENT_RESPONSE_COALESCED_MS" ::
-    "GHOST_WINDOWS" :: Nil
+    "GHOST_WINDOWS" ::
+    "HTTP_PAGELOAD_IS_SSL" :: Nil
 
 
   // Configuration for command line arguments
