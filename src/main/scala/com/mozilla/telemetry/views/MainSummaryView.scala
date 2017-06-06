@@ -90,7 +90,13 @@ object MainSummaryView {
       val schema = buildSchema(scalarDefinitions, histogramDefinitions)
       val ignoredCount = sc.accumulator(0, "Number of Records Ignored")
       val processedCount = sc.accumulator(0, "Number of Records Processed")
-      val messages = Dataset("telemetry")
+
+      val telemetrySource = currentDate match {
+        case d if d.isBefore(fmt.parseDateTime("20161012")) => "telemetry-oldinfra"
+        case _ => "telemetry"
+      }
+
+      val messages = Dataset(telemetrySource)
         .where("sourceName") {
           case "telemetry" => true
         }.where("sourceVersion") {
