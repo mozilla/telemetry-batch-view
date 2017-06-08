@@ -190,7 +190,7 @@ object MainPing{
       case JNothing => 0
       case v => Try(v.extract[Map[String, Int]]) match {
         case Success(m) =>
-          m.filterKeys(s => toInt(s) match {
+          m.filterKeys(s => Try(s.toInt).toOption match {
             case Some(key) => key >= threshold
             case None => false
           }).foldLeft(0)(_ + _._2)
@@ -220,7 +220,7 @@ object MainPing{
       JObject(x) <- h \ "values"
       (bucket, JInt(count)) <- x
       if count > 0
-      b <- toInt(bucket)
+      b <- Try(bucket.toInt).toOption
     } yield b
 
     buckets match {
@@ -340,14 +340,6 @@ object MainPing{
   private def gtZero(v: JValue): Boolean = v match {
     case JInt(x) => x > 0
     case _ => false
-  }
-
-  private def toInt(s: String): Option[Int] = {
-    try {
-      Some(s.toInt)
-    } catch {
-      case e: Exception => None
-    }
   }
 
   def extractHistogramMap(histogram: JValue): Map[Integer, Integer] = {
