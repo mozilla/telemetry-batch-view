@@ -110,6 +110,7 @@ object LongitudinalView {
     val channels = opt[String]("channels", descr = "Comma separated string, which channels to include. Defaults to all channels.", required = false)
     val samples = opt[String]("samples", descr = "Comma separated string, which samples to include. Defaults to 42.", required = false)
     val telemetrySource = opt[String]("source", descr = "Source for Dataset.from_source. Defaults to telemetry-sample.", required = false)
+    val experimentId = opt[String]("experiment", descr = "Experiment name to add to as a field", required = false)
     verify()
   }
 
@@ -135,6 +136,8 @@ object LongitudinalView {
         case _ => "telemetry-sample"
     }
 
+    val experimentId = opts.experimentId.get
+
     val sparkConf = new SparkConf().setAppName("Longitudinal")
     sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
     implicit val sc = new SparkContext(sparkConf)
@@ -152,6 +155,8 @@ object LongitudinalView {
         case sample if samples.contains(sample) => true
       }.where("appUpdateChannel") {
         case channel if channels.map(_.contains(channel)).getOrElse(true) => true
+      }.where("experimentId") {
+        case e => experimentId.isEmpty || e == experimentId.get
       }
 
     run(opts: Opts, messages)
@@ -168,6 +173,8 @@ object LongitudinalView {
         case Some(v) => v.toBoolean // fail loudly on invalid string
         case _ => false
     }
+
+    val experimentId = opts.experimentId.get
 
     require(S3Store.isPrefixEmpty(outputBucket, prefix), s"s3://${outputBucket}/${prefix} already exists!")
 
@@ -210,11 +217,11 @@ object LongitudinalView {
     val partitionCounts = clientMessages
       .mapPartitions{ case it =>
         val clientIterator = new ClientIterator(it)
-        val schema = buildSchema(histogramDefinitions, scalarDefinitions)
+        val schema = buildSchema(histogramDefinitions, scalarDefinitions, experimentId)
 
         val allRecords = for {
           client <- clientIterator
-          record = buildRecord(client, schema, histogramDefinitions, scalarDefinitions)
+          record = buildRecord(client, schema, histogramDefinitions, scalarDefinitions, experimentId)
         } yield record
 
         var ignoredCount = 0
@@ -247,7 +254,9 @@ object LongitudinalView {
     S3Store.deleteKey(outputBucket,  s"${prefix}/${lockfileName}")
   }
 
-  private def buildSchema(histogramDefinitions: Map[String, HistogramDefinition], scalarDefinitions: Map[String, ScalarDefinition]): Schema = {
+  private def buildSchema(histogramDefinitions: Map[String, HistogramDefinition],
+                          scalarDefinitions: Map[String, ScalarDefinition],
+                          experimentId: Option[String] = None): Schema = {
     // The $PROJECT_ROOT/scripts/generate-ping-schema.py script can be used to
     // generate these SchemaBuilder definitions, and the output of that script is
     // combined with data from http://gecko.readthedocs.org/en/latest/toolkit/components/telemetry/telemetry
@@ -579,6 +588,12 @@ object LongitudinalView {
         case _ =>
           throw new Exception("Unrecognized scalar type")
       }
+    }
+
+    experimentId match {
+      case Some(e) => builder.name("experiment_id").`type`().optional().stringType()
+                             .name("experiment_branch").`type`().optional().stringType()
+      case _ => Unit
     }
 
     builder.endRecord()
@@ -950,7 +965,25 @@ object LongitudinalView {
     }
   }
 
-  private def buildRecord(history: Iterable[Map[String, Any]], schema: Schema, histogramDefinitions: Map[String, HistogramDefinition], scalarDefinitions: Map[String, ScalarDefinition]): Option[GenericRecord] = {
+  private def experiment2Avro(payload: Map[String, Any], root: GenericRecordBuilder, experimentId: Option[String]): Unit = {
+    experimentId match {
+      case Some(e) => {
+        val branch = parse(payload.getOrElse(s"environment.experiments", return).asInstanceOf[String]) \ e \ "branch" match {
+          case JString(value) => value
+          case _ => return
+        }
+        root.set("experiment_id", e)
+            .set("experiment_branch", branch)
+      }
+      case _ => Unit
+    }
+  }
+
+  private def buildRecord(history: Iterable[Map[String, Any]],
+                          schema: Schema,
+                          histogramDefinitions: Map[String, HistogramDefinition],
+                          scalarDefinitions: Map[String, ScalarDefinition],
+                          experimentId: Option[String] = None): Option[GenericRecord] = {
     // De-dupe records
     val sorted = history.foldLeft((List[Map[String, Any]](), Set[String]()))(
       { case ((submissions, seen), current) =>
@@ -1012,6 +1045,7 @@ object LongitudinalView {
       keyedScalars2Avro(sorted, root, scalarDefinitions)
       sessionStartDates2Avro(sorted, root, schema)
       profileDates2Avro(sorted, root, schema)
+      experiment2Avro(sorted.head, root, experimentId)
     } catch {
       case e : Throwable =>
         // Ignore buggy clients
