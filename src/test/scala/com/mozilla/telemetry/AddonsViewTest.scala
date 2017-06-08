@@ -66,6 +66,8 @@ class AddonsViewTest extends FlatSpec with Matchers{
       addons.select("addon_id").distinct().count() should be(5)
 
       addons.where("addon_id == 'addon1'").select("client_id").distinct().count() should be(2)
+
+      addons.where("multiprocess_compatible").count() should be (3)
     } finally {
       spark.stop()
     }

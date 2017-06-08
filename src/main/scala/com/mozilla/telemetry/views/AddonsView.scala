@@ -115,6 +115,8 @@ object AddonsView {
       "active_addons.install_day as install_day",
       "active_addons.update_day as update_day",
       "active_addons.signed_state as signed_state",
-      "active_addons.is_system as is_system")
+      "active_addons.is_system as is_system",
+      "active_addons.is_web_extension as is_web_extension",
+      "active_addons.multiprocess_compatible as multiprocess_compatible")
   }
 }
