@@ -146,6 +146,7 @@ object GenericCountView {
     aggregate(sc, conf)
       .repartition(partitions)
       .write
+      .mode("overwrite")
       .parquet(s"s3://${conf.outputBucket()}/$version")
 
     sc.stop()
