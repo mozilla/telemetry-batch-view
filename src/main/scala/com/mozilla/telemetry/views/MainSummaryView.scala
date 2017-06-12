@@ -215,28 +215,32 @@ object MainSummaryView {
     }
   }
 
-  def getQuantumReady(e10sStatus: JValue, addons: JValue, theme: JValue): Boolean = {
+  def getQuantumReady(e10sStatus: JValue, addons: JValue, theme: JValue): Option[Boolean] = {
     val e10sEnabled = e10sStatus match {
-      case JBool(e10sStatus) => e10sStatus
-      case _ => false
+      case JBool(e10sStatus) => Some(e10sStatus)
+      case _ => None
     }
 
     val allowedAddons = getActiveAddons(addons) match {
-      case Some(l) => l.map(row => {
+      case Some(l) if l.length > 0 => Some(
+        l.map(row => {
           val isSystem = row.get(13) match {
             case b: Boolean => b
             case _ => false
           }
+
           val isWebExtension = row.get(14) match {
             case b: Boolean => b
             case _ => false
           }
-          isSystem && isWebExtension
-        }).reduce(_ && _)
-      case _ => false
+
+          isSystem || isWebExtension
+        }).reduce(_ && _))
+      case Some(l) => Some(true) // no addons => quantumReady = true
+      case _ => None
     }
 
-    val disallowedThemes = List(
+    val requiredThemes = List(
       "{972ce4c6-7e08-4474-a285-3208198ce6fd}",
       "firefox-compact-light@mozilla.org",
       "firefox-compact-dark@mozilla.org"
@@ -244,13 +248,20 @@ object MainSummaryView {
 
     val allowedTheme = getTheme(theme) match {
       case Some(t) => t.get(0) match {
-        case id: String => !disallowedThemes.contains(id)
-        case _ => false
+        case id: String => id match {
+            case "MISSING" => None
+            case other => Some(requiredThemes.contains(id))
+          }
+        case _ => None
       }
-      case _ => false
+      case _ => None
     }
 
-    e10sEnabled && allowedAddons && allowedTheme
+    for {
+      e10s <- e10sEnabled
+      theme <- allowedTheme
+      addons <- allowedAddons
+    } yield (e10s && theme && addons)
   }
 
   def getAttribution(attribution: JValue): Option[Row] = {
@@ -634,7 +645,7 @@ object MainSummaryView {
           settings \ "e10sEnabled",
           addons \ "activeAddons",
           addons \ "theme"
-        ),
+        ).orNull,
 
         MainPing.histogramToThresholdCount(histograms \ "GC_MAX_PAUSE_MS", 150),
         MainPing.histogramToThresholdCount(histograms \ "GC_MAX_PAUSE_MS", 250),
