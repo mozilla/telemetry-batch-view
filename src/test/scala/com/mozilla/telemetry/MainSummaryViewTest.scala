@@ -1724,18 +1724,18 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       {
         "addon1": {
           "isSystem": true,
-          "isWebExtension": true
+          "isWebExtension": false
         },
         "addon2": {
-          "isSystem": true,
+          "isSystem": false,
           "isWebExtension": true
         }
       }"""
     )
 
-    val json0theme = parse("""{"id": "okayid"}""")
+    val json0theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
 
-    MainSummaryView.getQuantumReady(json0e10s, json0addons, json0theme) should be (true)
+    MainSummaryView.getQuantumReady(json0e10s, json0addons, json0theme) should be (Some(true))
 
     // not quantum ready with no e10s
     val json1e10s = parse("false")
@@ -1752,11 +1752,11 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     | }""".stripMargin
     )
 
-    val json1theme = parse("""{"id": "okayid"}""")
+    val json1theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
 
-    MainSummaryView.getQuantumReady(json1e10s, json1addons, json1theme) should be (false)
+    MainSummaryView.getQuantumReady(json1e10s, json1addons, json1theme) should be (Some(false))
 
-    // not quantum ready with non-system addon
+    // not quantum ready with non-system and non-webextension addon
     val json2e10s = parse("true")
     val json2addons = parse("""
     | {
@@ -1766,21 +1766,21 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     |    },
     |    "addon2": {
     |      "isSystem": false,
-    |      "isWebExtension": true
+    |      "isWebExtension": false 
     |    }
     | }""".stripMargin
     )
 
-    val json2theme = parse("""{"id": "okayid"}""")
+    val json2theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
 
-    MainSummaryView.getQuantumReady(json2e10s, json2addons, json2theme) should be (false)
+    MainSummaryView.getQuantumReady(json2e10s, json2addons, json2theme) should be (Some(false))
 
-    // not quantum ready with non-webextension addon
+    // not quantum ready with non-webextension and non-system addon
     val json3e10s = parse("true")
     val json3addons = parse("""
     | {
     |   "addon1": {
-    |     "isSystem": true,
+    |     "isSystem": false,
     |     "isWebExtension": false
     |   },
     |   "addon2": {
@@ -1790,13 +1790,51 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     | }""".stripMargin
     )
 
-    val json3theme = parse("""{"id": "okayid"}""")
+    val json3theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
 
-    MainSummaryView.getQuantumReady(json3e10s, json3addons, json3theme) should be (false)
+    MainSummaryView.getQuantumReady(json3e10s, json3addons, json3theme) should be (Some(false))
 
-    // not quantum ready with old-style theme
+    // not quantum-ready with old-style theme
     val json4e10s = parse("true")
     val json4addons = parse("""
+    | {
+    |   "addon1": {
+    |     "isSystem": true,
+    |     "isWebExtension": false 
+    |   },
+    |   "addon2": {
+    |     "isSystem": false,
+    |     "isWebExtension": true
+    |   }
+    | }""".stripMargin
+    )
+
+    val json4theme = parse("""{"id": "old-style@mozilla.org"}""")
+
+    MainSummaryView.getQuantumReady(json4e10s, json4addons, json4theme) should be (Some(false))
+
+    // not quantum-ready if addon is missing isSystem and isWebExtension
+    val json5e10s = parse("true")
+    val json5addons = parse("""
+    | {
+    |   "addon1": {
+    |     "bladum": true,
+    |     "terbei": "hello" 
+    |   },
+    |   "addon2": {
+    |     "isSystem": false,
+    |     "isWebExtension": true
+    |   }
+    | }""".stripMargin
+    )
+
+    val json5theme = parse("""{"id": "old-style@mozilla.org"}""")
+
+    MainSummaryView.getQuantumReady(json5e10s, json5addons, json5theme) should be (Some(false))
+
+    // null quantum-ready if theme is missing
+    val json6e10s = parse("true")
+    val json6addons = parse("""
     | {
     |   "addon1": {
     |     "isSystem": true,
@@ -1809,9 +1847,51 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     | }""".stripMargin
     )
 
-    val json4theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
+    val json6theme = parse("{}")
 
-    MainSummaryView.getQuantumReady(json4e10s, json4addons, json4theme) should be (false)
+    MainSummaryView.getQuantumReady(json6e10s, json6addons, json6theme) should be (None)
+
+    // null quantum-ready if e10s is gibberish
+    val json7e10s = parse(""""fewfkew"""")
+    val json7addons = parse("""
+    | {
+    |   "addon1": {
+    |     "isSystem": true,
+    |     "isWebExtension": true
+    |   },
+    |   "addon2": {
+    |     "isSystem": true,
+    |     "isWebExtension": true
+    |   }
+    | }""".stripMargin
+    )
+
+    val json7theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
+
+    MainSummaryView.getQuantumReady(json7e10s, json7addons, json7theme) should be (None)
+
+    // Quantum ready if no addons
+    val json8e10s = parse("true")
+    val json8addons = parse("{}")
+    val json8theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
+
+    MainSummaryView.getQuantumReady(json8e10s, json8addons, json8theme) should be (Some(true))
+
+    // quantum-ready if an addon is missing isSystem or isWebExtension, but the other is true
+    val json9e10s = parse("true")
+    val json9addons = parse("""
+    | {
+    |   "addon1": {
+    |     "isWebExtension": true
+    |   },
+    |   "addon2": {
+    |     "isSystem": true
+    |   }
+    | }""".stripMargin
+    )
+    val json9theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
+
+    MainSummaryView.getQuantumReady(json9e10s, json9addons, json9theme) should be (Some(true))
   }
 
   "Quantum Readiness" can "be properly parsed" in {
@@ -1835,15 +1915,15 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           "activeAddons": {
             "spicemustflow": {
               "isSystem": true,
-              "isWebExtension": true
+              "isWebExtension": false 
             },
             "gom-jabbar": {
-              "isSystem": true,
+              "isSystem": false,
               "isWebExtension": true
             }
           },
           "theme": {
-            "id": "shai-hulud"
+            "id": "firefox-compact-light@mozilla.org"
           }
         }"""),
       None);
@@ -1867,5 +1947,4 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     spark.stop()
   }
-
 }
