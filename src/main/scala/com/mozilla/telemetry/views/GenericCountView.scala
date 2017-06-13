@@ -71,6 +71,10 @@ object GenericCountView {
       "version",
       descr = "Version of the output data. Defaults to v<from><to>",
       required = false)
+    val outputPartition = opt[String](
+      "output-partition",
+      descr = "Partition of the output data",
+      required = false)
     requireOne(inputTablename, inputFiles)
     verify()
   }
@@ -134,7 +138,7 @@ object GenericCountView {
     sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
     val sc = new SparkContext(sparkConf)
 
-    val partitions = conf.numParquetFiles()
+    val sparkPartitions = conf.numParquetFiles()
     val from = getFrom(conf)
     val to = getTo(conf)
 
@@ -143,11 +147,16 @@ object GenericCountView {
       case _ => s"v$from$to"
     }
 
+    val partition = conf.outputPartition.get match {
+      case Some(p) => s"/$p"
+      case _ => ""
+    }
+
     aggregate(sc, conf)
-      .repartition(partitions)
+      .repartition(sparkPartitions)
       .write
       .mode("overwrite")
-      .parquet(s"s3://${conf.outputBucket()}/$version")
+      .parquet(s"s3://${conf.outputBucket()}/$version$partition")
 
     sc.stop()
   }
