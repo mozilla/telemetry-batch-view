@@ -647,13 +647,13 @@ object MainSummaryView {
           addons \ "theme"
         ).orNull,
 
-        MainPing.histogramToThresholdCount(histograms \ "GC_MAX_PAUSE_MS", 150),
-        MainPing.histogramToThresholdCount(histograms \ "GC_MAX_PAUSE_MS", 250),
-        MainPing.histogramToThresholdCount(histograms \ "GC_MAX_PAUSE_MS", 2500),
+        MainPing.histogramToThresholdCount(histograms \ "GC_MAX_PAUSE_MS_2", 150),
+        MainPing.histogramToThresholdCount(histograms \ "GC_MAX_PAUSE_MS_2", 250),
+        MainPing.histogramToThresholdCount(histograms \ "GC_MAX_PAUSE_MS_2", 2500),
 
-        MainPing.histogramToThresholdCount(childHistograms \ "GC_MAX_PAUSE_MS", 150),
-        MainPing.histogramToThresholdCount(childHistograms \ "GC_MAX_PAUSE_MS", 250),
-        MainPing.histogramToThresholdCount(childHistograms \ "GC_MAX_PAUSE_MS", 2500),
+        MainPing.histogramToThresholdCount(childHistograms \ "GC_MAX_PAUSE_MS_2", 150),
+        MainPing.histogramToThresholdCount(childHistograms \ "GC_MAX_PAUSE_MS_2", 250),
+        MainPing.histogramToThresholdCount(childHistograms \ "GC_MAX_PAUSE_MS_2", 2500),
 
         MainPing.histogramToThresholdCount(histograms \ "CYCLE_COLLECTOR_MAX_PAUSE", 150),
         MainPing.histogramToThresholdCount(histograms \ "CYCLE_COLLECTOR_MAX_PAUSE", 250),

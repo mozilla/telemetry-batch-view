@@ -811,7 +811,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "plugins_infobar_allow"             -> null,
             "search_cohort"                     -> null,
             "gfx_compositor"                    -> "none",
-            "gc_max_pause_ms_main_above_150"                        -> 526,
+            "gc_max_pause_ms_main_above_150"                        -> 0,
             "gc_max_pause_ms_content_above_2500"                    -> 0,
             "cycle_collector_max_pause_main_above_150"              -> 1416,
             "cycle_collector_max_pause_content_above_2500"          -> 0,
