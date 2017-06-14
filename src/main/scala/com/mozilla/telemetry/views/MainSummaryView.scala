@@ -626,6 +626,7 @@ object MainSummaryView {
         hsum(histograms \ "PLUGINS_INFOBAR_SHOWN"),
         hsum(histograms \ "PLUGINS_INFOBAR_BLOCK"),
         hsum(histograms \ "PLUGINS_INFOBAR_ALLOW"),
+        hsum(histograms \ "PLUGINS_INFOBAR_DISMISSED"),
 
         // bug 1366253 - active experiments
         getExperiments(experiments).orNull,
@@ -976,6 +977,7 @@ object MainSummaryView {
       StructField("plugins_infobar_shown", IntegerType, nullable = true),
       StructField("plugins_infobar_block", IntegerType, nullable = true),
       StructField("plugins_infobar_allow", IntegerType, nullable = true),
+      StructField("plugins_infobar_dismissed", IntegerType, nullable = true),
 
       // bug 1366253 - active experiments
       StructField("experiments", MapType(StringType, StringType), nullable = true), // experiment id->branchname
