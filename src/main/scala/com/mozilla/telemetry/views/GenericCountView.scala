@@ -14,6 +14,7 @@ object GenericCountView {
   val DefaultSubmissionDateCol = "submission_date_s3"
   val DefaultHllBits = 12
   val DefaultOutputFiles = 32
+  val DefaultWriteMode = "overwrite"
 
   class Conf(args: Array[String]) extends ScallopConf(args) {
     val from = opt[String](
@@ -75,6 +76,11 @@ object GenericCountView {
       "output-partition",
       descr = "Partition of the output data",
       required = false)
+    val writeMode = opt[String](
+      "write-mode",
+      descr = "Spark write mode. Defaults to overwrite",
+      required = false,
+      default = Some(DefaultWriteMode))
     requireOne(inputTablename, inputFiles)
     verify()
   }
@@ -155,7 +161,7 @@ object GenericCountView {
     aggregate(sc, conf)
       .repartition(sparkPartitions)
       .write
-      .mode("overwrite")
+      .mode(conf.writeMode())
       .parquet(s"s3://${conf.outputBucket()}/$version$partition")
 
     sc.stop()
