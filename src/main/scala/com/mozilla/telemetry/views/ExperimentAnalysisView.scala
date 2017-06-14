@@ -1,15 +1,13 @@
 package com.mozilla.telemetry.views
 
-import com.mozilla.telemetry.experiments.analyzers.{HistogramAnalysis, HistogramAnalyzer}
+import com.mozilla.telemetry.experiments.analyzers.{HistogramAnalyzer, ScalarAnalyzer}
 import com.mozilla.telemetry.metrics._
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.rogach.scallop.ScallopConf
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.functions.col
 
 object ExperimentAnalysisView {
   def schemaVersion: String = "v1"
-
   def jobName: String = "experiment_analysis"
 
   // Configuration for command line arguments
@@ -18,6 +16,7 @@ object ExperimentAnalysisView {
     val inputLocation = opt[String]("input", descr = "Source for parquet data", required = true)
     val outputLocation = opt[String]("output", descr = "Destination for parquet data", required = true)
     val histo = opt[String]("histogram", descr = "Run job on just this histogram", required = false)
+    val scalar = opt[String]("scalar", descr = "Run job on just this scalar", required = false)
     val experiment = opt[String]("experiment", descr = "Run job on just this experiment", required = false)
     val date = opt[String]("date", descr = "Run date for this job (defaults to yesterday)", required = false)
     verify()
@@ -57,25 +56,24 @@ object ExperimentAnalysisView {
         .map(r => r(0).asInstanceOf[String])
     }
 
-    val histogramList = conf.histo.get match {
-      case Some(h) => List(h, Histograms.definitions()(h.toUpperCase))
-      case _ => MainSummaryView.filterHistogramDefinitions(Histograms.definitions(), true)
-    }
-
-    import spark.implicits._
+    val metricList: List[(String, MetricDefinition)] = (conf.histo.get match {
+      case Some(h) => List((h, Histograms.definitions()(h.toUpperCase)))
+      case _ => MainSummaryView.filterHistogramDefinitions(Histograms.definitions(), useWhitelist = true)
+    }) ++ (conf.scalar.get match {
+      case Some(s) => List((s, Scalars.definitions()(s.toUpperCase)))
+      case _ => Scalars.definitions(includeOptin = true).toList
+    })
 
     experiments.foreach { e: String =>
       val experimentData = data.where(col("experiment_id") === e)
-      val experimentResult = histogramList.map {
-        case (name: String, hd: HistogramDefinition) => {
+      val experimentResult = metricList.map {
+        case (name: String, hd: HistogramDefinition) =>
           val columnName = MainSummaryView.getHistogramName(name.toLowerCase, "parent")
-          val ds = new HistogramAnalyzer(columnName, hd, experimentData).analyze()
-
-          ds match {
-            case Some(d) => d
-            case _ => spark.emptyDataset[HistogramAnalysis]
-          }
-        }
+          new HistogramAnalyzer(columnName, hd, experimentData).analyze()
+        case (name: String, sd: ScalarDefinition) =>
+          val columnName = Scalars.getParquetFriendlyScalarName(name, "parent")
+          ScalarAnalyzer.getAnalyzer(columnName, sd, experimentData).analyze()
+        case _ => throw new Exception("Unsupported metric definition type")
       }.reduce(_.union(_))
 
       val outputLocation = s"${conf.outputLocation()}/experiment_id=$e/date=$date"
