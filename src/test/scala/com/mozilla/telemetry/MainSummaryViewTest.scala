@@ -643,6 +643,13 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "values":{"1":1,"0":0,"2":0},
       "bucket_count":3,
       "sum":1
+    },
+    "PLUGINS_INFOBAR_DISMISSED":{
+      "range":[1,2],
+      "histogram_type":2,
+      "values":{"1":1,"0":0,"2":0},
+      "bucket_count":3,
+      "sum":1
     }
   }"""),
       None);
@@ -654,7 +661,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "plugins_notification_user_action" -> Row(3, 0, 0),
       "plugins_infobar_shown" -> 12,
       "plugins_infobar_allow" -> 2,
-      "plugins_infobar_block" -> 1
+      "plugins_infobar_block" -> 1,
+      "plugins_infobar_dismissed" -> 1
     )
     val actual = applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
       .getValuesMap(expected.keys.toList)
@@ -809,6 +817,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "plugins_infobar_shown"             -> null,
             "plugins_infobar_block"             -> null,
             "plugins_infobar_allow"             -> null,
+            "plugins_infobar_dismissed"         -> null,
             "search_cohort"                     -> null,
             "gfx_compositor"                    -> "none",
             "gc_max_pause_ms_main_above_150"                        -> 0,
