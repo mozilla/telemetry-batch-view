@@ -21,12 +21,18 @@ object MainSummaryView {
   def jobName: String = "main_summary"
 
   val histogramsWhitelist =
+    "CERT_VALIDATION_SUCCESS_BY_CA" ::
+    "CYCLE_COLLECTOR_MAX_PAUSE" ::
     "GC_MAX_PAUSE_MS" ::
     "GC_MAX_PAUSE_MS_2" ::
-    "CYCLE_COLLECTOR_MAX_PAUSE" ::
-    "INPUT_EVENT_RESPONSE_COALESCED_MS" ::
     "GHOST_WINDOWS" ::
-    "HTTP_PAGELOAD_IS_SSL" :: Nil
+    "HTTP_CHANNEL_DISPOSITION" ::
+    "HTTP_PAGELOAD_IS_SSL" :: 
+    "INPUT_EVENT_RESPONSE_COALESCED_MS" ::
+    "SSL_HANDSHAKE_RESULT" ::
+    "SSL_HANDSHAKE_VERSION" ::
+    "SSL_TLS12_INTOLERANCE_REASON_PRE" ::
+    "SSL_TLS13_INTOLERANCE_REASON_PRE" :: Nil
 
 
   // Configuration for command line arguments
