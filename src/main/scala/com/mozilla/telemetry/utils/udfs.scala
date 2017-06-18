@@ -3,8 +3,11 @@ package com.mozilla.telemetry.utils
 import java.math.BigDecimal
 import java.sql.{Date, Timestamp}
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Column, Row, SparkSession}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.functions._
+import com.twitter.algebird.{Bytes, DenseHLL, HyperLogLog}
+import com.mozilla.spark.sql.hyperloglog.functions._
 
 class CollectList(inputStruct: StructType, orderCols: List[String], maxLength: Option[Int]) extends UserDefinedAggregateFunction {
   /**
@@ -155,5 +158,104 @@ class CollectList(inputStruct: StructType, orderCols: List[String], maxLength: O
 
   override def evaluate(buffer: Row): Any = {
     trimAndSort(buffer)
+  }
+}
+
+/**
+ * This class fixes HyperLogLogMerge when there are no
+ * rows, or when input rows are NULL.
+ */
+class HyperLogLogMerge extends UserDefinedAggregateFunction {
+
+  /**
+   * This HLL instance is has zero counts.
+   *
+   * scala> (new DenseHLL(12, new Bytes(Array.fill[Byte](1 << 12)(0)))).approximateSize.estimate
+   * res0: Long = 0
+   */
+  val emptyHll = new DenseHLL(12, new Bytes(Array.fill[Byte](1 << 12)(0)))
+
+  def inputSchema: org.apache.spark.sql.types.StructType =
+    StructType(StructField("value", BinaryType) :: Nil)
+
+  def bufferSchema: StructType = StructType(StructField("count", BinaryType) ::
+    StructField("bits", IntegerType) :: Nil)
+
+  def dataType: DataType = BinaryType
+
+  def deterministic: Boolean = true
+
+  def initialize(buffer: MutableAggregationBuffer): Unit = {
+    buffer(0) = null
+    buffer(1) = 0
+  }
+
+  def update(buffer: MutableAggregationBuffer, input: Row): Unit = {
+    if (input(0) != null) {
+      val hll = HyperLogLog.fromBytes(input.getAs[Array[Byte]](0)).toDenseHLL
+
+      if (buffer(0) != null) {
+        hll.updateInto(buffer.getAs[Array[Byte]](0))
+      } else {
+        buffer(0) = hll.v.array
+        buffer(1) = hll.bits
+      }
+    }
+  }
+
+  def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
+    if (buffer1(0) == null) {
+      buffer1(0) = buffer2(0)
+      buffer1(1) = buffer2(1)
+    } else if (buffer1(0) != null && buffer2(0) != null) {
+      val state2 = new DenseHLL(buffer2.getAs[Int](1), new Bytes(buffer2.getAs[Array[Byte]](0)))
+      state2.updateInto(buffer1.getAs[Array[Byte]](0))
+    }
+  }
+
+  def evaluate(buffer: Row): Any = {
+    val state = buffer(0) match {
+      case null => emptyHll
+      case o => new DenseHLL(buffer.getAs[Int](1), new Bytes(buffer.getAs[Array[Byte]](0)))
+    }
+    com.twitter.algebird.HyperLogLog.toBytes(state)
+  }
+}
+
+/**
+ * This class adds the capability to take in
+ * another Boolean column and only adds the
+ * associated hll if the Boolean column is `True`.
+ */
+class FilteredHyperLogLogMerge extends HyperLogLogMerge {
+
+  override def inputSchema: org.apache.spark.sql.types.StructType =
+    StructType(StructField("value", BinaryType) :: StructField("filtered", BooleanType) :: Nil)
+
+  override def update(buffer: MutableAggregationBuffer, input: Row): Unit = {
+    if (input(0) != null && input(1) != null && input.getAs[Boolean](1)) {
+      val hll = HyperLogLog.fromBytes(input.getAs[Array[Byte]](0)).toDenseHLL
+
+      if (buffer(0) != null) {
+        hll.updateInto(buffer.getAs[Array[Byte]](0))
+      } else {
+        buffer(0) = hll.v.array
+        buffer(1) = hll.bits
+      }
+    }
+  }
+}
+
+object UDFs{
+  val HllCreate = "hll_create"
+  val HllCardinality = "hll_cardinality"
+  val HllMerge = new HyperLogLogMerge
+  val FilteredHllMerge = new FilteredHyperLogLogMerge
+
+  implicit class MozUDFs(spark: SparkSession) {
+    def registerUDFs: Unit = {
+      spark.udf.register(HllCreate, hllCreate _)
+      spark.udf.register(HllCardinality, hllCardinality _)
+    }
   }
 }
