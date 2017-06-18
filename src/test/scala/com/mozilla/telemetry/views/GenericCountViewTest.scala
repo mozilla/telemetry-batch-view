@@ -1,7 +1,6 @@
 package com.mozilla.telemetry
 
-import com.mozilla.spark.sql.hyperloglog.aggregates._
-import com.mozilla.spark.sql.hyperloglog.functions._
+import com.mozilla.telemetry.utils.UDFs._
 import com.mozilla.telemetry.views.GenericCountView
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
@@ -83,12 +82,11 @@ class GenericCountTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
   import spark.implicits._
 
-  spark.udf.register("hll_cardinality", hllCardinality _)
-  private val sc = spark.sparkContext
+  spark.registerUDFs
 
   //setup data table
   private val tableName = "randomtablename"
-  sc.parallelize(Submission.randomList).toDF.registerTempTable(tableName)
+  spark.sparkContext.parallelize(Submission.randomList).toDF.registerTempTable(tableName)
 
   //setup options
   private val base =
@@ -126,22 +124,21 @@ class GenericCountTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
   // make client count dataset
   val conf = new GenericCountView.Conf(args.toArray)
-  private val aggregates = GenericCountView.aggregate(sc, conf)
+  private val aggregates = GenericCountView.aggregate(spark, conf)
 
   "Input data" can "be aggregated" in {
     val dims = Set(dimensions: _*) -- Set("client_id")
     (Set(aggregates.columns: _*) -- Set("client_id", "hll", "sum")) should be (dims)
 
-    val estimates = aggregates.select(expr("hll_cardinality(hll)")).collect()
+    val estimates = aggregates.select(expr(s"$HllCardinality(hll)")).collect()
     estimates.foreach { x =>
       x(0) should be (Submission.dimensions("client_id").count(x => x != null))
     }
 
-    val hllMerge = new HyperLogLogMerge
     val count = aggregates
       .select(col("hll"))
-      .agg(hllMerge(col("hll")).as("hll"))
-      .select(expr("hll_cardinality(hll)")).collect()
+      .agg(HllMerge(col("hll")).as("hll"))
+      .select(expr(s"$HllCardinality(hll)")).collect()
 
     count.length should be (1)
     count(0)(0) should be (Submission.dimensions("client_id").count(x => x != null))
