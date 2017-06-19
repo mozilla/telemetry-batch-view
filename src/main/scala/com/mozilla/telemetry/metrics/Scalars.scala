@@ -5,13 +5,14 @@ import java.util
 import org.yaml.snakeyaml.Yaml
 import collection.JavaConversions._
 import scala.io.Source
+import com.mozilla.telemetry.utils.MainPing
 
 sealed abstract class ScalarDefinition extends MetricDefinition
-case class UintScalar(keyed: Boolean) extends ScalarDefinition
-case class BooleanScalar(keyed: Boolean) extends ScalarDefinition
-case class StringScalar(keyed: Boolean) extends ScalarDefinition
+case class UintScalar(keyed: Boolean, processes: List[String]) extends ScalarDefinition
+case class BooleanScalar(keyed: Boolean, processes: List[String]) extends ScalarDefinition
+case class StringScalar(keyed: Boolean, processes: List[String]) extends ScalarDefinition
 
-class ScalarsClass {
+class ScalarsClass extends MetricsClass {
   val ScalarColumnNamePrefix = "scalar"
 
   // mock[io.Source] wasn't working with scalamock, so now we'll just use the function
@@ -64,14 +65,19 @@ class ScalarsClass {
         val props = v.asInstanceOf[util.LinkedHashMap[String, Any]]
         val kind = props.get("kind").asInstanceOf[String]
         val keyed = props.getOrElse("keyed", false).asInstanceOf[Boolean]
+        val processes = getProcesses(
+          props
+          .getOrElse("record_in_processes", new util.ArrayList(MainPing.ProcessTypes))
+          .asInstanceOf[util.ArrayList[String]].toSet.toList
+        )
 
         kind match {
           case ("uint") =>
-            Some((scalarName, UintScalar(keyed)))
+            Some((scalarName, UintScalar(keyed, processes)))
           case ("boolean") =>
-            Some((scalarName, BooleanScalar(keyed)))
+            Some((scalarName, BooleanScalar(keyed, processes)))
           case ("string") =>
-            Some((scalarName, StringScalar(keyed)))
+            Some((scalarName, StringScalar(keyed, processes)))
           case _ =>
             None
         }

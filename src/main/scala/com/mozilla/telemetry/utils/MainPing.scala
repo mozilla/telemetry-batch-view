@@ -311,22 +311,28 @@ object MainPing{
       Some(keys)
   }
 
-  def scalarsToRow(scalars: JValue, definitions: List[(String, ScalarDefinition)]): Row = {
+  def scalarsToRow(scalars: Map[String, JValue], definitions: List[(String, ScalarDefinition)]): Row = {
     val values = definitions.map{
       case (name, definition) =>
         definition match {
-          case UintScalar(keyed) => (name, keyed, asInt _)
-          case BooleanScalar(keyed) => (name, keyed, asBool _)
-          case StringScalar(keyed) => (name, keyed, asString _)
+          case UintScalar(keyed, processes) => (name, keyed, processes, asInt _)
+          case BooleanScalar(keyed, processes) => (name, keyed, processes, asBool _)
+          case StringScalar(keyed, processes) => (name, keyed, processes, asString _)
+        }
+    }.flatMap{
+      case (name, keyed, processes, func) =>
+        processes.map{ p =>
+          keyed match {
+            case true => (p, name, asMap(func) _)
+            case false => (p, name, func)
+          }
         }
     }.map{
-      case (name, keyed, func) =>
-        keyed match {
-          case true => (name, asMap(func) _)
-          case false => (name, func)
+      case (process, name, applyFunc) =>
+        Try(scalars(process)) match {
+          case Success(j) => applyFunc(j \ name).orNull
+          case _ => null
         }
-    }.map{
-        case (name, applyFunc) => applyFunc(scalars \ name).orNull
     }
 
     Row.fromSeq(values)
