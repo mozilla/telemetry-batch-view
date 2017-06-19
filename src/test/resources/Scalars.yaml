@@ -260,3 +260,15 @@ mock:
     notification_emails:
       - noop@mozilla.com
 
+  all.children :
+    bug_numbers:
+      - 1318709
+    description: A mocked scalar; not meant to be touched.
+    expires: never
+    kind: uint
+    release_channel_collection: opt-out
+    notification_emails:
+      - noop@mozilla.com
+    record_in_processes:
+      - all_childs
+

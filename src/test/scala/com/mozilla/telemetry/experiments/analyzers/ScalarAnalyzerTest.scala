@@ -2,6 +2,7 @@ package com.mozilla.telemetry.experiments.analyzers
 
 import com.holdenkarau.spark.testing.DatasetSuiteBase
 import com.mozilla.telemetry.metrics._
+import com.mozilla.telemetry.utils.MainPing
 import org.apache.spark.sql.DataFrame
 import org.scalatest.{FlatSpec, Matchers}
 
@@ -68,7 +69,7 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
   "Uint Scalars" can "be aggregated" in {
     val df = fixture
     val analyzer = ScalarAnalyzer.getAnalyzer("uint_scalar",
-      UintScalar(false),
+      UintScalar(false, MainPing.ProcessTypes),
       df.where(df.col("experiment_id") === "experiment1")
     )
     val actual = analyzer.analyze().collect().toSet
@@ -91,7 +92,7 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
   "Keyed Uint Scalars" can "be aggregated" in {
     val df = fixture
     val analyzer = ScalarAnalyzer.getAnalyzer("keyed_uint_scalar",
-      UintScalar(true),
+      UintScalar(true, MainPing.ProcessTypes),
       df.where(df.col("experiment_id") === "experiment1")
     )
     val actual = analyzer.analyze().collect().toSet
@@ -115,7 +116,7 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
   "Boolean Scalars" can "be aggregated" in {
     val df = fixture
     val analyzer = ScalarAnalyzer.getAnalyzer("boolean_scalar",
-      BooleanScalar(false),
+      BooleanScalar(false, MainPing.ProcessTypes),
       df.where(df.col("experiment_id") === "experiment1")
     )
     val actual = analyzer.analyze().collect().toSet
@@ -135,7 +136,7 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
   "Keyed Boolean Scalars" can "be aggregated" in {
     val df = fixture
     val analyzer = ScalarAnalyzer.getAnalyzer("keyed_boolean_scalar",
-      BooleanScalar(true),
+      BooleanScalar(true, MainPing.ProcessTypes),
       df.where(df.col("experiment_id") === "experiment1")
     )
     val actual = analyzer.analyze().collect().toSet
@@ -154,7 +155,7 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
   "String Scalars" can "be aggregated" in {
     val df = fixture
     val analyzer = ScalarAnalyzer.getAnalyzer("string_scalar",
-      StringScalar(false),
+      StringScalar(false, MainPing.ProcessTypes),
       df.where(df.col("experiment_id") === "experiment1")
     )
     val actual = analyzer.analyze().collect().toSet
@@ -174,7 +175,7 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
   "Keyed String Scalars" can "be aggregated" in {
     val df = fixture
     val analyzer = ScalarAnalyzer.getAnalyzer("keyed_string_scalar",
-      StringScalar(true),
+      StringScalar(true, MainPing.ProcessTypes),
       df.where(df.col("experiment_id") === "experiment1")
     )
     val actual = analyzer.analyze().collect().toSet

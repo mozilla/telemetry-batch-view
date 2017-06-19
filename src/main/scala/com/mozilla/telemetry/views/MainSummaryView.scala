@@ -357,11 +357,17 @@ object MainSummaryView {
         }
       }.toMap
 
+      lazy val scalars = MainPing.ProcessTypes.map{
+        p => p -> payload \ "payload" \ "processes" \ p \ "scalars"
+      }.toMap
+
+      lazy val keyedScalars = MainPing.ProcessTypes.map{
+        p => p -> payload \ "payload" \ "processes" \ p \ "keyedScalars"
+      }.toMap
+
       lazy val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms("parent") \ "WEAVE_CONFIGURED")
       lazy val weaveDesktop = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_DESKTOP")
       lazy val weaveMobile = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_MOBILE")
-      lazy val parentScalars = payload \ "payload" \ "processes" \ "parent" \ "scalars"
-      lazy val parentKeyedScalars = payload \ "payload" \ "processes" \ "parent" \ "keyedScalars"
       lazy val parentEvents = payload \ "payload" \ "processes" \ "parent" \ "events"
       lazy val experiments = parse(fields.getOrElse("environment.experiments", "{}").asInstanceOf[String])
 
@@ -693,7 +699,7 @@ object MainSummaryView {
       )
 
       val scalarRow = MainPing.scalarsToRow(
-        parentScalars merge parentKeyedScalars,
+        MainPing.ProcessTypes.map{ p => p -> (scalars(p) merge keyedScalars(p)) }.toMap,
         scalarDefinitions
       )
 
@@ -790,20 +796,22 @@ object MainSummaryView {
     scalarDefinitions.map{
       case (name, definition) =>
         definition match {
-            case UintScalar(keyed) => (name, keyed, IntegerType)
-            case BooleanScalar(keyed) => (name, keyed, BooleanType)
-            case StringScalar(keyed) => (name, keyed, StringType)
+          case UintScalar(keyed, processes) => (name, keyed, processes, IntegerType)
+          case BooleanScalar(keyed, processes) => (name, keyed, processes, BooleanType)
+          case StringScalar(keyed, processes) => (name, keyed, processes, StringType)
         }
-    }.map{
-      case (name, keyed, parquetType) =>
-        keyed match {
-          case true => StructField(Scalars.getParquetFriendlyScalarName(name, "parent"),
-                                   MapType(StringType, parquetType),
-                                   nullable = true)
-          case false => StructField(Scalars.getParquetFriendlyScalarName(name, "parent"),
-                                    parquetType,
-                                    nullable = true)
-        }
+    }.flatMap{
+      case (name, keyed, processes, parquetType) =>
+        processes.map{ p =>
+          keyed match {
+            case true => StructField(Scalars.getParquetFriendlyScalarName(name, p),
+                                     MapType(StringType, parquetType),
+                                     nullable = true)
+            case false => StructField(Scalars.getParquetFriendlyScalarName(name, p),
+                                      parquetType,
+                                      nullable = true)
+          }
+      }
     }
   }
 

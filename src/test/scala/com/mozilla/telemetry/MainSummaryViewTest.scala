@@ -1079,10 +1079,15 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 }
 
   "Engagement measures" can "be extracted" in {
+    // makes all but the parent scalars null
+    def makeExpected(expected: List[Any]): Row = Row.fromSeq(
+      scalarDefs.map(_._2).zip(expected).flatMap{ case (d, v) => d.processes.map(p => if(p == "parent") v else null) }
+    )
+
     // Doesn't have scalars
     val jNoScalars = parse(
       """{}""")
-    MainPing.scalarsToRow(jNoScalars, scalarDefs) should be (Row(null, null, null, null, null, null, null, null))
+    MainPing.scalarsToRow(Map("parent" -> jNoScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
 
     // Has scalars, but none of the expected ones
     val jUnexpectedScalars = parse(
@@ -1090,7 +1095,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |  "example1": 249,
         |  "example2": 2
         |}""".stripMargin)
-    MainPing.scalarsToRow(jUnexpectedScalars, scalarDefs) should be (Row(null, null, null, null, null, null, null, null))
+    MainPing.scalarsToRow(Map("parent" -> jUnexpectedScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
 
     // Has scalars, and some of the expected ones
     val jSomeExpectedScalars = parse(
@@ -1098,15 +1103,14 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |  "mock.scalar.uint": 2,
         |  "mock.uint.optin": 97
         |}""".stripMargin)
-    MainPing.scalarsToRow(jSomeExpectedScalars, scalarDefs) should be (Row(null, null, null, null, null, 2, 97, null))
+    MainPing.scalarsToRow(Map("parent" -> jSomeExpectedScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, 2, 97, null)))
 
     // Keyed scalars convert correctly
     val jKeyedScalar = parse(
       """{
         |  "mock.keyed.scalar.uint": {"a": 1, "b": 2}
         |}""".stripMargin)
-    MainPing.scalarsToRow(jKeyedScalar, scalarDefs) should be (Row(null, null, Map("a" -> 1, "b" -> 2), null, null, null, null, null))
-
+    MainPing.scalarsToRow(Map("parent" -> jKeyedScalar), scalarDefs) should be (makeExpected(List(null, null, null, Map("a" -> 1, "b" -> 2), null, null, null, null, null)))
 
     // Has scalars, all of the expected ones
     val jAllScalars = parse(
@@ -1121,7 +1125,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |  "mock.uint.optout": 42
         |}""".stripMargin)
 
-    val expected = Row(
+    val expected = makeExpected(List(
+        null,
         Map("a" -> true, "b" -> false),
         Map("a" -> "hello", "b" -> "world"),
         Map("a" -> 1, "b" -> 2),
@@ -1130,9 +1135,9 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         93,
         1,
         42
-    )
+    ))
 
-    MainPing.scalarsToRow(jAllScalars, scalarDefs) should be (expected)
+    MainPing.scalarsToRow(Map("parent" -> jAllScalars), scalarDefs) should be (expected)
 
     // Has scalars with weird data
     val jWeirdScalars = parse(
@@ -1142,11 +1147,11 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |  "mock.uint.optin": [9, 7],
         |  "mock.uint.optout": "hello, world"
         |}""".stripMargin)
-    MainPing.scalarsToRow(jWeirdScalars, scalarDefs) should be (Row(null, null, null, null, null, null, null, null))
+    MainPing.scalarsToRow(Map("parent" -> jWeirdScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
 
     // Has a scalars section containing unexpected data.
     val jBogusScalars = parse("""[10, "ten"]""")
-    MainPing.scalarsToRow(jBogusScalars, scalarDefs) should be (Row(null, null, null, null, null, null, null, null))
+    MainPing.scalarsToRow(Map("parent" -> jBogusScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
   }
 
   "Keyed Scalars" can "be properly shown" in {
@@ -1555,7 +1560,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     actual should be (expected)
   }
 
-  "All possible histograms" can "be included" in {
+  "All possible histograms and scalars" can "be included" in {
     val spark = SparkSession.builder()
        .appName("")
        .master("local[1]")
@@ -1565,6 +1570,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     import spark.implicits._
 
     val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(Histograms.definitions(includeOptin = false), useWhitelist = true)
+    val allScalarDefs = Scalars.definitions(true).toList.sortBy(_._1)
 
     val fakeHisto = """{
           "sum": 100,
@@ -1608,12 +1614,34 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         }"""
     }.mkString(",")
 
+    val scalarsData = allScalarDefs
+      .filter{ case(n, d) => !d.keyed }
+      .map{
+        case (n, d) => d match {
+          case _: UintScalar => (n, 1)
+          case _: BooleanScalar => (n, false)
+          case _: StringScalar => (n, """"tfw"""")
+        }
+      }.map{ case (n, v) => s""""$n": $v""" }.mkString(",")
+
+    val keyedScalarsData = allScalarDefs
+      .filter{ case(n, d) => d.keyed }
+      .map{
+        case (n, d) => d match {
+          case _: UintScalar => (n, """"key1": 1, "key2": 1""")
+          case _: BooleanScalar => (n, """"key1": true, "key2": false""")
+          case _: StringScalar => (n, """"key1": "empire", "key2": "didnothingwrong"""")
+        }
+      }.map{ case (n, v) => s""""$n": {$v}""" }.mkString(",")
+
     val processHistograms = s"""{
       "histograms": {$histosData},
-      "keyedHistograms": {$keyedHistosData}
+      "keyedHistograms": {$keyedHistosData},
+      "scalars": {$scalarsData},
+      "keyedScalars": {$keyedScalarsData}
     }"""
 
-    val processJSON = MainPing.ProcessTypes.filter(_ != "parent").map{ p => s""""$p": $processHistograms""" }.mkString(", ")
+    val processJSON = MainPing.ProcessTypes.map{ p => s""""$p": $processHistograms""" }.mkString(", ")
 
     val message = RichMessage(
       "1234",
@@ -1634,15 +1662,27 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       p -> (parse(s"{$histosData}") merge parse(s"{$keyedHistosData}"))
     }.toMap
 
-    val expected = MainPing
+    val expectedHistos = MainPing
       .histogramsToRow(expectedProcessHistos, allHistogramDefs)
-      .toSeq.zip(allHistogramDefs.map(e => MainSummaryView.getHistogramName(e._1, "parent")).toList)
-      .map(_.swap).toMap
+      .toSeq.zip(allHistogramDefs.flatMap{ case(n, d) =>
+        d.processes.map(p => MainSummaryView.getHistogramName(n, p))
+      }.toList).map(_.swap).toMap
 
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, allHistogramDefs)
+    val expectedProcessScalars = MainPing.ProcessTypes.map{ p =>
+      p -> (parse(s"{$scalarsData}") merge parse(s"{$keyedScalarsData}"))
+    }.toMap
 
+    val expectedScalars = MainPing
+      .scalarsToRow(expectedProcessScalars, allScalarDefs)
+      .toSeq.zip(allScalarDefs.flatMap{ case(n, d) =>
+        d.processes.map(p => Scalars.getParquetFriendlyScalarName(n, p))
+      }.toList).map(_.swap).toMap
+
+    val expected = expectedHistos ++ expectedScalars
+
+    val summary = MainSummaryView.messageToRow(message, allScalarDefs, allHistogramDefs)
     val actual = spark
-          .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs, allHistogramDefs))
+          .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(allScalarDefs, allHistogramDefs))
           .first
           .getValuesMap(expected.keys.toList)
 
@@ -2093,4 +2133,47 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     spark.stop()
   }
+
+  "Process Scalars" can "be properly shown" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "submission" -> """{
+  "payload": {
+    "processes": {
+      "content": {
+        "keyedScalars": {
+          "mock.keyed.scalar.uint": {
+            "search_enter": 1,
+            "search_suggestion": 2
+          }
+        }
+      }
+    }
+  }
+}"""),
+      None);
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+
+    val expected = Map(
+      "scalar_content_mock_keyed_scalar_uint" -> Map(
+        "search_enter" -> 1,
+        "search_suggestion" -> 2
+      )
+    )
+
+    val actual =
+      applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      .getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+    actual should be (expected)
+  }
+
+
 }
