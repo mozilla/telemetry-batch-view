@@ -4,18 +4,19 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import scala.collection.mutable.{Map => MMap}
 import scala.io.Source
+import com.mozilla.telemetry.utils.MainPing
 
 case class RawHistogram(values: Map[String, Int], sum: Long)
 
 sealed abstract class HistogramDefinition extends MetricDefinition
-case class FlagHistogram(keyed: Boolean) extends HistogramDefinition
-case class BooleanHistogram(keyed: Boolean) extends HistogramDefinition
-case class CountHistogram(keyed: Boolean) extends HistogramDefinition
-case class EnumeratedHistogram(keyed: Boolean, nValues: Int) extends HistogramDefinition
-case class LinearHistogram(keyed: Boolean, low: Int, high: Int, nBuckets: Int) extends HistogramDefinition
-case class ExponentialHistogram(keyed: Boolean, low: Int, high: Int, nBuckets: Int) extends HistogramDefinition
+case class FlagHistogram(keyed: Boolean, processes: List[String]) extends HistogramDefinition
+case class BooleanHistogram(keyed: Boolean, processes: List[String]) extends HistogramDefinition
+case class CountHistogram(keyed: Boolean, processes: List[String]) extends HistogramDefinition
+case class EnumeratedHistogram(keyed: Boolean, nValues: Int, processes: List[String]) extends HistogramDefinition
+case class LinearHistogram(keyed: Boolean, low: Int, high: Int, nBuckets: Int, processes: List[String]) extends HistogramDefinition
+case class ExponentialHistogram(keyed: Boolean, low: Int, high: Int, nBuckets: Int, processes: List[String]) extends HistogramDefinition
 
-class HistogramsClass {
+class HistogramsClass extends MetricsClass {
   private val processTypes = List("content", "gpu")
   private case class HistogramLocation(path: List[String], suffix: String)
   private def generateLocations(histogramKey: String)(processType: String): HistogramLocation = {
@@ -110,6 +111,12 @@ class HistogramsClass {
               case _ => Some(false)
             }
             case ("releaseChannelCollection", JString(x)) => Some(x)
+            case ("record_in_processes", JArray(x)) => Some(x.map{ p =>
+              p match {
+                case JString(p) => Some(p)
+                case _ => None
+              }
+            }.toList.flatten)
             case _ => None
           }
         } catch {
@@ -139,23 +146,28 @@ class HistogramsClass {
         val high = v.getOrElse("high", None).asInstanceOf[Option[Int]]
         val nBuckets = v.getOrElse("n_buckets", None).asInstanceOf[Option[Int]]
 
+        val processes = getProcesses(
+          v.getOrElse("record_in_processes", Some(MainPing.ProcessTypes)).get
+          .asInstanceOf[List[String]]
+        )
+
         def addSuffixes(key: String, definition: HistogramDefinition): List[(String, HistogramDefinition)] = {
             suffixes.map(suffixType => (key + suffixType, definition))
         }
 
         (kind, nValues, high, nBuckets) match {
           case ("flag", _, _, _) =>
-            Some(addSuffixes(k, FlagHistogram(keyed)))
+            Some(addSuffixes(k, FlagHistogram(keyed, processes)))
           case ("boolean", _, _ , _) =>
-            Some(addSuffixes(k, BooleanHistogram(keyed)))
+            Some(addSuffixes(k, BooleanHistogram(keyed, processes)))
           case ("count", _, _, _) =>
-            Some(addSuffixes(k, CountHistogram(keyed)))
+            Some(addSuffixes(k, CountHistogram(keyed, processes)))
           case ("enumerated", Some(x), _, _) =>
-            Some(addSuffixes(k, EnumeratedHistogram(keyed, x)))
+            Some(addSuffixes(k, EnumeratedHistogram(keyed, x, processes)))
           case ("linear", _, Some(h), Some(n)) =>
-            Some(addSuffixes(k, LinearHistogram(keyed, low, h, n)))
+            Some(addSuffixes(k, LinearHistogram(keyed, low, h, n, processes)))
           case ("exponential", _, Some(h), Some(n)) =>
-            Some(addSuffixes(k, ExponentialHistogram(keyed, low, h, n)))
+            Some(addSuffixes(k, ExponentialHistogram(keyed, low, h, n, processes)))
           case _ =>
             None
         }

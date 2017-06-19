@@ -36,6 +36,8 @@ case class Attribution(source: Option[String],
 case class Experiment(branch: Option[String])
 
 object MainPing{
+  val ProcessTypes = "parent" :: "content" :: "gpu" :: Nil
+
   // Count the number of keys inside a JSON Object
   def countKeys(o: JValue): Option[Long] = {
     o match {
@@ -169,7 +171,7 @@ object MainPing{
     }
   }
 
-  /*  Return the number of recorded observations greater than threshold 
+  /*  Return the number of recorded observations greater than threshold
    *  for the histogram.
    *
    *  CAUTION: Does not count any buckets that have any values
@@ -187,7 +189,7 @@ object MainPing{
     histogram \ "values" match {
       case JNothing => 0
       case v => Try(v.extract[Map[String, Int]]) match {
-        case Success(m) => 
+        case Success(m) =>
           m.filterKeys(s => toInt(s) match {
             case Some(key) => key >= threshold
             case None => false
@@ -353,28 +355,30 @@ object MainPing{
     }
   }
 
-  def histogramsToRow(histograms: JValue, definitions: List[(String, HistogramDefinition)]): Row = {
+  def histogramsToRow(histograms: Map[String, JValue], definitions: List[(String, HistogramDefinition)]): Row = {
     implicit val formats = DefaultFormats
 
     val values = definitions.map{
       case (name, definition) =>
         definition match {
-          case LinearHistogram(keyed, low, high, nBuckets) => (name, keyed)
-          case ExponentialHistogram(keyed, low, high, nBuckets) => (name, keyed)
-          case EnumeratedHistogram(keyed, _) => (name, keyed)
-          case BooleanHistogram(keyed) => (name, keyed)
+          case LinearHistogram(keyed, _, _, _, processes) => (name, keyed, processes)
+          case ExponentialHistogram(keyed, _, _, _, processes) => (name, keyed, processes)
+          case EnumeratedHistogram(keyed, _, processes) => (name, keyed, processes)
+          case BooleanHistogram(keyed, processes) => (name, keyed, processes)
           case other =>
             throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
         }
-    }.map{
-      case (name, keyed) =>
-        keyed match {
-          case true =>
-            Try((histograms \ name).extract[Map[String,JValue]].mapValues(extractHistogramMap _).map(identity)) match {
-              case Success(keyedHistogram) => keyedHistogram
-              case _ => null
+    }.flatMap{
+      case (name, keyed, processes) =>
+        processes.map{ p =>
+          keyed match {
+            case true =>
+              Try((histograms(p) \ name).extract[Map[String,JValue]].mapValues(extractHistogramMap _).map(identity)) match {
+                case Success(keyedHistogram) => keyedHistogram
+                case _ => null
+            }
+            case false => extractHistogramMap(histograms(p) \ name)
           }
-          case false => extractHistogramMap(histograms \ name)
         }
     }
 

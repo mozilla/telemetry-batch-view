@@ -1331,7 +1331,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val expected = Map(
       "dom_ipc_process_count" -> null,
-      "extensions_allow_non_mpc_extensions" -> true 
+      "extensions_allow_non_mpc_extensions" -> true
     )
 
     val actual =
@@ -1577,10 +1577,10 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     val histosData = allHistogramDefs.map{
       case (name, definition) =>
         definition match {
-          case LinearHistogram(keyed, _, _, _) => (name, keyed)
-          case ExponentialHistogram(keyed, _, _, _) => (name, keyed)
-          case EnumeratedHistogram(keyed, _) => (name, keyed)
-          case BooleanHistogram(keyed) => (name, keyed)
+          case LinearHistogram(keyed, _, _, _, _) => (name, keyed)
+          case ExponentialHistogram(keyed, _, _, _, _) => (name, keyed)
+          case EnumeratedHistogram(keyed, _, _) => (name, keyed)
+          case BooleanHistogram(keyed, _) => (name, keyed)
           case other =>
             throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
         }
@@ -1591,10 +1591,10 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     val keyedHistosData = allHistogramDefs.map{
       case (name, definition) =>
         definition match {
-          case LinearHistogram(keyed, _, _, _) => (name, keyed)
-          case ExponentialHistogram(keyed, _, _, _) => (name, keyed)
-          case EnumeratedHistogram(keyed, _) => (name, keyed)
-          case BooleanHistogram(keyed) => (name, keyed)
+          case LinearHistogram(keyed, _, _, _, _) => (name, keyed)
+          case ExponentialHistogram(keyed, _, _, _, _) => (name, keyed)
+          case EnumeratedHistogram(keyed, _, _) => (name, keyed)
+          case BooleanHistogram(keyed, _) => (name, keyed)
           case other =>
             throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
         }
@@ -1608,18 +1608,34 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         }"""
     }.mkString(",")
 
+    val processHistograms = s"""{
+      "histograms": {$histosData},
+      "keyedHistograms": {$keyedHistosData}
+    }"""
+
+    val processJSON = MainPing.ProcessTypes.filter(_ != "parent").map{ p => s""""$p": $processHistograms""" }.mkString(", ")
+
     val message = RichMessage(
       "1234",
       Map(
         "documentId" -> "foo",
         "submissionDate" -> "1234",
         "payload.histograms" -> s"{$histosData}",
-        "payload.keyedHistograms" -> s"{$keyedHistosData}"
+        "payload.keyedHistograms" -> s"{$keyedHistosData}",
+        "submission" -> s"""{
+  "payload": {
+    "processes": {$processJSON}
+   }
+  }"""
       ),
       None);
 
+    val expectedProcessHistos = MainPing.ProcessTypes.map{ p =>
+      p -> (parse(s"{$histosData}") merge parse(s"{$keyedHistosData}"))
+    }.toMap
+
     val expected = MainPing
-      .histogramsToRow(parse(s"{$histosData}") merge parse(s"{$keyedHistosData}"), allHistogramDefs)
+      .histogramsToRow(expectedProcessHistos, allHistogramDefs)
       .toSeq.zip(allHistogramDefs.map(e => MainSummaryView.getHistogramName(e._1, "parent")).toList)
       .map(_.swap).toMap
 
@@ -1775,7 +1791,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     |    },
     |    "addon2": {
     |      "isSystem": false,
-    |      "isWebExtension": false 
+    |      "isWebExtension": false
     |    }
     | }""".stripMargin
     )
@@ -1809,7 +1825,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     | {
     |   "addon1": {
     |     "isSystem": true,
-    |     "isWebExtension": false 
+    |     "isWebExtension": false
     |   },
     |   "addon2": {
     |     "isSystem": false,
@@ -1828,7 +1844,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     | {
     |   "addon1": {
     |     "bladum": true,
-    |     "terbei": "hello" 
+    |     "terbei": "hello"
     |   },
     |   "addon2": {
     |     "isSystem": false,
@@ -1924,7 +1940,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           "activeAddons": {
             "spicemustflow": {
               "isSystem": true,
-              "isWebExtension": false 
+              "isWebExtension": false
             },
             "gom-jabbar": {
               "isSystem": false,
@@ -1952,6 +1968,127 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       actual.get(f) should be (Some(v))
     }
 
+    actual should be (expected)
+
+    spark.stop()
+  }
+
+  "Process Histograms" can "be stored" in {
+    val spark = SparkSession.builder()
+        .appName("test quantum readiness")
+        .master("local[1]")
+        .getOrCreate()
+
+    val sc = spark.sparkContext
+    import spark.implicits._
+
+    val message = RichMessage(
+      "2235",
+      Map(
+        "documentId" -> "foobar",
+        "submissionDate" -> "12345",
+        "submission" -> """{
+          "payload": {
+            "processes": {
+              "content": {
+                "histograms": {
+                  "MOCK_EXPONENTIAL_OPTOUT": {
+                    "range": [1,100],
+                    "bucket_count": 10,
+                    "histogram_type": 0,
+                    "values": {
+                      "1": 0,
+                      "16": 1,
+                      "54": 1
+                    },
+                    "sum": 64
+                  },
+                  "MOCK_OPTOUT": {
+                    "range": [1,10],
+                    "bucket_count": 10,
+                    "histogram_type": 2,
+                    "values": {
+                      "1": 0,
+                      "3": 1,
+                      "9": 1
+                    },
+                    "sum": 12
+                  }
+                },
+                "keyedHistograms": {
+                  "MOCK_KEYED_LINEAR": {
+                    "foo": {
+                      "range": [1,100],
+                      "bucket_count": 10,
+                      "histogram_type": 0,
+                      "values": {
+                        "1": 0,
+                        "16": 1,
+                        "54": 1
+                      },
+                      "sum": 64
+                    },
+                    "bar": {
+                      "range": [1,100],
+                      "bucket_count": 10,
+                      "histogram_type": 0,
+                      "values": {
+                        "1": 1
+                      },
+                      "sum": 0
+                    }
+                  }
+                }
+              },
+              "gpu": {
+                "histograms": {
+                  "MOCK_EXPONENTIAL_OPTOUT": {
+                    "range": [1,100],
+                    "bucket_count": 10,
+                    "histogram_type": 0,
+                    "values": {
+                      "1": 0,
+                      "16": 1,
+                      "54": 1
+                    },
+                    "sum": 64
+                  },
+                  "MOCK_OPTOUT": {
+                    "range": [1,10],
+                    "bucket_count": 10,
+                    "histogram_type": 2,
+                    "values": {
+                      "1": 0,
+                      "3": 1,
+                      "9": 1
+                    },
+                    "sum": 12
+                  }
+                }
+              }
+            }
+          }
+        }"""),
+      None);
+
+    val expected = Map(
+      "histogram_content_mock_exponential_optout" -> Map(1 -> 0, 16 -> 1, 54 -> 1),
+      "histogram_gpu_mock_exponential_optout" -> Map(1 -> 0, 16 -> 1, 54 -> 1),
+      "histogram_content_mock_optout" -> Map(1 -> 0, 3 -> 1, 9 -> 1),
+      "histogram_gpu_mock_optout" -> Map(1 -> 0, 3 -> 1, 9 -> 1),
+      "histogram_content_mock_keyed_linear" -> Map("foo" -> Map(1 -> 0, 16 -> 1, 54 -> 1), "bar" -> Map(1 -> 1))
+    )
+
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+    val actual = spark
+          .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+          .first
+          .getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
     actual should be (expected)
 
     spark.stop()
