@@ -3,6 +3,7 @@ package com.mozilla.telemetry.experiments.analyzers
 import com.holdenkarau.spark.testing.DatasetSuiteBase
 import com.mozilla.telemetry.metrics.EnumeratedHistogram
 import org.apache.spark.sql.DataFrame
+import com.mozilla.telemetry.utils.MainPing
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.collection.Map
@@ -42,7 +43,7 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
   "Non-keyed Histograms" can "be aggregated" in {
     val df = fixture
     val analyzer = new HistogramAnalyzer("histogram",
-      EnumeratedHistogram(keyed = false, 150),
+      EnumeratedHistogram(keyed = false, 150, MainPing.ProcessTypes),
       df.where(df.col("experiment_id") === "experiment1")
     )
     val actual = analyzer.analyze().collect().toSet
@@ -65,7 +66,7 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
   "Keyed Histograms" can "be aggregated" in {
     val df = fixture
     val analyzer = new HistogramAnalyzer("keyed_histogram",
-      EnumeratedHistogram(keyed = true, 150),
+      EnumeratedHistogram(keyed = true, 150, MainPing.ProcessTypes),
       df.where(df.col("experiment_id") === "experiment1")
     )
     val actual = analyzer.analyze().collect().toSet
@@ -88,7 +89,7 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
   "Unknown histogram" should "return an empty dataset" in {
     val df = fixture
     val analyzer = new HistogramAnalyzer("unknown_histogram",
-      EnumeratedHistogram(keyed = true, 150),
+      EnumeratedHistogram(keyed = true, 150, MainPing.ProcessTypes),
       df.where(df.col("experiment_id") === "experiment1")
     )
     val actual = analyzer.analyze()

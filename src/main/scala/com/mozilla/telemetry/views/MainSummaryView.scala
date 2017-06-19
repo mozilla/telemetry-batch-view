@@ -27,7 +27,7 @@ object MainSummaryView {
     "GC_MAX_PAUSE_MS_2" ::
     "GHOST_WINDOWS" ::
     "HTTP_CHANNEL_DISPOSITION" ::
-    "HTTP_PAGELOAD_IS_SSL" :: 
+    "HTTP_PAGELOAD_IS_SSL" ::
     "INPUT_EVENT_RESPONSE_COALESCED_MS" ::
     "SSL_HANDSHAKE_RESULT" ::
     "SSL_HANDSHAKE_VERSION" ::
@@ -292,7 +292,7 @@ object MainSummaryView {
   def getUserPrefs(prefs: JValue): Option[Row] = {
     val pc = prefs \ "dom.ipc.processCount" match {
       case JInt(pc) => pc.toInt
-      case _ => null 
+      case _ => null
     }
     val anme = prefs \ "extensions.allow-non-mpc-extensions" match {
       case JBool(x) => x
@@ -341,19 +341,29 @@ object MainSummaryView {
       lazy val settings = parse(fields.getOrElse("environment.settings", "{}").asInstanceOf[String])
       lazy val system = parse(fields.getOrElse("environment.system", "{}").asInstanceOf[String])
       lazy val info = parse(fields.getOrElse("payload.info", "{}").asInstanceOf[String])
-      lazy val histograms = parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
-      lazy val keyedHistograms = parse(fields.getOrElse("payload.keyedHistograms", "{}").asInstanceOf[String])
       lazy val simpleMeasures = parse(fields.getOrElse("payload.simpleMeasurements", "{}").asInstanceOf[String])
 
-      lazy val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
-      lazy val weaveDesktop = MainPing.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
-      lazy val weaveMobile = MainPing.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
+      lazy val histograms = MainPing.ProcessTypes.map{
+        _ match {
+          case "parent" => "parent" -> parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
+          case p => p -> payload \ "payload" \ "processes" \ p \ "histograms"
+        }
+      }.toMap
+
+      lazy val keyedHistograms = MainPing.ProcessTypes.map{
+        _ match {
+          case "parent" => "parent" -> parse(fields.getOrElse("payload.keyedHistograms", "{}").asInstanceOf[String])
+          case p => p -> payload \ "payload" \ "processes" \ p \ "keyedHistograms"
+        }
+      }.toMap
+
+      lazy val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms("parent") \ "WEAVE_CONFIGURED")
+      lazy val weaveDesktop = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_DESKTOP")
+      lazy val weaveMobile = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_MOBILE")
       lazy val parentScalars = payload \ "payload" \ "processes" \ "parent" \ "scalars"
       lazy val parentKeyedScalars = payload \ "payload" \ "processes" \ "parent" \ "keyedScalars"
       lazy val parentEvents = payload \ "payload" \ "processes" \ "parent" \ "events"
       lazy val experiments = parse(fields.getOrElse("environment.experiments", "{}").asInstanceOf[String])
-      lazy val childHistograms = payload \ "payload" \ "processes" \ "content" \ "histograms"
-      lazy val childKeyedHistograms = payload \ "payload" \ "processes" \ "content" \ "keyedHistograms"
 
       val loopActivityCounterKeys = (0 to 4).map(_.toString)
       val sslHandshakeResultKeys = (0 to 671).map(_.toString)
@@ -531,20 +541,20 @@ object MainSummaryView {
           case _ => null
         },
         asInt(info \ "timezoneOffset"),
-        hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "pluginhang"),
-        hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "plugin"),
-        hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "content"),
-        hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "gmplugin"),
-        hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "plugin"),
-        hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "content"),
-        hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "gmplugin"),
-        hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "main-crash"),
-        hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "content-crash"),
-        hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "plugin-crash"),
-        hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "main-crash"),
-        hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash"),
-        hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash"),
-        hsum(keyedHistograms \ "SUBPROCESS_KILL_HARD" \ "ShutDownKill"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "pluginhang"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_ABNORMAL_ABORT" \ "plugin"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_ABNORMAL_ABORT" \ "content"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_ABNORMAL_ABORT" \ "gmplugin"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "plugin"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "content"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "gmplugin"),
+        hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "main-crash"),
+        hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "content-crash"),
+        hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "plugin-crash"),
+        hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "main-crash"),
+        hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash"),
+        hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_KILL_HARD" \ "ShutDownKill"),
         MainPing.countKeys(addons \ "activeAddons") match {
           case Some(x) => x
           case _ => null
@@ -581,21 +591,21 @@ object MainSummaryView {
           case JString(x) => x
           case _ => null
         },
-        MainPing.enumHistogramToRow(histograms \ "LOOP_ACTIVITY_COUNTER", loopActivityCounterKeys),
-        hsum(histograms \ "DEVTOOLS_TOOLBOX_OPENED_COUNT"),
+        MainPing.enumHistogramToRow(histograms("parent") \ "LOOP_ACTIVITY_COUNTER", loopActivityCounterKeys),
+        hsum(histograms("parent") \ "DEVTOOLS_TOOLBOX_OPENED_COUNT"),
         fields.getOrElse("Date", None) match {
           case x: String => x
           case _ => null
         },
-        MainPing.histogramToMean(histograms \ "PLACES_BOOKMARKS_COUNT").orNull,
-        MainPing.histogramToMean(histograms \ "PLACES_PAGES_COUNT").orNull,
-        hsum(histograms \ "PUSH_API_NOTIFY"),
-        hsum(histograms \ "WEB_NOTIFICATION_SHOWN"),
+        MainPing.histogramToMean(histograms("parent") \ "PLACES_BOOKMARKS_COUNT").orNull,
+        MainPing.histogramToMean(histograms("parent") \ "PLACES_PAGES_COUNT").orNull,
+        hsum(histograms("parent") \ "PUSH_API_NOTIFY"),
+        hsum(histograms("parent") \ "WEB_NOTIFICATION_SHOWN"),
 
-        MainPing.keyedEnumHistogramToMap(keyedHistograms \ "POPUP_NOTIFICATION_STATS",
+        MainPing.keyedEnumHistogramToMap(keyedHistograms("parent") \ "POPUP_NOTIFICATION_STATS",
           popupNotificationStatsKeys).orNull,
 
-        MainPing.getSearchCounts(keyedHistograms \ "SEARCH_COUNTS").orNull,
+        MainPing.getSearchCounts(keyedHistograms("parent") \ "SEARCH_COUNTS").orNull,
 
         getActiveAddons(addons \ "activeAddons").orNull,
         getTheme(addons \ "theme").orNull,
@@ -615,9 +625,9 @@ object MainSummaryView {
         Events.getEvents(parentEvents).orNull,
 
         // bug 1339655
-        MainPing.enumHistogramBucketCount(histograms \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.head).orNull,
-        MainPing.enumHistogramSumCounts(histograms \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.tail),
-        MainPing.enumHistogramToMap(histograms \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys),
+        MainPing.enumHistogramBucketCount(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.head).orNull,
+        MainPing.enumHistogramSumCounts(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.tail),
+        MainPing.enumHistogramToMap(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys),
 
         // bug 1353114 - payload.simpleMeasurements.*
         asInt(simpleMeasures \ "activeTicks"),
@@ -627,12 +637,12 @@ object MainSummaryView {
         asInt(simpleMeasures \ "totalTime"),
 
         // bug 1362520 - plugin notifications
-        hsum(histograms \ "PLUGINS_NOTIFICATION_SHOWN"),
-        MainPing.enumHistogramToRow(histograms \ "PLUGINS_NOTIFICATION_USER_ACTION", pluginNotificationUserActionKeys),
-        hsum(histograms \ "PLUGINS_INFOBAR_SHOWN"),
-        hsum(histograms \ "PLUGINS_INFOBAR_BLOCK"),
-        hsum(histograms \ "PLUGINS_INFOBAR_ALLOW"),
-        hsum(histograms \ "PLUGINS_INFOBAR_DISMISSED"),
+        hsum(histograms("parent") \ "PLUGINS_NOTIFICATION_SHOWN"),
+        MainPing.enumHistogramToRow(histograms("parent") \ "PLUGINS_NOTIFICATION_USER_ACTION", pluginNotificationUserActionKeys),
+        hsum(histograms("parent") \ "PLUGINS_INFOBAR_SHOWN"),
+        hsum(histograms("parent") \ "PLUGINS_INFOBAR_BLOCK"),
+        hsum(histograms("parent") \ "PLUGINS_INFOBAR_ALLOW"),
+        hsum(histograms("parent") \ "PLUGINS_INFOBAR_DISMISSED"),
 
         // bug 1366253 - active experiments
         getExperiments(experiments).orNull,
@@ -654,32 +664,32 @@ object MainSummaryView {
           addons \ "theme"
         ).orNull,
 
-        MainPing.histogramToThresholdCount(histograms \ "GC_MAX_PAUSE_MS_2", 150),
-        MainPing.histogramToThresholdCount(histograms \ "GC_MAX_PAUSE_MS_2", 250),
-        MainPing.histogramToThresholdCount(histograms \ "GC_MAX_PAUSE_MS_2", 2500),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "GC_MAX_PAUSE_MS_2", 150),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "GC_MAX_PAUSE_MS_2", 250),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "GC_MAX_PAUSE_MS_2", 2500),
 
-        MainPing.histogramToThresholdCount(childHistograms \ "GC_MAX_PAUSE_MS_2", 150),
-        MainPing.histogramToThresholdCount(childHistograms \ "GC_MAX_PAUSE_MS_2", 250),
-        MainPing.histogramToThresholdCount(childHistograms \ "GC_MAX_PAUSE_MS_2", 2500),
+        MainPing.histogramToThresholdCount(histograms("content") \ "GC_MAX_PAUSE_MS_2", 150),
+        MainPing.histogramToThresholdCount(histograms("content") \ "GC_MAX_PAUSE_MS_2", 250),
+        MainPing.histogramToThresholdCount(histograms("content") \ "GC_MAX_PAUSE_MS_2", 2500),
 
-        MainPing.histogramToThresholdCount(histograms \ "CYCLE_COLLECTOR_MAX_PAUSE", 150),
-        MainPing.histogramToThresholdCount(histograms \ "CYCLE_COLLECTOR_MAX_PAUSE", 250),
-        MainPing.histogramToThresholdCount(histograms \ "CYCLE_COLLECTOR_MAX_PAUSE", 2500),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "CYCLE_COLLECTOR_MAX_PAUSE", 150),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "CYCLE_COLLECTOR_MAX_PAUSE", 250),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "CYCLE_COLLECTOR_MAX_PAUSE", 2500),
 
-        MainPing.histogramToThresholdCount(childHistograms \ "CYCLE_COLLECTOR_MAX_PAUSE", 150),
-        MainPing.histogramToThresholdCount(childHistograms \ "CYCLE_COLLECTOR_MAX_PAUSE", 250),
-        MainPing.histogramToThresholdCount(childHistograms \ "CYCLE_COLLECTOR_MAX_PAUSE", 2500),
+        MainPing.histogramToThresholdCount(histograms("content") \ "CYCLE_COLLECTOR_MAX_PAUSE", 150),
+        MainPing.histogramToThresholdCount(histograms("content") \ "CYCLE_COLLECTOR_MAX_PAUSE", 250),
+        MainPing.histogramToThresholdCount(histograms("content") \ "CYCLE_COLLECTOR_MAX_PAUSE", 2500),
 
-        MainPing.histogramToThresholdCount(histograms \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 150),
-        MainPing.histogramToThresholdCount(histograms \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 250),
-        MainPing.histogramToThresholdCount(histograms \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 2500),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 150),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 250),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 2500),
 
-        MainPing.histogramToThresholdCount(childHistograms \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 150),
-        MainPing.histogramToThresholdCount(childHistograms \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 250),
-        MainPing.histogramToThresholdCount(childHistograms \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 2500),
+        MainPing.histogramToThresholdCount(histograms("content") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 150),
+        MainPing.histogramToThresholdCount(histograms("content") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 250),
+        MainPing.histogramToThresholdCount(histograms("content") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 2500),
 
-        MainPing.histogramToThresholdCount(histograms \ "GHOST_WINDOWS", 1),
-        MainPing.histogramToThresholdCount(childHistograms \ "GHOST_WINDOWS", 1)
+        MainPing.histogramToThresholdCount(histograms("parent") \ "GHOST_WINDOWS", 1),
+        MainPing.histogramToThresholdCount(histograms("content") \ "GHOST_WINDOWS", 1)
       )
 
       val scalarRow = MainPing.scalarsToRow(
@@ -688,7 +698,7 @@ object MainSummaryView {
       )
 
       val histogramRow = MainPing.histogramsToRow(
-        histograms merge keyedHistograms,
+        MainPing.ProcessTypes.map{ p => p -> (histograms(p) merge keyedHistograms(p)) }.toMap,
         histogramDefinitions
       )
 
@@ -819,18 +829,20 @@ object MainSummaryView {
     histogramDefinitions.map{
       case (name, definition) =>
         definition match {
-          case LinearHistogram(keyed, _, _, _) => (name, keyed)
-          case ExponentialHistogram(keyed, _, _, _) => (name, keyed)
-          case EnumeratedHistogram(keyed, _) => (name, keyed)
-          case BooleanHistogram(keyed) => (name, keyed)
+          case LinearHistogram(keyed, _, _, _, processes) => (name, keyed, processes)
+          case ExponentialHistogram(keyed, _, _, _, processes) => (name, keyed, processes)
+          case EnumeratedHistogram(keyed, _, processes) => (name, keyed, processes)
+          case BooleanHistogram(keyed, processes) => (name, keyed, processes)
           case other =>
             throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
         }
-    }.map{
-      case (name, keyed) =>
-        keyed match {
-          case true => StructField(getHistogramName(name, "parent"), MapType(StringType, HistogramSchema), nullable = true)
-          case false => StructField(getHistogramName(name, "parent"), HistogramSchema, nullable = true)
+    }.flatMap{
+      case (name, keyed, processes) =>
+        processes.map{ p =>
+          keyed match {
+            case true => StructField(getHistogramName(name, p), MapType(StringType, HistogramSchema), nullable = true)
+            case false => StructField(getHistogramName(name, p), HistogramSchema, nullable = true)
+          }
         }
     }
   }
