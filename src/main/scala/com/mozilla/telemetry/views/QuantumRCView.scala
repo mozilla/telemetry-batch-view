@@ -10,12 +10,21 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.SQLContext
 import org.rogach.scallop._
 
+/** Quantum Release Criteria View
+  *
+  * The purpose of this dataset is to verify that Quantum
+  * is improving Firefox. To see specifically what the
+  * criteria are, see bug 1366831.
+  *
+  * We use HLLs to get client_counts for a set of
+  * values across a set of dimensions.
+  */
 object QuantumRCView {
 
   val TotalCountColName = "total_clients"
   val DatasetPrefix = "quantum_rc"
   val Version = "v1"
-  val NumFiles = 32
+  val NumFiles = 16
   val WriteMode = "overwrite"
   val WeekPartitionName = "week"
 
@@ -84,6 +93,7 @@ object QuantumRCView {
   def aggregate(df: DataFrame): DataFrame = {
     import df.sparkSession.implicits._
 
+    // these are SHIELD experiments, not telemetry experiments
     val withExperiments = df
       .where("client_id IS NOT NULL")
       .select(col("*"),
