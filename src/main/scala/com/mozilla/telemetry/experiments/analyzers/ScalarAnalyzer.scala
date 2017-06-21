@@ -9,6 +9,10 @@ import scala.collection.Map
 // Spark doesn't support Datasets of case classes with type parameters (nor of abstract type members) -- otherwise we'd
 // be able to avoid creating the concrete type versions of all of these case classes
 
+trait definesToScalarMapRow[R] {
+  def toScalarMapRow: R
+}
+
 trait ScalarRow[T] {
   val experiment_id: String
   val branch: String
@@ -24,15 +28,15 @@ trait ScalarRow[T] {
 }
 
 case class BooleanScalarRow(experiment_id: String, branch: String, subgroup: String, metric: Option[Boolean])
-  extends ScalarRow[Boolean] {
+  extends ScalarRow[Boolean] with definesToScalarMapRow[BooleanScalarMapRow] {
   def toScalarMapRow: BooleanScalarMapRow = BooleanScalarMapRow(experiment_id, branch, subgroup, scalarMapRowMetric)
 }
 case class UintScalarRow(experiment_id: String, branch: String, subgroup: String, metric: Option[Int])
-  extends ScalarRow[Int] {
+  extends ScalarRow[Int] with definesToScalarMapRow[UintScalarMapRow] {
   def toScalarMapRow: UintScalarMapRow = UintScalarMapRow(experiment_id, branch, subgroup, scalarMapRowMetric)
 }
 case class StringScalarRow(experiment_id: String, branch: String, subgroup: String, metric: Option[String])
-  extends ScalarRow[String] {
+  extends ScalarRow[String] with definesToScalarMapRow[StringScalarMapRow] {
   def toScalarMapRow: StringScalarMapRow = StringScalarMapRow(experiment_id, branch, subgroup, scalarMapRowMetric)
 }
 
@@ -53,15 +57,18 @@ trait KeyedScalarRow[T] {
 }
 
 case class KeyedBooleanScalarRow(experiment_id: String, branch: String, subgroup: String,
-                                 metric: Option[Map[String, Boolean]]) extends KeyedScalarRow[Boolean] {
+                                 metric: Option[Map[String, Boolean]])
+  extends KeyedScalarRow[Boolean] with definesToScalarMapRow[BooleanScalarMapRow] {
   def toScalarMapRow: BooleanScalarMapRow = BooleanScalarMapRow(experiment_id, branch, subgroup, collapsedMetric)
 }
 case class KeyedUintScalarRow(experiment_id: String, branch: String, subgroup: String,
-                              metric: Option[Map[String, Int]]) extends KeyedScalarRow[Int] {
+                              metric: Option[Map[String, Int]])
+  extends KeyedScalarRow[Int] with definesToScalarMapRow[UintScalarMapRow] {
   def toScalarMapRow: UintScalarMapRow = UintScalarMapRow(experiment_id, branch, subgroup, collapsedMetric)
 }
 case class KeyedStringScalarRow(experiment_id: String, branch: String, subgroup: String,
-                                metric: Option[Map[String, String]]) extends KeyedScalarRow[String] {
+                                metric: Option[Map[String, String]])
+  extends KeyedScalarRow[String] with definesToScalarMapRow[StringScalarMapRow] {
   def toScalarMapRow: StringScalarMapRow = StringScalarMapRow(experiment_id, branch, subgroup, collapsedMetric)
 }
 
@@ -80,11 +87,8 @@ class BooleanScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame)
 
   def collapseKeys(formatted: DataFrame): Dataset[BooleanScalarMapRow] = {
     import df.sparkSession.implicits._
-    if (md.keyed) {
-      formatted.as[KeyedBooleanScalarRow].map(_.toScalarMapRow)
-    } else {
-      formatted.as[BooleanScalarRow].map(_.toScalarMapRow)
-    }
+    val s = if (md.keyed) formatted.as[KeyedBooleanScalarRow] else formatted.as[BooleanScalarRow]
+    s.map(_.toScalarMapRow)
   }
 }
 
@@ -95,11 +99,8 @@ class UintScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame)
 
   def collapseKeys(formatted: DataFrame): Dataset[UintScalarMapRow] = {
     import df.sparkSession.implicits._
-    if (md.keyed) {
-      formatted.as[KeyedUintScalarRow].map(_.toScalarMapRow)
-    } else {
-      formatted.as[UintScalarRow].map(_.toScalarMapRow)
-    }
+    val s = if (md.keyed) formatted.as[KeyedUintScalarRow] else formatted.as[UintScalarRow]
+    s.map(_.toScalarMapRow)
   }
 }
 
@@ -110,15 +111,8 @@ class StringScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame)
 
   def collapseKeys(formatted: DataFrame): Dataset[StringScalarMapRow] = {
     import df.sparkSession.implicits._
-    if (md.keyed) {
-      formatted.as[KeyedStringScalarRow].map(_.toScalarMapRow)
-    } else {
-      formatted.as[StringScalarRow].map(_.toScalarMapRow)
-    }
-  }
-
-  private def addStringHistograms(l: Map[String, Long], r: Map[String, Long]): Map[String, Long] = {
-    l ++ r.map { case (k, v) => k -> (v + l.getOrElse(k, 0L)) }
+    val s = if (md.keyed) formatted.as[KeyedStringScalarRow] else formatted.as[StringScalarRow]
+    s.map(_.toScalarMapRow)
   }
 
   override protected def reindex(aggregates: Dataset[MetricAnalysis]): Dataset[MetricAnalysis] = {
@@ -129,14 +123,18 @@ class StringScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame)
     val counts = aggregates.collect().map { a: MetricAnalysis =>
       a.histogram.values.map {p: HistogramPoint => p.label.get -> p.count.toLong}.toMap[String, Long]
     }
-    if (counts.isEmpty) return aggregates
-    val indexes = counts.reduce(addStringHistograms).toSeq.sortWith(_._2 > _._2).zipWithIndex.map {
-      case ((key, _), index) => key -> index.toLong
-    }.toMap
 
-    aggregates.map(r => r.copy(
-      histogram = r.histogram.map { case (_, p) => indexes(p.label.get) -> p }
-    ))
+    if (counts.isEmpty)
+      aggregates
+    else {
+      val indexes = counts.reduce(addHistograms[String]).toSeq.sortWith(_._2 > _._2).zipWithIndex.map {
+        case ((key, _), index) => key -> index.toLong
+      }.toMap
+
+      aggregates.map(r => r.copy(
+        histogram = r.histogram.map { case (_, p) => indexes(p.label.get) -> p }
+      ))
+    }
   }
 }
 
@@ -146,7 +144,7 @@ object ScalarAnalyzer {
       case s: BooleanScalar => new BooleanScalarAnalyzer(name, s, df)
       case s: UintScalar => new UintScalarAnalyzer(name, s, df)
       case s: StringScalar => new StringScalarAnalyzer(name, s, df)
-      case _ => throw new Exception("Unsupported scalar type")
+      case _ => throw new UnsupportedOperationException("Unsupported scalar type")
     }
   }
 }

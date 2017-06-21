@@ -15,8 +15,7 @@ object ExperimentAnalysisView {
     // TODO: change to s3 bucket/keys
     val inputLocation = opt[String]("input", descr = "Source for parquet data", required = true)
     val outputLocation = opt[String]("output", descr = "Destination for parquet data", required = true)
-    val histo = opt[String]("histogram", descr = "Run job on just this histogram", required = false)
-    val scalar = opt[String]("scalar", descr = "Run job on just this scalar", required = false)
+    val metric = opt[String]("metric", descr = "Run job on just this metric", required = false)
     val experiment = opt[String]("experiment", descr = "Run job on just this experiment", required = false)
     val date = opt[String]("date", descr = "Run date for this job (defaults to yesterday)", required = false)
     verify()
@@ -56,13 +55,11 @@ object ExperimentAnalysisView {
         .map(r => r(0).asInstanceOf[String])
     }
 
-    val metricList: List[(String, MetricDefinition)] = (conf.histo.get match {
-      case Some(h) => List((h, Histograms.definitions()(h.toUpperCase)))
-      case _ => MainSummaryView.filterHistogramDefinitions(Histograms.definitions(), useWhitelist = true)
-    }) ++ (conf.scalar.get match {
-      case Some(s) => List((s, Scalars.definitions()(s.toUpperCase)))
-      case _ => Scalars.definitions(includeOptin = true).toList
-    })
+    val metricList: List[(String, MetricDefinition)] = conf.metric.get match {
+      case Some(m) => List((m, (Histograms.definitions() ++ Scalars.definitions())(m.toUpperCase)))
+      case _ => MainSummaryView.filterHistogramDefinitions(Histograms.definitions(), useWhitelist = true) ++
+        Scalars.definitions(includeOptin = true).toList
+    }
 
     experiments.foreach { e: String =>
       val experimentData = data.where(col("experiment_id") === e)
@@ -73,7 +70,7 @@ object ExperimentAnalysisView {
         case (name: String, sd: ScalarDefinition) =>
           val columnName = Scalars.getParquetFriendlyScalarName(name, "parent")
           ScalarAnalyzer.getAnalyzer(columnName, sd, experimentData).analyze()
-        case _ => throw new Exception("Unsupported metric definition type")
+        case _ => throw new UnsupportedOperationException("Unsupported metric definition type")
       }.reduce(_.union(_))
 
       val outputLocation = s"${conf.outputLocation()}/experiment_id=$e/date=$date"

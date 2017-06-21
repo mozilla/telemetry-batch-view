@@ -9,22 +9,16 @@ import scala.collection.Map
 
 abstract class MetricAggregator[T]
   extends Aggregator[PreAggregateRow[T], Map[T, Long], Map[Long, HistogramPoint]] {
-  implicit class PreAggregateMetric(metric: Map[T, Long]) {
-    def add(other: Map[T, Long]): Map[T, Long] = {
-      metric ++ other.map { case (k, v) => k -> (v + metric.getOrElse(k, 0L))}
-    }
-  }
-
   def zero: Map[T, Long] = Map[T, Long]()
 
   def reduce(b: Map[T, Long], s: PreAggregateRow[T]): Map[T, Long] = {
     s.metric match {
-      case Some(m: Map[T, Long]) => b.add(m)
+      case Some(m: Map[T, Long]) => addHistograms[T](b, m)
       case _ => b
     }
   }
 
-  def merge(l: Map[T, Long], r: Map[T, Long]): Map[T, Long] = l.add(r)
+  def merge(l: Map[T, Long], r: Map[T, Long]): Map[T, Long] = addHistograms[T](l, r)
 
   def outputEncoder: Encoder[Map[Long, HistogramPoint]] = ExpressionEncoder()
 }
@@ -33,8 +27,8 @@ object BooleanAggregator extends MetricAggregator[Boolean] {
   def finish(b: Map[Boolean, Long]): Map[Long, HistogramPoint] = {
     val sum = b.values.sum.toDouble
     if (sum == 0) return Map.empty[Long, HistogramPoint]
-    val f = b.getOrElse(false, 0L)
-    val t = b.getOrElse(true, 0L)
+    val f = b.getOrElse(false, 0L).toDouble
+    val t = b.getOrElse(true, 0L).toDouble
 
     Map(0L -> HistogramPoint(f/sum, f, Some("False")), 1L -> HistogramPoint(t/sum, t, Some("True")))
   }

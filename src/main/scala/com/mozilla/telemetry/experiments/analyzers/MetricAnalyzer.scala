@@ -35,7 +35,7 @@ case class MetricAnalysis(experiment_id: String,
                           metric_name: String,
                           metric_type: String,
                           histogram: Map[Long, HistogramPoint],
-                          statistic: Option[Seq[Statistic]])
+                          statistics: Option[Seq[Statistic]])
 
 abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFrame) extends java.io.Serializable {
   type PreAggregateRowType <: PreAggregateRow[T]
@@ -44,18 +44,18 @@ abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFra
   import df.sparkSession.implicits._
 
   def analyze(): Dataset[MetricAnalysis] = {
-    val ds = format match {
-      case Some(d: DataFrame) => collapseKeys(d)
-      case _ => return df.sparkSession.emptyDataset[MetricAnalysis]
+    format match {
+      case Some(d: DataFrame) => {
+        val agg_column = aggregator.toColumn.name("metric_aggregate")
+        val output = collapseKeys(d)
+          .filter(r => r.metric.isDefined)
+          .groupByKey(x => MetricKey(x.experiment_id, x.branch, x.subgroup))
+          .agg(agg_column, count("*"))
+          .map(toOutputSchema)
+        reindex(output)
+      }
+      case _ => df.sparkSession.emptyDataset[MetricAnalysis]
     }
-
-    val agg_column = aggregator.toColumn.name("metric_aggregate")
-    val output = ds.filter(r => r.metric.isDefined)
-      .groupByKey(x => MetricKey(x.experiment_id, x.branch, x.subgroup))
-      .agg(agg_column, count("*"))
-      .map(toOutputSchema)
-
-    reindex(output)
   }
 
   private def format: Option[DataFrame] = {

@@ -9,9 +9,9 @@ import scala.collection.Map
 
 
 case class HistogramExperimentDataset(experiment_id: String,
-                             experiment_branch: String,
-                             histogram: Option[Map[Int, Int]],
-                             keyed_histogram: Option[Map[String, Map[Int, Int]]])
+                                      experiment_branch: String,
+                                      histogram: Option[Map[Int, Int]],
+                                      keyed_histogram: Option[Map[String, Map[Int, Int]]])
 
 class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
   val m1 = Map(0 -> 1, 1 -> 2, 2 -> 3)
