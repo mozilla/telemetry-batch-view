@@ -24,7 +24,7 @@ object QuantumRCView {
   val TotalCountColName = "total_clients"
   val DatasetPrefix = "quantum_rc"
   val Version = "v1"
-  val NumFiles = 16
+  val NumFiles = 2
   val WriteMode = "overwrite"
   val WeekPartitionName = "week"
 
