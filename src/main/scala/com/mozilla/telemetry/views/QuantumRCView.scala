@@ -132,7 +132,7 @@ object QuantumRCView {
     val from = getFrom(conf)
     val to = getTo(conf)
 
-    val df = spark.read
+    val df = spark.read.option("mergeSchema", "true")
       .parquet(s"s3://telemetry-parquet/${MainSummaryView.jobName}/${MainSummaryView.schemaVersion}")
       .where(s"$from <= submission_date_s3 AND submission_date_s3 <= $to")
 
