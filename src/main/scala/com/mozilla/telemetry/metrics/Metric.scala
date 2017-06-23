@@ -13,11 +13,10 @@ class MetricsClass {
       _ match {
         case "main" => "parent" :: Nil
         case "all" => MainPing.ProcessTypes
-        case "all_childs" => MainPing.ProcessTypes.filter(_ != "parent")
-        case "all_child" => MainPing.ProcessTypes.filter(_ != "parent")
-        case "all_children" => MainPing.ProcessTypes.filter(_ != "parent")
+        case "all_child" | "all_childs" | "all_children" =>
+          MainPing.ProcessTypes.filter(_ != "parent")
         case o => o :: Nil
       }
-    }.toSet.toList
+    }.distinct
   }
 }
