@@ -371,7 +371,6 @@ object MainSummaryView {
       lazy val parentEvents = payload \ "payload" \ "processes" \ "parent" \ "events"
       lazy val experiments = parse(fields.getOrElse("environment.experiments", "{}").asInstanceOf[String])
 
-      val loopActivityCounterKeys = (0 to 4).map(_.toString)
       val sslHandshakeResultKeys = (0 to 671).map(_.toString)
 
       // Messy list of known enum values for POPUP_NOTIFICATION_STATS.
@@ -597,7 +596,6 @@ object MainSummaryView {
           case JString(x) => x
           case _ => null
         },
-        MainPing.enumHistogramToRow(histograms("parent") \ "LOOP_ACTIVITY_COUNTER", loopActivityCounterKeys),
         hsum(histograms("parent") \ "DEVTOOLS_TOOLBOX_OPENED_COUNT"),
         fields.getOrElse("Date", None) match {
           case x: String => x
@@ -720,15 +718,6 @@ object MainSummaryView {
     StructField("engine", StringType, nullable = true), // Name of the search engine
     StructField("source", StringType, nullable = true), // Source of the search (urlbar, etc)
     StructField("count",  LongType,   nullable = true)  // Number of searches
-  ))
-
-  // Enumerated buckets from LOOP_ACTIVITY_COUNTER histogram
-  def buildLoopSchema = StructType(List(
-    StructField("open_panel",        IntegerType, nullable = true), // bucket 0
-    StructField("open_conversation", IntegerType, nullable = true), // bucket 1
-    StructField("room_open",         IntegerType, nullable = true), // bucket 2
-    StructField("room_share",        IntegerType, nullable = true), // bucket 3
-    StructField("room_delete",       IntegerType, nullable = true)  // bucket 4
   ))
 
   // Enumerated buckets from POPUP_NOTIFICATION_STATS keyed histogram
@@ -947,9 +936,6 @@ object MainSummaryView {
       StructField("default_search_engine_data_origin", StringType, nullable = true), // environment/settings/defaultSearchEngineData/origin
       StructField("default_search_engine_data_submission_url", StringType, nullable = true), // environment/settings/defaultSearchEngineData/submissionURL
       StructField("default_search_engine", StringType, nullable = true), // environment/settings/defaultSearchEngine
-
-      // LOOP_ACTIVITY_COUNTER histogram per bug 1261829
-      StructField("loop_activity_counter", buildLoopSchema, nullable = true),
 
       // DevTools usage per bug 1262478
       StructField("devtools_toolbox_opened_count", IntegerType, nullable = true), // DEVTOOLS_TOOLBOX_OPENED_COUNT
