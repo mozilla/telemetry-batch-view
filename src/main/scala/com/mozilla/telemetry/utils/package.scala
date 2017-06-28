@@ -92,4 +92,8 @@ package object utils{
     println(s"Elapsed time: ${(t1 - t0)/1000000000.0} s")
     result
   }
+
+  def yesterdayAsYYYYMMDD: String = {
+    DateTime.now.minusDays(1).toString("yyyyMMdd")
+  }
 }

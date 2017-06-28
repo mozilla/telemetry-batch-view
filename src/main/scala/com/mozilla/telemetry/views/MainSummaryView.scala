@@ -21,11 +21,18 @@ object MainSummaryView {
   def jobName: String = "main_summary"
 
   val histogramsWhitelist =
+    "CERT_VALIDATION_SUCCESS_BY_CA" ::
+    "CYCLE_COLLECTOR_MAX_PAUSE" ::
     "GC_MAX_PAUSE_MS" ::
     "GC_MAX_PAUSE_MS_2" ::
-    "CYCLE_COLLECTOR_MAX_PAUSE" ::
+    "GHOST_WINDOWS" ::
+    "HTTP_CHANNEL_DISPOSITION" ::
+    "HTTP_PAGELOAD_IS_SSL" ::
     "INPUT_EVENT_RESPONSE_COALESCED_MS" ::
-    "GHOST_WINDOWS" :: Nil
+    "SSL_HANDSHAKE_RESULT" ::
+    "SSL_HANDSHAKE_VERSION" ::
+    "SSL_TLS12_INTOLERANCE_REASON_PRE" ::
+    "SSL_TLS13_INTOLERANCE_REASON_PRE" :: Nil
 
 
   // Configuration for command line arguments
@@ -90,7 +97,13 @@ object MainSummaryView {
       val schema = buildSchema(scalarDefinitions, histogramDefinitions)
       val ignoredCount = sc.accumulator(0, "Number of Records Ignored")
       val processedCount = sc.accumulator(0, "Number of Records Processed")
-      val messages = Dataset("telemetry")
+
+      val telemetrySource = currentDate match {
+        case d if d.isBefore(fmt.parseDateTime("20161012")) => "telemetry-oldinfra"
+        case _ => "telemetry"
+      }
+
+      val messages = Dataset(telemetrySource)
         .where("sourceName") {
           case "telemetry" => true
         }.where("sourceVersion") {
@@ -107,42 +120,44 @@ object MainSummaryView {
           case v => filterVersion.isEmpty || v == filterVersion.get
         }.records(conf.limit.get)
 
-      val rowRDD = messages.flatMap(m => {
-        messageToRow(m, scalarDefinitions, histogramDefinitions) match {
-          case None =>
-            ignoredCount += 1
-            None
-          case x =>
-            processedCount += 1
-            x
-        }
-      })
+      if(!messages.isEmpty()){
+        val rowRDD = messages.flatMap(m => {
+          messageToRow(m, scalarDefinitions, histogramDefinitions) match {
+            case None =>
+              ignoredCount += 1
+              None
+            case x =>
+              processedCount += 1
+              x
+          }
+        })
 
-      val records = sqlContext.createDataFrame(rowRDD, schema)
+        val records = sqlContext.createDataFrame(rowRDD, schema)
 
-      // Note we cannot just use 'partitionBy' below to automatically populate
-      // the submission_date partition, because none of the write modes do
-      // quite what we want:
-      //  - "overwrite" causes the entire vX partition to be deleted and replaced with
-      //    the current day's data, so doesn't work with incremental jobs
-      //  - "append" would allow us to generate duplicate data for the same day, so
-      //    we would need to add some manual checks before running
-      //  - "error" (the default) causes the job to fail after any data is
-      //    loaded, so we can't do single day incremental updates.
-      //  - "ignore" causes new data not to be saved.
-      // So we manually add the "submission_date_s3" parameter to the s3path.
-      val s3prefix = s"$jobName/$schemaVersion/submission_date_s3=$currentDateString"
-      val s3path = s"s3://${conf.outputBucket()}/$s3prefix"
+        // Note we cannot just use 'partitionBy' below to automatically populate
+        // the submission_date partition, because none of the write modes do
+        // quite what we want:
+        //  - "overwrite" causes the entire vX partition to be deleted and replaced with
+        //    the current day's data, so doesn't work with incremental jobs
+        //  - "append" would allow us to generate duplicate data for the same day, so
+        //    we would need to add some manual checks before running
+        //  - "error" (the default) causes the job to fail after any data is
+        //    loaded, so we can't do single day incremental updates.
+        //  - "ignore" causes new data not to be saved.
+        // So we manually add the "submission_date_s3" parameter to the s3path.
+        val s3prefix = s"$jobName/$schemaVersion/submission_date_s3=$currentDateString"
+        val s3path = s"s3://${conf.outputBucket()}/$s3prefix"
 
-      // Repartition the dataframe by sample_id before saving.
-      val partitioned = records.repartition(100, records.col("sample_id"))
+        // Repartition the dataframe by sample_id before saving.
+        val partitioned = records.repartition(100, records.col("sample_id"))
 
-      // Then write to S3 using the given fields as path name partitions. Overwrites
-      // existing data.
-      partitioned.write.partitionBy("sample_id").mode("overwrite").parquet(s3path)
+        // Then write to S3 using the given fields as path name partitions. Overwrites
+        // existing data.
+        partitioned.write.partitionBy("sample_id").mode("overwrite").parquet(s3path)
 
-      // Then remove the _SUCCESS file so we don't break Spark partition discovery.
-      S3Store.deleteKey(conf.outputBucket(), s"$s3prefix/_SUCCESS")
+        // Then remove the _SUCCESS file so we don't break Spark partition discovery.
+        S3Store.deleteKey(conf.outputBucket(), s"$s3prefix/_SUCCESS")
+      }
 
       println(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
       println("     RECORDS SEEN:    %d".format(ignoredCount.value + processedCount.value))
@@ -155,6 +170,7 @@ object MainSummaryView {
 
   def getActiveAddons(activeAddons: JValue): Option[List[Row]] = {
     implicit val formats = DefaultFormats
+
     Try(activeAddons.extract[Map[String, Addon]]) match {
       case Success(addons) => {
         val rows = addons.map { case (addonId, addonData) =>
@@ -205,6 +221,55 @@ object MainSummaryView {
     }
   }
 
+  def getQuantumReady(e10sStatus: JValue, addons: JValue, theme: JValue): Option[Boolean] = {
+    val e10sEnabled = e10sStatus match {
+      case JBool(e10sStatus) => Some(e10sStatus)
+      case _ => None
+    }
+
+    val allowedAddons = getActiveAddons(addons) match {
+      case Some(l) if l.length > 0 => Some(
+        l.map(row => {
+          val isSystem = row.get(13) match {
+            case b: Boolean => b
+            case _ => false
+          }
+
+          val isWebExtension = row.get(14) match {
+            case b: Boolean => b
+            case _ => false
+          }
+
+          isSystem || isWebExtension
+        }).reduce(_ && _))
+      case Some(l) => Some(true) // no addons => quantumReady = true
+      case _ => None
+    }
+
+    val requiredThemes = List(
+      "{972ce4c6-7e08-4474-a285-3208198ce6fd}",
+      "firefox-compact-light@mozilla.org",
+      "firefox-compact-dark@mozilla.org"
+    )
+
+    val allowedTheme = getTheme(theme) match {
+      case Some(t) => t.get(0) match {
+        case id: String => id match {
+            case "MISSING" => None
+            case other => Some(requiredThemes.contains(id))
+          }
+        case _ => None
+      }
+      case _ => None
+    }
+
+    for {
+      e10s <- e10sEnabled
+      theme <- allowedTheme
+      addons <- allowedAddons
+    } yield (e10s && theme && addons)
+  }
+
   def getAttribution(attribution: JValue): Option[Row] = {
     // Return value mirrors the case class Attribution. If all the columns
     // are null, then then whole attribution field is null.
@@ -227,7 +292,7 @@ object MainSummaryView {
   def getUserPrefs(prefs: JValue): Option[Row] = {
     val pc = prefs \ "dom.ipc.processCount" match {
       case JInt(pc) => pc.toInt
-      case _ => null 
+      case _ => null
     }
     val anme = prefs \ "extensions.allow-non-mpc-extensions" match {
       case JBool(x) => x
@@ -276,15 +341,33 @@ object MainSummaryView {
       lazy val settings = parse(fields.getOrElse("environment.settings", "{}").asInstanceOf[String])
       lazy val system = parse(fields.getOrElse("environment.system", "{}").asInstanceOf[String])
       lazy val info = parse(fields.getOrElse("payload.info", "{}").asInstanceOf[String])
-      lazy val histograms = parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
-      lazy val keyedHistograms = parse(fields.getOrElse("payload.keyedHistograms", "{}").asInstanceOf[String])
       lazy val simpleMeasures = parse(fields.getOrElse("payload.simpleMeasurements", "{}").asInstanceOf[String])
 
-      lazy val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms \ "WEAVE_CONFIGURED")
-      lazy val weaveDesktop = MainPing.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_DESKTOP")
-      lazy val weaveMobile = MainPing.enumHistogramToCount(histograms \ "WEAVE_DEVICE_COUNT_MOBILE")
-      lazy val parentScalars = payload \ "payload" \ "processes" \ "parent" \ "scalars"
-      lazy val parentKeyedScalars = payload \ "payload" \ "processes" \ "parent" \ "keyedScalars"
+      lazy val histograms = MainPing.ProcessTypes.map{
+        _ match {
+          case "parent" => "parent" -> parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
+          case p => p -> payload \ "payload" \ "processes" \ p \ "histograms"
+        }
+      }.toMap
+
+      lazy val keyedHistograms = MainPing.ProcessTypes.map{
+        _ match {
+          case "parent" => "parent" -> parse(fields.getOrElse("payload.keyedHistograms", "{}").asInstanceOf[String])
+          case p => p -> payload \ "payload" \ "processes" \ p \ "keyedHistograms"
+        }
+      }.toMap
+
+      lazy val scalars = MainPing.ProcessTypes.map{
+        p => p -> payload \ "payload" \ "processes" \ p \ "scalars"
+      }.toMap
+
+      lazy val keyedScalars = MainPing.ProcessTypes.map{
+        p => p -> payload \ "payload" \ "processes" \ p \ "keyedScalars"
+      }.toMap
+
+      lazy val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms("parent") \ "WEAVE_CONFIGURED")
+      lazy val weaveDesktop = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_DESKTOP")
+      lazy val weaveMobile = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_MOBILE")
       lazy val parentEvents = payload \ "payload" \ "processes" \ "parent" \ "events"
       lazy val experiments = parse(fields.getOrElse("environment.experiments", "{}").asInstanceOf[String])
 
@@ -394,6 +477,10 @@ object MainSummaryView {
           case JInt(x) => x.toInt
           case _ => null
         },
+        payload \ "creationDate" match {
+          case JString(x) => x
+          case _ => null
+        },
         partner \ "distributionId" match {
           case JString(x) => x
           case _ => null
@@ -460,20 +547,20 @@ object MainSummaryView {
           case _ => null
         },
         asInt(info \ "timezoneOffset"),
-        hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "pluginhang"),
-        hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "plugin"),
-        hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "content"),
-        hsum(keyedHistograms \ "SUBPROCESS_ABNORMAL_ABORT" \ "gmplugin"),
-        hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "plugin"),
-        hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "content"),
-        hsum(keyedHistograms \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "gmplugin"),
-        hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "main-crash"),
-        hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "content-crash"),
-        hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "plugin-crash"),
-        hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "main-crash"),
-        hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash"),
-        hsum(keyedHistograms \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash"),
-        hsum(keyedHistograms \ "SUBPROCESS_KILL_HARD" \ "ShutDownKill"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "pluginhang"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_ABNORMAL_ABORT" \ "plugin"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_ABNORMAL_ABORT" \ "content"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_ABNORMAL_ABORT" \ "gmplugin"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "plugin"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "content"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "gmplugin"),
+        hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "main-crash"),
+        hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "content-crash"),
+        hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "plugin-crash"),
+        hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "main-crash"),
+        hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash"),
+        hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_KILL_HARD" \ "ShutDownKill"),
         MainPing.countKeys(addons \ "activeAddons") match {
           case Some(x) => x
           case _ => null
@@ -510,21 +597,21 @@ object MainSummaryView {
           case JString(x) => x
           case _ => null
         },
-        MainPing.enumHistogramToRow(histograms \ "LOOP_ACTIVITY_COUNTER", loopActivityCounterKeys),
-        hsum(histograms \ "DEVTOOLS_TOOLBOX_OPENED_COUNT"),
+        MainPing.enumHistogramToRow(histograms("parent") \ "LOOP_ACTIVITY_COUNTER", loopActivityCounterKeys),
+        hsum(histograms("parent") \ "DEVTOOLS_TOOLBOX_OPENED_COUNT"),
         fields.getOrElse("Date", None) match {
           case x: String => x
           case _ => null
         },
-        MainPing.histogramToMean(histograms \ "PLACES_BOOKMARKS_COUNT").orNull,
-        MainPing.histogramToMean(histograms \ "PLACES_PAGES_COUNT").orNull,
-        hsum(histograms \ "PUSH_API_NOTIFY"),
-        hsum(histograms \ "WEB_NOTIFICATION_SHOWN"),
+        MainPing.histogramToMean(histograms("parent") \ "PLACES_BOOKMARKS_COUNT").orNull,
+        MainPing.histogramToMean(histograms("parent") \ "PLACES_PAGES_COUNT").orNull,
+        hsum(histograms("parent") \ "PUSH_API_NOTIFY"),
+        hsum(histograms("parent") \ "WEB_NOTIFICATION_SHOWN"),
 
-        MainPing.keyedEnumHistogramToMap(keyedHistograms \ "POPUP_NOTIFICATION_STATS",
+        MainPing.keyedEnumHistogramToMap(keyedHistograms("parent") \ "POPUP_NOTIFICATION_STATS",
           popupNotificationStatsKeys).orNull,
 
-        MainPing.getSearchCounts(keyedHistograms \ "SEARCH_COUNTS").orNull,
+        MainPing.getSearchCounts(keyedHistograms("parent") \ "SEARCH_COUNTS").orNull,
 
         getActiveAddons(addons \ "activeAddons").orNull,
         getTheme(addons \ "theme").orNull,
@@ -544,9 +631,9 @@ object MainSummaryView {
         Events.getEvents(parentEvents).orNull,
 
         // bug 1339655
-        MainPing.enumHistogramBucketCount(histograms \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.head).orNull,
-        MainPing.enumHistogramSumCounts(histograms \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.tail),
-        MainPing.enumHistogramToMap(histograms \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys),
+        MainPing.enumHistogramBucketCount(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.head).orNull,
+        MainPing.enumHistogramSumCounts(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.tail),
+        MainPing.enumHistogramToMap(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys),
 
         // bug 1353114 - payload.simpleMeasurements.*
         asInt(simpleMeasures \ "activeTicks"),
@@ -556,11 +643,12 @@ object MainSummaryView {
         asInt(simpleMeasures \ "totalTime"),
 
         // bug 1362520 - plugin notifications
-        hsum(histograms \ "PLUGINS_NOTIFICATION_SHOWN"),
-        MainPing.enumHistogramToRow(histograms \ "PLUGINS_NOTIFICATION_USER_ACTION", pluginNotificationUserActionKeys),
-        hsum(histograms \ "PLUGINS_INFOBAR_SHOWN"),
-        hsum(histograms \ "PLUGINS_INFOBAR_BLOCK"),
-        hsum(histograms \ "PLUGINS_INFOBAR_ALLOW"),
+        hsum(histograms("parent") \ "PLUGINS_NOTIFICATION_SHOWN"),
+        MainPing.enumHistogramToRow(histograms("parent") \ "PLUGINS_NOTIFICATION_USER_ACTION", pluginNotificationUserActionKeys),
+        hsum(histograms("parent") \ "PLUGINS_INFOBAR_SHOWN"),
+        hsum(histograms("parent") \ "PLUGINS_INFOBAR_BLOCK"),
+        hsum(histograms("parent") \ "PLUGINS_INFOBAR_ALLOW"),
+        hsum(histograms("parent") \ "PLUGINS_INFOBAR_DISMISSED"),
 
         // bug 1366253 - active experiments
         getExperiments(experiments).orNull,
@@ -568,16 +656,55 @@ object MainSummaryView {
         settings \ "searchCohort" match {
           case JString(x) => x
           case _ => null
-        }
+        },
+
+        // bug 1366838 - Quantum Release Criteria
+        system \ "gfx" \ "features" \ "compositor" match {
+          case JString(x) => x
+          case _ => null
+        },
+
+        getQuantumReady(
+          settings \ "e10sEnabled",
+          addons \ "activeAddons",
+          addons \ "theme"
+        ).orNull,
+
+        MainPing.histogramToThresholdCount(histograms("parent") \ "GC_MAX_PAUSE_MS_2", 150),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "GC_MAX_PAUSE_MS_2", 250),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "GC_MAX_PAUSE_MS_2", 2500),
+
+        MainPing.histogramToThresholdCount(histograms("content") \ "GC_MAX_PAUSE_MS_2", 150),
+        MainPing.histogramToThresholdCount(histograms("content") \ "GC_MAX_PAUSE_MS_2", 250),
+        MainPing.histogramToThresholdCount(histograms("content") \ "GC_MAX_PAUSE_MS_2", 2500),
+
+        MainPing.histogramToThresholdCount(histograms("parent") \ "CYCLE_COLLECTOR_MAX_PAUSE", 150),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "CYCLE_COLLECTOR_MAX_PAUSE", 250),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "CYCLE_COLLECTOR_MAX_PAUSE", 2500),
+
+        MainPing.histogramToThresholdCount(histograms("content") \ "CYCLE_COLLECTOR_MAX_PAUSE", 150),
+        MainPing.histogramToThresholdCount(histograms("content") \ "CYCLE_COLLECTOR_MAX_PAUSE", 250),
+        MainPing.histogramToThresholdCount(histograms("content") \ "CYCLE_COLLECTOR_MAX_PAUSE", 2500),
+
+        MainPing.histogramToThresholdCount(histograms("parent") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 150),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 250),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 2500),
+
+        MainPing.histogramToThresholdCount(histograms("content") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 150),
+        MainPing.histogramToThresholdCount(histograms("content") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 250),
+        MainPing.histogramToThresholdCount(histograms("content") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 2500),
+
+        MainPing.histogramToThresholdCount(histograms("parent") \ "GHOST_WINDOWS", 1),
+        MainPing.histogramToThresholdCount(histograms("content") \ "GHOST_WINDOWS", 1)
       )
 
       val scalarRow = MainPing.scalarsToRow(
-        parentScalars merge parentKeyedScalars,
+        MainPing.ProcessTypes.map{ p => p -> (scalars(p) merge keyedScalars(p)) }.toMap,
         scalarDefinitions
       )
 
       val histogramRow = MainPing.histogramsToRow(
-        histograms merge keyedHistograms,
+        MainPing.ProcessTypes.map{ p => p -> (histograms(p) merge keyedHistograms(p)) }.toMap,
         histogramDefinitions
       )
 
@@ -669,20 +796,22 @@ object MainSummaryView {
     scalarDefinitions.map{
       case (name, definition) =>
         definition match {
-            case UintScalar(keyed) => (name, keyed, IntegerType)
-            case BooleanScalar(keyed) => (name, keyed, BooleanType)
-            case StringScalar(keyed) => (name, keyed, StringType)
+          case UintScalar(keyed, processes) => (name, keyed, processes, IntegerType)
+          case BooleanScalar(keyed, processes) => (name, keyed, processes, BooleanType)
+          case StringScalar(keyed, processes) => (name, keyed, processes, StringType)
         }
-    }.map{
-      case (name, keyed, parquetType) =>
-        keyed match {
-          case true => StructField(Scalars.getParquetFriendlyScalarName(name, "parent"),
-                                   MapType(StringType, parquetType),
-                                   nullable = true)
-          case false => StructField(Scalars.getParquetFriendlyScalarName(name, "parent"),
-                                    parquetType,
-                                    nullable = true)
-        }
+    }.flatMap{
+      case (name, keyed, processes, parquetType) =>
+        processes.map{ p =>
+          keyed match {
+            case true => StructField(Scalars.getParquetFriendlyScalarName(name, p),
+                                     MapType(StringType, parquetType),
+                                     nullable = true)
+            case false => StructField(Scalars.getParquetFriendlyScalarName(name, p),
+                                      parquetType,
+                                      nullable = true)
+          }
+      }
     }
   }
 
@@ -708,18 +837,20 @@ object MainSummaryView {
     histogramDefinitions.map{
       case (name, definition) =>
         definition match {
-          case LinearHistogram(keyed, _, _, _) => (name, keyed)
-          case ExponentialHistogram(keyed, _, _, _) => (name, keyed)
-          case EnumeratedHistogram(keyed, _) => (name, keyed)
-          case BooleanHistogram(keyed) => (name, keyed)
+          case LinearHistogram(keyed, _, _, _, processes) => (name, keyed, processes)
+          case ExponentialHistogram(keyed, _, _, _, processes) => (name, keyed, processes)
+          case EnumeratedHistogram(keyed, _, processes) => (name, keyed, processes)
+          case BooleanHistogram(keyed, processes) => (name, keyed, processes)
           case other =>
             throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
         }
-    }.map{
-      case (name, keyed) =>
-        keyed match {
-          case true => StructField(getHistogramName(name, "parent"), MapType(StringType, HistogramSchema), nullable = true)
-          case false => StructField(getHistogramName(name, "parent"), HistogramSchema, nullable = true)
+    }.flatMap{
+      case (name, keyed, processes) =>
+        processes.map{ p =>
+          keyed match {
+            case true => StructField(getHistogramName(name, p), MapType(StringType, HistogramSchema), nullable = true)
+            case false => StructField(getHistogramName(name, p), HistogramSchema, nullable = true)
+          }
         }
     }
   }
@@ -758,6 +889,7 @@ object MainSummaryView {
       StructField("subsession_length", LongType, nullable = true), // info/subsessionLength
       StructField("subsession_counter", IntegerType, nullable = true), // info/subsessionCounter
       StructField("profile_subsession_counter", IntegerType, nullable = true), // info/profileSubsessionCounter
+      StructField("creation_date", StringType, nullable = true), // creationDate
       StructField("distribution_id", StringType, nullable = true), // environment/partner/distributionId
       StructField("submission_date", StringType, nullable = false), // YYYYMMDD version of 'timestamp'
       // See bug 1232050
@@ -871,11 +1003,43 @@ object MainSummaryView {
       StructField("plugins_infobar_shown", IntegerType, nullable = true),
       StructField("plugins_infobar_block", IntegerType, nullable = true),
       StructField("plugins_infobar_allow", IntegerType, nullable = true),
+      StructField("plugins_infobar_dismissed", IntegerType, nullable = true),
 
       // bug 1366253 - active experiments
       StructField("experiments", MapType(StringType, StringType), nullable = true), // experiment id->branchname
 
-      StructField("search_cohort", StringType, nullable = true)
+      StructField("search_cohort", StringType, nullable = true),
+
+      // bug 1366838 - Quantum Release Criteria
+      StructField("gfx_compositor", StringType, nullable = true),
+      StructField("quantum_ready", BooleanType, nullable = true),
+
+      StructField("gc_max_pause_ms_main_above_150", LongType, nullable = true),
+      StructField("gc_max_pause_ms_main_above_250", LongType, nullable = true),
+      StructField("gc_max_pause_ms_main_above_2500", LongType, nullable = true),
+
+      StructField("gc_max_pause_ms_content_above_150", LongType, nullable = true),
+      StructField("gc_max_pause_ms_content_above_250", LongType, nullable = true),
+      StructField("gc_max_pause_ms_content_above_2500", LongType, nullable = true),
+
+      StructField("cycle_collector_max_pause_main_above_150", LongType, nullable = true),
+      StructField("cycle_collector_max_pause_main_above_250", LongType, nullable = true),
+      StructField("cycle_collector_max_pause_main_above_2500", LongType, nullable = true),
+
+      StructField("cycle_collector_max_pause_content_above_150", LongType, nullable = true),
+      StructField("cycle_collector_max_pause_content_above_250", LongType, nullable = true),
+      StructField("cycle_collector_max_pause_content_above_2500", LongType, nullable = true),
+
+      StructField("input_event_response_coalesced_ms_main_above_150", LongType, nullable = true),
+      StructField("input_event_response_coalesced_ms_main_above_250", LongType, nullable = true),
+      StructField("input_event_response_coalesced_ms_main_above_2500", LongType, nullable = true),
+
+      StructField("input_event_response_coalesced_ms_content_above_150", LongType, nullable = true),
+      StructField("input_event_response_coalesced_ms_content_above_250", LongType, nullable = true),
+      StructField("input_event_response_coalesced_ms_content_above_2500", LongType, nullable = true),
+
+      StructField("ghost_windows_main_above_1", LongType, nullable = true),
+      StructField("ghost_windows_content_above_1", LongType, nullable = true)
     ) ++ buildScalarSchema(scalarDefinitions)
       ++ buildHistogramSchema(histogramDefinitions))
   }

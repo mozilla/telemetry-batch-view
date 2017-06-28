@@ -3,7 +3,8 @@
     "description": "The result of the startup default desktop browser check.",
     "expires_in_version": "never",
     "kind": "boolean",
-    "releaseChannelCollection": "opt-out"
+    "releaseChannelCollection": "opt-out",
+    "record_in_processes": ["main", "content", "gpu"]
   },
   "FIPS_ENABLED": {
     "alert_emails": ["seceng@mozilla.org"],
@@ -11,7 +12,8 @@
     "description": "Has FIPS mode been enabled?",
     "expires_in_version": "54",
     "kind": "flag",
-    "releaseChannelCollection": "opt-out"
+    "releaseChannelCollection": "opt-out",
+    "record_in_processes": ["main", "content", "gpu"]
   },
   "FX_MIGRATION_ERRORS": {
     "bug_numbers": [731025],
@@ -21,7 +23,8 @@
     "keyed": true,
     "n_values": 12,
     "releaseChannelCollection": "opt-out",
-    "description": "Errors encountered during migration in buckets defined by the datatype, keyed by the string description of the browser."
+    "description": "Errors encountered during migration in buckets defined by the datatype, keyed by the string description of the browser.",
+    "record_in_processes": ["main", "content", "gpu"]
   },
   "FX_MIGRATION_LOGINS_IMPORT_MS": {
     "bug_numbers": [1289436],
@@ -32,7 +35,8 @@
     "high": 100000,
     "releaseChannelCollection": "opt-out",
     "keyed": true,
-    "description": "How long it took to import logins (passwords) from another browser, keyed by the name of the browser."
+    "description": "How long it took to import logins (passwords) from another browser, keyed by the name of the browser.",
+    "record_in_processes": ["main", "content", "gpu"]
   },
   "FX_TAB_SWITCH_TOTAL_MS": {
     "description": "Firefox: Time in ms till a tab switch is complete including the first paint",
@@ -40,7 +44,8 @@
     "high": 1000,
     "kind": "exponential",
     "n_buckets": 20,
-    "releaseChannelCollection": "opt-out"
+    "releaseChannelCollection": "opt-out",
+    "record_in_processes": ["main", "content", "gpu"]
   },
   "GC_MS": {
     "alert_emails": ["dev-telemetry-gc-alerts@mozilla.org"],
@@ -54,7 +59,8 @@
     "expires_in_version": "never",
     "kind": "enumerated",
     "n_values": 100,
-    "releaseChannelCollection": "opt-out"
+    "releaseChannelCollection": "opt-out",
+    "record_in_processes": ["main", "content", "gpu"]
   },
   "MOCK_OPTIN": {
     "alert_emails": ["telemetry-client-dev@mozilla.com"],
@@ -63,7 +69,8 @@
     "high": "10",
     "n_buckets": 10,
     "releaseChannelCollection": "opt-in",
-    "description": "a testing histogram; not meant to be touched"
+    "description": "a testing histogram; not meant to be touched",
+    "record_in_processes": ["main", "content", "gpu"]
   },
   "MOCK_OPTOUT": {
     "alert_emails": ["telemetry-client-dev@mozilla.com"],
@@ -72,14 +79,16 @@
     "high": "10",
     "n_buckets": 10,
     "releaseChannelCollection": "opt-out",
-    "description": "a testing histogram; not meant to be touched"
+    "description": "a testing histogram; not meant to be touched",
+    "record_in_processes": ["main", "content", "gpu"]
   },
   "PUSH_API_NOTIFY": {
     "alert_emails": ["push@mozilla.com"],
     "description": "Number of push messages that were successfully decrypted and delivered to a ServiceWorker.",
     "expires_in_version": "60",
     "kind": "count",
-    "releaseChannelCollection": "opt-out"
+    "releaseChannelCollection": "opt-out",
+    "record_in_processes": ["main", "content", "gpu"]
   },
   "SEARCH_SERVICE_ENGINE_COUNT": {
     "alert_emails": ["florian@mozilla.com"],
@@ -89,14 +98,16 @@
     "high": 200,
     "kind": "linear",
     "n_buckets": 50,
-    "releaseChannelCollection": "opt-out"
+    "releaseChannelCollection": "opt-out",
+    "record_in_processes": ["main", "content", "gpu"]
   },
   "SEARCH_COUNTS": {
     "expires_in_version": "never",
     "kind": "count",
     "keyed": true,
     "releaseChannelCollection": "opt-out",
-    "description": "Record the search counts for search engines"
+    "description": "Record the search counts for search engines",
+    "record_in_processes": ["main", "content", "gpu"]
   },
   "MOCK_EXPONENTIAL_OPTOUT": {
     "alert_emails": ["telemetry-client-dev@mozilla.com"],
@@ -105,7 +116,8 @@
     "high": "100",
     "n_buckets": 10,
     "releaseChannelCollection": "opt-out",
-    "description": "a testing histogram; not meant to be touched"
+    "description": "a testing histogram; not meant to be touched",
+    "record_in_processes": ["main", "content", "gpu"]
   },
   "MOCK_KEYED_LINEAR": {
     "alert_emails": ["telemetry-client-dev@mozilla.com"],
@@ -115,7 +127,8 @@
     "high": "10",
     "n_buckets": 10,
     "releaseChannelCollection": "opt-out",
-    "description": "a testing histogram; not meant to be touched"
+    "description": "a testing histogram; not meant to be touched",
+    "record_in_processes": ["main", "content", "gpu"]
   },
   "MOCK_KEYED_EXPONENTIAL": {
     "alert_emails": ["telemetry-client-dev@mozilla.com"],
@@ -125,6 +138,18 @@
     "high": "100",
     "n_buckets": 10,
     "releaseChannelCollection": "opt-out",
-    "description": "a testing histogram; not meant to be touched"
+    "description": "a testing histogram; not meant to be touched",
+    "record_in_processes": ["main", "content", "gpu"]
+  },
+  "CHILD_PROCESSES_ONLY": {
+    "alert_emails": ["telemetry-client-dev@mozilla.com"],
+    "expires_in_version": "never",
+    "keyed": true,
+    "kind": "exponential",
+    "high": "100",
+    "n_buckets": 10,
+    "releaseChannelCollection": "opt-out",
+    "description": "a testing histogram; not meant to be touched",
+    "record_in_processes": ["all_childs"]
   }
 }

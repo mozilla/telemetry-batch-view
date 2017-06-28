@@ -8,6 +8,8 @@ import org.apache.spark.sql.Row
 
 import scala.util.{Success, Failure, Try}
 
+import scala.util.{Success, Try}
+
 case class Addon(id: Option[String],
                  blocklisted: Option[Boolean],
                  description: Option[String],
@@ -34,6 +36,8 @@ case class Attribution(source: Option[String],
 case class Experiment(branch: Option[String])
 
 object MainPing{
+  val ProcessTypes = "parent" :: "content" :: "gpu" :: Nil
+
   // Count the number of keys inside a JSON Object
   def countKeys(o: JValue): Option[Long] = {
     o match {
@@ -167,6 +171,34 @@ object MainPing{
     }
   }
 
+  /*  Return the number of recorded observations greater than threshold
+   *  for the histogram.
+   *
+   *  CAUTION: Does not count any buckets that have any values
+   *   less than the threshold. For example, a bucket with range
+   *   (1, 10) will not be counted for a threshold of 2. Use
+   *   threshold that are not bucket boundaries with caution.
+   *
+   *  Example:
+   *  >> histogramToThresholdCount({"values": """{"1": 0, "2": 4, "8": 1}"""}, 3)
+   *  1
+   */
+  def histogramToThresholdCount(histogram: JValue, threshold: Int): Long = {
+    implicit val formats = org.json4s.DefaultFormats
+
+    histogram \ "values" match {
+      case JNothing => 0
+      case v => Try(v.extract[Map[String, Int]]) match {
+        case Success(m) =>
+          m.filterKeys(s => toInt(s) match {
+            case Some(key) => key >= threshold
+            case None => false
+          }).foldLeft(0)(_ + _._2)
+        case _ => 0
+      }
+    }
+  }
+
   // Return a map of histogram keys to rows with the bucket values for the given set of keys as fields.
   def keyedEnumHistogramToMap(histogram: JValue, keys: IndexedSeq[String]): Option[Map[String,Row]] = {
     val enums = Map[String, Row]() ++ (for {
@@ -279,22 +311,28 @@ object MainPing{
       Some(keys)
   }
 
-  def scalarsToRow(scalars: JValue, definitions: List[(String, ScalarDefinition)]): Row = {
+  def scalarsToRow(scalars: Map[String, JValue], definitions: List[(String, ScalarDefinition)]): Row = {
     val values = definitions.map{
       case (name, definition) =>
         definition match {
-          case UintScalar(keyed) => (name, keyed, asInt _)
-          case BooleanScalar(keyed) => (name, keyed, asBool _)
-          case StringScalar(keyed) => (name, keyed, asString _)
+          case UintScalar(keyed, processes) => (name, keyed, processes, asInt _)
+          case BooleanScalar(keyed, processes) => (name, keyed, processes, asBool _)
+          case StringScalar(keyed, processes) => (name, keyed, processes, asString _)
+        }
+    }.flatMap{
+      case (name, keyed, processes, func) =>
+        processes.map{ p =>
+          keyed match {
+            case true => (p, name, asMap(func) _)
+            case false => (p, name, func)
+          }
         }
     }.map{
-      case (name, keyed, func) =>
-        keyed match {
-          case true => (name, asMap(func) _)
-          case false => (name, func)
+      case (process, name, applyFunc) =>
+        Try(scalars(process)) match {
+          case Success(j) => applyFunc(j \ name).orNull
+          case _ => null
         }
-    }.map{
-        case (name, applyFunc) => applyFunc(scalars \ name).orNull
     }
 
     Row.fromSeq(values)
@@ -323,28 +361,30 @@ object MainPing{
     }
   }
 
-  def histogramsToRow(histograms: JValue, definitions: List[(String, HistogramDefinition)]): Row = {
+  def histogramsToRow(histograms: Map[String, JValue], definitions: List[(String, HistogramDefinition)]): Row = {
     implicit val formats = DefaultFormats
 
     val values = definitions.map{
       case (name, definition) =>
         definition match {
-          case LinearHistogram(keyed, low, high, nBuckets) => (name, keyed)
-          case ExponentialHistogram(keyed, low, high, nBuckets) => (name, keyed)
-          case EnumeratedHistogram(keyed, _) => (name, keyed)
-          case BooleanHistogram(keyed) => (name, keyed)
+          case LinearHistogram(keyed, _, _, _, processes) => (name, keyed, processes)
+          case ExponentialHistogram(keyed, _, _, _, processes) => (name, keyed, processes)
+          case EnumeratedHistogram(keyed, _, processes) => (name, keyed, processes)
+          case BooleanHistogram(keyed, processes) => (name, keyed, processes)
           case other =>
             throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
         }
-    }.map{
-      case (name, keyed) =>
-        keyed match {
-          case true =>
-            Try((histograms \ name).extract[Map[String,JValue]].mapValues(extractHistogramMap _).map(identity)) match {
-              case Success(keyedHistogram) => keyedHistogram
-              case _ => null
+    }.flatMap{
+      case (name, keyed, processes) =>
+        processes.map{ p =>
+          keyed match {
+            case true =>
+              Try((histograms(p) \ name).extract[Map[String,JValue]].mapValues(extractHistogramMap _).map(identity)) match {
+                case Success(keyedHistogram) => keyedHistogram
+                case _ => null
+            }
+            case false => extractHistogramMap(histograms(p) \ name)
           }
-          case false => extractHistogramMap(histograms \ name)
         }
     }
 

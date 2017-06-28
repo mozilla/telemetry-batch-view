@@ -1,12 +1,9 @@
 package com.mozilla.telemetry.views
 
 import com.github.nscala_time.time.Imports._
-import com.mozilla.spark.sql.hyperloglog.aggregates._
-import com.mozilla.spark.sql.hyperloglog.functions._
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.DataFrame
+import com.mozilla.telemetry.utils.UDFs._
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.SQLContext
 import org.rogach.scallop._
 
 object GenericCountView {
@@ -14,6 +11,7 @@ object GenericCountView {
   val DefaultSubmissionDateCol = "submission_date_s3"
   val DefaultHllBits = 12
   val DefaultOutputFiles = 32
+  val DefaultWriteMode = "overwrite"
 
   class Conf(args: Array[String]) extends ScallopConf(args) {
     val from = opt[String](
@@ -71,11 +69,18 @@ object GenericCountView {
       "version",
       descr = "Version of the output data. Defaults to v<from><to>",
       required = false)
+    val outputPartition = opt[String](
+      "output-partition",
+      descr = "Partition of the output data",
+      required = false)
+    val writeMode = opt[String](
+      "write-mode",
+      descr = "Spark write mode. Defaults to overwrite",
+      required = false,
+      default = Some(DefaultWriteMode))
     requireOne(inputTablename, inputFiles)
     verify()
   }
-
-  private val hllMerge = new HyperLogLogMerge
 
   private val fmt = DateTimeFormat.forPattern("yyyyMMdd")
 
@@ -93,18 +98,14 @@ object GenericCountView {
     }
   }
 
-  def aggregate(sc: SparkContext, conf: Conf): DataFrame = {
-    val sqlContext = new SQLContext(sc)
-    val hadoopConf = sc.hadoopConfiguration
-    sqlContext.udf.register("hll_create", hllCreate _)
-
+  def aggregate(spark: SparkSession, conf: Conf): DataFrame = {
     // To avoid parsing a SQL select statement,
     // we register as a temp table and let spark do it
     val tempTableName = "genericClientCountTempTable"
 
     val df = conf.inputTablename.get match {
-      case Some(t) => sqlContext.sql(s"SELECT * FROM $t")
-      case _ => sqlContext.read.load(conf.inputFiles())
+      case Some(t) => spark.sql(s"SELECT * FROM $t")
+      case _ => spark.read.load(conf.inputFiles())
     }
 
     df.registerTempTable(tempTableName)
@@ -121,20 +122,23 @@ object GenericCountView {
     val submissionDateCol = conf.submissionDateCol()
     val dimensions = conf.dimensions().split(",")
 
-    sqlContext.sql(s"SELECT $selection FROM $tempTableName")
+    spark.sql(s"SELECT $selection FROM $tempTableName")
       .where(s"$from <= $submissionDateCol and $submissionDateCol <= $to $where")
       .groupBy(dimensions.head, dimensions.tail:_*)
-      .agg(hllMerge(col("hll")).as("hll"))
+      .agg(HllMerge(col("hll")).as("hll"))
   }
 
   def main(args: Array[String]) {
     val conf = new Conf(args)
 
-    val sparkConf = new SparkConf().setAppName("GenericCountJob")
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
-    val sc = new SparkContext(sparkConf)
+    val spark = SparkSession
+      .builder()
+      .appName(s"Generic Count View Job")
+      .getOrCreate()
 
-    val partitions = conf.numParquetFiles()
+    spark.registerUDFs
+
+    val sparkPartitions = conf.numParquetFiles()
     val from = getFrom(conf)
     val to = getTo(conf)
 
@@ -143,11 +147,17 @@ object GenericCountView {
       case _ => s"v$from$to"
     }
 
-    aggregate(sc, conf)
-      .repartition(partitions)
-      .write
-      .parquet(s"s3://${conf.outputBucket()}/$version")
+    val partition = conf.outputPartition.get match {
+      case Some(p) => s"/$p"
+      case _ => ""
+    }
 
-    sc.stop()
+    aggregate(spark, conf)
+      .repartition(sparkPartitions)
+      .write
+      .mode(conf.writeMode())
+      .parquet(s"s3://${conf.outputBucket()}/$version$partition")
+
+    spark.stop()
   }
 }

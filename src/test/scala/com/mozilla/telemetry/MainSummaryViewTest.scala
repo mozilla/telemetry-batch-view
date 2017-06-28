@@ -643,6 +643,13 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "values":{"1":1,"0":0,"2":0},
       "bucket_count":3,
       "sum":1
+    },
+    "PLUGINS_INFOBAR_DISMISSED":{
+      "range":[1,2],
+      "histogram_type":2,
+      "values":{"1":1,"0":0,"2":0},
+      "bucket_count":3,
+      "sum":1
     }
   }"""),
       None);
@@ -654,7 +661,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "plugins_notification_user_action" -> Row(3, 0, 0),
       "plugins_infobar_shown" -> 12,
       "plugins_infobar_allow" -> 2,
-      "plugins_infobar_block" -> 1
+      "plugins_infobar_block" -> 1,
+      "plugins_infobar_dismissed" -> 1
     )
     val actual = applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
       .getValuesMap(expected.keys.toList)
@@ -745,6 +753,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "subsession_length"                 -> 14557l,
             "subsession_counter"                -> 12,
             "profile_subsession_counter"        -> 43,
+            "creation_date"                     -> "2016-03-28T16:02:52.676Z",
             "distribution_id"                   -> null,
             "submission_date"                   -> "20160407",
             "sync_configured"                   -> false,
@@ -808,7 +817,19 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "plugins_infobar_shown"             -> null,
             "plugins_infobar_block"             -> null,
             "plugins_infobar_allow"             -> null,
+            "plugins_infobar_dismissed"         -> null,
             "search_cohort"                     -> null,
+            "gfx_compositor"                    -> "none",
+            "gc_max_pause_ms_main_above_150"                        -> 0,
+            "gc_max_pause_ms_content_above_2500"                    -> 0,
+            "cycle_collector_max_pause_main_above_150"              -> 1416,
+            "cycle_collector_max_pause_content_above_2500"          -> 0,
+            "input_event_response_coalesced_ms_main_above_250"      -> 0,
+            "input_event_response_coalesced_ms_main_above_2500"     -> 0,
+            "input_event_response_coalesced_ms_content_above_250"   -> 0,
+            "input_event_response_coalesced_ms_content_above_2500"  -> 0,
+            "ghost_windows_main_above_1"                            -> 0,
+            "ghost_windows_content_above_1"                         -> 0,
             "scalar_parent_mock_keyed_scalar_bool"   -> null,
             "scalar_parent_mock_keyed_scalar_string" -> null,
             "scalar_parent_mock_keyed_scalar_uint"   -> null,
@@ -1058,10 +1079,15 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 }
 
   "Engagement measures" can "be extracted" in {
+    // makes all but the parent scalars null
+    def makeExpected(expected: List[Any]): Row = Row.fromSeq(
+      scalarDefs.map(_._2).zip(expected).flatMap{ case (d, v) => d.processes.map(p => if(p == "parent") v else null) }
+    )
+
     // Doesn't have scalars
     val jNoScalars = parse(
       """{}""")
-    MainPing.scalarsToRow(jNoScalars, scalarDefs) should be (Row(null, null, null, null, null, null, null, null))
+    MainPing.scalarsToRow(Map("parent" -> jNoScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
 
     // Has scalars, but none of the expected ones
     val jUnexpectedScalars = parse(
@@ -1069,7 +1095,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |  "example1": 249,
         |  "example2": 2
         |}""".stripMargin)
-    MainPing.scalarsToRow(jUnexpectedScalars, scalarDefs) should be (Row(null, null, null, null, null, null, null, null))
+    MainPing.scalarsToRow(Map("parent" -> jUnexpectedScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
 
     // Has scalars, and some of the expected ones
     val jSomeExpectedScalars = parse(
@@ -1077,15 +1103,14 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |  "mock.scalar.uint": 2,
         |  "mock.uint.optin": 97
         |}""".stripMargin)
-    MainPing.scalarsToRow(jSomeExpectedScalars, scalarDefs) should be (Row(null, null, null, null, null, 2, 97, null))
+    MainPing.scalarsToRow(Map("parent" -> jSomeExpectedScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, 2, 97, null)))
 
     // Keyed scalars convert correctly
     val jKeyedScalar = parse(
       """{
         |  "mock.keyed.scalar.uint": {"a": 1, "b": 2}
         |}""".stripMargin)
-    MainPing.scalarsToRow(jKeyedScalar, scalarDefs) should be (Row(null, null, Map("a" -> 1, "b" -> 2), null, null, null, null, null))
-
+    MainPing.scalarsToRow(Map("parent" -> jKeyedScalar), scalarDefs) should be (makeExpected(List(null, null, null, Map("a" -> 1, "b" -> 2), null, null, null, null, null)))
 
     // Has scalars, all of the expected ones
     val jAllScalars = parse(
@@ -1100,7 +1125,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |  "mock.uint.optout": 42
         |}""".stripMargin)
 
-    val expected = Row(
+    val expected = makeExpected(List(
+        null,
         Map("a" -> true, "b" -> false),
         Map("a" -> "hello", "b" -> "world"),
         Map("a" -> 1, "b" -> 2),
@@ -1109,9 +1135,9 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         93,
         1,
         42
-    )
+    ))
 
-    MainPing.scalarsToRow(jAllScalars, scalarDefs) should be (expected)
+    MainPing.scalarsToRow(Map("parent" -> jAllScalars), scalarDefs) should be (expected)
 
     // Has scalars with weird data
     val jWeirdScalars = parse(
@@ -1121,11 +1147,11 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |  "mock.uint.optin": [9, 7],
         |  "mock.uint.optout": "hello, world"
         |}""".stripMargin)
-    MainPing.scalarsToRow(jWeirdScalars, scalarDefs) should be (Row(null, null, null, null, null, null, null, null))
+    MainPing.scalarsToRow(Map("parent" -> jWeirdScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
 
     // Has a scalars section containing unexpected data.
     val jBogusScalars = parse("""[10, "ten"]""")
-    MainPing.scalarsToRow(jBogusScalars, scalarDefs) should be (Row(null, null, null, null, null, null, null, null))
+    MainPing.scalarsToRow(Map("parent" -> jBogusScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
   }
 
   "Keyed Scalars" can "be properly shown" in {
@@ -1310,7 +1336,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val expected = Map(
       "dom_ipc_process_count" -> null,
-      "extensions_allow_non_mpc_extensions" -> true 
+      "extensions_allow_non_mpc_extensions" -> true
     )
 
     val actual =
@@ -1534,7 +1560,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     actual should be (expected)
   }
 
-  "All possible histograms" can "be included" in {
+  "All possible histograms and scalars" can "be included" in {
     val spark = SparkSession.builder()
        .appName("")
        .master("local[1]")
@@ -1544,6 +1570,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     import spark.implicits._
 
     val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(Histograms.definitions(includeOptin = false), useWhitelist = true)
+    val allScalarDefs = Scalars.definitions(true).toList.sortBy(_._1)
 
     val fakeHisto = """{
           "sum": 100,
@@ -1556,10 +1583,10 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     val histosData = allHistogramDefs.map{
       case (name, definition) =>
         definition match {
-          case LinearHistogram(keyed, _, _, _) => (name, keyed)
-          case ExponentialHistogram(keyed, _, _, _) => (name, keyed)
-          case EnumeratedHistogram(keyed, _) => (name, keyed)
-          case BooleanHistogram(keyed) => (name, keyed)
+          case LinearHistogram(keyed, _, _, _, _) => (name, keyed)
+          case ExponentialHistogram(keyed, _, _, _, _) => (name, keyed)
+          case EnumeratedHistogram(keyed, _, _) => (name, keyed)
+          case BooleanHistogram(keyed, _) => (name, keyed)
           case other =>
             throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
         }
@@ -1570,10 +1597,10 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     val keyedHistosData = allHistogramDefs.map{
       case (name, definition) =>
         definition match {
-          case LinearHistogram(keyed, _, _, _) => (name, keyed)
-          case ExponentialHistogram(keyed, _, _, _) => (name, keyed)
-          case EnumeratedHistogram(keyed, _) => (name, keyed)
-          case BooleanHistogram(keyed) => (name, keyed)
+          case LinearHistogram(keyed, _, _, _, _) => (name, keyed)
+          case ExponentialHistogram(keyed, _, _, _, _) => (name, keyed)
+          case EnumeratedHistogram(keyed, _, _) => (name, keyed)
+          case BooleanHistogram(keyed, _) => (name, keyed)
           case other =>
             throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
         }
@@ -1587,32 +1614,81 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         }"""
     }.mkString(",")
 
+    val scalarsData = allScalarDefs
+      .filter{ case(n, d) => !d.keyed }
+      .map{
+        case (n, d) => d match {
+          case _: UintScalar => (n, 1)
+          case _: BooleanScalar => (n, false)
+          case _: StringScalar => (n, """"tfw"""")
+        }
+      }.map{ case (n, v) => s""""$n": $v""" }.mkString(",")
+
+    val keyedScalarsData = allScalarDefs
+      .filter{ case(n, d) => d.keyed }
+      .map{
+        case (n, d) => d match {
+          case _: UintScalar => (n, """"key1": 1, "key2": 1""")
+          case _: BooleanScalar => (n, """"key1": true, "key2": false""")
+          case _: StringScalar => (n, """"key1": "empire", "key2": "didnothingwrong"""")
+        }
+      }.map{ case (n, v) => s""""$n": {$v}""" }.mkString(",")
+
+    val processHistograms = s"""{
+      "histograms": {$histosData},
+      "keyedHistograms": {$keyedHistosData},
+      "scalars": {$scalarsData},
+      "keyedScalars": {$keyedScalarsData}
+    }"""
+
+    val processJSON = MainPing.ProcessTypes.map{ p => s""""$p": $processHistograms""" }.mkString(", ")
+
     val message = RichMessage(
       "1234",
       Map(
         "documentId" -> "foo",
         "submissionDate" -> "1234",
         "payload.histograms" -> s"{$histosData}",
-        "payload.keyedHistograms" -> s"{$keyedHistosData}"
+        "payload.keyedHistograms" -> s"{$keyedHistosData}",
+        "submission" -> s"""{
+  "payload": {
+    "processes": {$processJSON}
+   }
+  }"""
       ),
       None);
 
-    val expected = MainPing
-      .histogramsToRow(parse(s"{$histosData}") merge parse(s"{$keyedHistosData}"), allHistogramDefs)
-      .toSeq.zip(allHistogramDefs.map(e => MainSummaryView.getHistogramName(e._1, "parent")).toList)
-      .map(_.swap).toMap
+    val expectedProcessHistos = MainPing.ProcessTypes.map{ p =>
+      p -> (parse(s"{$histosData}") merge parse(s"{$keyedHistosData}"))
+    }.toMap
 
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, allHistogramDefs)
+    val expectedHistos = MainPing
+      .histogramsToRow(expectedProcessHistos, allHistogramDefs)
+      .toSeq.zip(allHistogramDefs.flatMap{ case(n, d) =>
+        d.processes.map(p => MainSummaryView.getHistogramName(n, p))
+      }.toList).map(_.swap).toMap
 
+    val expectedProcessScalars = MainPing.ProcessTypes.map{ p =>
+      p -> (parse(s"{$scalarsData}") merge parse(s"{$keyedScalarsData}"))
+    }.toMap
+
+    val expectedScalars = MainPing
+      .scalarsToRow(expectedProcessScalars, allScalarDefs)
+      .toSeq.zip(allScalarDefs.flatMap{ case(n, d) =>
+        d.processes.map(p => Scalars.getParquetFriendlyScalarName(n, p))
+      }.toList).map(_.swap).toMap
+
+    val expected = expectedHistos ++ expectedScalars
+
+    val summary = MainSummaryView.messageToRow(message, allScalarDefs, allHistogramDefs)
     val actual = spark
-          .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs, allHistogramDefs))
+          .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(allScalarDefs, allHistogramDefs))
           .first
           .getValuesMap(expected.keys.toList)
 
     for ((f, v) <- expected) {
       withClue(s"$f:") { actual.get(f) should be (Some(v)) }
     }
-
     actual should be (expected)
 
     spark.stop()
@@ -1628,4 +1704,476 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     allHistogramDefs should be (expectedDefs)
   }
+
+  "histogram to threshold count" can "extract correct counts" in {
+    val json1 = parse(
+      """
+        |{
+        |}
+      """.stripMargin)
+    MainPing.histogramToThresholdCount(json1, 3) should be (0)
+    MainPing.histogramToThresholdCount(json1 \ "GC_MAX_PAUSE_MS", 3) should be (0)
+
+    val json2 = parse(
+      """
+        |{
+        | "values": {
+        |  "1": 1,
+        |  "2": 10
+        | }
+        |}
+      """.stripMargin)
+    MainPing.histogramToThresholdCount(json2, 3) should be (0)
+
+    val json3 = parse(
+      """
+        |{
+        | "values": {
+        |  "1": 1,
+        |  "2": 10,
+        |  "3": 10
+        | }
+        |}
+      """.stripMargin)
+    MainPing.histogramToThresholdCount(json3, 3) should be (10)
+
+    val json4 = parse(
+      """
+        |{
+        | "values": {
+        |  "1": 1,
+        |  "2": 10,
+        |  "3": 10,
+        |  "5": 10,
+        |  "100": 10
+        | }
+        |}
+      """.stripMargin)
+    MainPing.histogramToThresholdCount(json4, 3) should be (30)
+  }
+
+  "histogram to threshold count" can "handle improper data" in {
+    val json1 = parse(
+      """
+        |{
+        |  "hello": "world"
+        |}
+      """.stripMargin)
+    MainPing.histogramToThresholdCount(json1, 3) should be (0)
+    MainPing.histogramToThresholdCount(json1 \ "GC_MAX_PAUSE_MS", 3) should be (0)
+
+    val json2 = parse(
+      """
+        |{
+        |  "values": "world"
+        |}
+      """.stripMargin)
+    MainPing.histogramToThresholdCount(json2, 3) should be (0)
+    MainPing.histogramToThresholdCount(json2 \ "GC_MAX_PAUSE_MS", 3) should be (0)
+
+    val json3 = parse(
+      """
+        |{
+        |  "values": {
+        |     "a": 2
+        |   }
+        |}
+      """.stripMargin)
+    MainPing.histogramToThresholdCount(json3, 3) should be (0)
+    MainPing.histogramToThresholdCount(json3 \ "GC_MAX_PAUSE_MS", 3) should be (0)
+  }
+
+  "Quantum Ready" should "be correct for a ping" in {
+    val json0e10s = parse("true")
+    val json0addons = parse("""
+      {
+        "addon1": {
+          "isSystem": true,
+          "isWebExtension": false
+        },
+        "addon2": {
+          "isSystem": false,
+          "isWebExtension": true
+        }
+      }"""
+    )
+
+    val json0theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
+
+    MainSummaryView.getQuantumReady(json0e10s, json0addons, json0theme) should be (Some(true))
+
+    // not quantum ready with no e10s
+    val json1e10s = parse("false")
+    val json1addons = parse("""
+    | {
+    |   "addon1": {
+    |     "isSystem": true,
+    |     "isWebExtension": true
+    |   },
+    |   "addon2": {
+    |     "isSystem": true,
+    |     "isWebExtension": true
+    |   }
+    | }""".stripMargin
+    )
+
+    val json1theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
+
+    MainSummaryView.getQuantumReady(json1e10s, json1addons, json1theme) should be (Some(false))
+
+    // not quantum ready with non-system and non-webextension addon
+    val json2e10s = parse("true")
+    val json2addons = parse("""
+    | {
+    |   "addon1": {
+    |      "isSystem": true,
+    |      "isWebExtension": true
+    |    },
+    |    "addon2": {
+    |      "isSystem": false,
+    |      "isWebExtension": false
+    |    }
+    | }""".stripMargin
+    )
+
+    val json2theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
+
+    MainSummaryView.getQuantumReady(json2e10s, json2addons, json2theme) should be (Some(false))
+
+    // not quantum ready with non-webextension and non-system addon
+    val json3e10s = parse("true")
+    val json3addons = parse("""
+    | {
+    |   "addon1": {
+    |     "isSystem": false,
+    |     "isWebExtension": false
+    |   },
+    |   "addon2": {
+    |     "isSystem": true,
+    |     "isWebExtension": true
+    |   }
+    | }""".stripMargin
+    )
+
+    val json3theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
+
+    MainSummaryView.getQuantumReady(json3e10s, json3addons, json3theme) should be (Some(false))
+
+    // not quantum-ready with old-style theme
+    val json4e10s = parse("true")
+    val json4addons = parse("""
+    | {
+    |   "addon1": {
+    |     "isSystem": true,
+    |     "isWebExtension": false
+    |   },
+    |   "addon2": {
+    |     "isSystem": false,
+    |     "isWebExtension": true
+    |   }
+    | }""".stripMargin
+    )
+
+    val json4theme = parse("""{"id": "old-style@mozilla.org"}""")
+
+    MainSummaryView.getQuantumReady(json4e10s, json4addons, json4theme) should be (Some(false))
+
+    // not quantum-ready if addon is missing isSystem and isWebExtension
+    val json5e10s = parse("true")
+    val json5addons = parse("""
+    | {
+    |   "addon1": {
+    |     "bladum": true,
+    |     "terbei": "hello"
+    |   },
+    |   "addon2": {
+    |     "isSystem": false,
+    |     "isWebExtension": true
+    |   }
+    | }""".stripMargin
+    )
+
+    val json5theme = parse("""{"id": "old-style@mozilla.org"}""")
+
+    MainSummaryView.getQuantumReady(json5e10s, json5addons, json5theme) should be (Some(false))
+
+    // null quantum-ready if theme is missing
+    val json6e10s = parse("true")
+    val json6addons = parse("""
+    | {
+    |   "addon1": {
+    |     "isSystem": true,
+    |     "isWebExtension": true
+    |   },
+    |   "addon2": {
+    |     "isSystem": true,
+    |     "isWebExtension": true
+    |   }
+    | }""".stripMargin
+    )
+
+    val json6theme = parse("{}")
+
+    MainSummaryView.getQuantumReady(json6e10s, json6addons, json6theme) should be (None)
+
+    // null quantum-ready if e10s is gibberish
+    val json7e10s = parse(""""fewfkew"""")
+    val json7addons = parse("""
+    | {
+    |   "addon1": {
+    |     "isSystem": true,
+    |     "isWebExtension": true
+    |   },
+    |   "addon2": {
+    |     "isSystem": true,
+    |     "isWebExtension": true
+    |   }
+    | }""".stripMargin
+    )
+
+    val json7theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
+
+    MainSummaryView.getQuantumReady(json7e10s, json7addons, json7theme) should be (None)
+
+    // Quantum ready if no addons
+    val json8e10s = parse("true")
+    val json8addons = parse("{}")
+    val json8theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
+
+    MainSummaryView.getQuantumReady(json8e10s, json8addons, json8theme) should be (Some(true))
+
+    // quantum-ready if an addon is missing isSystem or isWebExtension, but the other is true
+    val json9e10s = parse("true")
+    val json9addons = parse("""
+    | {
+    |   "addon1": {
+    |     "isWebExtension": true
+    |   },
+    |   "addon2": {
+    |     "isSystem": true
+    |   }
+    | }""".stripMargin
+    )
+    val json9theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
+
+    MainSummaryView.getQuantumReady(json9e10s, json9addons, json9theme) should be (Some(true))
+  }
+
+  "Quantum Readiness" can "be properly parsed" in {
+    val spark = SparkSession.builder()
+        .appName("test quantum readiness")
+        .master("local[1]")
+        .getOrCreate()
+
+    val sc = spark.sparkContext
+    import spark.implicits._
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.settings" -> """{
+          "e10sEnabled": true
+        }""",
+        "environment.addons" -> """{
+          "activeAddons": {
+            "spicemustflow": {
+              "isSystem": true,
+              "isWebExtension": false
+            },
+            "gom-jabbar": {
+              "isSystem": false,
+              "isWebExtension": true
+            }
+          },
+          "theme": {
+            "id": "firefox-compact-light@mozilla.org"
+          }
+        }"""),
+      None);
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+
+    val expected = Map(
+      "quantum_ready" -> true
+    )
+
+    val actual = spark
+      .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      .first
+      .getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+
+    actual should be (expected)
+
+    spark.stop()
+  }
+
+  "Process Histograms" can "be stored" in {
+    val spark = SparkSession.builder()
+        .appName("test quantum readiness")
+        .master("local[1]")
+        .getOrCreate()
+
+    val sc = spark.sparkContext
+    import spark.implicits._
+
+    val message = RichMessage(
+      "2235",
+      Map(
+        "documentId" -> "foobar",
+        "submissionDate" -> "12345",
+        "submission" -> """{
+          "payload": {
+            "processes": {
+              "content": {
+                "histograms": {
+                  "MOCK_EXPONENTIAL_OPTOUT": {
+                    "range": [1,100],
+                    "bucket_count": 10,
+                    "histogram_type": 0,
+                    "values": {
+                      "1": 0,
+                      "16": 1,
+                      "54": 1
+                    },
+                    "sum": 64
+                  },
+                  "MOCK_OPTOUT": {
+                    "range": [1,10],
+                    "bucket_count": 10,
+                    "histogram_type": 2,
+                    "values": {
+                      "1": 0,
+                      "3": 1,
+                      "9": 1
+                    },
+                    "sum": 12
+                  }
+                },
+                "keyedHistograms": {
+                  "MOCK_KEYED_LINEAR": {
+                    "foo": {
+                      "range": [1,100],
+                      "bucket_count": 10,
+                      "histogram_type": 0,
+                      "values": {
+                        "1": 0,
+                        "16": 1,
+                        "54": 1
+                      },
+                      "sum": 64
+                    },
+                    "bar": {
+                      "range": [1,100],
+                      "bucket_count": 10,
+                      "histogram_type": 0,
+                      "values": {
+                        "1": 1
+                      },
+                      "sum": 0
+                    }
+                  }
+                }
+              },
+              "gpu": {
+                "histograms": {
+                  "MOCK_EXPONENTIAL_OPTOUT": {
+                    "range": [1,100],
+                    "bucket_count": 10,
+                    "histogram_type": 0,
+                    "values": {
+                      "1": 0,
+                      "16": 1,
+                      "54": 1
+                    },
+                    "sum": 64
+                  },
+                  "MOCK_OPTOUT": {
+                    "range": [1,10],
+                    "bucket_count": 10,
+                    "histogram_type": 2,
+                    "values": {
+                      "1": 0,
+                      "3": 1,
+                      "9": 1
+                    },
+                    "sum": 12
+                  }
+                }
+              }
+            }
+          }
+        }"""),
+      None);
+
+    val expected = Map(
+      "histogram_content_mock_exponential_optout" -> Map(1 -> 0, 16 -> 1, 54 -> 1),
+      "histogram_gpu_mock_exponential_optout" -> Map(1 -> 0, 16 -> 1, 54 -> 1),
+      "histogram_content_mock_optout" -> Map(1 -> 0, 3 -> 1, 9 -> 1),
+      "histogram_gpu_mock_optout" -> Map(1 -> 0, 3 -> 1, 9 -> 1),
+      "histogram_content_mock_keyed_linear" -> Map("foo" -> Map(1 -> 0, 16 -> 1, 54 -> 1), "bar" -> Map(1 -> 1))
+    )
+
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+    val actual = spark
+          .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+          .first
+          .getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+    actual should be (expected)
+
+    spark.stop()
+  }
+
+  "Process Scalars" can "be properly shown" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "submission" -> """{
+  "payload": {
+    "processes": {
+      "content": {
+        "keyedScalars": {
+          "mock.keyed.scalar.uint": {
+            "search_enter": 1,
+            "search_suggestion": 2
+          }
+        }
+      }
+    }
+  }
+}"""),
+      None);
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+
+    val expected = Map(
+      "scalar_content_mock_keyed_scalar_uint" -> Map(
+        "search_enter" -> 1,
+        "search_suggestion" -> 2
+      )
+    )
+
+    val actual =
+      applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      .getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+    actual should be (expected)
+  }
+
+
 }

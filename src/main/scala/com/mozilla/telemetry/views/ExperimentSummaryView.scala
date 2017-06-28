@@ -99,7 +99,10 @@ object ExperimentSummaryView {
 
   def writeExperiments(input: String, output: String, date: String, experiments: List[String], spark: SparkSession): Unit = {
     val mainSummary = spark.read.parquet(input)
+
     mainSummary
+      .where("experiments IS NOT NULL AND size(experiments) > 0")
+      .dropDuplicates("document_id")
       .select(col("*"), explode(col("experiments")).as(Array("experiment_id", "experiment_branch")))
       .where(col("experiment_id").isin(experiments:_*))
       .withColumn("submission_date_s3", lit(date))
