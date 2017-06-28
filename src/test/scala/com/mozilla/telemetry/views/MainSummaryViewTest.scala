@@ -323,7 +323,6 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           }).sum
           searchCounter should be (65l)
 
-          r.getStruct(r.fieldIndex("loop_activity_counter")) should be (null)
           val popup = r.getMap[String,Row](r.fieldIndex("popup_notification_stats"))
           val expectedPopup = Map[String,Row](
             "(all)"             -> Row(8,2,0,0,0,1,0,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0),
