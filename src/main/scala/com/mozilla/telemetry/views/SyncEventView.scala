@@ -179,8 +179,8 @@ object SyncEventConverter {
 
     val common = List(
       ping \ "id" match {
-        case null => return None // a required field.
         case JString(x) => x
+        case _ => return None // a required field.
       },
       application \ "buildId" match {
         case JString(x) => x
@@ -205,8 +205,8 @@ object SyncEventConverter {
 
       // Info about the sync.
       payload \ "uid" match {
-        case null => return None // a required field.
         case JString(x) => x
+        case _ => return None // a required field.
       },
       payload \ "why" match {
         case JString(x) => x
@@ -253,7 +253,7 @@ object SyncEventConverter {
     }
 
     val values = eventObject.mapValues match {
-      case Some(x: Map[String, String]) => {
+      case Some(x: Map[String @unchecked, String @unchecked]) => {
         val deviceID = x getOrElse ("deviceID", null)
         val (deviceVersion, deviceOS) =
           if (deviceID == null) {
