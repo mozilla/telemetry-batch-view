@@ -1,6 +1,7 @@
 package com.mozilla.telemetry.experiments.analyzers
 
 import com.mozilla.telemetry.metrics._
+import com.mozilla.telemetry.metrics.UintDerivedScalar
 import org.apache.spark.sql._
 
 import scala.collection.Map
@@ -35,6 +36,10 @@ case class UintScalarRow(experiment_id: String, branch: String, subgroup: String
   extends ScalarRow[Int] with definesToScalarMapRow[UintScalarMapRow] {
   def toScalarMapRow: UintScalarMapRow = UintScalarMapRow(experiment_id, branch, subgroup, scalarMapRowMetric)
 }
+case class LongScalarRow(experiment_id: String, branch: String, subgroup: String, metric: Option[Long])
+  extends ScalarRow[Long] with definesToScalarMapRow[LongScalarMapRow] {
+  def toScalarMapRow: LongScalarMapRow = LongScalarMapRow(experiment_id, branch, subgroup, scalarMapRowMetric)
+}
 case class StringScalarRow(experiment_id: String, branch: String, subgroup: String, metric: Option[String])
   extends ScalarRow[String] with definesToScalarMapRow[StringScalarMapRow] {
   def toScalarMapRow: StringScalarMapRow = StringScalarMapRow(experiment_id, branch, subgroup, scalarMapRowMetric)
@@ -66,6 +71,11 @@ case class KeyedUintScalarRow(experiment_id: String, branch: String, subgroup: S
   extends KeyedScalarRow[Int] with definesToScalarMapRow[UintScalarMapRow] {
   def toScalarMapRow: UintScalarMapRow = UintScalarMapRow(experiment_id, branch, subgroup, collapsedMetric)
 }
+case class KeyedLongScalarRow(experiment_id: String, branch: String, subgroup: String,
+                              metric: Option[Map[String, Long]])
+  extends KeyedScalarRow[Long] with definesToScalarMapRow[LongScalarMapRow] {
+  def toScalarMapRow: LongScalarMapRow = LongScalarMapRow(experiment_id, branch, subgroup, collapsedMetric)
+}
 case class KeyedStringScalarRow(experiment_id: String, branch: String, subgroup: String,
                                 metric: Option[Map[String, String]])
   extends KeyedScalarRow[String] with definesToScalarMapRow[StringScalarMapRow] {
@@ -76,6 +86,8 @@ case class BooleanScalarMapRow(experiment_id: String, branch: String, subgroup: 
                                metric: Option[Map[Boolean, Long]]) extends PreAggregateRow[Boolean]
 case class UintScalarMapRow(experiment_id: String, branch: String, subgroup: String,
                             metric: Option[Map[Int, Long]]) extends PreAggregateRow[Int]
+case class LongScalarMapRow(experiment_id: String, branch: String, subgroup: String,
+                            metric: Option[Map[Long, Long]]) extends PreAggregateRow[Long]
 case class StringScalarMapRow(experiment_id: String, branch: String, subgroup: String,
                               metric: Option[Map[String, Long]]) extends PreAggregateRow[String]
 
@@ -100,6 +112,18 @@ class UintScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame)
   def collapseKeys(formatted: DataFrame): Dataset[UintScalarMapRow] = {
     import df.sparkSession.implicits._
     val s = if (md.keyed) formatted.as[KeyedUintScalarRow] else formatted.as[UintScalarRow]
+    s.map(_.toScalarMapRow)
+  }
+}
+
+class LongScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame)
+  extends MetricAnalyzer[Long](name, md, df) {
+  override type PreAggregateRowType = LongScalarMapRow
+  val aggregator = LongAggregator
+
+  def collapseKeys(formatted: DataFrame): Dataset[LongScalarMapRow] = {
+    import df.sparkSession.implicits._
+    val s = if (md.keyed) formatted.as[KeyedLongScalarRow] else formatted.as[LongScalarRow]
     s.map(_.toScalarMapRow)
   }
 }
@@ -144,6 +168,10 @@ object ScalarAnalyzer {
       case s: BooleanScalar => new BooleanScalarAnalyzer(name, s, df)
       case s: UintScalar => new UintScalarAnalyzer(name, s, df)
       case s: StringScalar => new StringScalarAnalyzer(name, s, df)
+      case s: UintDerivedScalar => new UintScalarAnalyzer(name, s, df)
+      case s: LongDerivedScalar => new LongScalarAnalyzer(name, s, df)
+      case s: StringDerivedScalar => new StringScalarAnalyzer(name, s, df)
+      case s: BooleanDerivedScalar => new BooleanScalarAnalyzer(name, s, df)
       case _ => throw new UnsupportedOperationException("Unsupported scalar type")
     }
   }

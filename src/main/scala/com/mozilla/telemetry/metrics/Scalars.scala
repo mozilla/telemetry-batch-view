@@ -7,7 +7,7 @@ import collection.JavaConversions._
 import scala.io.Source
 import com.mozilla.telemetry.utils.MainPing
 
-sealed abstract class ScalarDefinition extends MetricDefinition
+abstract class ScalarDefinition extends MetricDefinition
 case class UintScalar(keyed: Boolean, processes: List[String]) extends ScalarDefinition
 case class BooleanScalar(keyed: Boolean, processes: List[String]) extends ScalarDefinition
 case class StringScalar(keyed: Boolean, processes: List[String]) extends ScalarDefinition
