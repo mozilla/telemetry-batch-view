@@ -80,23 +80,11 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
 
     val expected = Set(
       MetricAnalysis("experiment1", "control", "All", 3L, "uint_scalar", "UintScalar",
-        Map(1L -> toPointControl(1), 5L -> toPointControl(2)), Seq(
-          Statistic(Some("branch1"), "Mann-Whitney U test", 2.5, None, None, None, Some(0.37109336952269756)),
-          Statistic(Some("branch2"), "Mann-Whitney U test", 5.0, None, None, None, Some(0.2482130789899235))
-        )
-      ),
+        Map(1L -> toPointControl(1), 5L -> toPointControl(2)), None),
       MetricAnalysis("experiment1", "branch1", "All", 1L, "uint_scalar", "UintScalar",
-        Map(1L -> toPointBranch1(1)), Seq(
-          Statistic(Some("control"), "Mann-Whitney U test", 2.5, None, None, None, Some(0.37109336952269756)),
-          Statistic(Some("branch2"), "Mann-Whitney U test", 1.0, None, None, None, Some(1.0))
-        )
-      ),
+        Map(1L -> toPointBranch1(1)), None),
       MetricAnalysis("experiment1", "branch2", "All", 2L, "uint_scalar", "UintScalar",
-        Map(1L -> toPointBranch2(2)), Seq(
-          Statistic(Some("branch1"), "Mann-Whitney U test", 1.0, None, None, None, Some(1.0)),
-          Statistic(Some("control"), "Mann-Whitney U test", 5.0, None, None, None, Some(0.2482130789899235))
-        )
-      )
+        Map(1L -> toPointBranch2(2)), None)
     )
     assert(actual == expected)
   }
@@ -116,23 +104,11 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
 
     val expected = Set(
       MetricAnalysis("experiment1", "control", "All", 3L, "keyed_uint_scalar", "UintScalar",
-        Map(1L -> toPointControl(3), 3L -> toPointControl(3)), Seq(
-          Statistic(Some("branch1"), "Mann-Whitney U test", 6.0, None, None, None, Some(1.0)),
-          Statistic(Some("branch2"), "Mann-Whitney U test", 12.0, None, None, None, Some(1.0))
-        )
-      ),
+        Map(1L -> toPointControl(3), 3L -> toPointControl(3)), None),
       MetricAnalysis("experiment1", "branch1", "All", 1L, "keyed_uint_scalar", "UintScalar",
-        Map(1L -> toPointBranch1(1), 3L -> toPointBranch1(1)), Seq(
-          Statistic(Some("control"), "Mann-Whitney U test", 6.0, None, None, None, Some(1.0)),
-          Statistic(Some("branch2"), "Mann-Whitney U test", 4.0, None, None, None, Some(1.0))
-        )
-      ),
+        Map(1L -> toPointBranch1(1), 3L -> toPointBranch1(1)), None),
       MetricAnalysis("experiment1", "branch2", "All", 2L, "keyed_uint_scalar", "UintScalar",
-        Map(1L -> toPointBranch2(2), 3L -> toPointBranch2(2)), Seq(
-          Statistic(Some("branch1"), "Mann-Whitney U test", 4.0, None, None, None, Some(1.0)),
-          Statistic(Some("control"), "Mann-Whitney U test", 12.0, None, None, None, Some(1.0))
-        )
-      )
+        Map(1L -> toPointBranch2(2), 3L -> toPointBranch2(2)), None)
     )
     assert(actual == expected)
   }
@@ -147,23 +123,11 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
 
     val expected = Set(
       MetricAnalysis("experiment1", "control", "All", 3L, "boolean_scalar", "BooleanScalar",
-        booleansToPoints(1, 2), Seq(
-          Statistic(Some("branch1"), "Mann-Whitney U test", 2.0, None, None, None, Some(0.6547208460185769)),
-          Statistic(Some("branch2"), "Mann-Whitney U test", 3.5, None, None, None, Some(0.7728299926844475))
-        )
-      ),
+        booleansToPoints(1, 2), None),
       MetricAnalysis("experiment1", "branch1", "All", 1L, "boolean_scalar", "BooleanScalar",
-        booleansToPoints(0, 1), Seq(
-          Statistic(Some("control"), "Mann-Whitney U test", 2.0, None, None, None, Some(0.6547208460185769)),
-          Statistic(Some("branch2"), "Mann-Whitney U test", 1.5, None, None, None, Some(0.54029137460742))
-        )
-      ),
+        booleansToPoints(0, 1), None),
       MetricAnalysis("experiment1", "branch2", "All", 2L, "boolean_scalar", "BooleanScalar",
-        booleansToPoints(1, 1), Seq(
-          Statistic(Some("branch1"), "Mann-Whitney U test", 1.5, None, None, None, Some(0.54029137460742)),
-          Statistic(Some("control"), "Mann-Whitney U test", 3.5, None, None, None, Some(0.7728299926844475))
-        )
-      )
+        booleansToPoints(1, 1), None)
     )
     assert(actual == expected)
   }
@@ -179,23 +143,11 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
 
     val expected = Set(
       MetricAnalysis("experiment1", "control", "All", 3L, "keyed_boolean_scalar", "BooleanScalar",
-        booleansToPoints(4, 2), Seq(
-          Statistic(Some("branch1"), "Mann-Whitney U test", 8.0, None, None, None, Some(0.5049850750938459)),
-          Statistic(Some("branch2"), "Mann-Whitney U test", 13.0, None, None, None, Some(0.8311704095417625))
-        )
-      ),
+        booleansToPoints(4, 2), None),
       MetricAnalysis("experiment1", "branch1", "All", 1L, "keyed_boolean_scalar", "BooleanScalar",
-        booleansToPoints(2, 0), Seq(
-          Statistic(Some("control"), "Mann-Whitney U test", 8.0, None, None, None, Some(0.5049850750938459)),
-          Statistic(Some("branch2"), "Mann-Whitney U test", 5.0, None, None, None, Some(0.6434288435636206))
-        )
-      ),
+        booleansToPoints(2, 0), None),
       MetricAnalysis("experiment1", "branch2", "All", 2L, "keyed_boolean_scalar", "BooleanScalar",
-        booleansToPoints(3, 1), Seq(
-          Statistic(Some("branch1"), "Mann-Whitney U test", 5.0, None, None, None, Some(0.6434288435636206)),
-          Statistic(Some("control"), "Mann-Whitney U test", 13.0, None, None, None, Some(0.8311704095417625))
-        )
-      )
+        booleansToPoints(3, 1), None)
     )
     assert(actual == expected)
   }
@@ -210,23 +162,11 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
 
     val expected = Set(
       MetricAnalysis("experiment1", "control", "All", 3L, "string_scalar", "StringScalar",
-        stringsToPoints(List((0, "hello", 2), (2, "world", 1))), Seq(
-          Statistic(Some("branch1"), "Mann-Whitney U test", 2.0, None, None, None, Some(0.6547208460185769)),
-          Statistic(Some("branch2"), "Mann-Whitney U test", 4.0, None, None, None, Some(0.5637028616507731))
-        )
-      ),
+        stringsToPoints(List((0, "hello", 2), (2, "world", 1))), None),
       MetricAnalysis("experiment1", "branch1", "All", 1L, "string_scalar", "StringScalar",
-        stringsToPoints(List((0, "hello", 1))), Seq(
-          Statistic(Some("control"), "Mann-Whitney U test", 2.0, None, None, None, Some(0.6547208460185769)),
-          Statistic(Some("branch2"), "Mann-Whitney U test", 2.0, None, None, None, Some(0.22067136191984704))
-        )
-      ),
+        stringsToPoints(List((0, "hello", 1))), None),
       MetricAnalysis("experiment1", "branch2", "All", 2L, "string_scalar", "StringScalar",
-        stringsToPoints(List((1, "ohai", 2))), Seq(
-          Statistic(Some("branch1"), "Mann-Whitney U test", 2.0, None, None, None, Some(0.22067136191984704)),
-          Statistic(Some("control"), "Mann-Whitney U test", 4.0, None, None, None, Some(0.5637028616507731))
-        )
-      )
+        stringsToPoints(List((1, "ohai", 2))), None)
     )
     assert(actual == expected)
   }
@@ -242,23 +182,11 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
 
     val expected = Set(
       MetricAnalysis("experiment1", "control", "All", 3L, "keyed_string_scalar", "StringScalar",
-        stringsToPoints(List((0, "hello", 3), (1, "world", 3))), Seq(
-          Statistic(Some("branch1"), "Mann-Whitney U test", 6.0, None, None, None, Some(1.0)),
-          Statistic(Some("branch2"), "Mann-Whitney U test", 12.0, None, None, None, Some(1.0))
-        )
-      ),
+        stringsToPoints(List((0, "hello", 3), (1, "world", 3))), None),
       MetricAnalysis("experiment1", "branch1", "All", 1L, "keyed_string_scalar", "StringScalar",
-        stringsToPoints(List((0, "hello", 1), (1, "world", 1))), Seq(
-          Statistic(Some("control"), "Mann-Whitney U test", 6.0, None, None, None, Some(1.0)),
-          Statistic(Some("branch2"), "Mann-Whitney U test", 4.0, None, None, None, Some(1.0))
-        )
-      ),
+        stringsToPoints(List((0, "hello", 1), (1, "world", 1))), None),
       MetricAnalysis("experiment1", "branch2", "All", 2L, "keyed_string_scalar", "StringScalar",
-        stringsToPoints(List((0, "hello", 2), (1, "world", 2))), Seq(
-          Statistic(Some("branch1"), "Mann-Whitney U test", 4.0, None, None, None, Some(1.0)),
-          Statistic(Some("control"), "Mann-Whitney U test", 12.0, None, None, None, Some(1.0))
-        )
-      )
+        stringsToPoints(List((0, "hello", 2), (1, "world", 2))), None)
     )
     assert(actual == expected)
   }
