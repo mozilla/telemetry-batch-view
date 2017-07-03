@@ -54,23 +54,11 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
 
     val expected = Set(
       MetricAnalysis("experiment1", "control", "All", 3L, "histogram", "EnumeratedHistogram",
-        Map(0L -> toPointControl(4), 1L -> toPointControl(8), 2L -> toPointControl(12), 5L -> toPointControl(0)), Seq(
-          Statistic(Some("branch1"), "Mann-Whitney U test", 72.0, None, None, None, Some(1.0)),
-          Statistic(Some("branch2"), "Mann-Whitney U test", 144.0, None, None, None, Some(1.0))
-        )
-      ),
+        Map(0L -> toPointControl(4), 1L -> toPointControl(8), 2L -> toPointControl(12), 5L -> toPointControl(0)), None),
       MetricAnalysis("experiment1", "branch1", "All", 1L, "histogram", "EnumeratedHistogram",
-        Map(0L -> toPointBranch1(1), 1L -> toPointBranch1(2), 2L -> toPointBranch1(3)), Seq(
-          Statistic(Some("control"), "Mann-Whitney U test", 72.0, None, None, None, Some(1.0)),
-          Statistic(Some("branch2"), "Mann-Whitney U test", 36.0, None, None, None, Some(1.0))
-        )
-      ),
+        Map(0L -> toPointBranch1(1), 1L -> toPointBranch1(2), 2L -> toPointBranch1(3)), None),
       MetricAnalysis("experiment1", "branch2", "All", 2L, "histogram", "EnumeratedHistogram",
-        Map(0L -> toPointBranch2(2), 1L -> toPointBranch2(4), 2L -> toPointBranch2(6), 5L -> toPointBranch2(0)), Seq(
-          Statistic(Some("branch1"), "Mann-Whitney U test", 36.0, None, None, None, Some(1.0)),
-          Statistic(Some("control"), "Mann-Whitney U test", 144.0, None, None, None, Some(1.0))
-        )
-      )
+        Map(0L -> toPointBranch2(2), 1L -> toPointBranch2(4), 2L -> toPointBranch2(6), 5L -> toPointBranch2(0)), None)
     )
     assert(actual == expected)
   }
@@ -89,23 +77,11 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
 
     val expected = Set(
       MetricAnalysis("experiment1", "control", "All", 3L, "keyed_histogram", "EnumeratedHistogram",
-        Map(0L -> toPointControl(8), 1L -> toPointControl(16), 2L -> toPointControl(24), 100L -> toPointControl(3)), Seq(
-          Statistic(Some("branch1"), "Mann-Whitney U test", 486.0, None, None, None, Some(0.7121545376511493)),
-          Statistic(Some("branch2"), "Mann-Whitney U test", 774.0, None, None, None, Some(0.538594314826435))
-        )
-      ),
+        Map(0L -> toPointControl(8), 1L -> toPointControl(16), 2L -> toPointControl(24), 100L -> toPointControl(3)), None),
       MetricAnalysis("experiment1", "branch1", "All", 1L, "keyed_histogram", "EnumeratedHistogram",
-        Map(0L -> toPointBranch1(3), 1L -> toPointBranch1(6), 2L -> toPointBranch1(9)), Seq(
-          Statistic(Some("control"), "Mann-Whitney U test", 486.0, None, None, None, Some(0.7121545376511493)),
-          Statistic(Some("branch2"), "Mann-Whitney U test", 288.0, None, None, None, Some(0.41778590651846526))
-        )
-      ),
+        Map(0L -> toPointBranch1(3), 1L -> toPointBranch1(6), 2L -> toPointBranch1(9)), None),
       MetricAnalysis("experiment1", "branch2", "All", 2L, "keyed_histogram", "EnumeratedHistogram",
-        Map(0L -> toPointBranch2(4), 1L -> toPointBranch2(8), 2L -> toPointBranch2(12), 100L -> toPointBranch2(4)), Seq(
-          Statistic(Some("branch1"), "Mann-Whitney U test", 288.0, None, None, None, Some(0.41778590651846526)),
-          Statistic(Some("control"), "Mann-Whitney U test", 774.0, None, None, None, Some(0.538594314826435))
-        )
-      )
+        Map(0L -> toPointBranch2(4), 1L -> toPointBranch2(8), 2L -> toPointBranch2(12), 100L -> toPointBranch2(4)), None)
     )
     assert(actual == expected)
   }
