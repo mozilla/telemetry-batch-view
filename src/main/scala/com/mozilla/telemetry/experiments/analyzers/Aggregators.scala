@@ -46,6 +46,16 @@ object UintAggregator extends MetricAggregator[Int] {
   def bufferEncoder: Encoder[Map[Int, Long]] = ExpressionEncoder()
 }
 
+object LongAggregator extends MetricAggregator[Long] {
+  def finish(b: Map[Long, Long]): Map[Long, HistogramPoint] = {
+    val sum = b.values.sum.toDouble
+    if (sum == 0) return Map.empty[Long, HistogramPoint]
+    b.map { case (k: Long, v) => k -> HistogramPoint(v.toDouble / sum, v.toDouble, None) }
+  }
+
+  def bufferEncoder: Encoder[Map[Long, Long]] = ExpressionEncoder()
+}
+
 object StringAggregator extends MetricAggregator[String] {
   def finish(b: Map[String, Long]): Map[Long, HistogramPoint] = {
     val sum = b.values.sum.toDouble
