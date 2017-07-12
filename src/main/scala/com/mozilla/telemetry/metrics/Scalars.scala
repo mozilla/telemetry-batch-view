@@ -8,9 +8,9 @@ import scala.io.Source
 import com.mozilla.telemetry.utils.MainPing
 
 abstract class ScalarDefinition extends MetricDefinition
-case class UintScalar(keyed: Boolean, processes: List[String]) extends ScalarDefinition
-case class BooleanScalar(keyed: Boolean, processes: List[String]) extends ScalarDefinition
-case class StringScalar(keyed: Boolean, processes: List[String]) extends ScalarDefinition
+case class UintScalar(keyed: Boolean, originalName: String, process: Option[String] = None) extends ScalarDefinition
+case class BooleanScalar(keyed: Boolean, originalName: String, process: Option[String] = None) extends ScalarDefinition
+case class StringScalar(keyed: Boolean, originalName: String, process: Option[String] = None) extends ScalarDefinition
 
 class ScalarsClass extends MetricsClass {
   val ScalarColumnNamePrefix = "scalar"
@@ -26,7 +26,7 @@ class ScalarsClass extends MetricsClass {
     ScalarColumnNamePrefix + '_' + (processName + '_' + scalarName).replace('.', '_')
   }
 
-  def definitions(includeOptin: Boolean = false): Map[String, ScalarDefinition] = {
+  def definitions(includeOptin: Boolean = false, nameJoiner: (String, String) => String = getParquetFriendlyScalarName): Map[String, ScalarDefinition] = {
     val uris = Map("release" -> "https://hg.mozilla.org/releases/mozilla-release/raw-file/tip/toolkit/components/telemetry/Scalars.yaml",
                    "beta" -> "https://hg.mozilla.org/releases/mozilla-beta/raw-file/tip/toolkit/components/telemetry/Scalars.yaml",
                    "aurora" -> "https://hg.mozilla.org/releases/mozilla-aurora/raw-file/tip/toolkit/components/telemetry/Scalars.yaml",
@@ -71,19 +71,27 @@ class ScalarsClass extends MetricsClass {
           .asInstanceOf[util.ArrayList[String]].toSet.toList
         )
 
+        def addProcesses(key: String, definition: ScalarDefinition): List[(String, ScalarDefinition)] = {
+          processes.map(process => (nameJoiner(key, process), definition match {
+            case d: UintScalar => d.copy(process=Some(process))
+            case d: BooleanScalar => d.copy(process=Some(process))
+            case d: StringScalar => d.copy(process=Some(process))
+          }))
+        }
+
         kind match {
           case ("uint") =>
-            Some((scalarName, UintScalar(keyed, processes)))
+            Some(addProcesses(scalarName, UintScalar(keyed, scalarName)))
           case ("boolean") =>
-            Some((scalarName, BooleanScalar(keyed, processes)))
+            Some(addProcesses(scalarName, BooleanScalar(keyed, scalarName)))
           case ("string") =>
-            Some((scalarName, StringScalar(keyed, processes)))
+            Some(addProcesses(scalarName, StringScalar(keyed, scalarName)))
           case _ =>
             None
         }
       }
 
-      scalarDefinitions.flatten.toMap
+      scalarDefinitions.flatten.flatten.toMap
     }
   }
 }

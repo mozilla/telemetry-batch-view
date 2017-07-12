@@ -250,8 +250,8 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       private val sqlContext = new SQLContext(sc)
 
       // Opt-out only schema
-      private val optoutHistogramDefs = histograms.definitions(includeOptin = false)
-      private val optoutScalarDefs = scalars.definitions(includeOptin = false)
+      val optoutHistogramDefs = histograms.definitions(includeOptin = false)
+      val optoutScalarDefs = scalars.definitions(includeOptin = false)
 
       private val optoutSchema = LongitudinalView invokePrivate buildSchema(optoutHistogramDefs, optoutScalarDefs)
       private val optoutRecord = (LongitudinalView  invokePrivate buildRecord(payloads ++ dupes, optoutSchema, optoutHistogramDefs, optoutScalarDefs)).get

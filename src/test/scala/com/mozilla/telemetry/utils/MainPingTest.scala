@@ -1,6 +1,7 @@
 package com.mozilla.telemetry.utils
 
 import org.scalatest.{FlatSpec, Matchers}
+import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 import org.apache.spark.sql.Row
 import scala.io.Source
@@ -560,15 +561,23 @@ class MainPingTest extends FlatSpec with Matchers {
   }
 
   "Engagement measures" can "be extracted" in {
-    // makes all but the parent scalars null
-    def makeExpected(expected: List[Any]): Row = Row.fromSeq(
-      scalarDefs.map(_._2).zip(expected).flatMap{ case (d, v) => d.processes.map(p => if(p == "parent") v else null) }
-    )
+    def makeScalarsMap(v: JValue): Map[String, JValue] = {
+      MainPing.ProcessTypes.map{ p =>
+        p -> v
+      } toMap
+    }
+
+    val order = List("mock.all.children", "mock.keyed.scalar.bool", "mock.keyed.scalar.string", "mock.keyed.scalar.uint", "mock.scalar.bool", "mock.scalar.string", "mock.scalar.uint", "mock.uint.optin", "mock.uint.optout")
+    def makeExpected(expected: List[Any]): Row = {
+      Row.fromSeq(
+        scalarDefs.map(d => expected(order.indexOf(d._2.originalName)))
+      )
+    }
 
     // Doesn't have scalars
     val jNoScalars = parse(
       """{}""")
-    MainPing.scalarsToRow(Map("parent" -> jNoScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
+    MainPing.scalarsToRow(makeScalarsMap(jNoScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
 
     // Has scalars, but none of the expected ones
     val jUnexpectedScalars = parse(
@@ -576,7 +585,7 @@ class MainPingTest extends FlatSpec with Matchers {
         |  "example1": 249,
         |  "example2": 2
         |}""".stripMargin)
-    MainPing.scalarsToRow(Map("parent" -> jUnexpectedScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
+    MainPing.scalarsToRow(makeScalarsMap(jUnexpectedScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
 
     // Has scalars, and some of the expected ones
     val jSomeExpectedScalars = parse(
@@ -584,14 +593,14 @@ class MainPingTest extends FlatSpec with Matchers {
         |  "mock.scalar.uint": 2,
         |  "mock.uint.optin": 97
         |}""".stripMargin)
-    MainPing.scalarsToRow(Map("parent" -> jSomeExpectedScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, 2, 97, null)))
+    MainPing.scalarsToRow(makeScalarsMap(jSomeExpectedScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, 2, 97, null)))
 
     // Keyed scalars convert correctly
     val jKeyedScalar = parse(
       """{
         |  "mock.keyed.scalar.uint": {"a": 1, "b": 2}
         |}""".stripMargin)
-    MainPing.scalarsToRow(Map("parent" -> jKeyedScalar), scalarDefs) should be
+    MainPing.scalarsToRow(makeScalarsMap(jKeyedScalar), scalarDefs) should be
       (makeExpected(List(null, null, null, Map("a" -> 1, "b" -> 2), null, null, null, null, null)))
 
     // Has scalars, all of the expected ones
@@ -619,7 +628,7 @@ class MainPingTest extends FlatSpec with Matchers {
         42
     ))
 
-    MainPing.scalarsToRow(Map("parent" -> jAllScalars), scalarDefs) should be (expected)
+    MainPing.scalarsToRow(makeScalarsMap(jAllScalars), scalarDefs) should be (expected)
 
     // Has scalars with weird data
     val jWeirdScalars = parse(
@@ -629,11 +638,11 @@ class MainPingTest extends FlatSpec with Matchers {
         |  "mock.uint.optin": [9, 7],
         |  "mock.uint.optout": "hello, world"
         |}""".stripMargin)
-    MainPing.scalarsToRow(Map("parent" -> jWeirdScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
+    MainPing.scalarsToRow(makeScalarsMap(jWeirdScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
 
     // Has a scalars section containing unexpected data.
     val jBogusScalars = parse("""[10, "ten"]""")
-    MainPing.scalarsToRow(Map("parent" -> jBogusScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
+    MainPing.scalarsToRow(makeScalarsMap(jBogusScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
   }
 
   "histogram to threshold count" can "extract correct counts" in {

@@ -72,10 +72,12 @@ object ExperimentAnalysisView {
   def getMetrics(conf: Conf, data: DataFrame) = {
     conf.metric.get match {
       case Some(m) => {
-        List((m, (Histograms.definitions() ++ Scalars.definitions())(m.toUpperCase)))
+        List((m, (Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _) ++ Scalars.definitions())(m.toUpperCase)))
       }
       case _ => {
-        val histogramDefs = MainSummaryView.filterHistogramDefinitions(Histograms.definitions(), useWhitelist = true)
+        val histogramDefs = MainSummaryView.filterHistogramDefinitions(
+          Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _),
+          useWhitelist = true)
         val scalarDefs = Scalars.definitions(includeOptin = true).toList
         scalarDefs ++ histogramDefs
       }
@@ -88,11 +90,9 @@ object ExperimentAnalysisView {
 
     metricList.map {
       case (name: String, hd: HistogramDefinition) =>
-        val columnName = MainSummaryView.getHistogramName(name.toLowerCase, "parent")
-        new HistogramAnalyzer(columnName, hd, experimentData).analyze()
+        new HistogramAnalyzer(name, hd, experimentData).analyze()
       case (name: String, sd: ScalarDefinition) =>
-        val columnName = Scalars.getParquetFriendlyScalarName(name, "parent")
-        ScalarAnalyzer.getAnalyzer(columnName, sd, experimentData).analyze()
+        ScalarAnalyzer.getAnalyzer(name, sd, experimentData).analyze()
       case _ => throw new UnsupportedOperationException("Unsupported metric definition type")
     }.reduce(_.union(_)).toDF()
   }

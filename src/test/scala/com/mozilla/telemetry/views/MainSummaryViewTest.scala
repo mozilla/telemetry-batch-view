@@ -29,7 +29,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     override protected val getURL = histogramUrlMock
   }
 
-  val histogramDefs = MainSummaryView.filterHistogramDefinitions(histograms.definitions(true))
+  val histogramDefs = MainSummaryView.filterHistogramDefinitions(histograms.definitions(true, nameJoiner = Histograms.prefixProcessJoiner _))
 
   "MainSummary records" can "be serialized" in {
     val sparkConf = new SparkConf().setAppName("MainSummary")
@@ -958,7 +958,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     val sc = spark.sparkContext
     import spark.implicits._
 
-    val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(Histograms.definitions(includeOptin = false), useWhitelist = true)
+    val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(Histograms.definitions(includeOptin = false, nameJoiner = Histograms.prefixProcessJoiner _), useWhitelist = true)
     val allScalarDefs = Scalars.definitions(true).toList.sortBy(_._1)
 
     val fakeHisto = """{
@@ -972,10 +972,10 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     val histosData = allHistogramDefs.map{
       case (name, definition) =>
         definition match {
-          case LinearHistogram(keyed, _, _, _, _) => (name, keyed)
-          case ExponentialHistogram(keyed, _, _, _, _) => (name, keyed)
-          case EnumeratedHistogram(keyed, _, _) => (name, keyed)
-          case BooleanHistogram(keyed, _) => (name, keyed)
+          case LinearHistogram(keyed, _, _, _, _, _) => (name, keyed)
+          case ExponentialHistogram(keyed, _, _, _, _, _) => (name, keyed)
+          case EnumeratedHistogram(keyed, _, _, _) => (name, keyed)
+          case BooleanHistogram(keyed, _, _) => (name, keyed)
           case other =>
             throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
         }
@@ -986,10 +986,10 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     val keyedHistosData = allHistogramDefs.map{
       case (name, definition) =>
         definition match {
-          case LinearHistogram(keyed, _, _, _, _) => (name, keyed)
-          case ExponentialHistogram(keyed, _, _, _, _) => (name, keyed)
-          case EnumeratedHistogram(keyed, _, _) => (name, keyed)
-          case BooleanHistogram(keyed, _) => (name, keyed)
+          case LinearHistogram(keyed, _, _, _, _, _) => (name, keyed)
+          case ExponentialHistogram(keyed, _, _, _, _, _) => (name, keyed)
+          case EnumeratedHistogram(keyed, _, _, _) => (name, keyed)
+          case BooleanHistogram(keyed, _, _) => (name, keyed)
           case other =>
             throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
         }
@@ -1053,9 +1053,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val expectedHistos = MainPing
       .histogramsToRow(expectedProcessHistos, allHistogramDefs)
-      .toSeq.zip(allHistogramDefs.flatMap{ case(n, d) =>
-        d.processes.map(p => MainSummaryView.getHistogramName(n, p))
-      }.toList).map(_.swap).toMap
+      .toSeq.zip(allHistogramDefs.map(_._1)).map(_.swap).toMap
 
     val expectedProcessScalars = MainPing.ProcessTypes.map{ p =>
       p -> (parse(s"{$scalarsData}") merge parse(s"{$keyedScalarsData}"))
@@ -1063,9 +1061,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val expectedScalars = MainPing
       .scalarsToRow(expectedProcessScalars, allScalarDefs)
-      .toSeq.zip(allScalarDefs.flatMap{ case(n, d) =>
-        d.processes.map(p => Scalars.getParquetFriendlyScalarName(n, p))
-      }.toList).map(_.swap).toMap
+      .toSeq.zip(allScalarDefs.map(_._1)).map(_.swap).toMap
 
     val expected = expectedHistos ++ expectedScalars
 
@@ -1085,9 +1081,11 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
   "Histogram filter" can "include all whitelisted histograms" in {
     val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(
-      Histograms.definitions(includeOptin = true),
+      Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _),
       useWhitelist = true
-    ).map(_._1).toSet
+    ).map{ case(name, definition) =>
+      (definition.originalName, definition.process.get)
+    }.filter(_._2 == "parent").map(_._1).toSet
 
     val expectedDefs = MainSummaryView.histogramsWhitelist.toSet
 
