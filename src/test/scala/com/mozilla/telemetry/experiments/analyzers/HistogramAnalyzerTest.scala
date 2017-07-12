@@ -43,7 +43,7 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
   "Non-keyed Histograms" can "be aggregated" in {
     val df = fixture
     val analyzer = new HistogramAnalyzer("histogram",
-      EnumeratedHistogram(keyed = false, 150, MainPing.ProcessTypes),
+      EnumeratedHistogram(keyed = false, "name", 150),
       df.where(df.col("experiment_id") === "experiment1")
     )
     val actual = analyzer.analyze().collect().toSet
@@ -66,7 +66,7 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
   "Keyed Histograms" can "be aggregated" in {
     val df = fixture
     val analyzer = new HistogramAnalyzer("keyed_histogram",
-      EnumeratedHistogram(keyed = true, 150, MainPing.ProcessTypes),
+      EnumeratedHistogram(keyed = true, "name", 150),
       df.where(df.col("experiment_id") === "experiment1")
     )
     val actual = analyzer.analyze().collect().toSet
@@ -89,7 +89,7 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
   "Unknown histogram" should "return an empty dataset" in {
     val df = fixture
     val analyzer = new HistogramAnalyzer("unknown_histogram",
-      EnumeratedHistogram(keyed = true, 150, MainPing.ProcessTypes),
+      EnumeratedHistogram(keyed = true, "name", 150),
       df.where(df.col("experiment_id") === "experiment1")
     )
     val actual = analyzer.analyze()

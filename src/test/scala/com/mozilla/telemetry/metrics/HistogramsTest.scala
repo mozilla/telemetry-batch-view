@@ -23,7 +23,9 @@ class HistogramsTest extends FlatSpec with Matchers {
       } toMap
 
       val definitions = optStatuses map {
-        optStatus => optStatus -> histograms.definitions(optStatus)
+        optStatus => optStatus -> histograms.definitions(optStatus).map{
+          case (k, value) => (k.toLowerCase, value)
+        }
       } toMap
     }
   }
@@ -45,11 +47,27 @@ class HistogramsTest extends FlatSpec with Matchers {
 
   "Histograms" must "have processes specified" in {
     val histograms = fixture.definitions(true)
-    assert(histograms("MOCK_KEYED_EXPONENTIAL").processes == MainPing.ProcessTypes)
+    assert(histograms.contains("mock_keyed_exponential"))
+    assert(histograms.contains("mock_keyed_exponential_content"))
+    assert(histograms.contains("mock_keyed_exponential_gpu"))
   }
 
   "Histograms all_child process" must "have child processes specified" in {
     val histograms = fixture.definitions(true)
-    assert(histograms("CHILD_PROCESSES_ONLY").processes == MainPing.ProcessTypes.filter(_ != "parent"))
+    assert(!histograms.contains("child_processes_only"))
+    assert(histograms.contains("child_processes_only_gpu"))
+    assert(histograms.contains("child_processes_only_content"))
+  }
+
+  "Histograms process" must "match name" in {
+    val histograms = fixture.definitions(true)
+    assert(histograms("mock_keyed_exponential").process.get == "parent")
+    assert(histograms("mock_keyed_exponential_content").process.get == "content")
+    assert(histograms("mock_keyed_exponential_gpu").process.get == "gpu")
+  }
+
+  "Histograms originalName" must "be correct" in {
+    val histograms = fixture.definitions(true)
+    assert(histograms("mock_keyed_exponential").originalName == "MOCK_KEYED_EXPONENTIAL")
   }
 }

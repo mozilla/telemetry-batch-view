@@ -205,7 +205,9 @@ object LongitudinalView {
        8 workers and 20 executors, 320 partitions provide a good compromise. */
 
     val histogramDefinitions = Histograms.definitions(includeOptin)
-    val scalarDefinitions = Scalars.definitions(includeOptin)
+
+    // Only show parent scalars
+    val scalarDefinitions = Scalars.definitions(includeOptin).filter(_._2.process == Some("parent"))
 
     val partitionCounts = clientMessages
       .mapPartitions{ case it =>
@@ -558,8 +560,7 @@ object LongitudinalView {
       }
     }
 
-    scalarDefinitions.foreach{ case (k, value) =>
-      val key = getParquetFriendlyScalarName(k.toLowerCase)
+    scalarDefinitions.foreach{ case (key, value) =>
       value match {
         case s: UintScalar if !s.keyed =>
           // TODO: After migrating to Spark 2.1.0, change this and the next
@@ -816,14 +817,6 @@ object LongitudinalView {
     }
   }
 
-  private def getParquetFriendlyScalarName(scalarName: String, processName: String = "parent"): String = {
-    // Scalar group and probe names can contain dots ('.'). But we don't
-    // want them to get into the Parquet column names, so replace them with
-    // underscores ('_'). Additionally, to prevent name clashing, we prefix
-    // all scalars.
-    ScalarColumnNamePrefix + (processName + '_' + scalarName).replace('.', '_')
-  }
-
   private def scalars2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, scalarDefinitions: Map[String, ScalarDefinition]) {
     implicit val formats = DefaultFormats
 
@@ -842,18 +835,11 @@ object LongitudinalView {
       }
     }
 
-    // Make sure there are no duplicates...
-    val uniqueKeys = scalarList.flatMap(x => x.keys).distinct.toSet
-
-    // ... and that the keys (scalar names) are valid.
-    val validKeys = for {
-      key <- uniqueKeys
-      definition <- scalarDefinitions.get(key)
-    } yield (key, definition)
-
-    for ((key, definition) <- validKeys) {
-      val prefixedKeyName = getParquetFriendlyScalarName(key.toLowerCase)
-      root.set(prefixedKeyName, vectorizeScalar(key, definition, scalarList))
+    for {
+      (key, definition) <- scalarDefinitions.toList
+      if !definition.keyed
+    }{
+      root.set(key, vectorizeScalar(definition.originalName, definition, scalarList))
     }
   }
 
@@ -868,16 +854,12 @@ object LongitudinalView {
       }
     }
 
-    val uniqueKeys = scalarsList.flatMap(x => x.keys).distinct.toSet
-
-    val validKeys = for {
-      key <- uniqueKeys
-      definition <- scalarDefinitions.get(key)
-    } yield (key, definition)
-
-    for ((key, definition) <- validKeys) {
+    for {
+      (key, definition) <- scalarDefinitions.toList
+      if definition.keyed
+    }{
       val keyedScalarsList = scalarsList.map{x =>
-        x.get(key) match {
+        x.get(definition.originalName) match {
           case Some(v) => v
           case _ => Map[String, AnyVal]()
         }
@@ -889,8 +871,7 @@ object LongitudinalView {
         vector = vectorizeScalar(label, definition, keyedScalarsList)
       } yield (label, vector)
 
-      val prefixedKeyName = getParquetFriendlyScalarName(key.toLowerCase)
-      root.set(prefixedKeyName, vectorized.toMap.asJava)
+      root.set(key, vectorized.toMap.asJava)
     }
   }
 

@@ -15,7 +15,6 @@ import com.mozilla.telemetry.metrics._
 import scala.util.{Success, Try}
 
 object MainSummaryView {
-  def HistogramPrefix = "histogram"
 
   def schemaVersion: String = "v4"
   def jobName: String = "main_summary"
@@ -92,7 +91,7 @@ object MainSummaryView {
 
       val scalarDefinitions = Scalars.definitions(includeOptin = true).toList.sortBy(_._1)
 
-      val histogramDefinitions = filterHistogramDefinitions(Histograms.definitions(includeOptin = true), useWhitelist = true)
+      val histogramDefinitions = filterHistogramDefinitions(Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _), useWhitelist = true)
 
       val schema = buildSchema(scalarDefinitions, histogramDefinitions)
       val ignoredCount = sc.accumulator(0, "Number of Records Ignored")
@@ -708,7 +707,7 @@ object MainSummaryView {
 
       Some(Row.merge(row, scalarRow, histogramRow))
     } catch {
-      case _: Exception =>
+      case e: Exception =>
         None
     }
   }
@@ -785,30 +784,18 @@ object MainSummaryView {
     scalarDefinitions.map{
       case (name, definition) =>
         definition match {
-          case UintScalar(keyed, processes) => (name, keyed, processes, IntegerType)
-          case BooleanScalar(keyed, processes) => (name, keyed, processes, BooleanType)
-          case StringScalar(keyed, processes) => (name, keyed, processes, StringType)
+          case UintScalar(keyed, _, _) => (name, keyed, IntegerType)
+          case BooleanScalar(keyed, _, _) => (name, keyed, BooleanType)
+          case StringScalar(keyed, _, _) => (name, keyed, StringType)
         }
-    }.flatMap{
-      case (name, keyed, processes, parquetType) =>
-        processes.map{ p =>
-          keyed match {
-            case true => StructField(Scalars.getParquetFriendlyScalarName(name, p),
-                                     MapType(StringType, parquetType),
-                                     nullable = true)
-            case false => StructField(Scalars.getParquetFriendlyScalarName(name, p),
-                                      parquetType,
-                                      nullable = true)
-          }
-      }
+    }.map{
+      case (name, keyed, parquetType) =>
+        keyed match {
+          case true => StructField(name, MapType(StringType, parquetType), nullable = true)
+          case false => StructField(name, parquetType, nullable = true)
+        }
     }
   }
-
-  def getHistogramName(name: String, process: String): String = {
-    s"${HistogramPrefix}_${process}_${name.toLowerCase}"
-  }
-
-  val HistogramSchema = MapType(IntegerType, IntegerType, true)
 
   def filterHistogramDefinitions(definitions: Map[String, HistogramDefinition], useWhitelist: Boolean = false): List[(String, HistogramDefinition)] = {
     definitions.toList.filter(_._2 match {
@@ -818,28 +805,18 @@ object MainSummaryView {
       case _: BooleanHistogram => true
       case _ => false
     }).filter(
-      entry => !useWhitelist || histogramsWhitelist.contains(entry._1)
+      entry => !useWhitelist || histogramsWhitelist.contains(entry._2.originalName)
     ).sortBy(_._1)
   }
+
+  val HistogramSchema = MapType(IntegerType, IntegerType, true)
 
   def buildHistogramSchema(histogramDefinitions: List[(String, HistogramDefinition)]): List[StructField] = {
     histogramDefinitions.map{
       case (name, definition) =>
-        definition match {
-          case LinearHistogram(keyed, _, _, _, processes) => (name, keyed, processes)
-          case ExponentialHistogram(keyed, _, _, _, processes) => (name, keyed, processes)
-          case EnumeratedHistogram(keyed, _, processes) => (name, keyed, processes)
-          case BooleanHistogram(keyed, processes) => (name, keyed, processes)
-          case other =>
-            throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
-        }
-    }.flatMap{
-      case (name, keyed, processes) =>
-        processes.map{ p =>
-          keyed match {
-            case true => StructField(getHistogramName(name, p), MapType(StringType, HistogramSchema), nullable = true)
-            case false => StructField(getHistogramName(name, p), HistogramSchema, nullable = true)
-          }
+        definition.keyed match {
+          case true => StructField(name, MapType(StringType, HistogramSchema), nullable = true)
+          case false => StructField(name, HistogramSchema, nullable = true)
         }
     }
   }
