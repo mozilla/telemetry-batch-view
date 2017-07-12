@@ -212,7 +212,10 @@ object SyncPingConverter {
     StructField("app_name", StringType, nullable = true), // application/name
     StructField("app_version", StringType, nullable = true), // application/version
     StructField("app_channel", StringType, nullable = true), // application/channel
-    // XXX - how do we record the "platform"?
+
+    StructField("os", StringType, nullable = true), // os/name
+    StructField("os_version", StringType, nullable = true), // os/version
+    StructField("os_locale", StringType, nullable = true), // os/locale
 
     // These fields are unique to the sync pings.
     StructField("uid", StringType, nullable = false),
@@ -466,6 +469,19 @@ object SyncPingConverter {
       application \ "channel" match {
         case JString(x) => x
         case _ => return None // a required field.
+      },
+
+      payload \ "os" \ "name" match {
+        case JString(x) => x
+        case _ => null
+      },
+      payload \ "os" \ "version" match {
+        case JString(x) => x
+        case _ => null
+      },
+      payload \ "os" \ "locale" match {
+        case JString(x) => x
+        case _ => null
       },
 
       // Info about the sync.
