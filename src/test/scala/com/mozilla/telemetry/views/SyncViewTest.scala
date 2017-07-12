@@ -182,6 +182,10 @@ class SyncViewTest extends FlatSpec with Matchers{
     firstSync.getAs[String]("app_version") should be ((ping \ "application" \ "version").extract[String])
     firstSync.getAs[String]("app_channel") should be ((ping \ "application" \ "channel").extract[String])
 
+    firstSync.getAs[String]("os") should be ((ping \ "payload" \ "os" \ "name").extract[String])
+    firstSync.getAs[String]("os_version") should be ((ping \ "payload" \ "os" \ "version").extract[String])
+    firstSync.getAs[String]("os_locale") should be ((ping \ "payload" \ "os" \ "locale").extract[String])
+
     val firstPing = (ping \ "payload" \ "syncs")(0)
     firstSync.getAs[Long]("when") should be ((firstPing \ "when").extract[Long])
     firstSync.getAs[String]("uid") should be ((firstPing \ "uid").extract[String])
@@ -201,6 +205,10 @@ class SyncViewTest extends FlatSpec with Matchers{
     secondSync.getAs[String]("app_name") should be ((ping \ "application" \ "name").extract[String])
     secondSync.getAs[String]("app_version") should be ((ping \ "application" \ "version").extract[String])
     secondSync.getAs[String]("app_channel") should be ((ping \ "application" \ "channel").extract[String])
+
+    secondSync.getAs[String]("os") should be ((ping \ "payload" \ "os" \ "name").extract[String])
+    secondSync.getAs[String]("os_version") should be ((ping \ "payload" \ "os" \ "version").extract[String])
+    secondSync.getAs[String]("os_locale") should be ((ping \ "payload" \ "os" \ "locale").extract[String])
 
     val secondPing = (ping \ "payload" \ "syncs")(1)
 
@@ -228,6 +236,10 @@ class SyncViewTest extends FlatSpec with Matchers{
     sync.getAs[String]("app_display_version") should be ((ping \ "application" \ "displayVersion").extract[String])
     sync.getAs[String]("app_name") should be ((ping \ "application" \ "name").extract[String])
     sync.getAs[String]("app_version") should be ((ping \ "application" \ "version").extract[String])
+
+    sync.getAs[String]("os") should be ((ping \ "payload" \ "os" \ "name").extract[String])
+    sync.getAs[String]("os_version") should be ((ping \ "payload" \ "os" \ "version").extract[String])
+    sync.getAs[String]("os_locale") should be ((ping \ "payload" \ "os" \ "locale").extract[String])
 
     val pingPayload = (ping \ "payload" \ "syncs")(0)
     sync.getAs[Long]("when") should be ((pingPayload \ "when").extract[Long])

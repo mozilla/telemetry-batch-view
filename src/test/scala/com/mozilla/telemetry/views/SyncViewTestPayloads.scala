@@ -104,6 +104,11 @@ object SyncViewTestPayloads {
     |    "channel": "nightly"
     |  },
     |  "payload": {
+    |    "os": {
+    |      "name": "Darwin",
+    |      "version": "15.6.0",
+    |      "locale": "en-US"
+    |    },
     |    "why": "schedule",
     |    "version": 1,
     |    "syncs": [
@@ -218,6 +223,11 @@ object SyncViewTestPayloads {
       |    "channel": "nightly"
       |  },
       |  "payload": {
+      |    "os": {
+      |      "name": "Darwin",
+      |      "version": "15.6.0",
+      |      "locale": "en-US"
+      |    },
       |    "why": "schedule",
       |    "version": 1,
       |    "syncs": [
@@ -300,6 +310,11 @@ object SyncViewTestPayloads {
       |    "channel": "nightly"
       |  },
       |  "payload": {
+      |    "os": {
+      |      "name": "Darwin",
+      |      "version": "15.6.0",
+      |      "locale": "en-US"
+      |    },
       |    "why": "schedule",
       |    "version": 1,
       |    "uid": "12345678912345678912345678912345",
