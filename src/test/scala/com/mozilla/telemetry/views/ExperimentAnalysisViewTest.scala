@@ -26,15 +26,13 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
     ExperimentSummaryRow("e", "id3", "control", 1, Map(2 -> 1))
   )
 
+  val args = "--bucket" :: "telemetry-mock-bucket" :: Nil
+
   "Child Scalars" can "be counted" in {
     import spark.implicits._
 
     val data = predata.toDS().toDF()
-    val args =
-      "--input" :: "telemetry-mock-bucket" ::
-      "--output" :: "telemetry-mock-bucket" :: Nil
     val conf = new ExperimentAnalysisView.Conf(args.toArray)
-
     val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, conf).collect()
     val agg = res.filter(_.metric_name == "scalar_content_browser_usage_graphite").head
     agg.histogram(1).pdf should be (1.0)
@@ -44,11 +42,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
     import spark.implicits._
 
     val data = predata.toDS().toDF()
-    val args =
-      "--input" :: "telemetry-mock-bucket" ::
-      "--output" :: "telemetry-mock-bucket" :: Nil
     val conf = new ExperimentAnalysisView.Conf(args.toArray)
-
     val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, conf).collect()
     val agg = res.filter(_.metric_name == "histogram_content_gc_max_pause_ms").head
     agg.histogram(1).pdf should be (1.0)
@@ -58,11 +52,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
     import spark.implicits._
 
     val data = predata.toDS().toDF()
-    val args =
-      "--input" :: "telemetry-mock-bucket" ::
-      "--output" :: "telemetry-mock-bucket" :: Nil
     val conf = new ExperimentAnalysisView.Conf(args.toArray)
-
     val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, conf).collect()
     val metadata = res.filter(_.metric_name == "Experiment Metadata")
     metadata.length should be (1)
