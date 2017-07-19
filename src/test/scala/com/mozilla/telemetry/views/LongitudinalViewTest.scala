@@ -21,9 +21,9 @@ import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, GenericR
 import java.io.ByteArrayOutputStream
 
 class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
-  val parentConstant = 42
-  val contentConstant = 24
-  val gpuConstant = 17
+  val ParentConstant = 42
+  val ContentConstant = 24
+  val GpuConstant = 17
 
   val fixture = {
     def createPayload(idx: Int): Map[String, Any] = {
@@ -97,22 +97,26 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
         if (idx == 1) {
           // Skip the scalar section for the first payload.
           ("bogus" -> "other") ~
-          ("keyedScalars" -> keyedScalars(parentConstant))
+          ("keyedScalars" -> keyedScalars(ParentConstant))
         } else {
-          ("scalars" -> scalars(parentConstant)) ~
-          ("keyedScalars" -> keyedScalars(parentConstant))
+          ("scalars" -> scalars(ParentConstant)) ~
+          ("keyedScalars" -> keyedScalars(ParentConstant))
         }
 
       val pingPayload =
         ("processes" ->
           ("parent" -> parent) ~
           ("content" ->
-            ("histograms" -> histograms(contentConstant)) ~
-            ("keyedHistograms" -> keyedHistograms(contentConstant))
+            ("histograms" -> histograms(ContentConstant)) ~
+            ("keyedHistograms" -> keyedHistograms(ContentConstant)) ~
+            ("scalars" -> scalars(ContentConstant)) ~
+            ("keyedScalars" -> keyedScalars(ContentConstant))
           ) ~
           ("gpu" ->
-            ("histograms" -> histograms(gpuConstant)) ~
-            ("keyedHistograms" -> keyedHistograms(gpuConstant))
+            ("histograms" -> histograms(GpuConstant)) ~
+            ("keyedHistograms" -> keyedHistograms(GpuConstant)) ~
+            ("scalars" -> scalars(GpuConstant)) ~
+            ("keyedScalars" -> keyedScalars(GpuConstant))
           )
         )
 
@@ -212,8 +216,8 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
         "DNT" -> "1",
         "payload.info" -> compact(render(info)),
         "payload.simpleMeasurements" -> compact(render(simpleMeasurements)),
-        "payload.histograms" -> compact(render(histograms(parentConstant))),
-        "payload.keyedHistograms" -> compact(render(keyedHistograms(parentConstant))),
+        "payload.histograms" -> compact(render(histograms(ParentConstant))),
+        "payload.keyedHistograms" -> compact(render(keyedHistograms(ParentConstant))),
         "payload" -> compact(render(pingPayload)),
         "environment.build" -> compact(render(build)),
         "environment.partner" -> compact(render(partner)),
@@ -454,13 +458,13 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
   "Boolean histograms" must "be converted correctly" in {
     val histograms = fixture.optoutRow.getList[WrappedArray[Long]](fixture.optoutRow.fieldIndex("browser_is_user_default"))
     assert(histograms.length == fixture.payloads.length)
-    histograms.foreach(x => assert(x.toList == List(parentConstant, 0)))
+    histograms.foreach(x => assert(x.toList == List(ParentConstant, 0)))
   }
 
   "Count histograms" must "be converted correctly" in {
     val histograms = fixture.optoutRow.getList[Int](fixture.optoutRow.fieldIndex("push_api_notify"))
     assert(histograms.length == fixture.payloads.length)
-    histograms.foreach(x => assert(x == parentConstant))
+    histograms.foreach(x => assert(x == ParentConstant))
   }
 
   "Enumerated histograms" must "be converted correctly" in {
@@ -472,7 +476,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
 
       for ((value, key) <- h.zipWithIndex) {
         if (key == 1)
-          assert(value == parentConstant)
+          assert(value == ParentConstant)
         else
           assert(value == 0)
       }
@@ -483,9 +487,9 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     val histograms = fixture.optoutRow.getList[Row](fixture.optoutRow.fieldIndex("search_service_engine_count"))
     assert(histograms.length == fixture.payloads.length)
 
-    val reference = List(0, parentConstant) ++ List.fill(48)(0)
+    val reference = List(0, ParentConstant) ++ List.fill(48)(0)
     histograms.foreach{ x =>
-      assert(x.getAs[Long]("sum") == parentConstant.toLong)
+      assert(x.getAs[Long]("sum") == ParentConstant.toLong)
       assert(x.getList[Int](x.fieldIndex("values")).toList == reference)
     }
   }
@@ -494,9 +498,9 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     val histograms = fixture.optoutRow.getList[Row](fixture.optoutRow.fieldIndex("fx_tab_switch_total_ms"))
     assert(histograms.length == fixture.payloads.length)
 
-    val reference = List(0, parentConstant) ++ List.fill(18)(0)
+    val reference = List(0, ParentConstant) ++ List.fill(18)(0)
     histograms.foreach{ x =>
-      assert(x.getAs[Long]("sum") == parentConstant.toLong)
+      assert(x.getAs[Long]("sum") == ParentConstant.toLong)
       assert(x.getList[Int](x.fieldIndex("values")).toList == reference.toList)
     }
   }
@@ -510,7 +514,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
 
       for ((value, key) <- h.zipWithIndex) {
         if (key == 1)
-          assert(value == parentConstant)
+          assert(value == ParentConstant)
         else
           assert(value == 0)
       }
@@ -521,7 +525,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     val entries = fixture.optoutRow.getMap[String, WrappedArray[Int]](fixture.optoutRow.fieldIndex("search_counts"))
     assert(entries.size == 1)
     assert(entries("foo").size == fixture.payloads.length)
-    entries("foo").foreach(x => assert(x == parentConstant))
+    entries("foo").foreach(x => assert(x == ParentConstant))
   }
 
   "Keyed exponential histograms" must "be converted correctly" in {
@@ -531,9 +535,9 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     val histograms = entries("foo")
     assert(histograms.length == fixture.payloads.length)
 
-    val reference = List(0, parentConstant) ++ List.fill(68)(0)
+    val reference = List(0, ParentConstant) ++ List.fill(68)(0)
     histograms.foreach{ x =>
-      assert(x.getAs[Long]("sum") == parentConstant.toLong)
+      assert(x.getAs[Long]("sum") == ParentConstant.toLong)
       assert(x.getList[Int](x.fieldIndex("values")).toList == reference.toList)
     }
   }
@@ -542,7 +546,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     val entries = fixture.optoutRow.getMap[String, WrappedArray[Int]](fixture.optoutRow.fieldIndex("search_counts_content"))
     assert(entries.size == 1)
     assert(entries("foo").size == fixture.payloads.length)
-    entries("foo").foreach(x => assert(x == contentConstant))
+    entries("foo").foreach(x => assert(x == ContentConstant))
   }
 
   "Opt-in Histograms" must "be ignored for optout only" in {
@@ -553,9 +557,9 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     val histograms = fixture.optinRow.getList[Row](fixture.optinRow.fieldIndex("mock_optin"))
     assert(histograms.length == fixture.payloads.length)
 
-    val reference = List(0, parentConstant) ++ List.fill(8)(0)
+    val reference = List(0, ParentConstant) ++ List.fill(8)(0)
     histograms.foreach{ x =>
-      assert(x.getAs[Long]("sum") == parentConstant.toLong)
+      assert(x.getAs[Long]("sum") == ParentConstant.toLong)
       assert(x.getList[Int](x.fieldIndex("values")).toList == reference.toList)
     }
    }
@@ -564,9 +568,9 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     val histograms = fixture.optinRow.getList[Row](fixture.optinRow.fieldIndex("mock_optout"))
     assert(histograms.length == fixture.payloads.length)
 
-    val reference = List(0, parentConstant) ++ List.fill(8)(0)
+    val reference = List(0, ParentConstant) ++ List.fill(8)(0)
     histograms.foreach{ x =>
-      assert(x.getAs[Long]("sum") == parentConstant.toLong)
+      assert(x.getAs[Long]("sum") == ParentConstant.toLong)
       assert(x.getList[Int](x.fieldIndex("values")).toList == reference.toList)
     }
    }
@@ -575,19 +579,19 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     val histograms = fixture.optoutRow.getList[Row](fixture.optoutRow.fieldIndex("mock_optout_content"))
     assert(histograms.length == fixture.payloads.length)
 
-    val reference = List(0, contentConstant) ++ List.fill(8)(0)
+    val reference = List(0, ContentConstant) ++ List.fill(8)(0)
     histograms.foreach{ x =>
-      assert(x.getAs[Long]("sum") == contentConstant.toLong)
+      assert(x.getAs[Long]("sum") == ContentConstant.toLong)
       assert(x.getList[Int](x.fieldIndex("values")).toList == reference.toList)
     }
   }
 
   "ClientIterator" should "not trim histories of size < 1000" in {
     val template = ("foo", Map("client" -> "foo"))
-    val history = List.fill(parentConstant)(template)
+    val history = List.fill(ParentConstant)(template)
     val split_history = new ClientIterator(history.iterator).toList
     assert(split_history.length == 1)
-    split_history(0).length === parentConstant
+    split_history(0).length === ParentConstant
   }
 
   it should "not trim histories of size 1000" in {
@@ -614,7 +618,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       // The first payload in the fixture is missing the scalars section. The scalars
       // must contain null for it.
       Option(x.getAs[Long]("value")) match {
-        case Some(value) => assert(value == parentConstant)
+        case Some(value) => assert(value == ParentConstant)
         case None => assert(index == 0)
       }
     }
@@ -640,7 +644,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       // The first payload in the fixture is missing the scalars section. The scalars
       // must contain null for it.
       Option(x.getAs[String]("value")) match {
-        case Some(value) => assert(value == parentConstant.toString)
+        case Some(value) => assert(value == ParentConstant.toString)
         case None => assert(index == 0)
       }
     }
@@ -651,9 +655,9 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       fixture.optoutRow.getMap[String, WrappedArray[Row]](fixture.optoutRow.fieldIndex("scalar_parent_mock_keyed_scalar_uint"))
     assert(entries.size == 2)
     assert(entries("a_key").size == fixture.payloads.length)
-    entries("a_key").foreach(x => assert(x.getAs[Long]("value") == parentConstant))
+    entries("a_key").foreach(x => assert(x.getAs[Long]("value") == ParentConstant))
     assert(entries("second_key").size == fixture.payloads.length)
-    entries("second_key").foreach(x => assert(x.getAs[Long]("value") == parentConstant))
+    entries("second_key").foreach(x => assert(x.getAs[Long]("value") == ParentConstant))
   }
 
   "Keyed boolean scalars" must "be converted correctly" in {
@@ -671,9 +675,9 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       fixture.optoutRow.getMap[String, WrappedArray[Row]](fixture.optoutRow.fieldIndex("scalar_parent_mock_keyed_scalar_string"))
     assert(entries.size == 2)
     assert(entries("fizz").size == fixture.payloads.length)
-    entries("fizz").foreach(x => assert(x.getAs[String]("value") == parentConstant.toString))
+    entries("fizz").foreach(x => assert(x.getAs[String]("value") == ParentConstant.toString))
     assert(entries("other").size == fixture.payloads.length)
-    entries("other").foreach(x => assert(x.getAs[String]("value") == parentConstant.toString))
+    entries("other").foreach(x => assert(x.getAs[String]("value") == ParentConstant.toString))
   }
 
   "Test scalars" must "not be added to the dataset" in {
@@ -695,7 +699,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       // The first payload in the fixture is missing the scalars section. The scalars
       // must contain null for it.
       Option(x.getAs[Long]("value")) match {
-        case Some(value) => assert(value == parentConstant)
+        case Some(value) => assert(value == ParentConstant)
         case None => assert(index == 0)
       }
     }
@@ -708,7 +712,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       // The first payload in the fixture is missing the scalars section. The scalars
       // must contain null for it.
       Option(x.getAs[Long]("value")) match {
-        case Some(value) => assert(value == parentConstant)
+        case Some(value) => assert(value == ParentConstant)
         case None => assert(index == 0)
       }
     }
@@ -721,9 +725,55 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       // The first payload in the fixture is missing the scalars section. The scalars
       // must contain null for it.
       Option(x.getAs[Long]("value")) match {
-        case Some(value) => assert(value == parentConstant)
+        case Some(value) => assert(value == ParentConstant)
         case None => assert(index == 0)
       }
     }
+  }
+
+  "Content process scalars" must "be added to opt-out dataset" in {
+    val scalars = fixture.optoutRow.getList[Row](fixture.optoutRow.fieldIndex("scalar_content_mock_uint_optout"))
+    assert(scalars.length == fixture.payloads.length)
+    scalars.zipWithIndex.foreach { case (x, index) =>
+      // The first payload in the fixture is missing the scalars section. The scalars
+      // must contain null for it.
+      Option(x.getAs[Long]("value")) match {
+        case Some(value) => assert(value == ContentConstant)
+        case None => assert(index == 0)
+      }
+    }
+  }
+
+  "GPU process scalars" must "be added to opt-out dataset" in {
+    val scalars = fixture.optoutRow.getList[Row](fixture.optoutRow.fieldIndex("scalar_gpu_mock_uint_optout"))
+    assert(scalars.length == fixture.payloads.length)
+    scalars.zipWithIndex.foreach { case (x, index) =>
+      // The first payload in the fixture is missing the scalars section. The scalars
+      // must contain null for it.
+      Option(x.getAs[Long]("value")) match {
+        case Some(value) => assert(value == GpuConstant)
+        case None => assert(index == 0)
+      }
+    }
+  }
+
+  "Content process keyed scalars" must "be added to opt-out dataset" in {
+    val entries =
+      fixture.optoutRow.getMap[String, WrappedArray[Row]](fixture.optoutRow.fieldIndex("scalar_content_mock_keyed_scalar_uint"))
+    assert(entries.size == 2)
+    assert(entries("a_key").size == fixture.payloads.length)
+    entries("a_key").foreach(x => assert(x.getAs[Long]("value") == ContentConstant))
+    assert(entries("second_key").size == fixture.payloads.length)
+    entries("second_key").foreach(x => assert(x.getAs[Long]("value") == ContentConstant))
+  }
+
+  "GPU process keyed scalars" must "be added to opt-out dataset" in {
+    val entries =
+      fixture.optoutRow.getMap[String, WrappedArray[Row]](fixture.optoutRow.fieldIndex("scalar_gpu_mock_keyed_scalar_uint"))
+    assert(entries.size == 2)
+    assert(entries("a_key").size == fixture.payloads.length)
+    entries("a_key").foreach(x => assert(x.getAs[Long]("value") == GpuConstant))
+    assert(entries("second_key").size == fixture.payloads.length)
+    entries("second_key").foreach(x => assert(x.getAs[Long]("value") == GpuConstant))
   }
 }
