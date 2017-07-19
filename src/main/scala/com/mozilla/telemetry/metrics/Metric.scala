@@ -4,7 +4,8 @@ import com.mozilla.telemetry.utils.MainPing
 
 trait MetricDefinition {
   val keyed: Boolean
-  val processes: List[String]
+  val process: Option[String]
+  val originalName: String
 }
 
 class MetricsClass {

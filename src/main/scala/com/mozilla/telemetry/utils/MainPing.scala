@@ -315,22 +315,20 @@ object MainPing{
     val values = definitions.map{
       case (name, definition) =>
         definition match {
-          case UintScalar(keyed, processes) => (name, keyed, processes, asInt _)
-          case BooleanScalar(keyed, processes) => (name, keyed, processes, asBool _)
-          case StringScalar(keyed, processes) => (name, keyed, processes, asString _)
-        }
-    }.flatMap{
-      case (name, keyed, processes, func) =>
-        processes.map{ p =>
-          keyed match {
-            case true => (p, name, asMap(func) _)
-            case false => (p, name, func)
-          }
+          case _: UintScalar => (name, definition, asInt _)
+          case _: BooleanScalar => (name, definition, asBool _)
+          case _: StringScalar => (name, definition, asString _)
         }
     }.map{
-      case (process, name, applyFunc) =>
-        Try(scalars(process)) match {
-          case Success(j) => applyFunc(j \ name).orNull
+      case (name, definition, func) =>
+        definition.keyed match {
+          case true => (name, definition, asMap(func) _)
+          case false => (name, definition, func)
+        }
+    }.map{
+      case (name, definition, applyFunc) =>
+        Try(scalars(definition.process.get)) match {
+          case Success(j) => applyFunc(j \ definition.originalName).orNull
           case _ => null
         }
     }
@@ -364,30 +362,18 @@ object MainPing{
   def histogramsToRow(histograms: Map[String, JValue], definitions: List[(String, HistogramDefinition)]): Row = {
     implicit val formats = DefaultFormats
 
-    val values = definitions.map{
-      case (name, definition) =>
-        definition match {
-          case LinearHistogram(keyed, _, _, _, processes) => (name, keyed, processes)
-          case ExponentialHistogram(keyed, _, _, _, processes) => (name, keyed, processes)
-          case EnumeratedHistogram(keyed, _, processes) => (name, keyed, processes)
-          case BooleanHistogram(keyed, processes) => (name, keyed, processes)
-          case other =>
-            throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
-        }
-    }.flatMap{
-      case (name, keyed, processes) =>
-        processes.map{ p =>
-          keyed match {
+    Row.fromSeq(
+      definitions.map{
+        case (name, definition) =>
+          definition.keyed match {
             case true =>
-              Try((histograms(p) \ name).extract[Map[String,JValue]].mapValues(extractHistogramMap _).map(identity)) match {
+              Try((histograms(definition.process.get) \ definition.originalName).extract[Map[String,JValue]].mapValues(extractHistogramMap _).map(identity)) match {
                 case Success(keyedHistogram) => keyedHistogram
                 case _ => null
             }
-            case false => extractHistogramMap(histograms(p) \ name)
+            case false => extractHistogramMap(histograms(definition.process.get) \ definition.originalName)
           }
-        }
-    }
-
-    Row.fromSeq(values)
+      }
+    )
   }
 }

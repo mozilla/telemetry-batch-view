@@ -9,14 +9,16 @@ import com.mozilla.telemetry.utils.MainPing
 case class RawHistogram(values: Map[String, Int], sum: Long)
 
 sealed abstract class HistogramDefinition extends MetricDefinition
-case class FlagHistogram(keyed: Boolean, processes: List[String]) extends HistogramDefinition
-case class BooleanHistogram(keyed: Boolean, processes: List[String]) extends HistogramDefinition
-case class CountHistogram(keyed: Boolean, processes: List[String]) extends HistogramDefinition
-case class EnumeratedHistogram(keyed: Boolean, nValues: Int, processes: List[String]) extends HistogramDefinition
-case class LinearHistogram(keyed: Boolean, low: Int, high: Int, nBuckets: Int, processes: List[String]) extends HistogramDefinition
-case class ExponentialHistogram(keyed: Boolean, low: Int, high: Int, nBuckets: Int, processes: List[String]) extends HistogramDefinition
+case class FlagHistogram(keyed: Boolean, originalName: String, process: Option[String] = None) extends HistogramDefinition
+case class BooleanHistogram(keyed: Boolean, originalName: String, process: Option[String] = None) extends HistogramDefinition
+case class CountHistogram(keyed: Boolean, originalName: String, process: Option[String] = None) extends HistogramDefinition
+case class EnumeratedHistogram(keyed: Boolean, originalName: String, nValues: Int, process: Option[String] = None) extends HistogramDefinition
+case class LinearHistogram(keyed: Boolean, originalName: String, low: Int, high: Int, nBuckets: Int, process: Option[String] = None) extends HistogramDefinition
+case class ExponentialHistogram(keyed: Boolean, originalName: String, low: Int, high: Int, nBuckets: Int, process: Option[String] = None) extends HistogramDefinition
 
 class HistogramsClass extends MetricsClass {
+  def HistogramPrefix = "histogram"
+
   private val processTypes = List("content", "gpu")
   private case class HistogramLocation(path: List[String], suffix: String)
   private def generateLocations(histogramKey: String)(processType: String): HistogramLocation = {
@@ -34,11 +36,6 @@ class HistogramsClass extends MetricsClass {
   private val keyedHistogramLocations =
     HistogramLocation(List("payload.keyedHistograms"), "") ::
     processTypes.map(generateLocations("keyedHistograms"))
-
-  private val suffixes =
-    (histogramLocations ++ keyedHistogramLocations)
-    .map( (hl: HistogramLocation) => hl.suffix )
-    .distinct
 
   private def parseHistogramLocation[HistogramFormat : Manifest](
     payload: Map[String, Any],
@@ -73,7 +70,11 @@ class HistogramsClass extends MetricsClass {
   // mock[io.Source] wasn't working with scalamock, so we'll just use the function
   protected val getURL: (String, String) => scala.io.BufferedSource = Source.fromURL
 
-  def definitions(includeOptin: Boolean = false): Map[String, HistogramDefinition] = {
+  def prefixProcessJoiner(name: String, process: String) = s"${HistogramPrefix}_${process}_${name.toLowerCase}"
+
+  def suffixProcessJoiner(name: String, process: String) = (name + ( if(process != "parent") "_" + process else "" )).toUpperCase
+
+  def definitions(includeOptin: Boolean = false, nameJoiner: (String, String) => String = suffixProcessJoiner): Map[String, HistogramDefinition] = {
     implicit val formats = DefaultFormats
 
     val uris = Map("release" -> "https://hg.mozilla.org/releases/mozilla-release/raw-file/tip/toolkit/components/telemetry/Histograms.json",
@@ -151,23 +152,30 @@ class HistogramsClass extends MetricsClass {
           .asInstanceOf[List[String]]
         )
 
-        def addSuffixes(key: String, definition: HistogramDefinition): List[(String, HistogramDefinition)] = {
-            suffixes.map(suffixType => (key + suffixType, definition))
+        def addProcesses(key: String, definition: HistogramDefinition): List[(String, HistogramDefinition)] = {
+          processes.map(process => (nameJoiner(key, process), definition match {
+            case d: FlagHistogram => d.copy(process=Some(process))
+            case d: BooleanHistogram => d.copy(process=Some(process))
+            case d: CountHistogram => d.copy(process=Some(process))
+            case d: EnumeratedHistogram => d.copy(process=Some(process))
+            case d: LinearHistogram => d.copy(process=Some(process))
+            case d: ExponentialHistogram => d.copy(process=Some(process))
+          }))
         }
 
         (kind, nValues, high, nBuckets) match {
           case ("flag", _, _, _) =>
-            Some(addSuffixes(k, FlagHistogram(keyed, processes)))
+            Some(addProcesses(k, FlagHistogram(keyed, k)))
           case ("boolean", _, _ , _) =>
-            Some(addSuffixes(k, BooleanHistogram(keyed, processes)))
+            Some(addProcesses(k, BooleanHistogram(keyed, k)))
           case ("count", _, _, _) =>
-            Some(addSuffixes(k, CountHistogram(keyed, processes)))
+            Some(addProcesses(k, CountHistogram(keyed, k)))
           case ("enumerated", Some(x), _, _) =>
-            Some(addSuffixes(k, EnumeratedHistogram(keyed, x, processes)))
+            Some(addProcesses(k, EnumeratedHistogram(keyed, k, x)))
           case ("linear", _, Some(h), Some(n)) =>
-            Some(addSuffixes(k, LinearHistogram(keyed, low, h, n, processes)))
+            Some(addProcesses(k, LinearHistogram(keyed, k, low, h, n)))
           case ("exponential", _, Some(h), Some(n)) =>
-            Some(addSuffixes(k, ExponentialHistogram(keyed, low, h, n, processes)))
+            Some(addProcesses(k, ExponentialHistogram(keyed, k, low, h, n)))
           case _ =>
             None
         }
