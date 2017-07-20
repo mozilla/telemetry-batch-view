@@ -3,7 +3,6 @@ package com.mozilla.telemetry.experiments.analyzers
 import com.holdenkarau.spark.testing.DatasetSuiteBase
 import com.mozilla.telemetry.metrics.EnumeratedHistogram
 import org.apache.spark.sql.DataFrame
-import com.mozilla.telemetry.utils.MainPing
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.collection.Map

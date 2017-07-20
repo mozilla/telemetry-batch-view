@@ -23,10 +23,10 @@ case class HistogramPoint(pdf: Double, count: Double, label: Option[String])
 case class Statistic(comparison_branch: Option[String],
                      name: String,
                      value: Double,
-                     confidence_low: Double,
-                     confidence_high: Double,
-                     confidence_level: Double,
-                     p_value: Double)
+                     confidence_low: Option[Double] = None,
+                     confidence_high: Option[Double] = None,
+                     confidence_level: Option[Double] = None,
+                     p_value: Option[Double] = None)
 
 case class MetricAnalysis(experiment_id: String,
                           experiment_branch: String,
