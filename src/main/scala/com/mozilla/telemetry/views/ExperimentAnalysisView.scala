@@ -1,9 +1,8 @@
 package com.mozilla.telemetry.views
 
-import com.mozilla.telemetry.experiments.analyzers.{HistogramAnalyzer, ScalarAnalyzer}
+import com.mozilla.telemetry.experiments.analyzers.{ExperimentAnalyzer, HistogramAnalyzer, MetricAnalysis, ScalarAnalyzer}
 import com.mozilla.telemetry.metrics._
-import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.rogach.scallop.ScallopConf
 import org.apache.spark.sql.functions.col
 
@@ -41,6 +40,7 @@ object ExperimentAnalysisView {
     getExperiments(conf, data).foreach{ e: String => 
       val outputLocation = s"${conf.outputLocation()}/experiment_id=$e/date=$date"
       getExperimentMetrics(e, data, conf)
+        .toDF()
         .drop(col("experiment_id"))
         .repartition(1)
         .write.mode("overwrite").parquet(outputLocation)
@@ -84,16 +84,18 @@ object ExperimentAnalysisView {
     }
   }
 
-  def getExperimentMetrics(experiment: String, data: DataFrame, conf: Conf): DataFrame = {
+  def getExperimentMetrics(experiment: String, data: DataFrame, conf: Conf): Dataset[MetricAnalysis] = {
     val metricList = getMetrics(conf, data)
     val experimentData = data.where(col("experiment_id") === experiment)
 
-    metricList.map {
+    val metrics = metricList.map {
       case (name: String, hd: HistogramDefinition) =>
         new HistogramAnalyzer(name, hd, experimentData).analyze()
       case (name: String, sd: ScalarDefinition) =>
         ScalarAnalyzer.getAnalyzer(name, sd, experimentData).analyze()
       case _ => throw new UnsupportedOperationException("Unsupported metric definition type")
-    }.reduce(_.union(_)).toDF()
+    }
+    val metadata = ExperimentAnalyzer.getExperimentMetadata(data)
+    (metadata :: metrics).reduce(_.union(_))
   }
 }
