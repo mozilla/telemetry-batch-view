@@ -10,6 +10,8 @@ object ExperimentAnalysisView {
   def schemaVersion: String = "v1"
   def jobName: String = "experiment_analysis"
 
+  private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getSimpleName)
+
   // Configuration for command line arguments
   class Conf(args: Array[String]) extends ScallopConf(args) {
     // TODO: change to s3 bucket/keys
@@ -29,21 +31,29 @@ object ExperimentAnalysisView {
       .appName(jobName)
       .getOrCreate()
 
-    spark.sparkContext.setLogLevel("ERROR")
+    spark.sparkContext.setLogLevel("INFO")
 
     val hadoopConf = spark.sparkContext.hadoopConfiguration
     hadoopConf.set("parquet.enable.summary-metadata", "false")
 
     val data = spark.read.parquet(conf.inputLocation())
     val date = getDate(conf)
+    logger.info("=======================================================================================")
+    logger.info(s"Starting $jobName for date $date")
 
-    getExperiments(conf, data).foreach{ e: String => 
+    val experiments = getExperiments(conf, data)
+
+    logger.info(s"List of experiments to process for $date is: $experiments")
+
+    experiments.foreach{ e: String =>
+      logger.info(s"Aggregating pings for experiment $e")
       val outputLocation = s"${conf.outputLocation()}/experiment_id=$e/date=$date"
       getExperimentMetrics(e, data, conf)
         .toDF()
         .drop(col("experiment_id"))
         .repartition(1)
         .write.mode("overwrite").parquet(outputLocation)
+      logger.info(s"Wrote aggregates to $outputLocation")
     }
 
     spark.stop()
@@ -89,11 +99,15 @@ object ExperimentAnalysisView {
     val experimentData = data.where(col("experiment_id") === experiment)
 
     val metrics = metricList.map {
-      case (name: String, hd: HistogramDefinition) =>
-        new HistogramAnalyzer(name, hd, experimentData).analyze()
-      case (name: String, sd: ScalarDefinition) =>
-        ScalarAnalyzer.getAnalyzer(name, sd, experimentData).analyze()
-      case _ => throw new UnsupportedOperationException("Unsupported metric definition type")
+      case (name: String, md: MetricDefinition) =>
+        logger.info(s"Aggregating metric $name")
+        md match {
+          case hd: HistogramDefinition =>
+            new HistogramAnalyzer(name, hd, experimentData).analyze()
+          case sd: ScalarDefinition =>
+            ScalarAnalyzer.getAnalyzer(name, sd, experimentData).analyze()
+          case _ => throw new UnsupportedOperationException("Unsupported metric definition type")
+        }
     }
     val metadata = ExperimentAnalyzer.getExperimentMetadata(data)
     (metadata :: metrics).reduce(_.union(_))
