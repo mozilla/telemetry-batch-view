@@ -100,7 +100,6 @@ object ExperimentAnalysisView {
 
     val metrics = metricList.map {
       case (name: String, md: MetricDefinition) =>
-        logger.info(s"Aggregating metric $name")
         md match {
           case hd: HistogramDefinition =>
             new HistogramAnalyzer(name, hd, experimentData).analyze()
