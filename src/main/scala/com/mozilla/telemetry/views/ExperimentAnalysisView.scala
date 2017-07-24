@@ -108,7 +108,7 @@ object ExperimentAnalysisView {
           case _ => throw new UnsupportedOperationException("Unsupported metric definition type")
         }
     }
-    val metadata = ExperimentAnalyzer.getExperimentMetadata(data)
+    val metadata = ExperimentAnalyzer.getExperimentMetadata(experimentData)
     (metadata :: metrics).reduce(_.union(_))
   }
 }

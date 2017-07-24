@@ -64,9 +64,12 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
     val conf = new ExperimentAnalysisView.Conf(args.toArray)
 
     val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, conf).collect()
-    val metadata = res.filter(_.metric_name == "Experiment Metadata").head.statistics.get
-    metadata.filter(_.name == "Total Pings").head.value should be (1.0)
-    metadata.filter(_.name == "Total Clients").head.value should be (1.0)
+    val metadata = res.filter(_.metric_name == "Experiment Metadata")
+    metadata.length should be (1)
+
+    val first = metadata.head.statistics.get
+    first.filter(_.name == "Total Pings").head.value should be (1.0)
+    first.filter(_.name == "Total Clients").head.value should be (1.0)
   }
 
   override def afterAll() {
