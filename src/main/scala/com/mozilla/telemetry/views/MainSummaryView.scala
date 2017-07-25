@@ -8,8 +8,8 @@ import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._
 import com.mozilla.telemetry.heka.{Dataset, Message}
-import com.mozilla.telemetry.utils.{Addon, Attribution, Experiment, MainPing, S3Store, Events}
-import org.json4s.{DefaultFormats, JValue}
+import com.mozilla.telemetry.utils.{Addon, Attribution, Events, Experiment, MainPing, S3Store}
+import org.json4s.{DefaultFormats, Extraction, JValue}
 import com.mozilla.telemetry.metrics._
 
 import scala.util.{Success, Try}
@@ -648,8 +648,13 @@ object MainSummaryView {
         MainPing.enumHistogramSumCounts(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.tail),
         MainPing.enumHistogramToMap(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys),
 
+        // bug 1382002 - use scalar version when available.
+        Try(MainPing.getScalarByName(scalars, scalarDefinitions, "scalar_parent_browser_engagement_active_ticks")) match {
+          case Success(x: Integer) => x
+          case _ => asInt (simpleMeasures \ "activeTicks")
+        },
+
         // bug 1353114 - payload.simpleMeasurements.*
-        asInt(simpleMeasures \ "activeTicks"),
         asInt(simpleMeasures \ "main"),
         asInt(simpleMeasures \ "firstPaint"),
         asInt(simpleMeasures \ "sessionRestored"),
