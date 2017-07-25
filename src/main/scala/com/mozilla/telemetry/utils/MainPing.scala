@@ -311,8 +311,20 @@ object MainPing{
       Some(keys)
   }
 
-  def scalarsToRow(scalars: Map[String, JValue], definitions: List[(String, ScalarDefinition)]): Row = {
-    val values = definitions.map{
+  def getScalarByName(scalars: Map[String, JValue], definitions: List[(String, ScalarDefinition)],
+                      scalarName: String): Any = {
+    val filteredDefs = definitions.filter(_._1 == scalarName)
+    val filtered = scalarsToList(scalars, filteredDefs)
+
+    filtered.length match {
+      case 1 => filtered.head
+      case 0 => throw new IllegalArgumentException("A scalar by that name does not exist.")
+      case _ => throw new IllegalArgumentException("Multiple scalars by that name were found.")
+    }
+  }
+
+  def scalarsToList(scalars: Map[String, JValue], definitions: List[(String, ScalarDefinition)]): List[Any] = {
+    definitions.map{
       case (name, definition) =>
         definition match {
           case _: UintScalar => (name, definition, asInt _)
@@ -332,8 +344,10 @@ object MainPing{
           case _ => null
         }
     }
+  }
 
-    Row.fromSeq(values)
+  def scalarsToRow(scalars: Map[String, JValue], definitions: List[(String, ScalarDefinition)]): Row = {
+    Row.fromSeq(scalarsToList(scalars, definitions))
   }
 
   // Check if a json value contains a number greater than zero.

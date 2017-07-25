@@ -616,7 +616,7 @@ class MainPingTest extends FlatSpec with Matchers {
         |  "mock.uint.optout": 42
         |}""".stripMargin)
 
-    val expected = makeExpected(List(
+    val expectedRow = makeExpected(List(
         null,
         Map("a" -> true, "b" -> false),
         Map("a" -> "hello", "b" -> "world"),
@@ -628,7 +628,7 @@ class MainPingTest extends FlatSpec with Matchers {
         42
     ))
 
-    MainPing.scalarsToRow(makeScalarsMap(jAllScalars), scalarDefs) should be (expected)
+    MainPing.scalarsToRow(makeScalarsMap(jAllScalars), scalarDefs) should be (expectedRow)
 
     // Has scalars with weird data
     val jWeirdScalars = parse(
@@ -643,6 +643,87 @@ class MainPingTest extends FlatSpec with Matchers {
     // Has a scalars section containing unexpected data.
     val jBogusScalars = parse("""[10, "ten"]""")
     MainPing.scalarsToRow(makeScalarsMap(jBogusScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
+  }
+
+  "Scalars" can "be accessed by name" in {
+    def makeScalarsMap(v: JValue): Map[String, JValue] = {
+      MainPing.ProcessTypes.map{ p =>
+        p -> v
+      } toMap
+    }
+
+    // Doesn't have scalars
+    val jNoScalars = parse("""{}""")
+    // Expect null where scalars exist in definition but not in the ping.
+      MainPing.getScalarByName(makeScalarsMap(jNoScalars), scalarDefs, "scalar_content_mock_scalar_bool") should === (null)
+      MainPing.getScalarByName(makeScalarsMap(jNoScalars), scalarDefs, "scalar_content_mock_scalar_string") should === (null)
+      MainPing.getScalarByName(makeScalarsMap(jNoScalars), scalarDefs, "scalar_content_mock_scalar_uint") should === (null)
+      MainPing.getScalarByName(makeScalarsMap(jNoScalars), scalarDefs, "scalar_content_mock_uint_optin") should === (null)
+      MainPing.getScalarByName(makeScalarsMap(jNoScalars), scalarDefs, "scalar_content_mock_uint_optout") should === (null)
+
+    // Has scalars, but none of the expected ones
+    val jUnexpectedScalars = parse(
+      """{
+        |  "example1": 249,
+        |  "example2": 2
+        |}""".stripMargin)
+    // Expect null where the scalars in the definition don't exist in the "ping",
+    // and expect exceptions where the scalars in the ping don't exist in the definition.
+    MainPing.getScalarByName(makeScalarsMap(jUnexpectedScalars), scalarDefs, "scalar_content_mock_scalar_bool") should === (null)
+    MainPing.getScalarByName(makeScalarsMap(jUnexpectedScalars), scalarDefs, "scalar_content_mock_scalar_string") should === (null)
+    MainPing.getScalarByName(makeScalarsMap(jUnexpectedScalars), scalarDefs, "scalar_content_mock_scalar_uint") should === (null)
+    MainPing.getScalarByName(makeScalarsMap(jUnexpectedScalars), scalarDefs, "scalar_content_mock_uint_optin") should === (null)
+    MainPing.getScalarByName(makeScalarsMap(jUnexpectedScalars), scalarDefs, "scalar_content_mock_uint_optout") should === (null)
+    an [IllegalArgumentException] should be thrownBy
+      MainPing.getScalarByName(makeScalarsMap(jUnexpectedScalars), scalarDefs, "example1")
+    an [IllegalArgumentException] should be thrownBy
+      MainPing.getScalarByName(makeScalarsMap(jUnexpectedScalars), scalarDefs, "example2")
+
+    // Has scalars, and some of the expected ones
+    val jSomeExpectedScalars = parse(
+      """{
+        |  "mock.scalar.uint": 2,
+        |  "mock.uint.optin": 97
+        |}""".stripMargin)
+    // Expect null where the scalar doesn't exist in the ping.
+    MainPing.getScalarByName(makeScalarsMap(jSomeExpectedScalars), scalarDefs, "scalar_content_mock_scalar_bool") should === (null)
+    MainPing.getScalarByName(makeScalarsMap(jSomeExpectedScalars), scalarDefs, "scalar_content_mock_scalar_string") should === (null)
+    MainPing.getScalarByName(makeScalarsMap(jSomeExpectedScalars), scalarDefs, "scalar_content_mock_scalar_uint") should be (2)
+    MainPing.getScalarByName(makeScalarsMap(jSomeExpectedScalars), scalarDefs, "scalar_content_mock_uint_optin") should be (97)
+    MainPing.getScalarByName(makeScalarsMap(jSomeExpectedScalars), scalarDefs, "scalar_content_mock_uint_optout") should === (null)
+
+    // Has scalars, all of the expected ones
+    val jAllScalars = parse(
+      """{
+        |  "mock.scalar.bool": false,
+        |  "mock.scalar.string": "hello world",
+        |  "mock.scalar.uint": 93,
+        |  "mock.uint.optin": 1,
+        |  "mock.uint.optout": 42
+        |}""".stripMargin)
+    MainPing.getScalarByName(makeScalarsMap(jAllScalars), scalarDefs, "scalar_content_mock_scalar_bool")  should === (false)
+    MainPing.getScalarByName(makeScalarsMap(jAllScalars), scalarDefs, "scalar_content_mock_scalar_string") should be ("hello world")
+    MainPing.getScalarByName(makeScalarsMap(jAllScalars), scalarDefs, "scalar_content_mock_scalar_uint") should be (93)
+    MainPing.getScalarByName(makeScalarsMap(jAllScalars), scalarDefs, "scalar_content_mock_uint_optin") should be (1)
+    MainPing.getScalarByName(makeScalarsMap(jAllScalars), scalarDefs, "scalar_content_mock_uint_optout") should be (42)
+    //Expect exception when scalarDefs has duplicates.
+    an [IllegalArgumentException] should be thrownBy
+      MainPing.getScalarByName(makeScalarsMap(jAllScalars), scalarDefs ++ scalarDefs, "scalar_parent_mock_scalar_uint")
+    // Expect an exception because the scalar does not exist in the definition.
+    an [IllegalArgumentException] should be thrownBy
+      MainPing.getScalarByName(makeScalarsMap(jAllScalars), scalarDefs, "scalar_content_mock_random_scalar")
+
+    // Has scalars with weird data
+    val jWeirdScalars = parse(
+      """{
+        |  "mock.scalar.uint": false,
+        |  "mock.uint.optin": [9, 7],
+        |  "mock.uint.optout": "hello, world"
+        |}""".stripMargin)
+    //Expect null where scalar is present but value does not comply with definition.
+    MainPing.getScalarByName(makeScalarsMap(jWeirdScalars), scalarDefs, "scalar_content_mock_scalar_uint") should === (null)
+    MainPing.getScalarByName(makeScalarsMap(jWeirdScalars), scalarDefs, "scalar_content_mock_uint_optin") should === (null)
+    MainPing.getScalarByName(makeScalarsMap(jWeirdScalars), scalarDefs, "scalar_content_mock_uint_optout") should === (null)
   }
 
   "histogram to threshold count" can "extract correct counts" in {

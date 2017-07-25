@@ -1,17 +1,16 @@
 package com.mozilla.telemetry
 
 import com.mozilla.telemetry.heka.{File, RichMessage}
-import com.mozilla.telemetry.utils.{MainPing, Events}
-import com.mozilla.telemetry.views.MainSummaryView
 import com.mozilla.telemetry.metrics._
 import com.mozilla.telemetry.utils.{Events, MainPing}
-import com.mozilla.telemetry.views.{MainSummaryView}
+import com.mozilla.telemetry.views.MainSummaryView
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.{SparkConf, SparkContext}
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{FlatSpec, Matchers}
+
 import scala.io.Source
 
 class MainSummaryViewTest extends FlatSpec with Matchers{
@@ -1484,5 +1483,75 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       actual.get(f) should be (Some(v))
     }
     actual should be (expected)
+  }
+
+  "Scalar implementations of Simple Measurements activeTicks" can "be properly selected" in {
+    val scalarUrlMockActiveTicks = (a: String, b: String) => Source.fromFile("src/test/resources/ScalarsActiveTicks.yaml")
+    val scalarsActiveTicks = new ScalarsClass {
+      override protected val getURL = scalarUrlMockActiveTicks
+    }
+    val activeTicksDef = scalarsActiveTicks.definitions(true).toList
+
+    val messageBothPresent = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.simpleMeasurements" -> """{"activeTicks": 111}""",
+        "submission" ->
+          """{
+          "payload": {
+            "processes": {
+              "parent": {
+                "scalars": {
+                  "browser.engagement.active_ticks": 999
+                  }
+                }
+              }
+            }
+          }
+        }"""),
+      None);
+
+    val summary = MainSummaryView.messageToRow(messageBothPresent, activeTicksDef, histogramDefs)
+    val selectedData =
+      applySchema(summary.get, MainSummaryView.buildSchema(activeTicksDef, histogramDefs)).getAs[Int]("active_ticks")
+
+    selectedData should be (999)
+  }
+
+  "Simple Measurements activeTicks" can "be properly selected in the absence of a scalar value" in {
+    val scalarUrlMockActiveTicks = (a: String, b: String) => Source.fromFile("src/test/resources/ScalarsActiveTicks.yaml")
+    val scalarsActiveTicks = new ScalarsClass {
+      override protected val getURL = scalarUrlMockActiveTicks
+    }
+    val activeTicksDef = scalarsActiveTicks.definitions(true).toList
+
+    val messageSMPresent = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.simpleMeasurements" -> """{"activeTicks": 111}""",
+        "submission" ->
+          """{
+          "payload": {
+            "processes": {
+              "parent": {
+                "scalars": {
+                  "browser.engagement.active_ticks": null
+                  }
+                }
+              }
+            }
+          }
+        }"""),
+      None);
+
+    val summary = MainSummaryView.messageToRow(messageSMPresent, activeTicksDef, histogramDefs)
+    val selectedData =
+      applySchema(summary.get, MainSummaryView.buildSchema(activeTicksDef, histogramDefs)).getAs[Int]("active_ticks")
+
+    selectedData should be (111)
   }
 }
