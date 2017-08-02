@@ -2,6 +2,7 @@ package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.experiments.analyzers.{ExperimentAnalyzer, HistogramAnalyzer, MetricAnalysis, ScalarAnalyzer}
 import com.mozilla.telemetry.metrics._
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.rogach.scallop.ScallopConf
 import org.apache.spark.sql.functions.col
@@ -25,16 +26,9 @@ object ExperimentAnalysisView {
 
   def main(args: Array[String]) {
     val conf = new Conf(args)
-    val spark = SparkSession
-      .builder()
-      .master("local[*]")
-      .appName(jobName)
-      .getOrCreate()
+    val spark = getOrCreateSparkSession(jobName)
 
     spark.sparkContext.setLogLevel("INFO")
-
-    val hadoopConf = spark.sparkContext.hadoopConfiguration
-    hadoopConf.set("parquet.enable.summary-metadata", "false")
 
     val data = spark.read.parquet(conf.inputLocation())
     val date = getDate(conf)

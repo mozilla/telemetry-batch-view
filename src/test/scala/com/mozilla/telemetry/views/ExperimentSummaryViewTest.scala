@@ -1,6 +1,7 @@
 package com.mozilla.telemetry
 
 import com.mozilla.telemetry.views.ExperimentSummaryView
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.col
 import org.scalatest.{FlatSpec, Matchers}
@@ -14,7 +15,7 @@ case class ExperimentMainSummary(document_id: String, client_id: String,
 
 class ExperimentSummaryViewTest extends FlatSpec with Matchers{
   "Experiment records" can "be exploded from MainSummary" in {
-    val spark = ExperimentSummaryView.getSparkSession()
+    val spark = getOrCreateSparkSession(ExperimentSummaryView.jobName)
     spark.sparkContext.setLogLevel("WARN")
 
     import spark.implicits._
