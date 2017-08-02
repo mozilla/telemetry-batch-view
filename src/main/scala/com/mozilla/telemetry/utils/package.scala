@@ -1,4 +1,8 @@
 package com.mozilla.telemetry
+
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.SparkSession
+
 package object utils{
   import java.rmi.dgc.VMID
   import org.apache.hadoop.fs.Path
@@ -47,6 +51,20 @@ package object utils{
     }
 
     output.toString()
+  }
+
+  def getOrCreateSparkSession(jobName: String): SparkSession = {
+    val conf = new SparkConf().setAppName(jobName)
+    conf.setMaster(conf.get("spark.master", "local[*]"))
+
+    val spark = SparkSession
+      .builder()
+      .config(conf)
+      .getOrCreate()
+
+    val hadoopConf = spark.sparkContext.hadoopConfiguration
+    hadoopConf.set("parquet.enable.summary-metadata", "false")
+    spark
   }
 
   def normalizeISOTimestamp(timestamp: String) = {

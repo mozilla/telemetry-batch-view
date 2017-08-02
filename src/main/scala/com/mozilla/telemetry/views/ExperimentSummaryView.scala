@@ -1,6 +1,6 @@
 package com.mozilla.telemetry.views
 
-import com.mozilla.telemetry.utils.S3Store
+import com.mozilla.telemetry.utils.{S3Store, getOrCreateSparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.SparkSession
 import org.joda.time.{DateTime, Days, format}
@@ -47,7 +47,11 @@ object ExperimentSummaryView {
       case _ => DateTime.now.minusDays(1)
     }
 
-    val spark = getSparkSession()
+    val spark = getOrCreateSparkSession(jobName)
+
+    val parquetSize = (512 * 1024 * 1024).toLong
+    spark.conf.set("parquet.block.size", parquetSize)
+    spark.conf.set("dfs.blocksize", parquetSize)
 
     implicit val sc = spark.sparkContext
 
@@ -74,19 +78,6 @@ object ExperimentSummaryView {
       logger.info("=======================================================================================")
     }
     sc.stop()
-  }
-
-  def getSparkSession(): SparkSession = {
-    val spark = SparkSession
-      .builder()
-      .appName(jobName)
-      .master("local[*]")
-      .getOrCreate()
-
-    val parquetSize = (512 * 1024 * 1024).toLong
-    spark.conf.set("parquet.block.size", parquetSize)
-    spark.conf.set("dfs.blocksize", parquetSize)
-    return spark
   }
 
   def deletePreviousOutput(bucket: String, prefix: String, date: String, experiment: String): Unit = {
