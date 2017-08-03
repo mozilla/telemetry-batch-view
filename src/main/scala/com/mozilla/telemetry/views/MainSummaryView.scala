@@ -20,6 +20,8 @@ object MainSummaryView {
   def jobName: String = "main_summary"
 
   val histogramsWhitelist =
+    "A11Y_INSTANTIATED_FLAG" ::
+    "A11Y_CONSUMERS" ::
     "CERT_VALIDATION_SUCCESS_BY_CA" ::
     "CYCLE_COLLECTOR_MAX_PAUSE" ::
     "GC_MAX_PAUSE_MS" ::
@@ -817,6 +819,7 @@ object MainSummaryView {
       case _: ExponentialHistogram => true
       case _: EnumeratedHistogram => true
       case _: BooleanHistogram => true
+      case _: FlagHistogram => true // FIXME: hack to allow `A11Y_INSTANTIATED_FLAG` through until we can update it
       case _ => false
     }).filter(
       entry => !useWhitelist || histogramsWhitelist.contains(entry._2.originalName)
