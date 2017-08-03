@@ -976,6 +976,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           case ExponentialHistogram(keyed, _, _, _, _, _) => (name, keyed)
           case EnumeratedHistogram(keyed, _, _, _) => (name, keyed)
           case BooleanHistogram(keyed, _, _) => (name, keyed)
+          case FlagHistogram(keyed, _, _) => (name, keyed)
           case other =>
             throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
         }
@@ -990,6 +991,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           case ExponentialHistogram(keyed, _, _, _, _, _) => (name, keyed)
           case EnumeratedHistogram(keyed, _, _, _) => (name, keyed)
           case BooleanHistogram(keyed, _, _) => (name, keyed)
+          case FlagHistogram(keyed, _, _) => (name, keyed)
           case other =>
             throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
         }
