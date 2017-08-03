@@ -24,33 +24,41 @@ object ExperimentAnalysisView {
     verify()
   }
 
+  def getSpark: SparkSession = {
+    val spark = getOrCreateSparkSession(jobName)
+    spark.sparkContext.setLogLevel("INFO")
+    spark
+  }
+
   def main(args: Array[String]) {
     val conf = new Conf(args)
-    val spark = getOrCreateSparkSession(jobName)
+    val sparkSession = getSpark
 
-    spark.sparkContext.setLogLevel("INFO")
-
-    val data = spark.read.parquet(conf.inputLocation())
+    val experimentData = sparkSession.read.parquet(conf.inputLocation())
     val date = getDate(conf)
     logger.info("=======================================================================================")
     logger.info(s"Starting $jobName for date $date")
 
-    val experiments = getExperiments(conf, data)
+    val experiments = getExperiments(conf, experimentData)
+    sparkSession.stop()
 
     logger.info(s"List of experiments to process for $date is: $experiments")
 
     experiments.foreach{ e: String =>
       logger.info(s"Aggregating pings for experiment $e")
+
+      val spark = getSpark
+      val data = spark.read.parquet(conf.inputLocation())
       val outputLocation = s"${conf.outputLocation()}/experiment_id=$e/date=$date"
       getExperimentMetrics(e, data, conf)
         .toDF()
         .drop(col("experiment_id"))
         .repartition(1)
         .write.mode("overwrite").parquet(outputLocation)
-      logger.info(s"Wrote aggregates to $outputLocation")
-    }
 
-    spark.stop()
+      logger.info(s"Wrote aggregates to $outputLocation")
+      spark.stop()
+    }
   }
 
   def getDate(conf: Conf): String =  {
