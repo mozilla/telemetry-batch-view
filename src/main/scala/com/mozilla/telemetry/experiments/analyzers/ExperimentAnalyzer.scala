@@ -1,7 +1,7 @@
 package com.mozilla.telemetry.experiments.analyzers
 
 import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.functions.{col, lit, count, approxCountDistinct}
+import org.apache.spark.sql.functions.{col, lit, count, countDistinct}
 
 
 case class ExperimentMetadata(experiment_id: String,
@@ -21,7 +21,7 @@ object ExperimentAnalyzer {
         lit("All").as("subgroup"),
         col("client_id"))
       .groupBy(col("experiment_id"), col("branch"), col("subgroup"))
-      .agg(approxCountDistinct("client_id", 0.01).alias("client_count"), count("*").alias("ping_count"))
+      .agg(countDistinct("client_id").alias("client_count"), count("*").alias("ping_count"))
       .as[ExperimentMetadata]
 
     counts.map { r =>
