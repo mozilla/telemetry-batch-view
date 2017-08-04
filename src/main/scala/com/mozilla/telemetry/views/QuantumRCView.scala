@@ -23,7 +23,7 @@ object QuantumRCView {
 
   val TotalCountColName = "total_clients"
   val DatasetPrefix = "quantum_rc"
-  val Version = "v1"
+  val Version = "v2"
   val NumFiles = 2
   val WriteMode = "overwrite"
   val WeekPartitionName = "week"
@@ -71,8 +71,6 @@ object QuantumRCView {
     "os"                 ::
     "env_build_arch"     ::
     "quantum_ready"      ::
-    "experiment_id"      ::
-    "experiment_branch"  ::
     Nil
 
   private val counts = Map(
@@ -93,17 +91,9 @@ object QuantumRCView {
   def aggregate(df: DataFrame): DataFrame = {
     import df.sparkSession.implicits._
 
-    // these are SHIELD experiments, not telemetry experiments
-    val withExperiments = df
+    val withoutExperiments = df
       .where("client_id IS NOT NULL")
-      .select(col("*"),
-        explode(
-          when($"experiments".isNotNull && (size($"experiments") !== 0),
-            $"experiments"
-          ).otherwise(
-            map(lit("none").cast("string"), lit(null).cast("string"))
-          )
-      ).as(Array("experiment_id", "experiment_branch")))
+      .drop($"experiments")
 
     val selection = s"$HllCreate(client_id, 12) as hll" ::
       dimensions ++
@@ -111,9 +101,9 @@ object QuantumRCView {
       sums.map{ case(k, v) => s"$v AS $k" }
 
     val sumCols = sums.keys.map(k => sum(k).as(k)).toList
-    val countCols = counts.keys.map(k => FilteredHllMerge($"hll", col(k)).as(k)).toList 
+    val countCols = counts.keys.map(k => FilteredHllMerge($"hll", col(k)).as(k)).toList
 
-    withExperiments
+    withoutExperiments
       .selectExpr(selection: _*)
       .groupBy(dimensions.head, dimensions.tail: _*)
       .agg(HllMerge($"hll").as(TotalCountColName), sumCols ++ countCols: _*)
