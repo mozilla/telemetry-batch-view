@@ -499,10 +499,6 @@ object MainSummaryView {
           case JString(x) => x
           case _ => null
         },
-        fields.getOrElse("submissionDate", None) match {
-          case x: String => x
-          case _ => return None // required
-        },
         weaveConfigured.orNull,
         weaveDesktop.orNull,
         weaveMobile.orNull,
@@ -874,7 +870,6 @@ object MainSummaryView {
       StructField("profile_subsession_counter", IntegerType, nullable = true), // info/profileSubsessionCounter
       StructField("creation_date", StringType, nullable = true), // creationDate
       StructField("distribution_id", StringType, nullable = true), // environment/partner/distributionId
-      StructField("submission_date", StringType, nullable = false), // YYYYMMDD version of 'timestamp'
       // See bug 1232050
       StructField("sync_configured", BooleanType, nullable = true), // WEAVE_CONFIGURED
       StructField("sync_count_desktop", IntegerType, nullable = true), // WEAVE_DEVICE_COUNT_DESKTOP
