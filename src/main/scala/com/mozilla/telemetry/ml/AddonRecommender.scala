@@ -201,7 +201,10 @@ object AddonRecommender {
 
     val serializedMapping = pretty(render(addonMapping.map {
       case (k, addonId) =>
-        (k.toString, Map("name" -> AMODatabase.getAddonNameById(addonId).getOrElse("Unknown"), "id" -> addonId).toMap)
+        (k.toString,
+          Map[String, JValue]("name" -> JString(AMODatabase.getAddonNameById(addonId).getOrElse("Unknown")),
+                              "id" -> addonId,
+                              "isWebextension" -> JBool(AMODatabase.isWebextension(addonId).getOrElse(false))).toMap)
     }))
     val addonMappingPath = Paths.get(s"$localOutputDir/addon_mapping.json")
     val privateS3prefix = s"telemetry-ml/addon_recommender/${runDate}"
@@ -220,6 +223,11 @@ object AddonRecommender {
     Files.write(itemMatrixPath, serializedItemFactors.getBytes(StandardCharsets.UTF_8))
     S3Store.uploadFile(itemMatrixPath.toFile, privateBucket, privateS3prefix, itemMatrixPath.getFileName.toString)
     S3Store.uploadFile(itemMatrixPath.toFile, publicBucket, publicS3prefix, itemMatrixPath.getFileName.toString)
+
+    // Upload the generated AMO cache to a S3 bucket.
+    val addonCachePath = AMODatabase.getLocalCachePath()
+    S3Store.uploadFile(addonCachePath.toFile, privateBucket, privateS3prefix, addonCachePath.getFileName.toString)
+    S3Store.uploadFile(addonCachePath.toFile, privateBucket, publicBucket, addonCachePath.getFileName.toString)
 
     // Serialize model to HDFS and then copy it to the local machine. We need to do this
     // instead of simply saving to file:// due to permission issues.
