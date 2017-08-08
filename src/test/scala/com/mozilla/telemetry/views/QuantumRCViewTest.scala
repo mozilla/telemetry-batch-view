@@ -136,17 +136,6 @@ class QuantumReleaseCriteriaViewTest extends FlatSpec with Matchers with BeforeA
   // make client count dataset
   private val aggregates = QuantumRCView.aggregate(df)
 
-  "FilteredHllMerge" can "properly count" in {
-    spark.udf.register("hll_merge", FilteredHllMerge)
-    val frame = sc.parallelize(List(("a", false), ("b", false), ("c", true), ("c", true)), 4).toDF("id", "allowed")
-    val count = frame
-      .selectExpr("hll_create(id, 12) as hll", "allowed")
-      .groupBy()
-      .agg(expr("hll_cardinality(hll_merge(hll, allowed)) as count"))
-      .collect()
-    count(0)(0) should be (1)
-  }
-
   // aggregates need to have correct count of RC
   "Aggregates" can "have the correct schema" in {
 
