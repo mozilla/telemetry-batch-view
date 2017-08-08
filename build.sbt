@@ -1,6 +1,5 @@
 javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint")
 
-resolvers += "Spark Packages Repo" at "https://dl.bintray.com/spark-packages/maven/"
 resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
 
 val sparkVersion = "2.0.2"
@@ -13,6 +12,7 @@ lazy val root = (project in file(".")).
     retrieveManaged := true,
     ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) },
     libraryDependencies += "com.mozilla.telemetry" %% "moztelemetry" % "1.0-SNAPSHOT",
+    libraryDependencies += "com.mozilla.telemetry" %% "spark-hyperloglog" % "2.0.0-SNAPSHOT",
     libraryDependencies += "org.apache.avro" % "avro" % "1.7.7",
     libraryDependencies += "org.apache.parquet" % "parquet-avro" % "1.7.0",
     libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.4",
@@ -33,7 +33,6 @@ lazy val root = (project in file(".")).
     libraryDependencies += "org.apache.hbase" % "hbase-common" % "1.2.3",
     libraryDependencies += "org.apache.hbase" % "hbase-hadoop-compat" % "1.2.3",
     libraryDependencies += "eu.unicredit" %% "hbase-rdd" % "0.7.1",
-    libraryDependencies += "vitillo" % "spark-hyperloglog" % "1.1.1",
     libraryDependencies += "org.scalaj" %% "scalaj-http" % "2.3.0",
     libraryDependencies += "org.yaml" % "snakeyaml" % "1.17",
     libraryDependencies += "com.google.protobuf" % "protobuf-java" % "2.5.0",
