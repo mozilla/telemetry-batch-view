@@ -821,25 +821,28 @@ object LongitudinalView {
     implicit val formats = DefaultFormats
 
     // Get a list of the scalars in the ping.
-    val scalarList = payloads.map{ case (x) =>
-      // Get the payload of the Heka frame, which contains the payload for the
-      // main ping.
+    val scalarsList = payloads.map{ case (x) =>
       val payload = parse(x.getOrElse("payload", return).asInstanceOf[String])
-      // If we can't find the "scalars" section for a ping, don't throw away all
-      // the data. This is semantically different from how we handle other stuff
-      // in the longitudinal (e.g. Histograms), but we need this since scalars
-      // landed recently and this section is not there on old pings.
-      (payload \ "processes" \ "parent" \ "scalars").toOption match {
-        case Some(scalars) => scalars.extract[Map[String, AnyVal]]
-        case _ => Map[String, AnyVal]()
-      }
+      MainPing.ProcessTypes.map{ process =>
+        (payload \ "processes" \ process \ "scalars").toOption match {
+          case Some(scalars) => process -> scalars.extract[Map[String, AnyVal]]
+          case _ => process -> Map[String, AnyVal]()
+        }
+      } toMap
     }
+
+    // this allows us to avoid iterating
+    // through every payload on every scalar
+    val byProcessScalarList = MainPing.ProcessTypes.map{ process =>
+      process -> scalarsList.map(_(process))
+    } toMap
 
     for {
       (key, definition) <- scalarDefinitions.toList
+      scalar_payloads = byProcessScalarList(definition.process.get)
       if !definition.keyed
     }{
-      root.set(key, vectorizeScalar(definition.originalName, definition, scalarList))
+      root.set(key, vectorizeScalar(definition.originalName, definition, scalar_payloads))
     }
   }
 
@@ -848,17 +851,28 @@ object LongitudinalView {
 
     val scalarsList = payloads.map{ case (x) =>
       val payload = parse(x.getOrElse("payload", return).asInstanceOf[String])
-      (payload \ "processes" \ "parent" \ "keyedScalars").toOption match {
-        case Some(scalars) => scalars.extract[Map[String, Map[String, AnyVal]]]
-        case _ => Map[String, Map[String, AnyVal]]()
-      }
+      MainPing.ProcessTypes.map{ process =>
+        (payload \ "processes" \ process \ "keyedScalars").toOption match {
+          case Some(scalars) => process -> scalars.extract[Map[String, Map[String, AnyVal]]]
+          case _ => process -> Map[String, Map[String, AnyVal]]()
+        }
+      } toMap
     }
+
+    // this allows us to avoid iterating
+    // through every payload on every scalar
+    val byProcessScalarList = MainPing.ProcessTypes.map{ process =>
+      process -> scalarsList.map(_(process))
+    } toMap
 
     for {
       (key, definition) <- scalarDefinitions.toList
+      scalar_payloads = byProcessScalarList(definition.process.get)
       if definition.keyed
     }{
-      val keyedScalarsList = scalarsList.map{x =>
+      // only includes keys that
+      // show up for this process
+      val keyedScalarsList = scalar_payloads.map{x =>
         x.get(definition.originalName) match {
           case Some(v) => v
           case _ => Map[String, AnyVal]()
