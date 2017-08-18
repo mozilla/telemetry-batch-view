@@ -28,8 +28,7 @@ case class MainSummarySubmission(client_id: String,
                       input_event_response_coalesced_ms_content_above_250: Int,
                       subsession_length: Long,
                       ghost_windows_main_above_1: Int,
-                      ghost_windows_content_above_1: Int,
-                      experiments: Map[String, String])
+                      ghost_windows_content_above_1: Int)
 
 object MainSummarySubmissions {
   val dimensions = Map(
@@ -44,8 +43,7 @@ object MainSummarySubmissions {
     "e10s_enabled" -> List(false),
     "os" -> List("Windows", "Darwin"),
     "env_build_arch" -> List("x86"),
-    "quantum_ready" -> List(false),
-    "experiments" -> List(Map("exp1" -> "branch1"), null))
+    "quantum_ready" -> List(false))
 
   val countValues = Map(
     "gc_max_pause_ms_main_above_150" -> List(3, 0),
@@ -87,7 +85,6 @@ object MainSummarySubmissions {
       subsession_length <- sumValues("subsession_length")
       ghost_windows_main_above_1 <- countValues("ghost_windows_main_above_1")
       ghost_windows_content_above_1 <- countValues("ghost_windows_content_above_1")
-      experiments <- dimensions("experiments")
     } yield {
       MainSummarySubmission(client_id.asInstanceOf[String],
                  app_name.asInstanceOf[String],
@@ -111,8 +108,7 @@ object MainSummarySubmissions {
                  input_event_response_coalesced_ms_content_above_250.asInstanceOf[Int],
                  subsession_length.asInstanceOf[Long],
                  ghost_windows_main_above_1.asInstanceOf[Int],
-                 ghost_windows_content_above_1.asInstanceOf[Int],
-                 experiments.asInstanceOf[Map[String, String]])
+                 ghost_windows_content_above_1.asInstanceOf[Int])
     }
   }
 }
@@ -135,17 +131,6 @@ class QuantumReleaseCriteriaViewTest extends FlatSpec with Matchers with BeforeA
 
   // make client count dataset
   private val aggregates = QuantumRCView.aggregate(df)
-
-  "FilteredHllMerge" can "properly count" in {
-    spark.udf.register("hll_merge", FilteredHllMerge)
-    val frame = sc.parallelize(List(("a", false), ("b", false), ("c", true), ("c", true)), 4).toDF("id", "allowed")
-    val count = frame
-      .selectExpr("hll_create(id, 12) as hll", "allowed")
-      .groupBy()
-      .agg(expr("hll_cardinality(hll_merge(hll, allowed)) as count"))
-      .collect()
-    count(0)(0) should be (1)
-  }
 
   // aggregates need to have correct count of RC
   "Aggregates" can "have the correct schema" in {
@@ -171,9 +156,7 @@ class QuantumReleaseCriteriaViewTest extends FlatSpec with Matchers with BeforeA
       "country" ::
       "gfx_compositor" ::
       "e10s_enabled" ::
-      "quantum_ready" ::
-      "experiment_id" ::
-      "experiment_branch" :: Nil
+      "quantum_ready" :: Nil
 
     (aggregates.columns.toSet) should be (dims.toSet)
   }

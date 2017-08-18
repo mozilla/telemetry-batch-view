@@ -1,7 +1,7 @@
 package com.mozilla.telemetry.ml
 
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Paths}
+import java.nio.file.{Files, Path, Paths}
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -14,7 +14,18 @@ import scala.io.Source
 import scalaj.http.Http
 
 private case class AMOAddonPage(previous: String, next: String, results: List[AMOAddonInfo])
-private case class AMOAddonInfo(guid: String, default_locale: String, name: Map[String,String])
+private case class AMOAddonFile(id: Long, platform: String, status: String, is_webextension: Boolean)
+private case class AMOAddonVersion(files: List[AMOAddonFile])
+private case class AMOAddonInfo(guid: String,
+                                categories: Map[String, List[String]],
+                                default_locale: String,
+                                description: Option[Map[String, String]],
+                                name: Map[String,String],
+                                current_version: AMOAddonVersion,
+                                ratings: Map[String, Double],
+                                summary: Option[Map[String, String]],
+                                tags: List[String],
+                                weekly_downloads: Long)
 
 /**
   * The AMODatabase singleton encapsulates a local version of the addons.mozilla.org (AMO)
@@ -77,7 +88,7 @@ final object AMODatabase {
     // If we have a cached copy of the request handy, use that. Please note that
     // the "read-from-disk" functionality is only needed for testing purposes, so
     // cache invalidation isn't a real issue.
-    val dbPath = Paths.get("./addons_database.json")
+    val dbPath = getLocalCachePath()
     if (Files.exists(dbPath)) {
       logger.info(s"Hitting addon database cache at $dbPath")
       parse(Source.fromFile(dbPath.toString()).mkString).extract[Map[String, AMOAddonInfo]]
@@ -109,11 +120,39 @@ final object AMODatabase {
   }
 
   /**
+    * Check if the provided addon is a webextension or a legacy addon.
+    * @param addonId The GUID for the desired addon.
+    * @return True if the latest version of the addon uses Webextensions, False otherwise.
+    */
+  def isWebextension(addonId: String): Option[Boolean] = {
+    // Each adddon can contain multiple files for each version. To ensure the addon is not
+    // a legacy addon, we verify that the latest version contains at least a Webextension
+    // compatible file which is publicly visible (status = "public").
+    addonDB.get(addonId) match {
+      case Some(addonInfo) => {
+        Some(addonInfo.current_version.files.exists(
+          fileInfo => fileInfo.is_webextension && fileInfo.status.equalsIgnoreCase("public")))
+      }
+      case None =>
+        logger.warn(s"Addon GUID not in AMO DB: $addonId")
+        None
+    }
+  }
+
+  /**
     * Tests whether the addon id is contained in the database.
     * @param addonId The GUID for the desired addon.
     * @return True if the addon database contains the addon, False otherwise.
     */
   def contains(addonId: String): Boolean = {
     addonDB.contains(addonId)
+  }
+
+  /**
+    * Get the path to the local cache file.
+    * @return A Path object representing the location of the addons cache file.
+    */
+  def getLocalCachePath() : Path = {
+    Paths.get("./addons_database.json")
   }
 }
