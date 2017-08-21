@@ -1485,26 +1485,29 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     actual should be (expected)
   }
 
-  "Scalar implementations of Simple Measurements activeTicks" can "be properly selected" in {
-    val scalarUrlMockActiveTicks = (a: String, b: String) => Source.fromFile("src/test/resources/ScalarsActiveTicks.yaml")
-    val scalarsActiveTicks = new ScalarsClass {
-      override protected val getURL = scalarUrlMockActiveTicks
+  "Migrated scalar values" can "be properly selected" in {
+    val migratedScalarsUrl = (a: String, b: String) => Source.fromFile("src/test/resources/ScalarsFromSimpleMeasures.yaml")
+    val migratedScalars = new ScalarsClass {
+      override protected val getURL = migratedScalarsUrl
     }
-    val activeTicksDef = scalarsActiveTicks.definitions(true).toList
+    val scalarsDef = migratedScalars.definitions(true).toList
 
     val messageBothPresent = RichMessage(
       "1234",
       Map(
         "documentId" -> "foo",
         "submissionDate" -> "1234",
-        "payload.simpleMeasurements" -> """{"activeTicks": 111}""",
+        "payload.simpleMeasurements" ->
+            """{"activeTicks": 111,
+                "firstPaint": 222}""",
         "submission" ->
           """{
           "payload": {
             "processes": {
               "parent": {
                 "scalars": {
-                  "browser.engagement.active_ticks": 999
+                  "browser.engagement.active_ticks": 888,
+                  "timestamps.first_paint": 999
                   }
                 }
               }
@@ -1513,45 +1516,64 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         }"""),
       None);
 
-    val summary = MainSummaryView.messageToRow(messageBothPresent, activeTicksDef, histogramDefs)
-    val selectedData =
-      applySchema(summary.get, MainSummaryView.buildSchema(activeTicksDef, histogramDefs)).getAs[Int]("active_ticks")
+    val messageSummary = MainSummaryView.messageToRow(messageBothPresent, scalarsDef, histogramDefs)
+    val appliedSummary =  applySchema(messageSummary.get, MainSummaryView.buildSchema(scalarsDef, histogramDefs))
 
-    selectedData should be (999)
+    val selectedActiveTicks = appliedSummary.getAs[Int]("active_ticks")
+    selectedActiveTicks should be (888)
+
+    val selectedFirstPaint = appliedSummary.getAs[Int]("first_paint")
+    selectedFirstPaint should be (999)
   }
 
-  "Simple Measurements activeTicks" can "be properly selected in the absence of a scalar value" in {
-    val scalarUrlMockActiveTicks = (a: String, b: String) => Source.fromFile("src/test/resources/ScalarsActiveTicks.yaml")
-    val scalarsActiveTicks = new ScalarsClass {
-      override protected val getURL = scalarUrlMockActiveTicks
+  "Migrated scalar values" can "fall back to simple measurements values" in {
+    val migratedScalarsUrl = (a: String, b: String) => Source.fromFile("src/test/resources/ScalarsFromSimpleMeasures.yaml")
+    val migratedScalars = new ScalarsClass {
+      override protected val getURL = migratedScalarsUrl
     }
-    val activeTicksDef = scalarsActiveTicks.definitions(true).toList
+    val scalarsDef = migratedScalars.definitions(true).toList
 
     val messageSMPresent = RichMessage(
       "1234",
       Map(
         "documentId" -> "foo",
         "submissionDate" -> "1234",
-        "payload.simpleMeasurements" -> """{"activeTicks": 111}""",
-        "submission" ->
-          """{
-          "payload": {
-            "processes": {
-              "parent": {
-                "scalars": {
-                  "browser.engagement.active_ticks": null
-                  }
-                }
-              }
-            }
-          }
-        }"""),
+        "payload.simpleMeasurements" ->
+          """{"activeTicks": 111,
+              "firstPaint": 222}"""
+      ),
       None);
 
-    val summary = MainSummaryView.messageToRow(messageSMPresent, activeTicksDef, histogramDefs)
-    val selectedData =
-      applySchema(summary.get, MainSummaryView.buildSchema(activeTicksDef, histogramDefs)).getAs[Int]("active_ticks")
+    val messageSummary = MainSummaryView.messageToRow(messageSMPresent, scalarsDef, histogramDefs)
+    val appliedSummary = applySchema(messageSummary.get, MainSummaryView.buildSchema(scalarsDef, histogramDefs))
 
-    selectedData should be (111)
+    val selectedActiveTicks = appliedSummary.getAs[Int]("active_ticks")
+    selectedActiveTicks should be(111)
+
+    val selectedFirstPaint = appliedSummary.getAs[Int]("first_paint")
+    selectedFirstPaint should be(222)
+  }
+
+  "Simple measurements values" can "be selected in the absence of a scalar definition." in {
+    val messageSMPresent = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.simpleMeasurements" ->
+          """{"activeTicks": 111,
+              "firstPaint": 222}"""
+        ),
+      None);
+
+    // If the scalar's definition does not exist, the simple measurement value should be selected.
+    val msgSummaryNoDefs = MainSummaryView.messageToRow(messageSMPresent, List(), histogramDefs)
+    val appliedSummaryNoDefs = applySchema(msgSummaryNoDefs.get, MainSummaryView.buildSchema(List(), histogramDefs))
+
+    val activeTicksVal = appliedSummaryNoDefs.getAs[Int]("active_ticks")
+    activeTicksVal should be(111)
+
+    val firstPaintVal =  appliedSummaryNoDefs.getAs[Int]("first_paint")
+    firstPaintVal should be(222)
   }
 }
