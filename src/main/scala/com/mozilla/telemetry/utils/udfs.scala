@@ -6,7 +6,6 @@ import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAg
 import org.apache.spark.sql.{Column, Row, SparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.functions._
-import com.twitter.algebird.{Bytes, DenseHLL, HyperLogLog}
 import com.mozilla.spark.sql.hyperloglog.functions._
 import com.mozilla.spark.sql.hyperloglog.aggregates._
 import scala.annotation.tailrec
