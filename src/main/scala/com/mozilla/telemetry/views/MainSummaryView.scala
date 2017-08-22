@@ -58,6 +58,7 @@ object MainSummaryView {
     val limit = opt[Int]("limit", descr = "Maximum number of files to read from S3", required = false)
     val channel = opt[String]("channel", descr = "Only process data from the given channel", required = false)
     val appVersion = opt[String]("version", descr = "Only process data from the given app version", required = false)
+    val allHistograms = opt[Boolean]("all-histograms", descr = "Flag to use all histograms", required = false)
     verify()
   }
 
@@ -107,7 +108,9 @@ object MainSummaryView {
 
       val scalarDefinitions = Scalars.definitions(includeOptin = true).toList.sortBy(_._1)
 
-      val histogramDefinitions = filterHistogramDefinitions(Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _), useWhitelist = true)
+      val histogramDefinitions = filterHistogramDefinitions(
+        Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _),
+        useWhitelist = !conf.allHistograms())
 
       val schema = buildSchema(scalarDefinitions, histogramDefinitions)
       val ignoredCount = sc.accumulator(0, "Number of Records Ignored")
