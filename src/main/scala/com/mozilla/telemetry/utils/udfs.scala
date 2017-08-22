@@ -9,6 +9,7 @@ import org.apache.spark.sql.functions._
 import com.twitter.algebird.{Bytes, DenseHLL, HyperLogLog}
 import com.mozilla.spark.sql.hyperloglog.functions._
 import com.mozilla.spark.sql.hyperloglog.aggregates._
+import scala.annotation.tailrec
 
 class CollectList(inputStruct: StructType, orderCols: List[String], maxLength: Option[Int]) extends UserDefinedAggregateFunction {
   /**
@@ -93,6 +94,7 @@ class CollectList(inputStruct: StructType, orderCols: List[String], maxLength: O
     }
   }
 
+  @tailrec
   private def rsort(input: Seq[Int], buffer: Row, orderColumns: Seq[String]): Seq[Int] = {
     orderColumns match {
       case Nil => input
