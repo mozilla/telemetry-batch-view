@@ -9,18 +9,24 @@ import org.apache.spark.sql.functions.col
 
 object ExperimentAnalysisView {
   def schemaVersion: String = "v1"
-  def jobName: String = "experiment_analysis"
+  def jobName: String = "experiments_aggregates"
+  def numParquetFiles: Int = 1
 
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getSimpleName)
 
   // Configuration for command line arguments
   class Conf(args: Array[String]) extends ScallopConf(args) {
-    // TODO: change to s3 bucket/keys
-    val inputLocation = opt[String]("input", descr = "Source for parquet data", required = true)
-    val outputLocation = opt[String]("output", descr = "Destination for parquet data", required = true)
+    val inputBucket = opt[String]("inbucket", descr = "Source bucket for parquet data", required = false)
+    val bucket = opt[String]("bucket", descr = "Destination bucket for parquet data", required = false)
+    val inputLocation = opt[String]("input-location", descr = "Exact location for parquet data", required = false)
+    val outputLocation = opt[String]("output-location", descr = "Exact location for output data", required = false)
     val metric = opt[String]("metric", descr = "Run job on just this metric", required = false)
     val experiment = opt[String]("experiment", descr = "Run job on just this experiment", required = false)
     val date = opt[String]("date", descr = "Run date for this job (defaults to yesterday)", required = false)
+
+    requireOne(bucket, inputLocation)
+    requireOne(bucket, outputLocation)
+    conflicts(bucket, List(inputLocation, outputLocation))
     verify()
   }
 
@@ -34,7 +40,10 @@ object ExperimentAnalysisView {
     val conf = new Conf(args)
     val sparkSession = getSpark
 
-    val experimentData = sparkSession.read.parquet(conf.inputLocation())
+    val inputLocation = getInputLocation(conf)
+    val baseOutputLocation = getOutputLocation(conf)
+
+    val experimentData = sparkSession.read.parquet(inputLocation)
     val date = getDate(conf)
     logger.info("=======================================================================================")
     logger.info(s"Starting $jobName for date $date")
@@ -49,15 +58,29 @@ object ExperimentAnalysisView {
 
       val spark = getSpark
       val data = spark.read.parquet(conf.inputLocation())
-      val outputLocation = s"${conf.outputLocation()}/experiment_id=$e/date=$date"
+      val outputLocation = s"$baseOutputLocation/experiment_id=$e/date=$date"
       getExperimentMetrics(e, data, conf)
         .toDF()
         .drop(col("experiment_id"))
-        .repartition(1)
+        .repartition(numParquetFiles)
         .write.mode("overwrite").parquet(outputLocation)
 
       logger.info(s"Wrote aggregates to $outputLocation")
       spark.stop()
+    }
+  }
+
+  def getInputLocation(conf: Conf): String = {
+    conf.bucket.get match {
+      case Some(b) => s"s3://${conf.inputBucket.get.getOrElse(b)}/${ExperimentSummaryView.jobName}/${ExperimentSummaryView.schemaVersion}"
+      case _ => conf.inputLocation()
+    }
+  }
+
+  def getOutputLocation(conf: Conf): String = {
+    conf.bucket.get match {
+      case Some(b) => s"s3://$b/$jobName/$schemaVersion"
+      case _ => conf.outputLocation()
     }
   }
 
