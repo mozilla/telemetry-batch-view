@@ -1,6 +1,6 @@
 package com.mozilla.telemetry
 
-import com.mozilla.telemetry.views.SyncPingConverter
+import com.mozilla.telemetry.utils.SyncPingConversion
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.{SparkConf, SparkContext}
@@ -19,11 +19,11 @@ class SyncViewTest extends FlatSpec with Matchers{
     implicit val formats = DefaultFormats
     sc.setLogLevel("WARN")
     try {
-      val row = SyncPingConverter.pingToRows(SyncViewTestPayloads.singleSyncPing)
+      val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.singleSyncPing)
       val sqlContext = new SQLContext(sc)
       val rdd = sc.parallelize(row.toSeq)
 
-      val dataframe = sqlContext.createDataFrame(rdd, SyncPingConverter.syncType)
+      val dataframe = sqlContext.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
 
       // verify the contents.
       dataframe.count() should be (1)
@@ -57,10 +57,10 @@ class SyncViewTest extends FlatSpec with Matchers{
     val sc = new SparkContext(sparkConf)
     sc.setLogLevel("WARN")
     try {
-      val row = SyncPingConverter.pingToRows(SyncViewTestPayloads.multiSyncPing)
+      val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.multiSyncPing)
       val sqlContext = new SQLContext(sc)
       val rdd = sc.parallelize(row.toSeq)
-      val dataframe = sqlContext.createDataFrame(rdd, SyncPingConverter.syncType)
+      val dataframe = sqlContext.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
 
       // verify the contents
       validateMultiSyncPing(dataframe.collect(), SyncViewTestPayloads.multiSyncPing)
@@ -75,11 +75,11 @@ class SyncViewTest extends FlatSpec with Matchers{
     val sc = new SparkContext(sparkConf)
     sc.setLogLevel("WARN")
     try {
-      val row = SyncPingConverter.pingToRows(SyncViewTestPayloads.multiSyncPing)
+      val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.multiSyncPing)
       // Write a parquet file with the rows.
       val sqlContext = new SQLContext(sc)
       val rdd = sc.parallelize(row.toSeq)
-      val dataframe = sqlContext.createDataFrame(rdd, SyncPingConverter.syncType)
+      val dataframe = sqlContext.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
       val tempFile = com.mozilla.telemetry.utils.temporaryFileName()
       dataframe.write.parquet(tempFile.toString)
       // read it back in and verify it.
@@ -98,11 +98,11 @@ class SyncViewTest extends FlatSpec with Matchers{
     val sc = new SparkContext(sparkConf)
     sc.setLogLevel("WARN")
     try {
-      val row = SyncPingConverter.pingToRows(SyncViewTestPayloads.complexSyncPing)
+      val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.complexSyncPing)
       // Write a parquet file with the rows.
       val sqlContext = new SQLContext(sc)
       val rdd = sc.parallelize(row.toSeq)
-      val dataframe = sqlContext.createDataFrame(rdd, SyncPingConverter.syncType)
+      val dataframe = sqlContext.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
       val tempFile = com.mozilla.telemetry.utils.temporaryFileName()
       dataframe.write.parquet(tempFile.toString)
       // read it back in and verify it.
@@ -121,11 +121,11 @@ class SyncViewTest extends FlatSpec with Matchers{
     val sc = new SparkContext(sparkConf)
     sc.setLogLevel("WARN")
     try {
-      val row = SyncPingConverter.pingToRows(SyncViewTestPayloads.multiSyncPingWithTopLevelIds)
+      val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.multiSyncPingWithTopLevelIds)
       // Write a parquet file with the rows.
       val sqlContext = new SQLContext(sc)
       val rdd = sc.parallelize(row.toSeq)
-      val dataframe = sqlContext.createDataFrame(rdd, SyncPingConverter.syncType)
+      val dataframe = sqlContext.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
       // Note: We intentionally validate with a *different* json object from the one we parsed.
       validateMultiSyncPing(dataframe.collect(), SyncViewTestPayloads.multiSyncPing)
     } finally {
