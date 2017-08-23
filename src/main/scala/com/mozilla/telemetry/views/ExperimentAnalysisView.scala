@@ -50,6 +50,7 @@ object ExperimentAnalysisView {
       val spark = getSpark
       val data = spark.read.parquet(conf.inputLocation())
       val outputLocation = s"${conf.outputLocation()}/experiment_id=$e/date=$date"
+      import spark.implicits._
       getExperimentMetrics(e, data, conf)
         .toDF()
         .drop(col("experiment_id"))
@@ -96,21 +97,21 @@ object ExperimentAnalysisView {
     }
   }
 
-  def getExperimentMetrics(experiment: String, data: DataFrame, conf: Conf): Dataset[MetricAnalysis] = {
+  def getExperimentMetrics(experiment: String, data: DataFrame, conf: Conf): List[MetricAnalysis] = {
     val metricList = getMetrics(conf, data)
     val experimentData = data.where(col("experiment_id") === experiment)
 
-    val metrics = metricList.map {
+    val metrics = metricList.flatMap {
       case (name: String, md: MetricDefinition) =>
         md match {
           case hd: HistogramDefinition =>
-            new HistogramAnalyzer(name, hd, experimentData).analyze()
+            new HistogramAnalyzer(name, hd, experimentData).analyze().collect()
           case sd: ScalarDefinition =>
-            ScalarAnalyzer.getAnalyzer(name, sd, experimentData).analyze()
+            ScalarAnalyzer.getAnalyzer(name, sd, experimentData).analyze().collect()
           case _ => throw new UnsupportedOperationException("Unsupported metric definition type")
         }
     }
-    val metadata = ExperimentAnalyzer.getExperimentMetadata(experimentData)
-    (metadata :: metrics).reduce(_.union(_))
+    val metadata = ExperimentAnalyzer.getExperimentMetadata(experimentData).collect()
+    (metadata ++ metrics).toList
   }
 }
