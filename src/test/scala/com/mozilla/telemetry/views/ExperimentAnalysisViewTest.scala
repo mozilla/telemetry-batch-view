@@ -35,7 +35,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
       "--output" :: "telemetry-mock-bucket" :: Nil
     val conf = new ExperimentAnalysisView.Conf(args.toArray)
 
-    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, conf).collect()
+    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, conf)
     val agg = res.filter(_.metric_name == "scalar_content_browser_usage_graphite").head
     agg.histogram(1).pdf should be (1.0)
   }
@@ -49,7 +49,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
       "--output" :: "telemetry-mock-bucket" :: Nil
     val conf = new ExperimentAnalysisView.Conf(args.toArray)
 
-    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, conf).collect()
+    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, conf)
     val agg = res.filter(_.metric_name == "histogram_content_gc_max_pause_ms").head
     agg.histogram(1).pdf should be (1.0)
   }
@@ -63,7 +63,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
       "--output" :: "telemetry-mock-bucket" :: Nil
     val conf = new ExperimentAnalysisView.Conf(args.toArray)
 
-    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, conf).collect()
+    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, conf)
     val metadata = res.filter(_.metric_name == "Experiment Metadata")
     metadata.length should be (1)
 
