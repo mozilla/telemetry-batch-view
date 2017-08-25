@@ -61,9 +61,22 @@ object HBaseAddonRecommenderView {
         // Get the data for the desired date.
         val data = datasetForDate(currentDateString)
 
-        // Only get the most recent entry (by subsession start date rather than submission
-        // date) for each client.
-        val clientsData: DataFrame = data
+        // Get the most recent (client_id, subsession_start_date) tuple for each client
+        // since the main_summary might contain multiple rows per client. We will use
+        // it to filter out the much table with all the columns we require.
+        val clientsShortlist: DataFrame = data
+          .select(
+            $"client_id",
+            $"subsession_start_date",
+            row_number()
+              .over(Window.partitionBy("client_id")
+                .orderBy(desc("subsession_start_date")))
+              .alias("clientid_rank"))
+          .where($"clientid_rank" === 1)
+          .drop("clientid_rank")
+
+        // Restrict the data to the columns we're interested in.
+        val dataSubset: DataFrame = data
             .select(
               $"client_id",
               $"subsession_start_date",
@@ -74,12 +87,17 @@ object HBaseAddonRecommenderView {
               $"scalar_parent_browser_engagement_tab_open_event_count",
               $"scalar_parent_browser_engagement_total_uri_count",
               $"scalar_parent_browser_engagement_unique_domains_count",
-              $"active_addons",
-              row_number()
-                .over(Window.partitionBy("client_id")
-                  .orderBy(desc("subsession_start_date")))
-                .alias("clientid_rank"))
-          .where($"clientid_rank" === 1)
+              $"active_addons")
+
+        // Due to a bug [SPARK-12837] in Spark < 2.2.0, we need to disable broadcasting
+        // in order to join without facing errors like "Total size of serialized results of XXX
+        // is bigger than spark.driver.maxResultSize (YYY GB)".
+        spark.conf.set("spark.sql.autoBroadcastJoinThreshold", -1)
+
+        // Join the two tables: only the elements in both dataframes will make it
+        // through.
+        val clientsData: DataFrame = dataSubset
+            .join(clientsShortlist, Seq("client_id", "subsession_start_date"))
 
         // Convert the DataFrame to JSON and get an RDD out of it.
         val subset = clientsData.select("client_id", "subsession_start_date")
