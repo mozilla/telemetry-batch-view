@@ -34,7 +34,7 @@ object ExperimentAnalysisView {
     val conf = new Conf(args)
     val sparkSession = getSpark
 
-    val experimentData = sparkSession.read.parquet(conf.inputLocation())
+    val experimentData = sparkSession.read.option("mergeSchema", "true").parquet(conf.inputLocation())
     val date = getDate(conf)
     logger.info("=======================================================================================")
     logger.info(s"Starting $jobName for date $date")
@@ -48,7 +48,7 @@ object ExperimentAnalysisView {
       logger.info(s"Aggregating pings for experiment $e")
 
       val spark = getSpark
-      val data = spark.read.parquet(conf.inputLocation())
+      val data = spark.read.option("mergeSchema", "true").parquet(conf.inputLocation())
       val outputLocation = s"${conf.outputLocation()}/experiment_id=$e/date=$date"
       import spark.implicits._
       getExperimentMetrics(e, data, conf)
