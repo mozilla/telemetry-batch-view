@@ -1,6 +1,6 @@
 package com.mozilla.telemetry.views
 
-import com.mozilla.telemetry.experiments.analyzers.{ExperimentAnalyzer, HistogramAnalyzer, MetricAnalysis, ScalarAnalyzer}
+import com.mozilla.telemetry.experiments.analyzers.{CrashAnalyzer, ExperimentAnalyzer, HistogramAnalyzer, MetricAnalysis, ScalarAnalyzer}
 import com.mozilla.telemetry.metrics._
 import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
@@ -8,8 +8,11 @@ import org.rogach.scallop.ScallopConf
 import org.apache.spark.sql.functions.col
 
 object ExperimentAnalysisView {
-  def schemaVersion: String = "v1"
-  def jobName: String = "experiment_analysis"
+
+  def defaultErrorAggregatesBucket = "net-mozaws-prod-us-west-2-pipeline-data"
+  def errorAggregatesSuffix = "error_aggregates/v2"
+  def jobName = "experiment_analysis"
+  def schemaVersion = "v1"
 
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getSimpleName)
 
@@ -18,6 +21,8 @@ object ExperimentAnalysisView {
     // TODO: change to s3 bucket/keys
     val inputLocation = opt[String]("input", descr = "Source for parquet data", required = true)
     val outputLocation = opt[String]("output", descr = "Destination for parquet data", required = true)
+    val errorAggregatesBucket = opt[String](descr = "Bucket for error_aggregates data", required = false,
+      default = Some(defaultErrorAggregatesBucket))
     val metric = opt[String]("metric", descr = "Run job on just this metric", required = false)
     val experiment = opt[String]("experiment", descr = "Run job on just this experiment", required = false)
     val date = opt[String]("date", descr = "Run date for this job (defaults to yesterday)", required = false)
@@ -48,10 +53,11 @@ object ExperimentAnalysisView {
       logger.info(s"Aggregating pings for experiment $e")
 
       val spark = getSpark
-      val data = spark.read.option("mergeSchema", "true").parquet(conf.inputLocation())
+      val experimentsSummary = spark.read.option("mergeSchema", "true").parquet(conf.inputLocation())
+      val errorAggregates = spark.read.parquet(s"s3://${conf.errorAggregatesBucket()}/$errorAggregatesSuffix")
       val outputLocation = s"${conf.outputLocation()}/experiment_id=$e/date=$date"
       import spark.implicits._
-      getExperimentMetrics(e, data, conf)
+      getExperimentMetrics(e, experimentsSummary, errorAggregates, conf)
         .toDF()
         .drop(col("experiment_id"))
         .repartition(1)
@@ -97,9 +103,10 @@ object ExperimentAnalysisView {
     }
   }
 
-  def getExperimentMetrics(experiment: String, data: DataFrame, conf: Conf): List[MetricAnalysis] = {
-    val metricList = getMetrics(conf, data)
-    val experimentData = data.where(col("experiment_id") === experiment)
+  def getExperimentMetrics(experiment: String, experimentsSummary: DataFrame, errorAggregates: DataFrame, conf: Conf): List[MetricAnalysis] = {
+    val metricList = getMetrics(conf, experimentsSummary)
+    val experimentData = experimentsSummary.where(col("experiment_id") === experiment)
+    val experimentErrorAggregates = errorAggregates.where(col("experiment_id") === experiment)
 
     val metrics = metricList.flatMap {
       case (name: String, md: MetricDefinition) =>
@@ -111,7 +118,9 @@ object ExperimentAnalysisView {
           case _ => throw new UnsupportedOperationException("Unsupported metric definition type")
         }
     }
+
     val metadata = ExperimentAnalyzer.getExperimentMetadata(experimentData).collect()
-    (metadata ++ metrics).toList
+    val crashes = CrashAnalyzer.getExperimentCrashes(experimentErrorAggregates)
+    (metadata ++ metrics ++ crashes).toList
   }
 }
