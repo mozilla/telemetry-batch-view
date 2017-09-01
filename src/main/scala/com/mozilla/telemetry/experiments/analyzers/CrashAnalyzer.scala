@@ -28,6 +28,13 @@ object CrashAnalyzer {
   def makeTitle(name: String): String = name.split("_").map(_.capitalize).mkString(" ")
 
   def getExperimentCrashes(errorAggregates: DataFrame): Seq[MetricAnalysis] = {
+    errorAggregates.count() match {
+      case x if x <= 0 => Seq[MetricAnalysis]()
+      case _ => getNonemptyExperimentCrashes(errorAggregates)
+    }
+  }
+
+  private def getNonemptyExperimentCrashes(errorAggregates: DataFrame): Seq[MetricAnalysis] = {
     import errorAggregates.sparkSession.implicits._
 
     val aggregates = Extras.map{ c => sum(c).as(c) } ++

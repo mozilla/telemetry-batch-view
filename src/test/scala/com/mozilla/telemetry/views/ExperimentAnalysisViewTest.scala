@@ -3,6 +3,7 @@ package com.mozilla.telemetry
 import com.mozilla.telemetry.views.ExperimentAnalysisView
 import com.mozilla.telemetry.experiments.analyzers.CrashAnalyzer
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.functions.col
 import org.scalatest.{FlatSpec, Matchers, BeforeAndAfterAll}
 
 case class ExperimentSummaryRow(
@@ -104,7 +105,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
     val conf = new ExperimentAnalysisView.Conf(args.toArray)
 
     val results = errorAgg.map(_.experiment_id).distinct.map{ id =>
-      id -> ExperimentAnalysisView.getExperimentMetrics(id, spark.emptyDataset[ExperimentSummaryRow].toDF(), data, conf)
+      id -> ExperimentAnalysisView.getExperimentMetrics(id, spark.emptyDataset[ExperimentSummaryRow].toDF(), data.filter(col("experiment_id") === id), conf)
     }.toMap
 
     errorAgg.foreach{ e =>
@@ -122,6 +123,19 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
         rows.filter(r => r.metric_name == CrashAnalyzer.makeTitle(metric)).head.statistics.get.head.value should be (value)
       }
     }
+  }
+
+  "Experiment Analysis View" can "handle missing error_aggregates data" in {
+    import spark.implicits._
+
+    val df = spark.emptyDataFrame
+    val args =
+      "--input" :: "telemetry-mock-bucket" ::
+      "--output" :: "telemetry-mock-bucket" :: Nil
+    val conf = new ExperimentAnalysisView.Conf(args.toArray)
+
+    val res = ExperimentAnalysisView.getExperimentMetrics("id1", spark.emptyDataset[ExperimentSummaryRow].toDF(), df, conf)
+    res.size should be (0)
   }
 
   override def afterAll() {
