@@ -27,5 +27,5 @@ root
 
 ```
 For more detail on where these fields come from in the
-[raw data](https://gecko.readthedocs.io/en/latest/toolkit/components/telemetry/telemetry/data/crash-ping.html),
+[raw data](https://firefox-source-docs.mozilla.org/toolkit/components/telemetry/telemetry/data/crash-ping.html),
 please look at the case classes [in the CrashSummaryView code](src/main/scala/views/CrashSummaryView.scala).

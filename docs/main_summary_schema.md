@@ -190,7 +190,7 @@ browser.engagement.max_concurrent_tab_count). The full schema name is scalar_<pr
 available.
 
 For more detail on where these fields come from in the
-[raw data](https://gecko.readthedocs.io/en/latest/toolkit/components/telemetry/telemetry/data/main-ping.html),
+[raw data](https://firefox-source-docs.mozilla.org/toolkit/components/telemetry/telemetry/data/main-ping.html),
 please look [in the MainSummaryView code](src/main/scala/views/MainSummaryView.scala)
 in the `buildSchema` function.
 

@@ -252,7 +252,7 @@ object LongitudinalView {
   private def buildSchema(histogramDefinitions: Map[String, HistogramDefinition], scalarDefinitions: Map[String, ScalarDefinition]): Schema = {
     // The $PROJECT_ROOT/scripts/generate-ping-schema.py script can be used to
     // generate these SchemaBuilder definitions, and the output of that script is
-    // combined with data from http://gecko.readthedocs.org/en/latest/toolkit/components/telemetry/telemetry
+    // combined with data from https://firefox-source-docs.mozilla.org/toolkit/components/telemetry/telemetry
     // to get the results below. See the schemas at https://github.com/mozilla-services/mozilla-pipeline-schemas/
 
     // Note that field names have to be defined with underscore_notation to allow
