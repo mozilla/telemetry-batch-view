@@ -5,12 +5,12 @@ import com.mozilla.telemetry.metrics._
 import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.rogach.scallop.ScallopConf
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{col, min}
+import scala.util.{Failure, Success, Try}
 
 object ExperimentAnalysisView {
-
   def defaultErrorAggregatesBucket = "net-mozaws-prod-us-west-2-pipeline-data"
-  def errorAggregatesSuffix = "error_aggregates/v2"
+  def errorAggregatesPath = "error_aggregates/v2"
   def jobName = "experiment_analysis"
   def schemaVersion = "v1"
 
@@ -54,8 +54,14 @@ object ExperimentAnalysisView {
 
       val spark = getSpark
       val experimentsSummary = spark.read.option("mergeSchema", "true").parquet(conf.inputLocation())
-      val errorAggregates = spark.read.parquet(s"s3://${conf.errorAggregatesBucket()}/$errorAggregatesSuffix")
+
+      val minDate = experimentsSummary.agg(min("submission_date_s3")).first.getAs[String](0)
+      val errorAggregates = Try(spark.read.parquet(s"s3://${conf.errorAggregatesBucket()}/$errorAggregatesPath")) match {
+        case Success(df) => df.where(col("experiment_id") === e && col("submission_date") >= minDate)
+        case Failure(_) => spark.emptyDataFrame
+      }
       val outputLocation = s"${conf.outputLocation()}/experiment_id=$e/date=$date"
+
       import spark.implicits._
       getExperimentMetrics(e, experimentsSummary, errorAggregates, conf)
         .toDF()
@@ -106,7 +112,6 @@ object ExperimentAnalysisView {
   def getExperimentMetrics(experiment: String, experimentsSummary: DataFrame, errorAggregates: DataFrame, conf: Conf): List[MetricAnalysis] = {
     val metricList = getMetrics(conf, experimentsSummary)
     val experimentData = experimentsSummary.where(col("experiment_id") === experiment)
-    val experimentErrorAggregates = errorAggregates.where(col("experiment_id") === experiment)
 
     val metrics = metricList.flatMap {
       case (name: String, md: MetricDefinition) =>
@@ -120,7 +125,7 @@ object ExperimentAnalysisView {
     }
 
     val metadata = ExperimentAnalyzer.getExperimentMetadata(experimentData).collect()
-    val crashes = CrashAnalyzer.getExperimentCrashes(experimentErrorAggregates)
+    val crashes = CrashAnalyzer.getExperimentCrashes(errorAggregates)
     (metadata ++ metrics ++ crashes).toList
   }
 }
