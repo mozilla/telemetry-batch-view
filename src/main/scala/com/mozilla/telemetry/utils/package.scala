@@ -114,4 +114,10 @@ package object utils{
   def yesterdayAsYYYYMMDD: String = {
     DateTime.now.minusDays(1).toString("yyyyMMdd")
   }
+
+  def deletePrefix(bucket: String, prefix: String): Unit = {
+    if (!S3Store.isPrefixEmpty(bucket, prefix)) {
+      S3Store.listKeys(bucket, prefix).foreach(o => S3Store.deleteKey(bucket, o.key))
+    }
+  }
 }
