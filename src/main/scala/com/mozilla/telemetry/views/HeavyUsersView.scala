@@ -212,13 +212,13 @@ object HeavyUsersView {
 
     // Add today's total to yesterday's 28 days total
     val added: Dataset[UserActiveTicks] = aggregated
-      .joinWith(prevData, aggregated("client_id") === prevData("client_id"), "outer")
+      .joinWith(prevData, (aggregated("client_id") === prevData("client_id")) && (aggregated("sample_id") === prevData("sample_id")), "outer")
       .map(addActiveTicksToHeavyUserRow)
       .as[UserActiveTicks]
 
     // Subtract 28 days ago's active_ticks
     val current: Dataset[UserActiveTicks] = added
-      .joinWith(subtractData, added("client_id") === subtractData("client_id"), "left_outer")
+      .joinWith(subtractData, (added("client_id") === subtractData("client_id")) && (added("sample_id") === subtractData("sample_id")), "left_outer")
       .map(subtractHeavyUserFromActiveTicks)
       .as[UserActiveTicks]
       .filter(_.active_ticks_period > 0)
