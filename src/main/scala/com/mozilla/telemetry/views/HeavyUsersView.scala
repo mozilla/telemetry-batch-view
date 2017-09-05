@@ -1,7 +1,9 @@
 package com.mozilla.telemetry.views
 
 import java.lang.Long
+
 import com.github.nscala_time.time.Imports._
+import com.mozilla.telemetry.utils.deletePrefix
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.expressions.scalalang.typed.sumLong
 import org.apache.spark.sql.functions.{col, min}
@@ -252,6 +254,11 @@ object HeavyUsersView {
     current.write.mode("overwrite").csv(s"$cutoffsPath-$date")
   }
 
+  private def deleteDate(bucket: String, date: String): Unit = {
+    val prefix = s"$DatasetPrefix/$Version/$SubmissionDatePartitionName=$date"
+    deletePrefix(bucket, prefix)
+  }
+
   def main(args: Array[String]): Unit = {
     val conf = new Conf(args)
 
@@ -263,6 +270,7 @@ object HeavyUsersView {
     import spark.implicits._
 
     val date = getDate(conf)
+    deleteDate(conf.bucket(), date)
 
     val df = spark.read.option("mergeSchema", "true")
       .parquet(s"s3://${conf.mainSummaryBucket()}/${MainSummaryView.jobName}/${MainSummaryView.schemaVersion}")

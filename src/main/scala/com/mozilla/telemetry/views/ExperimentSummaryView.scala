@@ -1,6 +1,6 @@
 package com.mozilla.telemetry.views
 
-import com.mozilla.telemetry.utils.{S3Store, getOrCreateSparkSession}
+import com.mozilla.telemetry.utils.{deletePrefix, getOrCreateSparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.SparkSession
 import org.joda.time.{DateTime, Days, format}
@@ -85,10 +85,7 @@ object ExperimentSummaryView {
 
   def deletePreviousOutput(bucket: String, prefix: String, date: String, experiment: String): Unit = {
     val completePrefix = s"$prefix/experiment_id=$experiment/submission_date_s3=$date"
-    if (!S3Store.isPrefixEmpty(bucket, completePrefix)) {
-      // not the most efficient way to do this, but this is all on AWS anyway..
-      S3Store.listKeys(bucket, completePrefix).foreach(o => S3Store.deleteKey(bucket, o.key))
-    }
+    deletePrefix(bucket, completePrefix)
   }
 
   def writeExperiments(input: String, output: String, date: String, experiments: List[String], spark: SparkSession): Unit = {
