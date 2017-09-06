@@ -47,7 +47,8 @@ object MainSummaryView {
     "TIME_TO_LOAD_EVENT_END_MS" ::
     "TIME_TO_LOAD_EVENT_START_MS" ::
     "TIME_TO_NON_BLANK_PAINT_MS" ::
-    "TIME_TO_RESPONSE_START_MS" :: Nil
+    "TIME_TO_RESPONSE_START_MS" :: 
+    "UPTAKE_REMOTE_CONTENT_RESULT_1" :: Nil
 
 
   // Configuration for command line arguments
