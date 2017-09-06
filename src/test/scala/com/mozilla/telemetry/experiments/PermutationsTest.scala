@@ -18,7 +18,6 @@ class PermutationsTest extends FlatSpec with Matchers with DatasetSuiteBase {
     val numTrials = 1000000
     val output = Permutations.weightedGenerator(cutoffs, "hello", numTrials)("world")
     val counts = output.groupBy(identity).mapValues(_.size)
-    counts(0) / numTrials.toDouble should be > 0.25 * 0.98
-    counts(0) / numTrials.toDouble should be < 0.25 * 1.02
+    counts(0) / numTrials.toDouble should be (0.25 +- 0.005)
   }
 }
