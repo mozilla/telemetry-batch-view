@@ -4,6 +4,7 @@ import java.lang.Long
 
 import com.github.nscala_time.time.Imports._
 import com.mozilla.telemetry.utils.deletePrefix
+import com.mozilla.telemetry.utils.CustomPartitioners._
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.expressions.scalalang.typed.sumLong
 import org.apache.spark.sql.functions.{col, min}
@@ -59,7 +60,7 @@ object HeavyUsersView {
   case class HeavyUsersRow (
     submission_date_s3: String,
     client_id: String,
-    sample_id: String,
+    sample_id: Integer,
     profile_creation_date: Long,
     active_ticks: Long,
     active_ticks_period: Long,
@@ -71,7 +72,7 @@ object HeavyUsersView {
    **/
   case class UserActiveTicks (
     client_id: String,
-    sample_id: String,
+    sample_id: Integer,
     profile_creation_date: Long,
     active_ticks: Long,
     active_ticks_period: Long)
@@ -209,7 +210,7 @@ object HeavyUsersView {
       .filter(r => r.submission_date_s3 == date && Option(r.active_ticks).getOrElse(0: Long) > 0)
       .groupByKey(r => (r.client_id, r.sample_id, r.profile_creation_date))
       .agg(sumLong[MainSummaryRow](_.active_ticks))
-      .map{ case((cid, sid, pcd), at) => UserActiveTicks(cid, sid, pcd, at, null) }
+      .map{ case((cid, sid, pcd), at) => UserActiveTicks(cid, sid.toInt, pcd, at, null) }
       .as[UserActiveTicks]
 
     // Add today's total to yesterday's 28 days total
@@ -300,8 +301,8 @@ object HeavyUsersView {
       case None =>
     }
 
-    newDS
-      .repartition(NumFiles, $"sample_id")
+    newDS.toDF
+      .consistentRepartition(NumFiles, "sample_id", (sid: String) => sid.toDouble / 100.0)
       .sortWithinPartitions($"sample_id")
       .drop(SubmissionDatePartitionName)
       .write
