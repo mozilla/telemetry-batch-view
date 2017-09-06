@@ -1,11 +1,13 @@
 package com.mozilla.telemetry.views
 
-import com.mozilla.telemetry.experiments.analyzers.{CrashAnalyzer, ExperimentAnalyzer, HistogramAnalyzer, MetricAnalysis, ScalarAnalyzer}
+import com.mozilla.telemetry.experiments.Permutations.weightedGenerator
+import com.mozilla.telemetry.experiments.analyzers._
 import com.mozilla.telemetry.metrics._
 import com.mozilla.telemetry.utils.getOrCreateSparkSession
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.functions.{col, min, udf}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.rogach.scallop.ScallopConf
-import org.apache.spark.sql.functions.{col, min}
+
 import scala.util.{Failure, Success, Try}
 
 object ExperimentAnalysisView {
@@ -131,5 +133,20 @@ object ExperimentAnalysisView {
     val metadata = ExperimentAnalyzer.getExperimentMetadata(experimentsSummary).collect()
     val crashes = CrashAnalyzer.getExperimentCrashes(errorAggregates)
     (metadata ++ metrics ++ crashes).toList
+  }
+
+  def addPermutations(df: DataFrame, branchCounts: Map[String, Long], experiment: String): DataFrame = {
+    // create the cutoffs from branchCounts
+    val total = branchCounts.map(_._2).sum.toDouble
+    val cutoffs = branchCounts
+      .toList
+      .sortBy(_._1) // sort by branch name
+      .scanLeft(0L)(_ + _._2) // transform to cumulative branch counts
+      .tail  // drop the initial 0 from scanLeft
+      .map(_/total) // turn cumulative counts into cutoffs from 0 to 1
+
+    val generator = weightedGenerator(cutoffs, experiment) _
+    val permutationsUDF = udf(generator)
+    df.withColumn("permutations", permutationsUDF(col("client_id")))
   }
 }
