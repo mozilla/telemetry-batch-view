@@ -88,7 +88,9 @@ class ExperimentSummaryViewTest extends FlatSpec with Matchers{
 
     val expected = List("shield-public-infobar-display-bug1368141",
                         "shield-lazy-client-classify",
-                        "pref-flip-test-nightly-1")
+                        "pref-flip-test-nightly-1",
+                        "nightly-nothing-burger-1"
+    )
 
     assert(ExperimentSummaryView.getExperimentList(json) == expected)
   }

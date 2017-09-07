@@ -201,5 +201,142 @@
       },
       "comment": "looks good to me"
     }
+  },
+  {
+    "id": 225,
+    "last_updated": "2017-08-30T20:17:59.565943Z",
+    "name": "Opt-out Nightly Enrollment Test - Nothing Burger",
+    "enabled": false,
+    "is_approved": false,
+    "revision_id": "8a013fc441e6396836ac7222cae63756c7818b32be4850902a431dbfa838132c",
+    "action": "opt-out-study",
+    "arguments": {
+      "name": "nightly-nothing-burger-1",
+      "description": "Enrollment test on 40% of Nightly en_US. No UI. End date is 9/1. Bug: https://bugzilla.mozilla.org/show_bug.cgi?id=1394962",
+      "addonUrl": "https://net-mozaws-prod-us-west-2-normandy.s3.amazonaws.com/extensions/shield-optout-nothing-study-signed.xpi"
+    },
+    "channels": [],
+    "countries": [],
+    "locales": [],
+    "extra_filter_expression": "( normandy.channel == 'nightly' && \n[normandy.userId, normandy.recipe.id]|stableSample(0.40) && \nnormandy.locale == 'en-US' &&\nnormandy.version >= '57.0' )",
+    "filter_expression": "( normandy.channel == 'nightly' && \n[normandy.userId, normandy.recipe.id]|stableSample(0.40) && \nnormandy.locale == 'en-US' &&\nnormandy.version >= '57.0' )",
+    "latest_revision_id": "8a013fc441e6396836ac7222cae63756c7818b32be4850902a431dbfa838132c",
+    "approved_revision_id": null,
+    "approval_request": {
+      "id": 176,
+      "created": "2017-08-30T20:18:02.195615Z",
+      "creator": {
+        "id": 3,
+        "first_name": "",
+        "last_name": "",
+        "email": "mgrimes@mozilla.com"
+      },
+      "approved": true,
+      "approver": {
+        "id": 2,
+        "first_name": "",
+        "last_name": "",
+        "email": "mkelly@mozilla.com"
+      },
+      "comment": "Approved for testing on Nightly alongside a pref experiment with the same filters."
+    }
+  },
+  {
+    "id": 204,
+    "last_updated": "2017-08-21T20:53:20.617299Z",
+    "name": "Shield Study 14 - Privacy Prefs Breakage (Bug 1377563)",
+    "enabled": false,
+    "is_approved": false,
+    "revision_id": "345416e5dea3f428d48277ef8c9cc60c4005c9241adc325a97a1ed34a0f03a7a",
+    "action": "show-heartbeat",
+    "arguments": {
+      "engagementButtonLabel": "Tell me more",
+      "includeTelemetryUUID": true,
+      "learnMoreMessage": "Learn More",
+      "learnMoreUrl": "https://wiki.mozilla.org/Firefox/Shield/Shield_Studies",
+      "message": "Please help us improve Firefox privacy features",
+      "postAnswerUrl": "https://addons.mozilla.org/firefox/shield_study_14",
+      "repeatOption": "once",
+      "surveyId": "privacy-prefs-breakage-1",
+      "thanksMessage": "Thank You!"
+    },
+    "channels": [],
+    "countries": [],
+    "locales": [],
+    "extra_filter_expression": "(\n    [normandy.userId]|bucketSample(592, 30, 1000)\n    && normandy.locale in ['en-US', 'en-AU', 'en-CA', 'en-GB', 'en-NZ', 'en-ZA']\n    && normandy.channel == 'release'\n    && normandy.version >= '53.0'\n    && !normandy.isFirstRun\n)",
+    "filter_expression": "(\n    [normandy.userId]|bucketSample(592, 30, 1000)\n    && normandy.locale in ['en-US', 'en-AU', 'en-CA', 'en-GB', 'en-NZ', 'en-ZA']\n    && normandy.channel == 'release'\n    && normandy.version >= '53.0'\n    && !normandy.isFirstRun\n)",
+    "latest_revision_id": "345416e5dea3f428d48277ef8c9cc60c4005c9241adc325a97a1ed34a0f03a7a",
+    "approved_revision_id": null,
+    "approval_request": {
+      "id": 165,
+      "created": "2017-08-21T20:53:23.013469Z",
+      "creator": {
+        "id": 3,
+        "first_name": "",
+        "last_name": "",
+        "email": "mgrimes@mozilla.com"
+      },
+      "approved": true,
+      "approver": {
+        "id": 7,
+        "first_name": "",
+        "last_name": "",
+        "email": "isegall@mozilla.com"
+      },
+      "comment": "roll 'er out"
+    }
+  },
+  {
+    "id": 220,
+    "last_updated": "2017-09-06T16:47:58.999161Z",
+    "name": "Preference Experiment: Screenshots in Release (Bug 1369150)",
+    "enabled": true,
+    "is_approved": true,
+    "revision_id": "6142d29a534b5b45f216c72af7b59b4d2522408cc6729e54d29eda0f24c56ba7",
+    "action": "preference-experiment",
+    "arguments": {
+      "slug": "pref-flip-screenshots-release-1369150",
+      "experimentDocumentUrl": "https://bugzilla.mozilla.org/show_bug.cgi?id=1369150",
+      "preferenceName": "extensions.screenshots.system-disabled",
+      "preferenceType": "boolean",
+      "preferenceBranchType": "default",
+      "branches": [
+        {
+          "ratio": 1,
+          "slug": "control",
+          "value": true
+        },
+        {
+          "ratio": 1,
+          "slug": "screenshots-enabled",
+          "value": false
+        }
+      ]
+    },
+    "channels": [],
+    "countries": [],
+    "locales": [],
+    "extra_filter_expression": "( normandy.channel == 'release' && \n[normandy.userId, normandy.recipe.id]|stableSample(0.25) && \nnormandy.version >= '55.0' &&\nnormandy.version < '56.0' )",
+    "filter_expression": "( normandy.channel == 'release' && \n[normandy.userId, normandy.recipe.id]|stableSample(0.25) && \nnormandy.version >= '55.0' &&\nnormandy.version < '56.0' )",
+    "latest_revision_id": "6142d29a534b5b45f216c72af7b59b4d2522408cc6729e54d29eda0f24c56ba7",
+    "approved_revision_id": "6142d29a534b5b45f216c72af7b59b4d2522408cc6729e54d29eda0f24c56ba7",
+    "approval_request": {
+      "id": 187,
+      "created": "2017-09-06T16:48:08.120712Z",
+      "creator": {
+        "id": 3,
+        "first_name": "",
+        "last_name": "",
+        "email": "mgrimes@mozilla.com"
+      },
+      "approved": true,
+      "approver": {
+        "id": 11,
+        "first_name": "Kamyar",
+        "last_name": "Ardekani",
+        "email": "kardekani@mozilla.com"
+      },
+      "comment": "Ramping up to 25% of release. 56.0 and above excluded so that users can receive the built-in version from 56.0."
+    }
   }
 ]
