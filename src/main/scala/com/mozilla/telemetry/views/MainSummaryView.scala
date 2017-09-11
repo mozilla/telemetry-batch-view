@@ -215,6 +215,21 @@ object MainSummaryView {
     }
   }
 
+  def getDisabledAddons(activeAddons: JValue, addonDetails: JValue): Option[List[String]] = {
+    // Get the list of ids from the active addons.
+    val activeIds = activeAddons match {
+      case JObject(addons) => addons.map(k => k._1)
+      case _ => List()
+    }
+    // Only report the ids of the addons which are in the addonDetails but not in the activeAddons.
+    // They are the disabled addons (possibly because they are legacy). We need this as addonDetails
+    // may contain both disabled and active addons.
+    addonDetails match {
+      case JObject(addons) => Some(addons.map(k => k._1).filter(k => !activeIds.contains(k)))
+      case _ => None
+    }
+  }
+
   def getTheme(theme: JValue): Option[Row] = {
     implicit val formats = DefaultFormats
     Try(theme.extract[Addon]) match {
@@ -630,6 +645,7 @@ object MainSummaryView {
         MainPing.getSearchCounts(keyedHistograms("parent") \ "SEARCH_COUNTS").orNull,
 
         getActiveAddons(addons \ "activeAddons").orNull,
+        getDisabledAddons(addons \ "activeAddons", payload \ "payload" \ "addonDetails" \ "XPI").orNull,
         getTheme(addons \ "theme").orNull,
         settings \ "blocklistEnabled" match {
           case JBool(x) => x
@@ -972,6 +988,9 @@ object MainSummaryView {
 
       // Addon and configuration settings per Bug 1290181
       StructField("active_addons", ArrayType(buildAddonSchema, containsNull = false), nullable = true), // One per item in environment.addons.activeAddons
+      // Legacy/disabled addon and configuration settings per Bug 1390814. Please note that |disabled_addons_ids|
+      // may go away in the future.
+      StructField("disabled_addons_ids", ArrayType(StringType, containsNull = false), nullable = true), // One per item in payload.addonDetails.XPI
       StructField("active_theme", buildAddonSchema, nullable = true), // environment.addons.theme
       StructField("blocklist_enabled", BooleanType, nullable = true), // environment.settings.blocklistEnabled
       StructField("addon_compatibility_check_enabled", BooleanType, nullable = true), // environment.settings.addonCompatibilityCheckEnabled
