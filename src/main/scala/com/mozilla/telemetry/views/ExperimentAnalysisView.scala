@@ -54,12 +54,17 @@ object ExperimentAnalysisView {
 
       val spark = getSpark
       val experimentsSummary = spark.read.option("mergeSchema", "true").parquet(conf.inputLocation())
+        .where(col("experiment_id") === e)
 
-      val minDate = experimentsSummary.agg(min("submission_date_s3")).first.getAs[String](0)
+      val minDate = experimentsSummary
+        .agg(min("submission_date_s3"))
+        .first.getAs[String](0)
+
       val errorAggregates = Try(spark.read.parquet(s"s3://${conf.errorAggregatesBucket()}/$errorAggregatesPath")) match {
         case Success(df) => df.where(col("experiment_id") === e && col("submission_date") >= minDate)
         case Failure(_) => spark.emptyDataFrame
       }
+
       val outputLocation = s"${conf.outputLocation()}/experiment_id=$e/date=$date"
 
       import spark.implicits._
@@ -111,20 +116,19 @@ object ExperimentAnalysisView {
 
   def getExperimentMetrics(experiment: String, experimentsSummary: DataFrame, errorAggregates: DataFrame, conf: Conf): List[MetricAnalysis] = {
     val metricList = getMetrics(conf, experimentsSummary)
-    val experimentData = experimentsSummary.where(col("experiment_id") === experiment)
 
     val metrics = metricList.flatMap {
       case (name: String, md: MetricDefinition) =>
         md match {
           case hd: HistogramDefinition =>
-            new HistogramAnalyzer(name, hd, experimentData).analyze().collect()
+            new HistogramAnalyzer(name, hd, experimentsSummary).analyze().collect()
           case sd: ScalarDefinition =>
-            ScalarAnalyzer.getAnalyzer(name, sd, experimentData).analyze().collect()
+            ScalarAnalyzer.getAnalyzer(name, sd, experimentsSummary).analyze().collect()
           case _ => throw new UnsupportedOperationException("Unsupported metric definition type")
         }
     }
 
-    val metadata = ExperimentAnalyzer.getExperimentMetadata(experimentData).collect()
+    val metadata = ExperimentAnalyzer.getExperimentMetadata(experimentsSummary).collect()
     val crashes = CrashAnalyzer.getExperimentCrashes(errorAggregates)
     (metadata ++ metrics ++ crashes).toList
   }

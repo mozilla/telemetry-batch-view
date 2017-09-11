@@ -51,7 +51,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
   "Child Scalars" can "be counted" in {
     import spark.implicits._
 
-    val data = predata.toDS().toDF()
+    val data = predata.toDS().toDF().where(col("experiment_id") === "id1")
     val args =
       "--input" :: "telemetry-mock-bucket" ::
       "--output" :: "telemetry-mock-bucket" :: Nil
@@ -65,7 +65,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
   "Child Histograms" can "be counted" in {
     import spark.implicits._
 
-    val data = predata.toDS().toDF()
+    val data = predata.toDS().toDF().where(col("experiment_id") === "id1")
     val args =
       "--input" :: "telemetry-mock-bucket" ::
       "--output" :: "telemetry-mock-bucket" :: Nil
@@ -79,7 +79,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
   "Total client ids and pings" can "be counted" in {
     import spark.implicits._
 
-    val data = predata.toDS().toDF()
+    val data = predata.toDS().toDF().where(col("experiment_id") === "id1")
     val args =
       "--input" :: "telemetry-mock-bucket" ::
       "--output" :: "telemetry-mock-bucket" :: Nil
