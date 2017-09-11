@@ -1,0 +1,36 @@
+# This file contains a copy of definitions of the scalar probes that are recorded in Telemetry.
+# They are probes that were originally recorded as simple measurements, but have been duplicated or migrated to scalars.
+# This file contains only these probes, and is for testing their scalar implementation purposes only.
+
+# The following section contains the browser engagement scalars.
+browser.engagement:
+  active_ticks:
+    bug_numbers:
+      - 1376942
+    description: >
+      The count of the number of five-second intervals ('ticks') the user
+      was considered 'active' in a subsession. Session activity involves keyboard or mouse
+      interaction with the application. It does not take into account whether or not the window
+      has focus or is in the foreground, only if it is receiving these interaction events.
+    expires: never
+    kind: uint
+    notification_emails:
+      - bcolloran@mozilla.com
+    release_channel_collection: opt-out
+    record_in_processes:
+      - 'main'
+
+# The following section contains probes that record timestamps.
+timestamps:
+  first_paint:
+    bug_numbers:
+      - 1386186
+    description: >
+     Record the timestamp of the first content window paint, in milliseconds since process start.
+    expires: never
+    kind: uint
+    notification_emails:
+      - hkirschner@mozilla.com
+    release_channel_collection: opt-out
+    record_in_processes:
+      - main

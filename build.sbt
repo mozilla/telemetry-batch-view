@@ -35,8 +35,7 @@ lazy val root = (project in file(".")).
     libraryDependencies += "eu.unicredit" %% "hbase-rdd" % "0.7.1",
     libraryDependencies += "org.scalaj" %% "scalaj-http" % "2.3.0",
     libraryDependencies += "org.yaml" % "snakeyaml" % "1.17",
-    libraryDependencies += "com.google.protobuf" % "protobuf-java" % "2.5.0",
-    libraryDependencies += "com.twitter" %% "algebird-core" % "0.12.0"
+    libraryDependencies += "com.google.protobuf" % "protobuf-java" % "2.5.0"
   )
 
 /*

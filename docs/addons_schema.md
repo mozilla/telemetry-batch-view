@@ -26,7 +26,7 @@ root
  |-- sample_id: string (nullable = true)
 ```
 For more detail on where these fields come from in the
-[raw data](https://gecko.readthedocs.io/en/latest/toolkit/components/telemetry/telemetry/data/environment.html#addons),
+[raw data](https://firefox-source-docs.mozilla.org/toolkit/components/telemetry/telemetry/data/environment.html#addons),
 please look 
 [in the AddonsView code](src/main/scala/views/AddonsView.scala).
 

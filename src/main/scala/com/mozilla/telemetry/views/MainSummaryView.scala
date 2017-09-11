@@ -659,7 +659,14 @@ object MainSummaryView {
 
         // bug 1353114 - payload.simpleMeasurements.*
         asInt(simpleMeasures \ "main"),
-        asInt(simpleMeasures \ "firstPaint"),
+
+        // Use scalar version when available.
+        Try(MainPing.getScalarByName(scalars, scalarDefinitions, "scalar_parent_timestamps_first_paint")) match {
+          case Success(x: Integer) => x
+          case _ => asInt (simpleMeasures \ "firstPaint")
+        },
+
+        // bug 1353114 - payload.simpleMeasurements.*
         asInt(simpleMeasures \ "sessionRestored"),
         asInt(simpleMeasures \ "totalTime"),
 
