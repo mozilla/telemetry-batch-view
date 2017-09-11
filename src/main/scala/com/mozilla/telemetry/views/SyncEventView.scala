@@ -134,7 +134,7 @@ object SyncEventView {
 }
 
 // Convert Sync Events, which are defined by the schema at:
-// https://gecko.readthedocs.io/en/latest/toolkit/components/telemetry/telemetry/data/sync-ping.html#events-in-the-sync-ping
+// https://firefox-source-docs.mozilla.org/toolkit/components/telemetry/telemetry/data/sync-ping.html#events-in-the-sync-ping
 object SyncEventConverter {
   def eventFields: Array[StructField] = Events.buildEventSchema.fields.map(
     f => f.copy(name = "event_" + f.name) // prepends `event_` to event schema column names for clarity
