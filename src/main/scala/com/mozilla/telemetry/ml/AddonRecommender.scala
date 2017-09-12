@@ -208,13 +208,13 @@ object AddonRecommender {
     }))
     val addonMappingPath = Paths.get(s"$localOutputDir/addon_mapping.json")
     val privateS3prefix = s"telemetry-ml/addon_recommender/${runDate}"
-    val publicS3prefix = "telemetry-ml/addon_recommender"
+    val latestS3prefix = "telemetry-ml/addon_recommender"
     Files.write(addonMappingPath, serializedMapping.getBytes(StandardCharsets.UTF_8))
     // We upload the generated data in a private bucket to have an history of all the
     // generated models. Also push the latest version on the public bucket, so that
     // AMO can access it over HTTP.
     S3Store.uploadFile(addonMappingPath.toFile, privateBucket, privateS3prefix, addonMappingPath.getFileName.toString)
-    S3Store.uploadFile(addonMappingPath.toFile, publicBucket, publicS3prefix, addonMappingPath.getFileName.toString)
+    S3Store.uploadFile(addonMappingPath.toFile, publicBucket, latestS3prefix, addonMappingPath.getFileName.toString)
 
     // Serialize item matrix
     val itemFactors = model.bestModel.asInstanceOf[ALSModel].itemFactors.as[ItemFactors].collect()
@@ -222,12 +222,12 @@ object AddonRecommender {
     val itemMatrixPath = Paths.get(s"$localOutputDir/item_matrix.json")
     Files.write(itemMatrixPath, serializedItemFactors.getBytes(StandardCharsets.UTF_8))
     S3Store.uploadFile(itemMatrixPath.toFile, privateBucket, privateS3prefix, itemMatrixPath.getFileName.toString)
-    S3Store.uploadFile(itemMatrixPath.toFile, publicBucket, publicS3prefix, itemMatrixPath.getFileName.toString)
+    S3Store.uploadFile(itemMatrixPath.toFile, publicBucket, latestS3prefix, itemMatrixPath.getFileName.toString)
 
     // Upload the generated AMO cache to a S3 bucket.
     val addonCachePath = AMODatabase.getLocalCachePath()
     S3Store.uploadFile(addonCachePath.toFile, privateBucket, privateS3prefix, addonCachePath.getFileName.toString)
-    S3Store.uploadFile(addonCachePath.toFile, privateBucket, publicBucket, addonCachePath.getFileName.toString)
+    S3Store.uploadFile(addonCachePath.toFile, privateBucket, latestS3prefix, addonCachePath.getFileName.toString)
 
     // Serialize model to HDFS and then copy it to the local machine. We need to do this
     // instead of simply saving to file:// due to permission issues.
