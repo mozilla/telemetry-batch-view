@@ -165,6 +165,57 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     actual should be (expected)
   }
 
+  "MainSummary legacy addons" can "be summarized" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "submission" -> """{
+          "payload": {
+            "addonDetails": {
+              "XPI": {
+                "some-disabled-addon-id": {
+                  "dont-care": "about-this-data",
+                  "we-discard-this": 11
+                },
+                "active-addon-id": {
+                  "dont-care": 12
+                }
+              }
+            }
+          }
+        }""",
+        "environment.addons" -> """{
+          "activeAddons": {
+            "active-addon-id": {
+              "isSystem": false,
+              "isWebExtension": true
+            },
+            "gom-jabbar": {
+              "isSystem": false,
+              "isWebExtension": true
+            }
+          },
+          "theme": {
+            "id": "firefox-compact-light@mozilla.org"
+          }
+        }"""),
+      None);
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+
+    // This will make sure that:
+    // - the disabled addon is in the list;
+    // - active addons are filtered out.
+    val expected = Map(
+      "document_id" -> "foo",
+      "disabled_addons_ids" -> List("some-disabled-addon-id")
+    )
+    val actual = applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      .getValuesMap(expected.keys.toList)
+    actual should be (expected)
+  }
+
   // Apply the given schema to the given potentially-generic Row.
   def applySchema(row: Row, schema: StructType): Row = new GenericRowWithSchema(row.toSeq.toArray, schema)
 
