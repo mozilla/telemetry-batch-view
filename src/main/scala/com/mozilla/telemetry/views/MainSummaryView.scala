@@ -109,7 +109,7 @@ object MainSummaryView {
       val scalarDefinitions = Scalars.definitions(includeOptin = true).toList.sortBy(_._1)
 
       val histogramDefinitions = filterHistogramDefinitions(
-        Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _),
+        Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true),
         useWhitelist = !conf.allHistograms())
 
       val schema = buildSchema(scalarDefinitions, histogramDefinitions)
@@ -852,6 +852,7 @@ object MainSummaryView {
       case _: EnumeratedHistogram => true
       case _: BooleanHistogram => true
       case _: FlagHistogram => true // FIXME: hack to allow `A11Y_INSTANTIATED_FLAG` through until we can update it
+      case _: CategoricalHistogram => true
       case _ => false
     }).filter(
       entry => !useWhitelist || histogramsWhitelist.contains(entry._2.originalName)
@@ -859,13 +860,20 @@ object MainSummaryView {
   }
 
   val HistogramSchema = MapType(IntegerType, IntegerType, true)
+  val CategoricalHistogramSchema = MapType(StringType, IntegerType, true)
 
   def buildHistogramSchema(histogramDefinitions: List[(String, HistogramDefinition)]): List[StructField] = {
     histogramDefinitions.map{
       case (name, definition) =>
+        definition match {
+          case _: CategoricalHistogram => (name, definition, CategoricalHistogramSchema)
+          case _ => (name, definition, HistogramSchema)
+        }
+    }.map{
+      case (name, definition, schemaType) =>
         definition.keyed match {
-          case true => StructField(name, MapType(StringType, HistogramSchema), nullable = true)
-          case false => StructField(name, HistogramSchema, nullable = true)
+          case true => StructField(name, MapType(StringType, schemaType), nullable = true)
+          case false => StructField(name, schemaType, nullable = true)
         }
     }
   }

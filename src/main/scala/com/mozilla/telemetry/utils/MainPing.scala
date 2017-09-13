@@ -373,19 +373,41 @@ object MainPing{
     }
   }
 
+  /**
+   * Converts buckets to their labels.
+   * Accumulates all non-labeled buckets into the spill bucket.
+   */
+  def extractCategoricalHistogramMap(definition: CategoricalHistogram)(histogram: JValue): Map[String, Int] = {
+    extractHistogramMap(histogram) match {
+      case null => null
+      case l => l.toList
+        .map{ case(k, v) => definition.getLabel(k) -> v }
+        .groupBy(_._1)
+        .mapValues(_.foldLeft(0)(_ + _._2))
+        .map(identity) // see https://stackoverflow.com/questions/32900862/map-can-not-be-serializable-in-scala
+    }
+  }
+
   def histogramsToRow(histograms: Map[String, JValue], definitions: List[(String, HistogramDefinition)]): Row = {
     implicit val formats = DefaultFormats
 
     Row.fromSeq(
       definitions.map{
         case (name, definition) =>
+          definition match {
+            case d: CategoricalHistogram => (definition, extractCategoricalHistogramMap(d) _)
+            case _ => (definition, extractHistogramMap _)
+          }
+      }.map{
+        case (definition, extractFunc) =>
           definition.keyed match {
             case true =>
-              Try((histograms(definition.process.get) \ definition.originalName).extract[Map[String,JValue]].mapValues(extractHistogramMap _).map(identity)) match {
+              Try((histograms(definition.process.get) \ definition.originalName).extract[Map[String,JValue]].mapValues(extractFunc).map(identity)) match {
                 case Success(keyedHistogram) => keyedHistogram
                 case _ => null
-            }
-            case false => extractHistogramMap(histograms(definition.process.get) \ definition.originalName)
+              }
+            case false =>
+              extractFunc(histograms(definition.process.get) \ definition.originalName)
           }
       }
     )
