@@ -171,18 +171,14 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       Map(
         "documentId" -> "foo",
         "submissionDate" -> "1234",
-        "submission" -> """{
-          "payload": {
-            "addonDetails": {
-              "XPI": {
-                "some-disabled-addon-id": {
-                  "dont-care": "about-this-data",
-                  "we-discard-this": 11
-                },
-                "active-addon-id": {
-                  "dont-care": 12
-                }
-              }
+        "payload.addonDetails" -> """{
+          "XPI": {
+            "some-disabled-addon-id": {
+              "dont-care": "about-this-data",
+              "we-discard-this": 11
+            },
+            "active-addon-id": {
+              "dont-care": 12
             }
           }
         }""",
