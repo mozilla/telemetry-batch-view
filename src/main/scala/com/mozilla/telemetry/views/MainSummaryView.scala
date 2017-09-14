@@ -366,6 +366,7 @@ object MainSummaryView {
       // Don't compute the expensive stuff until we need it. We may skip a record
       // due to missing required fields.
       lazy val addons = parse(fields.getOrElse("environment.addons", "{}").asInstanceOf[String])
+      lazy val addonDetails = parse(fields.getOrElse("payload.addonDetails", "{}").asInstanceOf[String])
       lazy val payload = parse(message.payload.getOrElse(fields.getOrElse("submission", "{}")).asInstanceOf[String])
       lazy val application = payload \ "application"
       lazy val build = parse(fields.getOrElse("environment.build", "{}").asInstanceOf[String])
@@ -645,7 +646,7 @@ object MainSummaryView {
         MainPing.getSearchCounts(keyedHistograms("parent") \ "SEARCH_COUNTS").orNull,
 
         getActiveAddons(addons \ "activeAddons").orNull,
-        getDisabledAddons(addons \ "activeAddons", payload \ "payload" \ "addonDetails" \ "XPI").orNull,
+        getDisabledAddons(addons \ "activeAddons", addonDetails \ "XPI").orNull,
         getTheme(addons \ "theme").orNull,
         settings \ "blocklistEnabled" match {
           case JBool(x) => x
