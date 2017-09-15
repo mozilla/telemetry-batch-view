@@ -61,25 +61,38 @@ object HBaseAddonRecommenderView {
         // Get the data for the desired date.
         val data = datasetForDate(currentDateString)
 
-        // Only get the most recent entry (by subsession start date rather than submission
-        // date) for each client.
-        val clientsData: DataFrame = data
-            .select(
-              $"client_id",
-              $"subsession_start_date",
-              $"city",
-              $"locale",
-              $"os",
-              $"places_bookmarks_count",
-              $"scalar_parent_browser_engagement_tab_open_event_count",
-              $"scalar_parent_browser_engagement_total_uri_count",
-              $"scalar_parent_browser_engagement_unique_domains_count",
-              $"active_addons",
-              row_number()
-                .over(Window.partitionBy("client_id")
-                  .orderBy(desc("subsession_start_date")))
-                .alias("clientid_rank"))
+        // Get the most recent (client_id, subsession_start_date) tuple for each client
+        // since the main_summary might contain multiple rows per client. We will use
+        // it to filter out the full table with all the columns we require.
+        val clientsShortlist = data
+          .select(
+            $"client_id",
+            $"subsession_start_date",
+            row_number()
+              .over(Window.partitionBy("client_id")
+                .orderBy(desc("subsession_start_date")))
+              .alias("clientid_rank"))
           .where($"clientid_rank" === 1)
+          .drop("clientid_rank")
+
+        // Restrict the data to the columns we're interested in.
+        val dataSubset = data
+          .select(
+            $"client_id",
+            $"subsession_start_date",
+            $"city",
+            $"locale",
+            $"os",
+            $"places_bookmarks_count",
+            $"scalar_parent_browser_engagement_tab_open_event_count",
+            $"scalar_parent_browser_engagement_total_uri_count",
+            $"scalar_parent_browser_engagement_unique_domains_count",
+            $"active_addons")
+
+        // Join the two tables: only the elements in both dataframes will make it
+        // through.
+        val clientsData = dataSubset
+          .join(clientsShortlist, Seq("client_id", "subsession_start_date"))
 
         // Convert the DataFrame to JSON and get an RDD out of it.
         val subset = clientsData.select("client_id", "subsession_start_date")
