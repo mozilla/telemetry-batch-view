@@ -87,7 +87,8 @@ object HBaseAddonRecommenderView {
             $"scalar_parent_browser_engagement_tab_open_event_count",
             $"scalar_parent_browser_engagement_total_uri_count",
             $"scalar_parent_browser_engagement_unique_domains_count",
-            $"active_addons")
+            $"active_addons",
+            $"disabled_addons_ids")
 
         // Join the two tables: only the elements in both dataframes will make it
         // through.
