@@ -17,7 +17,8 @@ case class TestMainSummaryPing(client_id: Option[String],
                                scalar_parent_browser_engagement_tab_open_event_count: Option[Long] = None,
                                scalar_parent_browser_engagement_total_uri_count: Option[Long] = None,
                                scalar_parent_browser_engagement_unique_domains_count: Option[Long] = None,
-                               active_addons: Option[String] = None)
+                               active_addons: Option[String] = None,
+                               disabled_addons_ids: Option[String] = None)
 
 class HBaseAddonRecommenderViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   val tableName = HBaseAddonRecommenderView.tableName
