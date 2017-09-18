@@ -151,5 +151,25 @@
     "releaseChannelCollection": "opt-out",
     "description": "a testing histogram; not meant to be touched",
     "record_in_processes": ["all_childs"]
+  },
+  "MOCK_CATEGORICAL": {
+    "alert_emails": ["telemetry-client-dev@mozilla.com"],
+    "expires_in_version": "never",
+    "kind": "categorical",
+    "keyed": false,
+    "labels": ["I", "am", "a", "strange", "loop"],
+    "releaseChannelCollection": "opt-out",
+    "description": "a testing histogram; not meant to be touched",
+    "record_in_processes": ["main", "content", "gpu"]
+  },
+  "MOCK_KEYED_CATEGORICAL": {
+    "alert_emails": ["telemetry-client-dev@mozilla.com"],
+    "expires_in_version": "never",
+    "kind": "categorical",
+    "keyed": true,
+    "labels": ["all", "of", "this", "has", "happened", "before"],
+    "releaseChannelCollection": "opt-out",
+    "description": "a testing histogram; not meant to be touched",
+    "record_in_processes": ["main", "content", "gpu"]
   }
 }

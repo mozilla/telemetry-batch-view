@@ -1,6 +1,6 @@
 package com.mozilla.telemetry.views
 
-import com.mozilla.telemetry.utils.{S3Store, getOrCreateSparkSession}
+import com.mozilla.telemetry.utils.{deletePrefix, getOrCreateSparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.SparkSession
 import org.joda.time.{DateTime, Days, format}
@@ -15,10 +15,13 @@ object ExperimentSummaryView {
   def schemaVersion: String = "v1"
   def jobName: String = "experiments"
   def experimentsUrl: String = "https://normandy.services.mozilla.com/api/v1/recipe/"
-  def experimentsUrlParams = List(("latest_revision__action", "3"), ("format", "json"))
-  def experimentsQualifyingAction = "preference-experiment"
+  def experimentsUrlParams = List(("format", "json"))
+  def experimentsQualifyingAction = List("preference-experiment", "opt-out-study")
+  def excludedExperiments = List("pref-flip-screenshots-release-1369150")
   private case class NormandyRecipeBranch(ratio: Int, slug: String, value: Any)
-  private case class NormandyRecipeArguments(branches: List[NormandyRecipeBranch], slug: String)
+  private case class NormandyRecipeArguments(branches: List[NormandyRecipeBranch],
+                                             slug: Option[String],
+                                             name: Option[String])
   private case class NormandyRecipe(id: Long, enabled: Boolean, action: String, arguments: NormandyRecipeArguments)
   case class NormandyException(private val message: String = "",
                                private val cause: Throwable = None.orNull) extends Exception(message, cause)
@@ -82,10 +85,7 @@ object ExperimentSummaryView {
 
   def deletePreviousOutput(bucket: String, prefix: String, date: String, experiment: String): Unit = {
     val completePrefix = s"$prefix/experiment_id=$experiment/submission_date_s3=$date"
-    if (!S3Store.isPrefixEmpty(bucket, completePrefix)) {
-      // not the most efficient way to do this, but this is all on AWS anyway..
-      S3Store.listKeys(bucket, completePrefix).foreach(o => S3Store.deleteKey(bucket, o.key))
-    }
+    deletePrefix(bucket, completePrefix)
   }
 
   def writeExperiments(input: String, output: String, date: String, experiments: List[String], spark: SparkSession): Unit = {
@@ -110,15 +110,35 @@ object ExperimentSummaryView {
   }
 
   def getExperimentList(json: JValue): List[String] = {
-    implicit val formats = DefaultFormats
     json match {
       case JArray(x) => x.flatMap(v =>
-        Try(v.extract[NormandyRecipe]) match {
-          case Success(r) => if (r.action == experimentsQualifyingAction) List(r.arguments.slug) else List()
+        getNormalizedRecipe(v) match {
+          case Some(r) =>
+            if (experimentsQualifyingAction.contains(r.action) && !excludedExperiments.contains(r.arguments.slug.get))
+              List(r.arguments.slug.get)
+            else
+              List()
           case _ => List()
         }
       )
       case _ => throw NormandyException("Unexpected response format from experiment recipe server")
+    }
+  }
+
+  private def getNormalizedRecipe(json: JValue): Option[NormandyRecipe] = {
+    // Some normandy recipes stuff the slug in a "slug" field and some in a "name" field
+    // Here we try to normalize this a bit
+    implicit val formats = DefaultFormats
+    Try(json.extract[NormandyRecipe]) match {
+      case Success(r) =>
+        Try(r.arguments.slug.getOrElse(r.arguments.name.get)) match {
+          case Success(slug) =>
+            Some(r.copy(arguments=NormandyRecipeArguments(r.arguments.branches, Some(slug), Some(slug))))
+          case _ =>
+            None
+        }
+      case _ =>
+        None
     }
   }
 }

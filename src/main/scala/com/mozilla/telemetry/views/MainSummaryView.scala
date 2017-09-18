@@ -59,6 +59,7 @@ object MainSummaryView {
     val limit = opt[Int]("limit", descr = "Maximum number of files to read from S3", required = false)
     val channel = opt[String]("channel", descr = "Only process data from the given channel", required = false)
     val appVersion = opt[String]("version", descr = "Only process data from the given app version", required = false)
+    val allHistograms = opt[Boolean]("all-histograms", descr = "Flag to use all histograms", required = false)
     verify()
   }
 
@@ -108,7 +109,9 @@ object MainSummaryView {
 
       val scalarDefinitions = Scalars.definitions(includeOptin = true).toList.sortBy(_._1)
 
-      val histogramDefinitions = filterHistogramDefinitions(Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _), useWhitelist = true)
+      val histogramDefinitions = filterHistogramDefinitions(
+        Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true),
+        useWhitelist = !conf.allHistograms())
 
       val schema = buildSchema(scalarDefinitions, histogramDefinitions)
       val ignoredCount = sc.accumulator(0, "Number of Records Ignored")
@@ -209,6 +212,21 @@ object MainSummaryView {
         }
         Some(rows.toList)
       }
+      case _ => None
+    }
+  }
+
+  def getDisabledAddons(activeAddons: JValue, addonDetails: JValue): Option[List[String]] = {
+    // Get the list of ids from the active addons.
+    val activeIds = activeAddons match {
+      case JObject(addons) => addons.map(k => k._1)
+      case _ => List()
+    }
+    // Only report the ids of the addons which are in the addonDetails but not in the activeAddons.
+    // They are the disabled addons (possibly because they are legacy). We need this as addonDetails
+    // may contain both disabled and active addons.
+    addonDetails match {
+      case JObject(addons) => Some(addons.map(k => k._1).filter(k => !activeIds.contains(k)))
       case _ => None
     }
   }
@@ -349,6 +367,7 @@ object MainSummaryView {
       // Don't compute the expensive stuff until we need it. We may skip a record
       // due to missing required fields.
       lazy val addons = parse(fields.getOrElse("environment.addons", "{}").asInstanceOf[String])
+      lazy val addonDetails = parse(fields.getOrElse("payload.addonDetails", "{}").asInstanceOf[String])
       lazy val payload = parse(message.payload.getOrElse(fields.getOrElse("submission", "{}")).asInstanceOf[String])
       lazy val application = payload \ "application"
       lazy val build = parse(fields.getOrElse("environment.build", "{}").asInstanceOf[String])
@@ -628,6 +647,7 @@ object MainSummaryView {
         MainPing.getSearchCounts(keyedHistograms("parent") \ "SEARCH_COUNTS").orNull,
 
         getActiveAddons(addons \ "activeAddons").orNull,
+        getDisabledAddons(addons \ "activeAddons", addonDetails \ "XPI").orNull,
         getTheme(addons \ "theme").orNull,
         settings \ "blocklistEnabled" match {
           case JBool(x) => x
@@ -833,6 +853,7 @@ object MainSummaryView {
       case _: EnumeratedHistogram => true
       case _: BooleanHistogram => true
       case _: FlagHistogram => true // FIXME: hack to allow `A11Y_INSTANTIATED_FLAG` through until we can update it
+      case _: CategoricalHistogram => true
       case _ => false
     }).filter(
       entry => !useWhitelist || histogramsWhitelist.contains(entry._2.originalName)
@@ -840,13 +861,20 @@ object MainSummaryView {
   }
 
   val HistogramSchema = MapType(IntegerType, IntegerType, true)
+  val CategoricalHistogramSchema = MapType(StringType, IntegerType, true)
 
   def buildHistogramSchema(histogramDefinitions: List[(String, HistogramDefinition)]): List[StructField] = {
     histogramDefinitions.map{
       case (name, definition) =>
+        definition match {
+          case _: CategoricalHistogram => (name, definition, CategoricalHistogramSchema)
+          case _ => (name, definition, HistogramSchema)
+        }
+    }.map{
+      case (name, definition, schemaType) =>
         definition.keyed match {
-          case true => StructField(name, MapType(StringType, HistogramSchema), nullable = true)
-          case false => StructField(name, HistogramSchema, nullable = true)
+          case true => StructField(name, MapType(StringType, schemaType), nullable = true)
+          case false => StructField(name, schemaType, nullable = true)
         }
     }
   }
@@ -970,6 +998,9 @@ object MainSummaryView {
 
       // Addon and configuration settings per Bug 1290181
       StructField("active_addons", ArrayType(buildAddonSchema, containsNull = false), nullable = true), // One per item in environment.addons.activeAddons
+      // Legacy/disabled addon and configuration settings per Bug 1390814. Please note that |disabled_addons_ids|
+      // may go away in the future.
+      StructField("disabled_addons_ids", ArrayType(StringType, containsNull = false), nullable = true), // One per item in payload.addonDetails.XPI
       StructField("active_theme", buildAddonSchema, nullable = true), // environment.addons.theme
       StructField("blocklist_enabled", BooleanType, nullable = true), // environment.settings.blocklistEnabled
       StructField("addon_compatibility_check_enabled", BooleanType, nullable = true), // environment.settings.addonCompatibilityCheckEnabled

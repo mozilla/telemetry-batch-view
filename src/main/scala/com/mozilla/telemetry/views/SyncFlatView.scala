@@ -10,9 +10,9 @@ import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._ // Just for my attempted mocks below.....
 
 
-object SyncView {
-  def schemaVersion: String = "v2"
-  def jobName: String = "sync_summary"
+object SyncFlatView {
+  def schemaVersion: String = "v1"
+  def jobName: String = "sync_flat_summary"
 
   // Configuration for command line arguments
   private class Conf(args: Array[String]) extends ScallopConf(args) {
@@ -44,15 +44,17 @@ object SyncView {
     implicit val sc = new SparkContext(sparkConf)
     val spark = SparkSession
       .builder()
-      .appName("SyncView")
+      .appName("SyncFlatEngineView")
       .getOrCreate()
     val hadoopConf = sc.hadoopConfiguration
 
     // We want to end up with reasonably large parquet files on S3.
-    val parquetSize = 512 * 1024 * 1024
+    val parquetSize = 256 * 1024 * 1024
     hadoopConf.setInt("parquet.block.size", parquetSize)
     hadoopConf.setInt("dfs.blocksize", parquetSize)
     hadoopConf.set("parquet.enable.summary-metadata", "false")
+
+    val partitionCount = 100
 
     for (offset <- 0 to Days.daysBetween(from, to).getDays) {
       val currentDate = from.plusDays(offset)
@@ -63,32 +65,41 @@ object SyncView {
 
       val ignoredCount = sc.longAccumulator("Number of Records Ignored")
       val processedCount = sc.longAccumulator("Number of Records Processed")
+      val failedCount = sc.longAccumulator("Number of Records Failed")
 
       val messages = Dataset("telemetry")
-        .where("sourceName") {
-          case "telemetry" => true
-        }.where("sourceVersion") {
-          case "4" => true
-        }.where("docType") {
-          case "sync" => true
-        }.where("appName") {
-          case "Firefox" => true
-        }.where("submissionDate") {
-          case date if date == currentDate.toString("yyyyMMdd") => true
-        }.records(conf.limit.get)
+      .where("sourceName") {
+        case "telemetry" => true
+      }.where("sourceVersion") {
+        case "4" => true
+      }.where("docType") {
+        case "sync" => true
+      }.where("submissionDate") {
+        case date if date == currentDate.toString("yyyyMMdd") => true
+      }.records(conf.limit.get, Some(partitionCount))
 
       val rowRDD = messages.flatMap(m => {
-        messageToRow(m) match {
-          case Nil =>
-            ignoredCount.add(1)
-            None
-          case x =>
-            processedCount.add(1)
-            x
+        try {
+          val payload = parse(string2JsonInput(m.payload.getOrElse(m.fieldsAsMap.getOrElse("submission", "{}")).asInstanceOf[String]))
+          SyncPingConversion.pingToFlatRows(payload) match {
+            case Nil => {
+              ignoredCount.add(1)
+              Nil
+            }
+            case x => {
+              processedCount.add(1)
+              x
+            }
+          }
+        } catch {
+          case _: Exception => {
+            failedCount.add(1)
+            Nil
+          }
         }
       })
 
-      val records = spark.createDataFrame(rowRDD, SyncPingConversion.nestedSyncType)
+      val records = spark.createDataFrame(rowRDD, SyncPingConversion.singleEngineFlatSyncType)
 
       if (conf.outputBucket.supplied) {
         // Note we cannot just use 'partitionBy' below to automatically populate
@@ -105,7 +116,8 @@ object SyncView {
         val s3prefix = s"$jobName/$schemaVersion/submission_date_s3=$currentDateString"
         val s3path = s"s3://${conf.outputBucket()}/$s3prefix"
 
-        records.repartition(10).write.mode("overwrite").parquet(s3path)
+        // We're already partitioned by partitionCount, so no need to repartition or coalesce.
+        records.write.mode("overwrite").parquet(s3path)
 
         // Then remove the _SUCCESS file so we don't break Spark partition discovery.
         S3Store.deleteKey(conf.outputBucket(), s"$s3prefix/_SUCCESS")
@@ -117,18 +129,12 @@ object SyncView {
       }
 
       println(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
-      println(s"     RECORDS SEEN:    ${ignoredCount.value + processedCount.value}")
+      println(s"     RECORDS SEEN:    ${ignoredCount.value + processedCount.value + failedCount.value}")
       println(s"     RECORDS IGNORED: ${ignoredCount.value}")
+      println(s"     RECORDS FAILED:  ${failedCount.value}")
       println("=======================================================================================")
     }
 
     sc.stop()
-  }
-
-  // Convert the given Heka message containing a "sync" ping
-  // to a list of rows containing all the fields.
-  def messageToRow(message: Message): List[Row] = {
-    val payload = parse(string2JsonInput(message.payload.getOrElse(message.fieldsAsMap.getOrElse("submission", "{}")).asInstanceOf[String]))
-    SyncPingConversion.pingToNestedRows(payload)
   }
 }
