@@ -1,7 +1,10 @@
 package com.mozilla.telemetry.views
 
 import java.lang.Long
+
 import com.github.nscala_time.time.Imports._
+import com.mozilla.telemetry.utils.deletePrefix
+import com.mozilla.telemetry.utils.CustomPartitioners._
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.expressions.scalalang.typed.sumLong
 import org.apache.spark.sql.functions.{col, min}
@@ -57,7 +60,7 @@ object HeavyUsersView {
   case class HeavyUsersRow (
     submission_date_s3: String,
     client_id: String,
-    sample_id: String,
+    sample_id: Integer,
     profile_creation_date: Long,
     active_ticks: Long,
     active_ticks_period: Long,
@@ -69,7 +72,7 @@ object HeavyUsersView {
    **/
   case class UserActiveTicks (
     client_id: String,
-    sample_id: String,
+    sample_id: Integer,
     profile_creation_date: Long,
     active_ticks: Long,
     active_ticks_period: Long)
@@ -207,18 +210,18 @@ object HeavyUsersView {
       .filter(r => r.submission_date_s3 == date && Option(r.active_ticks).getOrElse(0: Long) > 0)
       .groupByKey(r => (r.client_id, r.sample_id, r.profile_creation_date))
       .agg(sumLong[MainSummaryRow](_.active_ticks))
-      .map{ case((cid, sid, pcd), at) => UserActiveTicks(cid, sid, pcd, at, null) }
+      .map{ case((cid, sid, pcd), at) => UserActiveTicks(cid, sid.toInt, pcd, at, null) }
       .as[UserActiveTicks]
 
     // Add today's total to yesterday's 28 days total
     val added: Dataset[UserActiveTicks] = aggregated
-      .joinWith(prevData, aggregated("client_id") === prevData("client_id"), "outer")
+      .joinWith(prevData, (aggregated("client_id") === prevData("client_id")) && (aggregated("sample_id") === prevData("sample_id")), "outer")
       .map(addActiveTicksToHeavyUserRow)
       .as[UserActiveTicks]
 
     // Subtract 28 days ago's active_ticks
     val current: Dataset[UserActiveTicks] = added
-      .joinWith(subtractData, added("client_id") === subtractData("client_id"), "left_outer")
+      .joinWith(subtractData, (added("client_id") === subtractData("client_id")) && (added("sample_id") === subtractData("sample_id")), "left_outer")
       .map(subtractHeavyUserFromActiveTicks)
       .as[UserActiveTicks]
       .filter(_.active_ticks_period > 0)
@@ -252,6 +255,11 @@ object HeavyUsersView {
     current.write.mode("overwrite").csv(s"$cutoffsPath-$date")
   }
 
+  private def deleteDate(bucket: String, date: String): Unit = {
+    val prefix = s"$DatasetPrefix/$Version/$SubmissionDatePartitionName=$date"
+    deletePrefix(bucket, prefix)
+  }
+
   def main(args: Array[String]): Unit = {
     val conf = new Conf(args)
 
@@ -263,6 +271,7 @@ object HeavyUsersView {
     import spark.implicits._
 
     val date = getDate(conf)
+    deleteDate(conf.bucket(), date)
 
     val df = spark.read.option("mergeSchema", "true")
       .parquet(s"s3://${conf.mainSummaryBucket()}/${MainSummaryView.jobName}/${MainSummaryView.schemaVersion}")
@@ -292,8 +301,8 @@ object HeavyUsersView {
       case None =>
     }
 
-    newDS
-      .repartition(NumFiles, $"sample_id")
+    newDS.toDF
+      .consistentRepartition(NumFiles, "sample_id", (sid: String) => sid.toDouble / 100.0)
       .sortWithinPartitions($"sample_id")
       .drop(SubmissionDatePartitionName)
       .write
