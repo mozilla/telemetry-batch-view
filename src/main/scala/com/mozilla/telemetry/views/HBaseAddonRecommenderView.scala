@@ -80,6 +80,7 @@ object HBaseAddonRecommenderView {
           .select(
             $"client_id",
             $"subsession_start_date",
+            $"subsession_length",
             $"city",
             $"locale",
             $"os",
@@ -99,6 +100,7 @@ object HBaseAddonRecommenderView {
         val subset = clientsData.select("client_id", "subsession_start_date")
         val jsonData = clientsData.select("city",
                                           "subsession_start_date",
+                                          "subsession_length",
                                           "locale",
                                           "os",
                                           "places_bookmarks_count",
