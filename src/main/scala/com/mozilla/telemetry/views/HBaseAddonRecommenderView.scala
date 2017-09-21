@@ -105,7 +105,8 @@ object HBaseAddonRecommenderView {
                                           "scalar_parent_browser_engagement_tab_open_event_count",
                                           "scalar_parent_browser_engagement_total_uri_count",
                                           "scalar_parent_browser_engagement_unique_domains_count",
-                                          "active_addons").toJSON.rdd
+                                          "active_addons",
+                                          "disabled_addons_ids").toJSON.rdd
 
         // Build an RDD containing (key, document) tuples: one per client.
         val rdd = subset.rdd.zip(jsonData).flatMap{ case (row, json) =>

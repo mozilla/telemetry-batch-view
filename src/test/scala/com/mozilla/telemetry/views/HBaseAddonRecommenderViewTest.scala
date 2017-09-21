@@ -55,7 +55,8 @@ class HBaseAddonRecommenderViewTest extends FlatSpec with Matchers with BeforeAn
     // table). The other ones are corrupted and won't make it to the table.
     val dataset = Seq(
       TestMainSummaryPing(Some("foo_id"), Some(start_date_iso), "release",
-        Some("Rome"), Some("IT_it"), Some("Windows")),
+        Some("Rome"), Some("IT_it"), Some("Windows"), Some(1), Some(2), Some(3),
+        Some(4), Some("active-addon-test"), Some("disabled-addon-test")),
       TestMainSummaryPing(Some("foo_id"), Some(now.minusMonths(4).toString), "release"),
       TestMainSummaryPing(Some("foo_broken_id"), Some("corrupted"), "release"),
       TestMainSummaryPing(None, Some("corrupted"), "release"))
@@ -73,7 +74,16 @@ class HBaseAddonRecommenderViewTest extends FlatSpec with Matchers with BeforeAn
 
     // Validate the payload of the expected entry.
     assert(table(0)._2("cf")("payload") ==
-      s"""{"city":"Rome","subsession_start_date":"$start_date_iso","locale":"IT_it","os":"Windows"}""")
+      s"""{"city":"Rome",
+         |"subsession_start_date":"$start_date_iso",
+         |"locale":"IT_it",
+         |"os":"Windows",
+         |"places_bookmarks_count":1,
+         |"scalar_parent_browser_engagement_tab_open_event_count":2,
+         |"scalar_parent_browser_engagement_total_uri_count":3,
+         |"scalar_parent_browser_engagement_unique_domains_count":4,
+         |"active_addons":"active-addon-test",
+         |"disabled_addons_ids":"disabled-addon-test"}""".stripMargin.filter(_ >= ' '))
   }
 
   it should "overwrite entries when backfilling" taggedAs(Slow) in {
