@@ -9,6 +9,7 @@ import unicredit.spark.hbase._
 
 case class TestMainSummaryPing(client_id: Option[String],
                                subsession_start_date: Option[String],
+                               subsession_length: Option[Long],
                                channel: String,
                                city: Option[String] = None,
                                locale: Option[String] = None,
@@ -17,7 +18,8 @@ case class TestMainSummaryPing(client_id: Option[String],
                                scalar_parent_browser_engagement_tab_open_event_count: Option[Long] = None,
                                scalar_parent_browser_engagement_total_uri_count: Option[Long] = None,
                                scalar_parent_browser_engagement_unique_domains_count: Option[Long] = None,
-                               active_addons: Option[String] = None)
+                               active_addons: Option[String] = None,
+                               disabled_addons_ids: Option[String] = None)
 
 class HBaseAddonRecommenderViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   val tableName = HBaseAddonRecommenderView.tableName
@@ -53,11 +55,12 @@ class HBaseAddonRecommenderViewTest extends FlatSpec with Matchers with BeforeAn
     // with the first being the most recent (and thus the one making it to the HBase
     // table). The other ones are corrupted and won't make it to the table.
     val dataset = Seq(
-      TestMainSummaryPing(Some("foo_id"), Some(start_date_iso), "release",
-        Some("Rome"), Some("IT_it"), Some("Windows")),
-      TestMainSummaryPing(Some("foo_id"), Some(now.minusMonths(4).toString), "release"),
-      TestMainSummaryPing(Some("foo_broken_id"), Some("corrupted"), "release"),
-      TestMainSummaryPing(None, Some("corrupted"), "release"))
+      TestMainSummaryPing(Some("foo_id"), Some(start_date_iso), Some(3785), "release",
+        Some("Rome"), Some("IT_it"), Some("Windows"), Some(1), Some(2), Some(3),
+        Some(4), Some("active-addon-test"), Some("disabled-addon-test")),
+      TestMainSummaryPing(Some("foo_id"), Some(now.minusMonths(4).toString), Some(1), "release"),
+      TestMainSummaryPing(Some("foo_broken_id"), Some("corrupted"), Some(1), "release"),
+      TestMainSummaryPing(None, Some("corrupted"), Some(1), "release"))
       .toDS()
 
     dataset.createOrReplaceTempView("main_summary")
@@ -72,12 +75,22 @@ class HBaseAddonRecommenderViewTest extends FlatSpec with Matchers with BeforeAn
 
     // Validate the payload of the expected entry.
     assert(table(0)._2("cf")("payload") ==
-      s"""{"city":"Rome","subsession_start_date":"$start_date_iso","locale":"IT_it","os":"Windows"}""")
+      s"""{"city":"Rome",
+         |"subsession_start_date":"$start_date_iso",
+         |"subsession_length":3785,
+         |"locale":"IT_it",
+         |"os":"Windows",
+         |"places_bookmarks_count":1,
+         |"scalar_parent_browser_engagement_tab_open_event_count":2,
+         |"scalar_parent_browser_engagement_total_uri_count":3,
+         |"scalar_parent_browser_engagement_unique_domains_count":4,
+         |"active_addons":"active-addon-test",
+         |"disabled_addons_ids":"disabled-addon-test"}""".stripMargin.filter(_ >= ' '))
   }
 
   it should "overwrite entries when backfilling" taggedAs(Slow) in {
     val dataset = Seq(
-      TestMainSummaryPing(Some("foo_id"), Some(start_date_iso), "release",
+      TestMainSummaryPing(Some("foo_id"), Some(start_date_iso), Some(1), "release",
         Some("Naples"), Some("IT_it"), Some("Windows")))
       .toDS()
 
@@ -90,7 +103,11 @@ class HBaseAddonRecommenderViewTest extends FlatSpec with Matchers with BeforeAn
     assert(table.size == 1)
     assert(table(0)._1 == s"foo_id")
     assert(table(0)._2("cf")("payload") ==
-      s"""{"city":"Naples","subsession_start_date":"$start_date_iso","locale":"IT_it","os":"Windows"}""")
+      s"""{"city":"Naples",
+         |"subsession_start_date":"$start_date_iso",
+         |"subsession_length":1,
+         |"locale":"IT_it",
+         |"os":"Windows"}""".stripMargin.filter(_ >= ' '))
   }
 
   override def afterAll(): Unit = {

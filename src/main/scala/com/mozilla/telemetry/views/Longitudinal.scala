@@ -483,7 +483,7 @@ object LongitudinalView {
     val builder = SchemaBuilder
       .record("Submission").fields()
         .name("client_id").`type`().stringType().noDefault()
-        .name("os").`type`().stringType().noDefault()
+        .name("os").`type`().optional().stringType()
         .name("normalized_channel").`type`().stringType().noDefault()
         .name("submission_date").`type`().optional().array().items().stringType()
         .name("sample_id").`type`().optional().array().items().doubleType()
@@ -940,9 +940,16 @@ object LongitudinalView {
     }
 
     // only set the keys if there are valid entries
+
     if (values.exists( value => value != default )) {
       root.set(avroField, values.asJava)
     }
+  }
+
+  def getFirst[T](key: String, payloads: Seq[Map[String, Any]]): Option[T] = {
+    payloads
+      .collectFirst{ case m if m contains key => m(key) }
+      .map(_.asInstanceOf[T])
   }
 
   private def buildRecord(history: Iterable[Map[String, Any]], schema: Schema, histogramDefinitions: Map[String, HistogramDefinition], scalarDefinitions: Map[String, ScalarDefinition]): Option[GenericRecord] = {
@@ -961,9 +968,9 @@ object LongitudinalView {
       })._1.reverse  // preserve ordering
 
     val root = new GenericRecordBuilder(schema)
-      .set("client_id", sorted.head("clientId").asInstanceOf[String])
-      .set("os", sorted.head("os").asInstanceOf[String])
-      .set("normalized_channel", sorted.head("normalizedChannel").asInstanceOf[String])
+      .set("client_id", getFirst[String]("clientId", sorted).orNull)
+      .set("os", getFirst[String]("os", sorted).orNull)
+      .set("normalized_channel", getFirst[String]("normalizedChannel", sorted).orNull)
 
     try {
       value2Avro("sampleId",       "sample_id",       0.0, x => x, sorted, root, schema)

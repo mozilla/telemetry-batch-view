@@ -28,7 +28,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     override protected val getURL = histogramUrlMock
   }
 
-  val histogramDefs = MainSummaryView.filterHistogramDefinitions(histograms.definitions(true, nameJoiner = Histograms.prefixProcessJoiner _))
+  val histogramDefs = MainSummaryView.filterHistogramDefinitions(histograms.definitions(true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true))
 
   "MainSummary records" can "be serialized" in {
     val sparkConf = new SparkConf().setAppName("MainSummary")
@@ -162,6 +162,53 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       withClue(s"$f:") { actual.get(f) should be (Some(v)) }
       actual.get(f) should be (Some(v))
     }
+    actual should be (expected)
+  }
+
+  "MainSummary legacy addons" can "be summarized" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.addonDetails" -> """{
+          "XPI": {
+            "some-disabled-addon-id": {
+              "dont-care": "about-this-data",
+              "we-discard-this": 11
+            },
+            "active-addon-id": {
+              "dont-care": 12
+            }
+          }
+        }""",
+        "environment.addons" -> """{
+          "activeAddons": {
+            "active-addon-id": {
+              "isSystem": false,
+              "isWebExtension": true
+            },
+            "gom-jabbar": {
+              "isSystem": false,
+              "isWebExtension": true
+            }
+          },
+          "theme": {
+            "id": "firefox-compact-light@mozilla.org"
+          }
+        }"""),
+      None);
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+
+    // This will make sure that:
+    // - the disabled addon is in the list;
+    // - active addons are filtered out.
+    val expected = Map(
+      "document_id" -> "foo",
+      "disabled_addons_ids" -> List("some-disabled-addon-id")
+    )
+    val actual = applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      .getValuesMap(expected.keys.toList)
     actual should be (expected)
   }
 
@@ -957,7 +1004,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     val sc = spark.sparkContext
     import spark.implicits._
 
-    val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(Histograms.definitions(includeOptin = false, nameJoiner = Histograms.prefixProcessJoiner _), useWhitelist = true)
+    val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(Histograms.definitions(includeOptin = false, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true), useWhitelist = true)
     val allScalarDefs = Scalars.definitions(true).toList.sortBy(_._1)
 
     val fakeHisto = """{
@@ -968,33 +1015,15 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           "histogramType": 2
         }"""
 
-    val histosData = allHistogramDefs.map{
-      case (name, definition) =>
-        definition match {
-          case LinearHistogram(keyed, _, _, _, _, _) => (name, keyed)
-          case ExponentialHistogram(keyed, _, _, _, _, _) => (name, keyed)
-          case EnumeratedHistogram(keyed, _, _, _) => (name, keyed)
-          case BooleanHistogram(keyed, _, _) => (name, keyed)
-          case FlagHistogram(keyed, _, _) => (name, keyed)
-          case other =>
-            throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
-        }
-    }.filter(!_._2).map{
+    val histosData = allHistogramDefs.filter{
+      case (name, definition) => !definition.keyed
+    }.map{
       case (name, _) => s""""$name": $fakeHisto"""
     }.mkString(",")
 
-    val keyedHistosData = allHistogramDefs.map{
-      case (name, definition) =>
-        definition match {
-          case LinearHistogram(keyed, _, _, _, _, _) => (name, keyed)
-          case ExponentialHistogram(keyed, _, _, _, _, _) => (name, keyed)
-          case EnumeratedHistogram(keyed, _, _, _) => (name, keyed)
-          case BooleanHistogram(keyed, _, _) => (name, keyed)
-          case FlagHistogram(keyed, _, _) => (name, keyed)
-          case other =>
-            throw new UnsupportedOperationException(s"${other.toString()} histogram types are not supported")
-        }
-    }.filter(_._2).map{
+    val keyedHistosData = allHistogramDefs.filter{
+      case (name, definition) => definition.keyed
+    }.map{
       case (name, _) =>
         s"""
         "$name": {
@@ -1082,7 +1111,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
   "Histogram filter" can "include all whitelisted histograms" in {
     val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(
-      Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _),
+      Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true),
       useWhitelist = true
     ).map{ case(name, definition) =>
       (definition.originalName, definition.process.get)
@@ -1575,5 +1604,153 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val firstPaintVal =  appliedSummaryNoDefs.getAs[Int]("first_paint")
     firstPaintVal should be(222)
+  }
+
+  "Main Summary" can "store categorical histograms" in {
+    val spark = SparkSession.builder()
+        .appName("test categorical")
+        .master("local[1]")
+        .getOrCreate()
+
+    val sc = spark.sparkContext
+    import spark.implicits._
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.histograms" -> """
+        |{
+        |  "MOCK_CATEGORICAL": {
+        |    "range": [1,100],
+        |    "bucket_count": 51,
+        |    "histogram_type": 1,
+        |    "values": {
+        |      "1": 0,
+        |      "2": 1,
+        |      "3": 1,
+        |      "5": 1
+        |    },
+        |    "sum": 10
+        |  }
+        |}""".stripMargin),
+      None);
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+    val expected = Map(
+      "histogram_parent_mock_categorical" -> Map("am" -> 0, "a" -> 1, "strange" -> 1, CategoricalHistogram.SpillBucketName -> 1)
+    )
+
+    val actual = spark
+      .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      .first
+      .getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+    }
+
+    actual should be (expected)
+    spark.stop()
+  }
+
+  it can "store keyed categorical histograms" in {
+    val spark = SparkSession.builder()
+        .appName("test keyed categorical histograms")
+        .master("local[1]")
+        .getOrCreate()
+
+    val sc = spark.sparkContext
+    import spark.implicits._
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.histograms" -> """
+        |{
+        |  "MOCK_KEYED_CATEGORICAL": {
+        |    "gaius": {
+        |      "range": [1,20],
+        |      "bucket_count": 51,
+        |      "histogram_type": 1,
+        |      "values": {
+        |        "0": 1,
+        |        "1": 1,
+        |        "2": 1,
+        |        "6": 1
+        |      },
+        |      "sum": 9
+        |    }
+        |  }
+        |}""".stripMargin),
+      None);
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+    val expected = Map(
+      "histogram_parent_mock_keyed_categorical" -> Map("gaius" -> Map("all" -> 1, "of" -> 1, "this" -> 1, CategoricalHistogram.SpillBucketName -> 1))
+    )
+
+    val actual = spark
+      .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      .first
+      .getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+    }
+
+    actual should be (expected)
+    spark.stop()
+  }
+
+  it can "handle incorrect categorical histogram buckets" in {
+    val spark = SparkSession.builder()
+        .appName("test categorical")
+        .master("local[1]")
+        .getOrCreate()
+
+    val sc = spark.sparkContext
+    import spark.implicits._
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.histograms" -> """
+        |{
+        |  "MOCK_CATEGORICAL": {
+        |    "range": [1,100],
+        |    "bucket_count": 51,
+        |    "histogram_type": 1,
+        |    "values": {
+        |      "1": 0,
+        |      "2": 1,
+        |      "3": 1,
+        |      "5": 1,
+        |      "10": 1,
+        |      "100": 1
+        |    },
+        |    "sum": 10
+        |  }
+        |}""".stripMargin),
+        None);
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+    val expected = Map(
+      "histogram_parent_mock_categorical" -> Map("am" -> 0, "a" -> 1, "strange" -> 1, CategoricalHistogram.SpillBucketName -> 3)
+    )
+
+    val actual = spark
+      .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      .first
+      .getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+    }
+
+    actual should be (expected)
+    spark.stop()
   }
 }

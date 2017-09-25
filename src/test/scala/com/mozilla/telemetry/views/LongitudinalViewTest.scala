@@ -277,6 +277,14 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       val optinRows = sqlContext.read.load(optinFilename).collect()
       val optinRow =  optinRows(0)
 
+      private val nonOsPayload = createPayload(1) - "os"
+      private val missingOsRecord = (LongitudinalView  invokePrivate buildRecord((nonOsPayload +: payloads) ++ dupes, optinSchema, optinHistogramDefs, optinScalarDefs)).get
+      private val missingOsPath = ParquetFile.serialize(List(missingOsRecord).toIterator, optinSchema)
+      private val missingOsFilename = missingOsPath.toString.replace("file:", "")
+
+      val missingOsRows = sqlContext.read.load(missingOsFilename).collect()
+      val missingOsRow = missingOsRows(0)
+
       sc.stop()
     }
   }
@@ -748,6 +756,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     val scalars = fixture.optoutRow.getList[Row](fixture.optoutRow.fieldIndex("scalar_gpu_mock_uint_optout"))
     assert(scalars.length == fixture.payloads.length)
     scalars.zipWithIndex.foreach { case (x, index) =>
+
       // The first payload in the fixture is missing the scalars section. The scalars
       // must contain null for it.
       Option(x.getAs[Long]("value")) match {
@@ -775,5 +784,9 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
     entries("a_key").foreach(x => assert(x.getAs[Long]("value") == GpuConstant))
     assert(entries("second_key").size == fixture.payloads.length)
     entries("second_key").foreach(x => assert(x.getAs[Long]("value") == GpuConstant))
+  }
+
+  "OS" must "be allowed to go missing" in {
+    assert(fixture.missingOsRow.getAs[String]("os") == fixture.payloads(0)("os"))
   }
 }

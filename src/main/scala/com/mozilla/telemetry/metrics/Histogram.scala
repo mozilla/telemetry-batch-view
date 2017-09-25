@@ -16,6 +16,15 @@ case class EnumeratedHistogram(keyed: Boolean, originalName: String, nValues: In
 case class LinearHistogram(keyed: Boolean, originalName: String, low: Int, high: Int, nBuckets: Int, process: Option[String] = None) extends HistogramDefinition
 case class ExponentialHistogram(keyed: Boolean, originalName: String, low: Int, high: Int, nBuckets: Int, process: Option[String] = None) extends HistogramDefinition
 
+/**
+ * All non-labeled values will be aggregated into the spill bucket,
+ * and their label is SpillBucketName
+ */
+case class CategoricalHistogram(keyed: Boolean, originalName: String, labels: Seq[String], process: Option[String] = None) extends HistogramDefinition {
+  def getLabel(i: Int): String = labels.lift(i).getOrElse(CategoricalHistogram.SpillBucketName)
+}
+object CategoricalHistogram{ val SpillBucketName = "spill" }
+
 class HistogramsClass extends MetricsClass {
   def HistogramPrefix = "histogram"
 
@@ -74,7 +83,7 @@ class HistogramsClass extends MetricsClass {
 
   def suffixProcessJoiner(name: String, process: String) = (name + ( if(process != "parent") "_" + process else "" )).toUpperCase
 
-  def definitions(includeOptin: Boolean = false, nameJoiner: (String, String) => String = suffixProcessJoiner): Map[String, HistogramDefinition] = {
+  def definitions(includeOptin: Boolean = false, nameJoiner: (String, String) => String = suffixProcessJoiner, includeCategorical: Boolean = false): Map[String, HistogramDefinition] = {
     implicit val formats = DefaultFormats
 
     val uris = Map("release" -> "https://hg.mozilla.org/releases/mozilla-release/raw-file/tip/toolkit/components/telemetry/Histograms.json",
@@ -118,6 +127,12 @@ class HistogramsClass extends MetricsClass {
                 case _ => None
               }
             }.toList.flatten)
+            case ("labels", JArray(x)) => Some(x.map{ l =>
+              l match {
+                case JString(l) => Some(l)
+                case _ => None
+              }
+            })
             case _ => None
           }
         } catch {
@@ -133,7 +148,8 @@ class HistogramsClass extends MetricsClass {
       }
 
       def includeHistogram(definition: MMap[String, Option[Any]]) = {
-        includeOptin || (definition.getOrElse("releaseChannelCollection", "opt-in") == Some("opt-out"))
+        (includeOptin || (definition.getOrElse("releaseChannelCollection", "opt-in") == Some("opt-out"))) &&
+        (includeCategorical || (definition.getOrElse("kind", "categorical") != Some("categorical")))
       }
 
       val pretty = for {
@@ -146,6 +162,7 @@ class HistogramsClass extends MetricsClass {
         val low = v.getOrElse("low", Some(1)).get.asInstanceOf[Int]
         val high = v.getOrElse("high", None).asInstanceOf[Option[Int]]
         val nBuckets = v.getOrElse("n_buckets", None).asInstanceOf[Option[Int]]
+        val labels = v.getOrElse("labels", None).asInstanceOf[Option[Seq[Option[String]]]]
 
         val processes = getProcesses(
           v.getOrElse("record_in_processes", Some(MainPing.ProcessTypes)).get
@@ -160,22 +177,25 @@ class HistogramsClass extends MetricsClass {
             case d: EnumeratedHistogram => d.copy(process=Some(process))
             case d: LinearHistogram => d.copy(process=Some(process))
             case d: ExponentialHistogram => d.copy(process=Some(process))
+            case d: CategoricalHistogram => d.copy(process=Some(process))
           }))
         }
 
-        (kind, nValues, high, nBuckets) match {
-          case ("flag", _, _, _) =>
+        (kind, nValues, high, nBuckets, labels) match {
+          case ("flag", _, _, _, _) =>
             Some(addProcesses(k, FlagHistogram(keyed, k)))
-          case ("boolean", _, _ , _) =>
+          case ("boolean", _, _, _, _) =>
             Some(addProcesses(k, BooleanHistogram(keyed, k)))
-          case ("count", _, _, _) =>
+          case ("count", _, _, _, _) =>
             Some(addProcesses(k, CountHistogram(keyed, k)))
-          case ("enumerated", Some(x), _, _) =>
+          case ("enumerated", Some(x), _, _, _) =>
             Some(addProcesses(k, EnumeratedHistogram(keyed, k, x)))
-          case ("linear", _, Some(h), Some(n)) =>
+          case ("linear", _, Some(h), Some(n), _) =>
             Some(addProcesses(k, LinearHistogram(keyed, k, low, h, n)))
-          case ("exponential", _, Some(h), Some(n)) =>
+          case ("exponential", _, Some(h), Some(n), _) =>
             Some(addProcesses(k, ExponentialHistogram(keyed, k, low, h, n)))
+          case ("categorical", _, _, _, Some(l)) =>
+            Some(addProcesses(k, CategoricalHistogram(keyed, k, l.map(_.get))))
           case _ =>
             None
         }
