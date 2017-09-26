@@ -40,6 +40,7 @@ case class MetricAnalysis(experiment_id: String,
 abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFrame) extends java.io.Serializable {
   type PreAggregateRowType <: PreAggregateRow[T]
   val aggregator: MetricAggregator[T]
+  def validateRow(row: PreAggregateRowType): Boolean
 
   import df.sparkSession.implicits._
 
@@ -48,7 +49,7 @@ abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFra
       case Some(d: DataFrame) => {
         val agg_column = aggregator.toColumn.name("metric_aggregate")
         val output = collapseKeys(d)
-          .filter(r => r.metric.isDefined)
+          .filter(validateRow _)
           .groupByKey(x => MetricKey(x.experiment_id, x.branch, x.subgroup))
           .agg(agg_column, count("*"))
           .map(toOutputSchema)
