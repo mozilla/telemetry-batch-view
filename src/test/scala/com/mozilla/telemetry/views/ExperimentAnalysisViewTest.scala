@@ -162,11 +162,11 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
       .mapValues(_.size)
 
     // 0 should map to "branch1", first alphabetically
-    counts(0x00) should be (5000 +- 100)
+    counts(0x00) should be (100 +- 15)
     // 1 should map to "branch2", second alphabetically
-    counts(0x01) should be (10000 +- 100)
+    counts(0x01) should be (200 +- 30)
     // 2 should map to "control", last alphabetically
-    counts(0x02) should be (10000 +- 100)
+    counts(0x02) should be (200 +- 30)
 
     // the permutations for client_id "a" should be the same
     res(0).getAs[Seq[Byte]](0) should be (res(1).getAs[Seq[Byte]](0))

@@ -6,6 +6,7 @@ import com.mozilla.telemetry.metrics._
 import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import org.apache.spark.sql.functions.{col, min, udf}
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.storage.StorageLevel
 import org.rogach.scallop.ScallopConf
 
 import scala.util.{Failure, Success, Try}
@@ -15,8 +16,25 @@ object ExperimentAnalysisView {
   def errorAggregatesPath = "error_aggregates/v2"
   def jobName = "experiment_analysis"
   def schemaVersion = "v1"
+  // This gives us ~120MB partitions with the columns we have now. We should tune this as we add more columns.
+  def rowsPerPartition = 25000
 
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getSimpleName)
+
+  // scalar_ and histogram_ columns are automatically added
+  private val usedColumns = List(
+    "client_id",
+    "experiment_id",
+    "experiment_branch"
+  )
+
+  implicit class ExperimentDataFrame(df: DataFrame) {
+    def selectUsedColumns: DataFrame = {
+      val columns = (usedColumns
+      ++ (df.schema.map(_.name).filter { s: String => s.startsWith("histogram_") || s.startsWith("scalar_") }))
+      df.select(columns.head, columns.tail: _*)
+    }
+  }
 
   // Configuration for command line arguments
   class Conf(args: Array[String]) extends ScallopConf(args) {
@@ -33,6 +51,9 @@ object ExperimentAnalysisView {
 
   def getSpark: SparkSession = {
     val spark = getOrCreateSparkSession(jobName)
+    if (spark.sparkContext.defaultParallelism > 200) {
+      spark.sqlContext.sql(s"set spark.sql.shuffle.partitions=${spark.sparkContext.defaultParallelism}")
+    }
     spark.sparkContext.setLogLevel("INFO")
     spark
   }
@@ -55,6 +76,7 @@ object ExperimentAnalysisView {
       logger.info(s"Aggregating pings for experiment $e")
 
       val spark = getSpark
+
       val experimentsSummary = spark.read.option("mergeSchema", "true").parquet(conf.inputLocation())
         .where(col("experiment_id") === e)
 
@@ -117,27 +139,52 @@ object ExperimentAnalysisView {
   }
 
   def getExperimentMetrics(experiment: String, experimentsSummary: DataFrame, errorAggregates: DataFrame, conf: Conf): List[MetricAnalysis] = {
+    val metadata = ExperimentAnalyzer.getExperimentMetadata(experimentsSummary).collect()
+    val persisted = addPermutationsAndPersist(experimentsSummary, metadata, experiment)
+
     val metricList = getMetrics(conf, experimentsSummary)
 
     val metrics = metricList.flatMap {
       case (name: String, md: MetricDefinition) =>
         md match {
           case hd: HistogramDefinition =>
-            new HistogramAnalyzer(name, hd, experimentsSummary).analyze().collect()
+            new HistogramAnalyzer(name, hd, persisted).analyze().collect()
           case sd: ScalarDefinition =>
-            ScalarAnalyzer.getAnalyzer(name, sd, experimentsSummary).analyze().collect()
+            ScalarAnalyzer.getAnalyzer(name, sd, persisted).analyze().collect()
           case _ => throw new UnsupportedOperationException("Unsupported metric definition type")
         }
     }
 
-    val metadata = ExperimentAnalyzer.getExperimentMetadata(experimentsSummary).collect()
     val crashes = CrashAnalyzer.getExperimentCrashes(errorAggregates)
     (metadata ++ metrics ++ crashes).toList
   }
 
+  // Adds a column for permutations, repartitions if warranted, and persists the result for quicker access
+  def addPermutationsAndPersist(experimentsSummary: DataFrame,
+                                metadata: Array[MetricAnalysis],
+                                experiment: String): DataFrame = {
+    val topLevelMetadata = metadata.filter(_.subgroup == "All")
+    val totalPings = topLevelMetadata.flatMap(_.statistics.get.filter(_.name == "Total Pings").map(_.value)).sum
+    val branchCounts = topLevelMetadata.map {
+      r => r.experiment_branch ->
+        (r.statistics.get.collectFirst {case s: Statistic if s.name == "Total Clients" => s} match {
+          case Some(s: Statistic) => s.value.toLong
+          case _ => throw new Exception(s"Missing Total Clients metadata for branch ${r.experiment_branch}")
+        })
+    }.toMap
+
+    val withPermutations = addPermutations(experimentsSummary.selectUsedColumns, branchCounts, experiment)
+    (totalPings / rowsPerPartition match {
+      case c if c > experimentsSummary.sparkSession.sparkContext.defaultParallelism =>
+        withPermutations.repartition(c.toInt)
+      case _ =>
+        withPermutations
+    }).persist(StorageLevel.MEMORY_AND_DISK)
+  }
+
   def addPermutations(df: DataFrame, branchCounts: Map[String, Long], experiment: String): DataFrame = {
     // create the cutoffs from branchCounts
-    val total = branchCounts.map(_._2).sum.toDouble
+    val total = branchCounts.values.sum.toDouble
     val cutoffs = branchCounts
       .toList
       .sortBy(_._1) // sort by branch name
@@ -145,7 +192,7 @@ object ExperimentAnalysisView {
       .tail  // drop the initial 0 from scanLeft
       .map(_/total) // turn cumulative counts into cutoffs from 0 to 1
 
-    val generator = weightedGenerator(cutoffs, experiment) _
+    val generator = weightedGenerator(cutoffs, experiment, numPermutations = 100) _
     val permutationsUDF = udf(generator)
     df.withColumn("permutations", permutationsUDF(col("client_id")))
   }
