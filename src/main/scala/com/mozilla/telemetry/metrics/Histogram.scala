@@ -8,13 +8,27 @@ import com.mozilla.telemetry.utils.MainPing
 
 case class RawHistogram(values: Map[String, Int], sum: Long)
 
-sealed abstract class HistogramDefinition extends MetricDefinition
-case class FlagHistogram(keyed: Boolean, originalName: String, process: Option[String] = None) extends HistogramDefinition
-case class BooleanHistogram(keyed: Boolean, originalName: String, process: Option[String] = None) extends HistogramDefinition
-case class CountHistogram(keyed: Boolean, originalName: String, process: Option[String] = None) extends HistogramDefinition
-case class EnumeratedHistogram(keyed: Boolean, originalName: String, nValues: Int, process: Option[String] = None) extends HistogramDefinition
-case class LinearHistogram(keyed: Boolean, originalName: String, low: Int, high: Int, nBuckets: Int, process: Option[String] = None) extends HistogramDefinition
-case class ExponentialHistogram(keyed: Boolean, originalName: String, low: Int, high: Int, nBuckets: Int, process: Option[String] = None) extends HistogramDefinition
+sealed abstract class HistogramDefinition extends MetricDefinition {
+  def getBuckets: Array[Int]
+}
+case class FlagHistogram(keyed: Boolean, originalName: String, process: Option[String] = None) extends HistogramDefinition {
+  def getBuckets: Array[Int] = Array(0, 1)
+}
+case class BooleanHistogram(keyed: Boolean, originalName: String, process: Option[String] = None) extends HistogramDefinition {
+  def getBuckets: Array[Int] = Array(0, 1)
+}
+case class CountHistogram(keyed: Boolean, originalName: String, process: Option[String] = None) extends HistogramDefinition {
+  def getBuckets: Array[Int] = Array(0, 1)
+}
+case class EnumeratedHistogram(keyed: Boolean, originalName: String, nValues: Int, process: Option[String] = None) extends HistogramDefinition {
+  def getBuckets: Array[Int] = (0 to nValues).toArray
+}
+case class LinearHistogram(keyed: Boolean, originalName: String, low: Int, high: Int, nBuckets: Int, process: Option[String] = None) extends HistogramDefinition {
+  def getBuckets: Array[Int] = Histograms.linearBuckets(low, high, nBuckets)
+}
+case class ExponentialHistogram(keyed: Boolean, originalName: String, low: Int, high: Int, nBuckets: Int, process: Option[String] = None) extends HistogramDefinition {
+  def getBuckets: Array[Int] = Histograms.exponentialBuckets(low, high, nBuckets)
+}
 
 /**
  * All non-labeled values will be aggregated into the spill bucket,
@@ -22,6 +36,7 @@ case class ExponentialHistogram(keyed: Boolean, originalName: String, low: Int, 
  */
 case class CategoricalHistogram(keyed: Boolean, originalName: String, labels: Seq[String], process: Option[String] = None) extends HistogramDefinition {
   def getLabel(i: Int): String = labels.lift(i).getOrElse(CategoricalHistogram.SpillBucketName)
+  def getBuckets: Array[Int] = (0 to labels.length).toArray
 }
 object CategoricalHistogram{ val SpillBucketName = "spill" }
 
