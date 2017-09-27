@@ -7,7 +7,7 @@ import com.mozilla.telemetry.utils.deletePrefix
 import com.mozilla.telemetry.utils.CustomPartitioners._
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.expressions.scalalang.typed.sumLong
-import org.apache.spark.sql.functions.{col, min}
+import org.apache.spark.sql.functions.{col, first, min}
 import org.rogach.scallop._
 import scala.util.Try
 
@@ -208,9 +208,9 @@ object HeavyUsersView {
     // Aggregate today's main_summary data
     val aggregated: Dataset[UserActiveTicks] = ds
       .filter(r => r.submission_date_s3 == date && Option(r.active_ticks).getOrElse(0: Long) > 0)
-      .groupByKey(r => (r.client_id, r.sample_id, r.profile_creation_date))
-      .agg(sumLong[MainSummaryRow](_.active_ticks))
-      .map{ case((cid, sid, pcd), at) => UserActiveTicks(cid, sid.toInt, pcd, at, null) }
+      .groupByKey(r => r.client_id)
+      .agg(sumLong[MainSummaryRow](_.active_ticks), first(col("sample_id")).as[String], first(col("profile_creation_date")).as[Long])
+      .map{ case(cid, at, sid, pcd) => UserActiveTicks(cid, sid.toInt, pcd, at, null) }
       .as[UserActiveTicks]
 
     // Add today's total to yesterday's 28 days total
