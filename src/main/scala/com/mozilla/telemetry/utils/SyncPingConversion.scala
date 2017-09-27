@@ -4,7 +4,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 import org.joda.time.DateTime
 import org.json4s.{DefaultFormats, JValue}
-import org.json4s.JsonAST.{JArray, JInt, JObject, JString}
+import org.json4s.JsonAST._
 import java.util.UUID
 
 // Common conversion code for SyncView and SyncFlatView. Schema for sync pings described here:
@@ -143,26 +143,36 @@ object SyncPingConversion {
     StructField("engine_outgoing_batch_total_failed", LongType, nullable = false)
   ))
 
- /*
- * Convert the JSON payload to rows matching the above types.
- */
-  // XXX - this looks dodgy - I'm sure there's a more scala-ish way to write this...
+  // Helper similar to v.extract[String], but that doesn't throw when
+  // it gets surprised
+  private def getStringFromValue(v: JValue): String = v match {
+    case JString(x) => x
+    case JInt(x) => x.toString
+    case JBool(x) => x.toString
+    case JDecimal(x) => x.toString
+    case JDouble(x) => x.toString
+    case JNull => null
+    case x => if (x == null) { null } else { x.toString }
+  }
+
+  /*
+   * Convert the JSON payload to rows matching the above types.
+   */
   private def failureReasonToRow(failure: JValue): Row = failure match {
-    case JObject(x) =>
-      implicit val formats: DefaultFormats.type = DefaultFormats
-      Row(
-        (failure \ "name").extract[String],
-        (failure \ "name").extract[String] match {
-          case "httperror" => (failure \ "code").extract[String]
-          case "nserror" => (failure \ "code").extract[String]
-          case "shutdownerror" => null
-          case "autherror" => (failure \ "from").extract[String]
-          case "othererror" => (failure \ "error").extract[String]
-          case "unexpectederror" => (failure \ "error").extract[String]
-          case "sqlerror" => (failure \ "code").extract[String]
-          case _ => null
-        }
-      )
+    case JObject(fields) => {
+      val name = getStringFromValue(failure \ "name")
+      // This is more relaxed than the schema (which expects the value
+      // sometimes under "error", and other times under "code", but
+      // there are some clients that don't properly implement the schema,
+      // and we'd still like their data.
+      // So we just look for some field other than `"name"` inside the
+      // object, and use that if one exists.
+      val value = fields.find(fieldPair => fieldPair._1 != "name") match {
+        case Some((_, message)) => getStringFromValue(message)
+        case _ => null
+      }
+      Row(name, value)
+    }
     case _ =>
       null
   }
@@ -376,6 +386,7 @@ object SyncPingConversion {
       }
     }
 
+
     val row = Row(
       // The metadata...
       application \ "buildId" match {
@@ -411,7 +422,6 @@ object SyncPingConversion {
         case JString(x) => x
         case _ => null
       },
-
       // Info about the sync.
       stringFromSyncOrPayload("uid") match {
         case null => return None // a required field.
