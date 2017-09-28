@@ -3,7 +3,7 @@ package com.mozilla.telemetry.views
 import com.github.nscala_time.time.Imports._
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericData, GenericRecord, GenericRecordBuilder}
-import org.apache.spark.{Partitioner, SparkContext, SparkConf}
+import org.apache.spark.Partitioner
 import org.apache.spark.rdd.RDD
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -70,6 +70,8 @@ protected class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHist
 }
 
 object LongitudinalView {
+  val jobName = "longitudinal"
+
   // Column name prefix used to prevent name clashing between scalars and other
   // columns.
   private val ScalarColumnNamePrefix = "scalar_"
@@ -135,9 +137,8 @@ object LongitudinalView {
         case _ => "telemetry-sample"
     }
 
-    val sparkConf = new SparkConf().setAppName("Longitudinal")
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
-    implicit val sc = new SparkContext(sparkConf)
+    val spark = getOrCreateSparkSession(jobName)
+    implicit val sc = spark.sparkContext
 
     val messages = Dataset(telemetrySource)
       .where("sourceName") {
@@ -159,8 +160,7 @@ object LongitudinalView {
   }
 
   private def run(opts: Opts, messages: RDD[Message]): Unit = {
-    val clsName = "longitudinal" // Needed for retro-compatibility with existing data
-    val prefix = s"${clsName}/v${opts.to()}"
+    val prefix = s"${jobName}/v${opts.to()}"
     val outputBucket = opts.outputBucket()
     val lockfileName = "RUNNING"
 

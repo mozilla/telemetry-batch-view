@@ -1,14 +1,14 @@
 package com.mozilla.telemetry.views
 
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.joda.time.{DateTime, Days, format}
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._
 import com.mozilla.telemetry.heka.{Dataset, Message}
-import com.mozilla.telemetry.utils.{Addon, Attribution, Events, Experiment, MainPing, S3Store}
+import com.mozilla.telemetry.utils.{Addon, Attribution, Events,
+  Experiment, getOrCreateSparkSession, MainPing, S3Store}
 import org.json4s.{DefaultFormats, Extraction, JValue}
 import com.mozilla.telemetry.metrics._
 
@@ -78,10 +78,9 @@ object MainSummaryView {
 
     // Set up Spark
     for (offset <- 0 to Days.daysBetween(from, to).getDays) {
-      val sparkConf = new SparkConf().setAppName(jobName)
-      sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
-      implicit val sc = new SparkContext(sparkConf)
-      val sqlContext = new SQLContext(sc)
+      val spark = getOrCreateSparkSession(jobName)
+      implicit val sc = spark.sparkContext
+      val sqlContext = spark.sqlContext
       val hadoopConf = sc.hadoopConfiguration
       hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
 
