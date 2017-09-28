@@ -28,7 +28,7 @@ object HeavyUsersView {
   val DatasetPrefix = "heavy_users"
   val DefaultMainSummaryBucket = "telemetry-parquet"
   val Version = "v1"
-  val NumFiles = 10 // ~3.5GB in total, per day
+  val NumFiles = 16 // ~3.5GB in total, per day
   val WriteMode = "overwrite"
   val SubmissionDatePartitionName = "submission_date_s3"
   val TimeWindow = 28.days
