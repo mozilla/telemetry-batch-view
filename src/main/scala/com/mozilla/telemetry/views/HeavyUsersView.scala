@@ -7,7 +7,7 @@ import com.mozilla.telemetry.utils.deletePrefix
 import com.mozilla.telemetry.utils.CustomPartitioners._
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.expressions.scalalang.typed.sumLong
-import org.apache.spark.sql.functions.{col, first, min}
+import org.apache.spark.sql.functions.{col, first, max, min}
 import org.rogach.scallop._
 import scala.util.Try
 
@@ -83,6 +83,9 @@ object HeavyUsersView {
       descr = "Destination bucket for parquet data")
     val date = opt[String](
       descr = "Submission date to process. Defaults to yesterday",
+      required = false)
+    val firstRun = opt[Boolean](
+      descr = "Whether this is the first run of heavy_user",
       required = false)
     val mainSummaryBucket = opt[String](
       descr = "Main summary bucket",
@@ -239,6 +242,16 @@ object HeavyUsersView {
     (withCutoffs, cutoff)
   }
 
+  def senseExistingData(existingData: Dataset[HeavyUsersRow], date: String, firstRun: Boolean): Unit = {
+    if(!firstRun) {
+      val lastDateRow = existingData.select(max(col("submission_date_s3"))).collect()
+      val lastDate = fmt.parseDateTime(lastDateRow(0).getString(0))
+      if((lastDate + 1.days) != fmt.parseDateTime(date)){
+        throw new java.lang.IllegalStateException("Missing previous day's heavy_users data")
+      }
+    }
+  }
+
   private def getCutoffs(spark: SparkSession, bucket: String): Map[String, Double] = {
     val cutoffsPath = s"s3://$bucket/$CutoffsDirectory"
     spark.read.csv(cutoffsPath)
@@ -288,6 +301,8 @@ object HeavyUsersView {
       .schema(heavyUsersSchema)
       .parquet(s"s3://${conf.bucket()}/$DatasetPrefix/$Version")
       .as[HeavyUsersRow]
+
+    senseExistingData(existingData, date, conf.firstRun())
 
     val cutoffs = getCutoffs(spark, conf.bucket())
 

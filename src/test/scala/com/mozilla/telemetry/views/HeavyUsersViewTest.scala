@@ -5,6 +5,7 @@ import com.mozilla.telemetry.views.HeavyUsersView
 import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import org.apache.spark.sql.Dataset
 import org.scalatest.{FlatSpec, Matchers, BeforeAndAfterAll}
+import org.scalatest.Assertions._
 
 import scala.io.Source
 
@@ -121,6 +122,27 @@ class HeavyUsersViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   it can "correctly calculate a cutoff" in {
     val ds = (1 until 100).map(HeavyUsersView.UserActiveTicks("someclient", 42, 1, 1, _)).toDS
     HeavyUsersView.getCutoff(ds, false).get should be (90)
+  }
+
+  it can "sense that previous data exists" in {
+    val ds = List(
+      HeavyUsersView.HeavyUsersRow("20170901", "client1", 42, 1, 2, 2, Some(false), Some(false))).toDS
+
+    // will fail if this throws IllegalStateException
+    HeavyUsersView.senseExistingData(ds, "20170902", false)
+  }
+
+  it can "sense that previous data is missing" in {
+    val ds = List(
+      HeavyUsersView.HeavyUsersRow("20170901", "client1", 42, 1, 2, 2, Some(false), Some(false))).toDS
+
+    intercept[java.lang.IllegalStateException] {
+      HeavyUsersView.senseExistingData(ds, "20170903", false)
+    }
+  }
+
+  it can "ignore missing data on first run" in {
+    HeavyUsersView.senseExistingData(spark.emptyDataset[HeavyUsersView.HeavyUsersRow], "20170903", true)
   }
 
   override def afterAll() = {
