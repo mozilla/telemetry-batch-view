@@ -28,6 +28,16 @@ class HistogramAnalyzer(name: String, hd: HistogramDefinition, df: DataFrame)
   extends MetricAnalyzer[Int](name, hd, df) {
   override type PreAggregateRowType = PreAggHistogramRow
   override val aggregator = UintAggregator
+  val buckets = hd.getBuckets
+
+  // Checks that 1. all the buckets keys are expected values and 2. bucket values are positive numbers
+  def validateRow(row: PreAggregateRowType): Boolean = {
+    row.metric match {
+      case Some(m: Map[Int, Long]) =>
+        (m.keys.toSet subsetOf buckets.toSet) && m.values.forall(_ >= 0L)
+      case _ => false
+    }
+  }
 
   def collapseKeys(formatted: DataFrame): Dataset[PreAggHistogramRow] = {
     import df.sparkSession.implicits._

@@ -7,7 +7,7 @@ import com.mozilla.telemetry.utils.deletePrefix
 import com.mozilla.telemetry.utils.CustomPartitioners._
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.expressions.scalalang.typed.sumLong
-import org.apache.spark.sql.functions.{col, min}
+import org.apache.spark.sql.functions.{col, first, max, min}
 import org.rogach.scallop._
 import scala.util.Try
 
@@ -28,7 +28,7 @@ object HeavyUsersView {
   val DatasetPrefix = "heavy_users"
   val DefaultMainSummaryBucket = "telemetry-parquet"
   val Version = "v1"
-  val NumFiles = 10 // ~3.5GB in total, per day
+  val NumFiles = 16 // ~3.5GB in total, per day
   val WriteMode = "overwrite"
   val SubmissionDatePartitionName = "submission_date_s3"
   val TimeWindow = 28.days
@@ -83,6 +83,9 @@ object HeavyUsersView {
       descr = "Destination bucket for parquet data")
     val date = opt[String](
       descr = "Submission date to process. Defaults to yesterday",
+      required = false)
+    val firstRun = opt[Boolean](
+      descr = "Whether this is the first run of heavy_user",
       required = false)
     val mainSummaryBucket = opt[String](
       descr = "Main summary bucket",
@@ -208,9 +211,9 @@ object HeavyUsersView {
     // Aggregate today's main_summary data
     val aggregated: Dataset[UserActiveTicks] = ds
       .filter(r => r.submission_date_s3 == date && Option(r.active_ticks).getOrElse(0: Long) > 0)
-      .groupByKey(r => (r.client_id, r.sample_id, r.profile_creation_date))
-      .agg(sumLong[MainSummaryRow](_.active_ticks))
-      .map{ case((cid, sid, pcd), at) => UserActiveTicks(cid, sid.toInt, pcd, at, null) }
+      .groupByKey(r => r.client_id)
+      .agg(sumLong[MainSummaryRow](_.active_ticks), first(col("sample_id")).as[String], first(col("profile_creation_date")).as[Long])
+      .map{ case(cid, at, sid, pcd) => UserActiveTicks(cid, sid.toInt, pcd, at, null) }
       .as[UserActiveTicks]
 
     // Add today's total to yesterday's 28 days total
@@ -237,6 +240,16 @@ object HeavyUsersView {
       .as[HeavyUsersRow]
 
     (withCutoffs, cutoff)
+  }
+
+  def senseExistingData(existingData: Dataset[HeavyUsersRow], date: String, firstRun: Boolean): Unit = {
+    if(!firstRun) {
+      val lastDateRow = existingData.select(max(col("submission_date_s3"))).collect()
+      val lastDate = fmt.parseDateTime(lastDateRow(0).getString(0))
+      if((lastDate + 1.days) != fmt.parseDateTime(date)){
+        throw new java.lang.IllegalStateException("Missing previous day's heavy_users data")
+      }
+    }
   }
 
   private def getCutoffs(spark: SparkSession, bucket: String): Map[String, Double] = {
@@ -288,6 +301,8 @@ object HeavyUsersView {
       .schema(heavyUsersSchema)
       .parquet(s"s3://${conf.bucket()}/$DatasetPrefix/$Version")
       .as[HeavyUsersRow]
+
+    senseExistingData(existingData, date, conf.firstRun())
 
     val cutoffs = getCutoffs(spark, conf.bucket())
 

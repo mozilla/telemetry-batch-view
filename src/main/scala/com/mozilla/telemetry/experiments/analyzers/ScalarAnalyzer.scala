@@ -96,6 +96,8 @@ class BooleanScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame)
   override type PreAggregateRowType = BooleanScalarMapRow
   val aggregator = BooleanAggregator
 
+  override def validateRow(row: BooleanScalarMapRow): Boolean = row.metric.isDefined
+
   def collapseKeys(formatted: DataFrame): Dataset[BooleanScalarMapRow] = {
     import df.sparkSession.implicits._
     val s = if (md.keyed) formatted.as[KeyedBooleanScalarRow] else formatted.as[BooleanScalarRow]
@@ -107,6 +109,10 @@ class UintScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame)
   extends MetricAnalyzer[Int](name, md, df) {
   override type PreAggregateRowType = UintScalarMapRow
   val aggregator = UintAggregator
+  override def validateRow(row: UintScalarMapRow): Boolean = row.metric match {
+    case Some(m) => m.keys.forall(_ >= 0)
+    case None => false
+  }
 
   def collapseKeys(formatted: DataFrame): Dataset[UintScalarMapRow] = {
     import df.sparkSession.implicits._
@@ -120,6 +126,11 @@ class LongScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame)
   override type PreAggregateRowType = LongScalarMapRow
   val aggregator = LongAggregator
 
+  override def validateRow(row: LongScalarMapRow): Boolean = row.metric match {
+    case Some(m) => m.keys.forall(_ >= 0L)
+    case None => false
+  }
+
   def collapseKeys(formatted: DataFrame): Dataset[LongScalarMapRow] = {
     import df.sparkSession.implicits._
     val s = if (md.keyed) formatted.as[KeyedLongScalarRow] else formatted.as[LongScalarRow]
@@ -131,6 +142,8 @@ class StringScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame)
   extends MetricAnalyzer[String](name, md, df) {
   override type PreAggregateRowType = StringScalarMapRow
   val aggregator = StringAggregator
+
+  override def validateRow(row: StringScalarMapRow): Boolean = row.metric.isDefined
 
   def collapseKeys(formatted: DataFrame): Dataset[StringScalarMapRow] = {
     import df.sparkSession.implicits._
