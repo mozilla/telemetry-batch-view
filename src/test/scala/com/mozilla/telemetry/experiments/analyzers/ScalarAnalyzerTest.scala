@@ -35,6 +35,7 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
         Some(false), Some(keyed_boolean2), Some("world"), Some(keyed_string)),
       ScalarExperimentDataset("experiment1", "control", Some(5), Some(keyed_uint),
         Some(true), Some(keyed_boolean2), Some("hello"), Some(keyed_string)),
+      ScalarExperimentDataset("experiment1", "control", Some(-1), Some(Map("test" -> -1)), None, None, None, None),
       ScalarExperimentDataset("experiment1", "branch1", Some(1), Some(keyed_uint),
         Some(true), Some(keyed_boolean1), Some("hello"), Some(keyed_string)),
       ScalarExperimentDataset("experiment1", "branch2", Some(1), Some(keyed_uint),
@@ -189,5 +190,22 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
         stringsToPoints(List((0, "hello", 2), (1, "world", 2))), None)
     )
     assert(actual == expected)
+  }
+
+  "Invalid scalars" should "be filtered out" in {
+    val df = fixture
+    val analyzer = ScalarAnalyzer.getAnalyzer("uint_scalar",
+      UintScalar(false, "name"),
+      df.where(df.col("experiment_id") === "experiment1")
+    )
+    val actual = analyzer.analyze().collect().filter(_.experiment_branch == "control").head
+    assert(actual.n == 3L)
+
+    val keyed_analyzer = ScalarAnalyzer.getAnalyzer("keyed_uint_scalar",
+      UintScalar(true, "name"),
+      df.where(df.col("experiment_id") === "experiment1")
+    )
+    val keyed_actual = analyzer.analyze().collect().filter(_.experiment_branch == "control").head
+    assert(keyed_actual.n == 3L)
   }
 }

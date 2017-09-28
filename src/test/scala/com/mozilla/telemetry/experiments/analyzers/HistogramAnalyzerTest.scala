@@ -24,6 +24,8 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
     Seq(
       HistogramExperimentDataset("experiment1", "control", Some(m1), Some(Map("key1" -> m1, "key2" -> m2))),
       HistogramExperimentDataset("experiment1", "control", None, None),
+      HistogramExperimentDataset("experiment1", "control", Some(Map(0 -> 1, 10000 -> 2)), None),
+      HistogramExperimentDataset("experiment1", "control", Some(Map(0 -> 1, 1 -> -2)), None),
       HistogramExperimentDataset("experiment1", "control", Some(m2), Some(Map("hi" -> m2, "there" -> m3))),
       HistogramExperimentDataset("experiment1", "control", Some(m4), Some(Map("hi" -> m3, "there" -> m3))),
       HistogramExperimentDataset("experiment1", "branch1", Some(m1), Some(Map("key1" -> m1, "key2" -> m2))),
@@ -96,5 +98,16 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
     import spark.implicits._
     val expected = df.sparkSession.emptyDataset[MetricAnalysis]
     assertDatasetEquals[MetricAnalysis](expected, actual)
+  }
+
+  "Invalid histograms" should "be dropped from analysis" in {
+    val df = fixture
+    val analyzer = new HistogramAnalyzer("histogram",
+      EnumeratedHistogram(keyed = false, "name", 150),
+      df.where(df.col("experiment_id") === "experiment1")
+    )
+
+    val actual = analyzer.analyze().collect().filter(_.experiment_branch == "control").head
+    assert(actual.n == 3L)
   }
 }
