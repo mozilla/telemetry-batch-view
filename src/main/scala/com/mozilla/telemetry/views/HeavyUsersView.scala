@@ -289,6 +289,7 @@ object HeavyUsersView {
     val df = spark.read.option("mergeSchema", "true")
       .parquet(s"s3://${conf.mainSummaryBucket()}/${MainSummaryView.jobName}/${MainSummaryView.schemaVersion}")
       .select(MainSummaryRow.Columns: _*)
+      .where("sample_id IS NOT NULL")
       .as[MainSummaryRow]
 
     /*
