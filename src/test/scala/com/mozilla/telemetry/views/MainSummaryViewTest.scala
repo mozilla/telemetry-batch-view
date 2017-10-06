@@ -282,6 +282,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "env_build_arch"                    -> "x86-64",
             "e10s_enabled"                      -> true,
             "e10s_cohort"                       -> "unsupportedChannel",
+            "e10s_multi_processes"              -> null,
             "locale"                            -> "en-US",
             "active_experiment_id"              -> null,
             "active_experiment_branch"          -> null,
@@ -1753,4 +1754,32 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     actual should be (expected)
     spark.stop()
   }
+
+  it can "properly show e10s_multi_processes" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.settings" -> """{
+          "e10sMultiProcesses": 12
+        }"""),
+      None);
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+
+    val expected = Map(
+      "e10s_multi_processes" -> 12
+    )
+
+    val actual =
+      applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      .getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+    actual should be (expected)
+  }
+
 }
