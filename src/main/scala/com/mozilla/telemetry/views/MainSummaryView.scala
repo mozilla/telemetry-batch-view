@@ -568,6 +568,10 @@ object MainSummaryView {
           case JString(x) => x
           case _ => null
         },
+        settings \ "e10sMultiProcesses" match {
+          case JInt(x) => x.toLong
+          case _ => null
+        },
         settings \ "locale" match {
           case JString(x) => x
           case _ => null
@@ -939,6 +943,10 @@ object MainSummaryView {
       // See bug 1251259
       StructField("e10s_enabled", BooleanType, nullable = true), // environment/settings/e10sEnabled
       StructField("e10s_cohort", StringType, nullable = true), // environment/settings/e10sCohort
+
+      // Bug 1406238
+      StructField("e10s_multi_processes", LongType, nullable = true), // environment/settings/e10sMultiProcesses
+
       StructField("locale", StringType, nullable = true), // environment/settings/locale
       // See bug 1331082
       StructField("attribution", buildAttributionSchema, nullable = true), // environment/settings/attribution/
