@@ -18,7 +18,7 @@ object ExperimentAnalyzer {
       .select(
         col("experiment_id"),
         col("experiment_branch").as("branch"),
-        lit("All").as("subgroup"),
+        lit(MetricAnalyzer.topLevelLabel).as("subgroup"),
         col("client_id"))
       .groupBy(col("experiment_id"), col("branch"), col("subgroup"))
       .agg(countDistinct("client_id").alias("client_count"), count("*").alias("ping_count"))

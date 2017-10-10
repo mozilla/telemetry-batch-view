@@ -148,9 +148,9 @@ object ExperimentAnalysisView {
       case (name: String, md: MetricDefinition) =>
         md match {
           case hd: HistogramDefinition =>
-            new HistogramAnalyzer(name, hd, persisted).analyze().collect()
+            new HistogramAnalyzer(name, hd, persisted).analyze()
           case sd: ScalarDefinition =>
-            ScalarAnalyzer.getAnalyzer(name, sd, persisted).analyze().collect()
+            ScalarAnalyzer.getAnalyzer(name, sd, persisted).analyze()
           case _ => throw new UnsupportedOperationException("Unsupported metric definition type")
         }
     }
@@ -163,7 +163,7 @@ object ExperimentAnalysisView {
   def addPermutationsAndPersist(experimentsSummary: DataFrame,
                                 metadata: Array[MetricAnalysis],
                                 experiment: String): DataFrame = {
-    val topLevelMetadata = metadata.filter(_.subgroup == "All")
+    val topLevelMetadata = metadata.filter(_.subgroup == MetricAnalyzer.topLevelLabel)
     val totalPings = topLevelMetadata.flatMap(_.statistics.get.filter(_.name == "Total Pings").map(_.value)).sum
     val branchCounts = topLevelMetadata.map {
       r => r.experiment_branch ->

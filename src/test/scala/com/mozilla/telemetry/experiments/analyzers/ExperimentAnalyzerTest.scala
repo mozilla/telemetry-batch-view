@@ -27,15 +27,15 @@ class ExperimentAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBas
     val df = fixture
     val actual = ExperimentAnalyzer.getExperimentMetadata(df).collect.toSet
     val expected = Set(
-      MetricAnalysis("experiment1", "control", "All", 4, "Experiment Metadata", "Metadata",
+      MetricAnalysis("experiment1", "control", MetricAnalyzer.topLevelLabel, 4, "Experiment Metadata", "Metadata",
         Map.empty[Long, HistogramPoint],
         Some(Seq(Statistic(None, "Total Pings", 4.0), Statistic(None, "Total Clients", 3.0)))
       ),
-      MetricAnalysis("experiment1", "branch1", "All", 1, "Experiment Metadata", "Metadata",
+      MetricAnalysis("experiment1", "branch1", MetricAnalyzer.topLevelLabel, 1, "Experiment Metadata", "Metadata",
         Map.empty[Long, HistogramPoint],
         Some(Seq(Statistic(None, "Total Pings", 1.0), Statistic(None, "Total Clients", 1.0)))
       ),
-      MetricAnalysis("experiment1", "branch2", "All", 2, "Experiment Metadata", "Metadata",
+      MetricAnalysis("experiment1", "branch2", MetricAnalyzer.topLevelLabel, 2, "Experiment Metadata", "Metadata",
         Map.empty[Long, HistogramPoint],
         Some(Seq(Statistic(None, "Total Pings", 2.0), Statistic(None, "Total Clients", 2.0)))
       )

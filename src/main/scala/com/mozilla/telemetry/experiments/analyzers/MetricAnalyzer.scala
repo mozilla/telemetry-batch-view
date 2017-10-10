@@ -1,5 +1,6 @@
 package com.mozilla.telemetry.experiments.analyzers
 
+import com.mozilla.telemetry.experiments.statistics.{ComparativeStatistics, DescriptiveStatistics}
 import com.mozilla.telemetry.metrics.MetricDefinition
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.{col, count, lit}
@@ -44,7 +45,7 @@ abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFra
 
   import df.sparkSession.implicits._
 
-  def analyze(): Dataset[MetricAnalysis] = {
+  def analyze(): List[MetricAnalysis] = {
     format match {
       case Some(d: DataFrame) => {
         val agg_column = aggregator.toColumn.name("metric_aggregate")
@@ -53,9 +54,9 @@ abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFra
           .groupByKey(x => MetricKey(x.experiment_id, x.branch, x.subgroup))
           .agg(agg_column, count("*"))
           .map(toOutputSchema)
-        reindex(output)
+        addStatistics(reindex(output))
       }
-      case _ => df.sparkSession.emptyDataset[MetricAnalysis]
+      case _ => List.empty[MetricAnalysis]
     }
   }
 
@@ -63,7 +64,7 @@ abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFra
     Try(df.select(
       col("experiment_id"),
       col("experiment_branch").as("branch"),
-      lit("All").as("subgroup"),
+      lit(MetricAnalyzer.topLevelLabel).as("subgroup"),
       col(name).as("metric"))
     ) match {
       case Success(x) => Some(x)
@@ -80,8 +81,46 @@ abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFra
     aggregates
   }
 
+  private def addStatistics(aggregates: Dataset[MetricAnalysis]): List[MetricAnalysis] = {
+    val collected = aggregates.collect().toList
+    val descriptiveStatsMap = collected.map(m => m -> DescriptiveStatistics(m).getStatistics).toMap
+
+    val grouped = collected.groupBy(_.subgroup)
+
+    val comparativeStatsMap = grouped.getOrElse(MetricAnalyzer.topLevelLabel, List.empty[MetricAnalysis]) match {
+      // two branches are easy to compare
+      case m if m.length == 2 => ComparativeStatistics(m.head, m.last).getStatistics
+
+      // for > 2 branches, we find the control branch and compare the rest of the branches against that
+      case m if m.length > 2 =>
+        val controlOrNot = m.groupBy(_.experiment_branch.toLowerCase == "control")
+        (controlOrNot.get(true), controlOrNot.get(false)) match {
+          case (Some(control), Some(notControl)) =>
+            if (control.length != 1) throw new Exception("Something wonky is going on with the control branch")
+
+            // iterate through each of the experimental branches and compare against control
+            notControl
+              .map(ComparativeStatistics(control.head, _).getStatistics)
+              .reduce(addListMaps[MetricAnalysis, Statistic])
+
+          // if no branches are named "control", we don't know what to compare against so we don't run these stats
+          case _ => Map.empty[MetricAnalysis, List[Statistic]]
+        }
+      // We have seen a couple "single-branch" sanity test experiments
+      case _ => Map.empty[MetricAnalysis, List[Statistic]]
+    }
+
+    addListMaps[MetricAnalysis, Statistic](descriptiveStatsMap, comparativeStatsMap)
+      .map { case(m, s) => m.copy(statistics = Some(s))}
+      .toList
+  }
+
   private def toOutputSchema(r: (MetricKey, Map[Long, HistogramPoint], Long)): MetricAnalysis = r match {
     case (k: MetricKey, h: Map[Long, HistogramPoint], n: Long) =>
       MetricAnalysis(k.experiment_id, k.branch, k.subgroup, n, name, md.getClass.getSimpleName, h, None)
   }
+}
+
+object MetricAnalyzer {
+  val topLevelLabel = "All"
 }
