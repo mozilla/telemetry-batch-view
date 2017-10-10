@@ -44,7 +44,7 @@ object CrashAnalyzer {
       ComplexCrashTypes.map{ case (k, v) => (v / sum("usage_hours")).as(makeRateName(k)) }
 
     val crashes = errorAggregates
-      .withColumn("subgroup", lit("All"))
+      .withColumn("subgroup", lit(MetricAnalyzer.topLevelLabel))
       .groupBy(col("experiment_id"), col("experiment_branch"), col("subgroup"))
       .agg(aggregates.head, aggregates.tail: _*)
       .collect()

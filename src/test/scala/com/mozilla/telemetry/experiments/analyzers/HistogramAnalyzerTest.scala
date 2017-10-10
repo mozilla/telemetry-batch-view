@@ -47,20 +47,38 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
       EnumeratedHistogram(keyed = false, "name", 150),
       df.where(df.col("experiment_id") === "experiment1")
     )
-    val actual = analyzer.analyze().collect().toSet
+    val actual = analyzer.analyze().toSet
 
     def toPointControl: (Int => HistogramPoint) = partialToPoint(24.0, None)
     def toPointBranch1: (Int => HistogramPoint) = partialToPoint(6.0, None)
     def toPointBranch2: (Int => HistogramPoint) = partialToPoint(12.0, None)
 
     val expected = Set(
-      MetricAnalysis("experiment1", "control", "All", 3L, "histogram", "EnumeratedHistogram",
-        Map(0L -> toPointControl(4), 1L -> toPointControl(8), 2L -> toPointControl(12), 5L -> toPointControl(0)), None),
-      MetricAnalysis("experiment1", "branch1", "All", 1L, "histogram", "EnumeratedHistogram",
-        Map(0L -> toPointBranch1(1), 1L -> toPointBranch1(2), 2L -> toPointBranch1(3)), None),
-      MetricAnalysis("experiment1", "branch2", "All", 2L, "histogram", "EnumeratedHistogram",
-        Map(0L -> toPointBranch2(2), 1L -> toPointBranch2(4), 2L -> toPointBranch2(6), 5L -> toPointBranch2(0)), None)
-    )
+      MetricAnalysis("experiment1", "control", MetricAnalyzer.topLevelLabel, 3L, "histogram", "EnumeratedHistogram",
+        Map(0L -> toPointControl(4), 1L -> toPointControl(8), 2L -> toPointControl(12), 5L -> toPointControl(0)),
+        Some(List(
+          Statistic(Some("branch1"), "Chi-Square Distance", 0.0),
+          Statistic(Some("branch2"), "Chi-Square Distance", 0.0),
+          Statistic(None, "Mean", 1.3333333333333333),
+          Statistic(None, "Median", 1.0),
+          Statistic(None, "25th Percentile", 1.0),
+          Statistic(None, "75th Percentile", 2.0)))),
+      MetricAnalysis("experiment1", "branch1", MetricAnalyzer.topLevelLabel, 1L, "histogram", "EnumeratedHistogram",
+        Map(0L -> toPointBranch1(1), 1L -> toPointBranch1(2), 2L -> toPointBranch1(3)),
+        Some(List(
+          Statistic(Some("control"), "Chi-Square Distance", 0.0),
+          Statistic(None, "Mean", 1.3333333333333333),
+          Statistic(None, "Median", 1.0),
+          Statistic(None, "25th Percentile", 0.5),
+          Statistic(None, "75th Percentile", 2.0)))),
+      MetricAnalysis("experiment1", "branch2", MetricAnalyzer.topLevelLabel, 2L, "histogram", "EnumeratedHistogram",
+        Map(0L -> toPointBranch2(2), 1L -> toPointBranch2(4), 2L -> toPointBranch2(6), 5L -> toPointBranch2(0)),
+        Some(List(
+          Statistic(Some("control"), "Chi-Square Distance", 0.0),
+          Statistic(None, "Mean", 1.3333333333333333),
+          Statistic(None, "Median", 1.0),
+          Statistic(None, "25th Percentile", 1.0),
+          Statistic(None, "75th Percentile", 2.0)))))
     assert(actual == expected)
   }
 
@@ -70,24 +88,43 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
       EnumeratedHistogram(keyed = true, "name", 150),
       df.where(df.col("experiment_id") === "experiment1")
     )
-    val actual = analyzer.analyze().collect().toSet
+    val actual = analyzer.analyze().toSet
 
     def toPointControl: (Int => HistogramPoint) = partialToPoint(51.0, None)
     def toPointBranch1: (Int => HistogramPoint) = partialToPoint(18.0, None)
     def toPointBranch2: (Int => HistogramPoint) = partialToPoint(28.0, None)
 
     val expected = Set(
-      MetricAnalysis("experiment1", "control", "All", 3L, "keyed_histogram", "EnumeratedHistogram",
-        Map(0L -> toPointControl(8), 1L -> toPointControl(16), 2L -> toPointControl(24), 100L -> toPointControl(3)), None),
-      MetricAnalysis("experiment1", "branch1", "All", 1L, "keyed_histogram", "EnumeratedHistogram",
-        Map(0L -> toPointBranch1(3), 1L -> toPointBranch1(6), 2L -> toPointBranch1(9)), None),
-      MetricAnalysis("experiment1", "branch2", "All", 2L, "keyed_histogram", "EnumeratedHistogram",
-        Map(0L -> toPointBranch2(4), 1L -> toPointBranch2(8), 2L -> toPointBranch2(12), 100L -> toPointBranch2(4)), None)
+      MetricAnalysis("experiment1", "control", MetricAnalyzer.topLevelLabel, 3L, "keyed_histogram", "EnumeratedHistogram",
+        Map(0L -> toPointControl(8), 1L -> toPointControl(16), 2L -> toPointControl(24), 100L -> toPointControl(3)),
+        Some(List(
+          Statistic(Some("branch1"), "Chi-Square Distance", 0.030303030303030304),
+          Statistic(Some("branch2"), "Chi-Square Distance", 0.019470404984423675),
+          Statistic(None, "Mean", 7.137254901960785),
+          Statistic(None, "Median", 2.0),
+          Statistic(None, "25th Percentile", 1.0),
+          Statistic(None, "75th Percentile", 2.0)))),
+      MetricAnalysis("experiment1", "branch1", MetricAnalyzer.topLevelLabel, 1L, "keyed_histogram", "EnumeratedHistogram",
+        Map(0L -> toPointBranch1(3), 1L -> toPointBranch1(6), 2L -> toPointBranch1(9)),
+        Some(List(
+          Statistic(Some("control"), "Chi-Square Distance", 0.030303030303030304),
+          Statistic(None, "Mean", 1.3333333333333333),
+          Statistic(None, "Median", 1.0),
+          Statistic(None, "25th Percentile", 1.0),
+          Statistic(None, "75th Percentile", 2.0)))),
+      MetricAnalysis("experiment1", "branch2", MetricAnalyzer.topLevelLabel, 2L, "keyed_histogram", "EnumeratedHistogram",
+        Map(0L -> toPointBranch2(4), 1L -> toPointBranch2(8), 2L -> toPointBranch2(12), 100L -> toPointBranch2(4)),
+        Some(List(
+          Statistic(Some("control"), "Chi-Square Distance", 0.019470404984423675),
+          Statistic(None, "Mean", 15.428571428571429),
+          Statistic(None, "Median", 2.0),
+          Statistic(None, "25th Percentile", 1.0),
+          Statistic(None, "75th Percentile", 2.0))))
     )
     assert(actual == expected)
   }
 
-  "Unknown histogram" should "return an empty dataset" in {
+  "Unknown histogram" should "return an empty list" in {
     val df = fixture
     val analyzer = new HistogramAnalyzer("unknown_histogram",
       EnumeratedHistogram(keyed = true, "name", 150),
@@ -96,8 +133,8 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
     val actual = analyzer.analyze()
 
     import spark.implicits._
-    val expected = df.sparkSession.emptyDataset[MetricAnalysis]
-    assertDatasetEquals[MetricAnalysis](expected, actual)
+    val expected = List()
+    assert(expected == actual)
   }
 
   "Invalid histograms" should "be dropped from analysis" in {
@@ -107,7 +144,7 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
       df.where(df.col("experiment_id") === "experiment1")
     )
 
-    val actual = analyzer.analyze().collect().filter(_.experiment_branch == "control").head
+    val actual = analyzer.analyze().filter(_.experiment_branch == "control").head
     assert(actual.n == 3L)
   }
 }
