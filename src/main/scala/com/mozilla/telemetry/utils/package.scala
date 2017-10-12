@@ -53,14 +53,25 @@ package object utils{
     output.toString()
   }
 
-  def getOrCreateSparkSession(jobName: String): SparkSession = {
+  def getOrCreateSparkSession(jobName: String, enableHiveSupport: Boolean = false): SparkSession = {
     val conf = new SparkConf().setAppName(jobName)
     conf.setMaster(conf.get("spark.master", "local[*]"))
 
-    val spark = SparkSession
-      .builder()
-      .config(conf)
-      .getOrCreate()
+    val spark = enableHiveSupport match {
+      case true => {
+        SparkSession
+          .builder()
+          .config(conf)
+          .enableHiveSupport()
+          .getOrCreate()
+      }
+      case false => {
+        SparkSession
+          .builder()
+          .config(conf)
+          .getOrCreate()
+      }
+    }
 
     val hadoopConf = spark.sparkContext.hadoopConfiguration
     hadoopConf.set("parquet.enable.summary-metadata", "false")
