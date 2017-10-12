@@ -43,10 +43,11 @@ private case class AMOAddonInfo(guid: String,
   */
 final object AMODatabase {
   implicit val formats = Serialization.formats(NoTypeHints)
-  // This API URI will fetch all the public addons for Firefox, sorting them by creation date.
-  private val AMORequestURI = "https://addons.mozilla.org/api/v3/addons/search/?app=firefox&sort=created&type=extension"
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
-  private val addonDB: Map[String, AMOAddonInfo] = getDatabase()
+  private var addonDB: Map[String, AMOAddonInfo] = Map()
+  // This API URI will fetch all the public addons for Firefox, sorting them by creation date.
+  private val defaultAMORequestURI = "https://addons.mozilla.org/api/v3/addons/search/"
+  private val queryParams = "?app=firefox&sort=created&type=extension"
 
   /**
     * Fetch the remote AMO database by using the /search API endpoint.
@@ -82,9 +83,10 @@ final object AMODatabase {
   /**
     * Fetch a copy of the AMO addons database or return a cached local copy if
     * available.
+    * @param apiURI The AMO api URI to use to fetch the data.
     * @return A map of addon GUIDs to their info.
     */
-  private def getDatabase(): Map[String, AMOAddonInfo] = synchronized {
+  private def getDatabase(apiURI: String): Map[String, AMOAddonInfo] = synchronized {
     // If we have a cached copy of the request handy, use that. Please note that
     // the "read-from-disk" functionality is only needed for testing purposes, so
     // cache invalidation isn't a real issue.
@@ -94,11 +96,20 @@ final object AMODatabase {
       parse(Source.fromFile(dbPath.toString()).mkString).extract[Map[String, AMOAddonInfo]]
     } else {
       // Otherwise fetch it from addons.mozilla.org (might take some time..) and cache it.
-      val fetchedAddonsMap = fetchAddonsDatabase(Some(AMORequestURI))
+      val fetchedAddonsMap = fetchAddonsDatabase(Some(s"$apiURI$queryParams"))
       val serializedFetchedAddons = write(fetchedAddonsMap)
       Files.write(dbPath, serializedFetchedAddons.getBytes(StandardCharsets.UTF_8))
       fetchedAddonsMap
     }
+  }
+
+  /**
+    * Initialize this object by downloading the AMO addons.
+    * @param apiURI The AMO api URI to use to fetch the data.
+    */
+  def init(apiURI: String = defaultAMORequestURI): Unit = {
+    logger.info(s"Downloading AMO data from $apiURI")
+    addonDB = getDatabase(apiURI)
   }
 
   /**
