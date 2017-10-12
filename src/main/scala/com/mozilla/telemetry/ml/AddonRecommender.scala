@@ -5,12 +5,11 @@ import java.nio.file.{Files, Paths}
 
 import breeze.linalg.{DenseMatrix, DenseVector}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
-import com.mozilla.telemetry.utils.S3Store
+import com.mozilla.telemetry.utils.{S3Store, getOrCreateSparkSession}
 import org.apache.spark.ml.evaluation.NaNRegressionEvaluator
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
-import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.SparkSession
 import org.joda.time.{DateTime, format}
 import org.json4s.JsonDSL._
 import org.json4s._
@@ -94,6 +93,37 @@ object AddonRecommender {
     new DenseMatrix(itemFactors(0).features.length, itemFactors.length, itemMatrixValues)
   }
 
+  /**
+    * Get a new dataset from the Longitudinal dataset containing only the relevant addon data.
+    * @param sparkSession The SparkSession used for loading the Longitudinal dataset.
+    * @param addonBlacklist The a list of addon GUIDs to exclude.
+    * @return A 4 columns Dataset with each row having the client id, the addon GUID
+    *         and the hashed client id and GUID.
+    */
+  private def getAddonData(sparkSession: SparkSession, addonBlacklist: List[String]) = {
+    import sparkSession.sqlContext.implicits._
+    sparkSession.sqlContext.sql("select * from longitudinal")
+      .where("active_addons is not null")
+      .where("build is not null and build[0].application_name = 'Firefox'")
+      .selectExpr("client_id", "active_addons[0] as active_addons")
+      .as[Addons]
+      .flatMap { case Addons(Some(clientId), Some(addons)) =>
+        for {
+          (addonId, meta) <- addons
+          if !addonBlacklist.contains(addonId) && AMODatabase.contains(addonId)
+          addonName <- meta.name
+          blocklisted <- meta.blocklisted
+          signedState <- meta.signed_state
+          userDisabled <- meta.user_disabled
+          appDisabled <- meta.app_disabled
+          addonType <- meta.`type`
+          if !blocklisted && (addonType != "extension" || signedState == 2) && !userDisabled && !appDisabled
+        } yield {
+          (clientId, addonId, hash(clientId), hash(addonId))
+        }
+      }
+  }
+
   private def recommend(inputDir: String, addons: Set[String]) = {
     val mapping: List[(Int, String)] = for {
       JObject(a) <- parse(Source.fromFile(s"$inputDir/addon_mapping.json").mkString)
@@ -129,33 +159,14 @@ object AddonRecommender {
   }
 
   private def train(localOutputDir: String, runDate: String, privateBucket: String, publicBucket: String) = {
-    val sparkConf = new SparkConf().setAppName(this.getClass.getName)
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
-    val sc = new SparkContext(sparkConf)
-    val hiveContext = new HiveContext(sc)
-    import hiveContext.implicits._
+    val spark = getOrCreateSparkSession("AddonRecommenderTest", enableHiveSupport = true)
+    val sc = spark.sparkContext
+    import spark.implicits._
 
-    val clientAddons = hiveContext.sql("select * from longitudinal")
-      .where("active_addons is not null")
-      .where("build is not null and build[0].application_name = 'Firefox'")
-      .selectExpr("client_id", "active_addons[0] as active_addons")
-      .as[Addons]
-      .flatMap{ case Addons(Some(clientId), Some(addons)) =>
-        for {
-          (addonId, meta) <- addons
-          if !List("loop@mozilla.org","firefox@getpocket.com", "e10srollout@mozilla.org", "firefox-hotfix@mozilla.org").contains(addonId) &&
-             AMODatabase.contains(addonId)
-          addonName <- meta.name
-          blocklisted <- meta.blocklisted
-          signedState <- meta.signed_state
-          userDisabled <- meta.user_disabled
-          appDisabled <- meta.app_disabled
-          addonType <- meta.`type`
-          if !blocklisted && (addonType != "extension" || signedState == 2) && !userDisabled && !appDisabled
-        } yield {
-          (clientId, addonId, hash(clientId), hash(addonId))
-        }
-      }
+    AMODatabase.init()
+
+    val blacklist = List("loop@mozilla.org", "firefox@getpocket.com", "e10srollout@mozilla.org", "firefox-hotfix@mozilla.org")
+    val clientAddons = getAddonData(spark, blacklist)
 
     val ratings = clientAddons
       .map{ case (_, _, hashedClientId, hashedAddonId) => Rating(hashedClientId, hashedAddonId, 1.0f)}
