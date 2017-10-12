@@ -151,12 +151,11 @@ class StringScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame)
     s.map(_.toScalarMapRow)
   }
 
-  override protected def reindex(aggregates: Dataset[MetricAnalysis]): Dataset[MetricAnalysis] = {
-    import aggregates.sparkSession.implicits._
+  override protected def reindex(aggregates: List[MetricAnalysis]): List[MetricAnalysis] = {
     // this is really annoying, but we need to give string scalar values indexes and they have to be
     // consistent among all the histograms across all branches, so we: aggregate the histograms
     // across all the branches, sort by count descending, and use that order for our index
-    val counts = aggregates.collect().map { a: MetricAnalysis =>
+    val counts = aggregates.map { a: MetricAnalysis =>
       a.histogram.values.map {p: HistogramPoint => p.label.get -> p.count.toLong}.toMap[String, Long]
     }
 

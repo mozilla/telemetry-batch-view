@@ -2,7 +2,6 @@ package com.mozilla.telemetry.experiments.analyzers
 
 import com.holdenkarau.spark.testing.DatasetSuiteBase
 import com.mozilla.telemetry.metrics._
-import com.mozilla.telemetry.utils.MainPing
 import org.apache.spark.sql.DataFrame
 import org.scalatest.{FlatSpec, Matchers}
 

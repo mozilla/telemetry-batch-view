@@ -54,6 +54,8 @@ abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFra
           .groupByKey(x => MetricKey(x.experiment_id, x.branch, x.subgroup))
           .agg(agg_column, count("*"))
           .map(toOutputSchema)
+          .collect
+          .toList
         addStatistics(reindex(output))
       }
       case _ => List.empty[MetricAnalysis]
@@ -76,16 +78,15 @@ abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFra
 
   def collapseKeys(formatted: DataFrame): Dataset[PreAggregateRowType]
 
-  protected def reindex(aggregates: Dataset[MetricAnalysis]): Dataset[MetricAnalysis] = {
+  protected def reindex(aggregates: List[MetricAnalysis]): List[MetricAnalysis] = {
     // This is meant as a finishing step for string scalars only
     aggregates
   }
 
-  private def addStatistics(aggregates: Dataset[MetricAnalysis]): List[MetricAnalysis] = {
-    val collected = aggregates.collect().toList
-    val descriptiveStatsMap = collected.map(m => m -> DescriptiveStatistics(m).getStatistics).toMap
+  private def addStatistics(aggregates: List[MetricAnalysis]): List[MetricAnalysis] = {
+    val descriptiveStatsMap = aggregates.map(m => m -> DescriptiveStatistics(m).getStatistics).toMap
 
-    val grouped = collected.groupBy(_.subgroup)
+    val grouped = aggregates.groupBy(_.subgroup)
 
     val comparativeStatsMap = grouped.getOrElse(MetricAnalyzer.topLevelLabel, List.empty[MetricAnalysis]) match {
       // two branches are easy to compare
@@ -111,7 +112,7 @@ abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFra
     }
 
     addListMaps[MetricAnalysis, Statistic](descriptiveStatsMap, comparativeStatsMap)
-      .map { case(m, s) => m.copy(statistics = Some(s))}
+      .map { case(m, s) => m.copy(statistics = Some(s)) }
       .toList
   }
 
