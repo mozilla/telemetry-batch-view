@@ -27,7 +27,7 @@ case class ChiSquareDistance(control: MetricAnalysis, experimental: MetricAnalys
       val c = control.histogram.getOrElse(k, HistogramPoint(0.0, 0.0, None)).pdf
       val e = experimental.histogram.getOrElse(k, HistogramPoint(0.0, 0.0, None)).pdf
       c + e match {
-        case 0 => 0
+        case 0 => 0.0
         case _ => math.pow(c - e, 2) / (c + e)
       }
     }).sum / 2
