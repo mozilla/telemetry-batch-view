@@ -45,8 +45,8 @@ case class Percentile(h: Map[Long, HistogramPoint], percentile: Double, name: St
 
   protected def getNthValue(n: Long): Long = {
     @tailrec def _getNthValue(n: Long, l: List[(Long, Long)], cumulative: Long): Long = {
-      val (k, v) = l.head
-      if (cumulative + v >= n) k else _getNthValue(n, l.tail, cumulative + v)
+      val (bucket, count) = l.head
+      if (cumulative + count >= n) bucket else _getNthValue(n, l.tail, cumulative + count)
     }
 
     _getNthValue(n, h.toList.sortBy(_._1).map { case (bucket, point) => (bucket, point.count.toLong)}, 0L)
