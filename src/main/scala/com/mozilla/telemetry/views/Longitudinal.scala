@@ -606,6 +606,9 @@ object LongitudinalView {
                                              payloads: List[Map[String, RawHistogram]],
                                              histogramSchema: Schema): java.util.Collection[Any] =
     definition match {
+      case c: CategoricalHistogram =>
+        throw new java.lang.UnsupportedOperationException(s"Categorical histograms cannot be added to the Longitudinal dataset, found ${c.originalName}")
+
       case _: FlagHistogram =>
         // A flag histograms is represented with a scalar.
         vectorizeHistogram_(name, payloads, h => h.values("0") == 0, false)
