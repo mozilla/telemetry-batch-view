@@ -477,7 +477,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   }
 
   "User prefs" can "be extracted" in {
-    // Contains prefs, but not dom.ipc.processCount or extensions.allow-non-mpc-extensions:
+    // Contains prefs, but none of the tracked ones:
     val json1 = parse(
       """
         |{
@@ -507,7 +507,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       """.stripMargin)
     MainSummaryView.getUserPrefs(json2 \ "environment" \ "settings" \ "userPrefs") should be (None)
 
-    // Contains prefs, including dom.ipc.processCount and extensions.allow-non-mpc-extensions
+    // Contains prefs, including all tracked ones:
     val json3 = parse(
       """
         |{
@@ -517,15 +517,16 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |    "dom.ipc.processCount": 2,
         |    "browser.newtabpage.enhanced": true,
         |    "browser.startup.page": 3,
-        |    "extensions.allow-non-mpc-extensions": true
+        |    "extensions.allow-non-mpc-extensions": true,
+        |    "extensions.legacy.enabled": true
         |   }
         |  }
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getUserPrefs(json3 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(2, true)))
+    MainSummaryView.getUserPrefs(json3 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(2, true, true)))
 
-    // Contains dom.ipc.processCount and extensions.allow-non-mpc-extensions with bogus data types
+    // Contains tracked prefs with bogus data types
     val json4 = parse(
       """
         |{
@@ -535,7 +536,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |    "dom.ipc.processCount": "2",
         |    "browser.newtabpage.enhanced": true,
         |    "browser.startup.page": 3,
-        |    "extensions.allow-non-mpc-extensions": 1
+        |    "extensions.allow-non-mpc-extensions": 1,
+        |    "extensions.legacy.enabled": ["bogus"]
         |   }
         |  }
         | }
@@ -555,7 +557,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       """.stripMargin)
     MainSummaryView.getUserPrefs(json5 \ "environment" \ "settings" \ "userPrefs") should be (None)
 
-    // Contains dom.ipc.processCount but not extensions.allow-non-mpc-extensions
+    // Contains dom.ipc.processCount but not others
     val json6 = parse(
       """
         |{
@@ -570,9 +572,9 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getUserPrefs(json6 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(4, null)))
+    MainSummaryView.getUserPrefs(json6 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(4, null, null)))
 
-    // Contains extensions.allow-non-mpc-extensions but not dom.ipc.processCount
+    // Contains extensions.allow-non-mpc-extensions but not others
     val json7 = parse(
       """
         |{
@@ -587,7 +589,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getUserPrefs(json7 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(null, false)))
+    MainSummaryView.getUserPrefs(json7 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(null, false, null)))
   }
 
   "Keyed Scalars" can "be properly shown" in {
