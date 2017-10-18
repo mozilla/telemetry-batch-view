@@ -369,6 +369,26 @@ object SyncPingConversion {
   private def multiSyncPayloadToNestedRow(ping: JValue, syncs: List[JValue]): List[Row] = {
     syncs.flatMap(sync => singleSyncPayloadToNestedRow(ping, sync))
   }
+  private def getStringOrNull(s: JValue) = s match {
+    case JString(x) => x
+    case _ => null
+  }
+
+  private def extractOSData(ping: JValue, payload: JValue): (String, String, String) = {
+    val os = payload \ "os" match {
+      case obj @ JObject(_) => obj
+      // Android stores it at the top level, unfortunately
+      case _ => ping \ "os" match {
+        case obj @ JObject(_) => obj
+        case _ => return (null, null, null)
+      }
+    }
+    (
+      getStringOrNull(os \ "name"),
+      getStringOrNull(os \ "version"),
+      getStringOrNull(os \ "locale")
+    )
+  }
 
   // Convert an "old style" ping that records a single Sync to a (nested) row
   private def singleSyncPayloadToNestedRow(ping: JValue, sync: JValue): Option[Row] = {
@@ -385,6 +405,8 @@ object SyncPingConversion {
           }
       }
     }
+
+    val (osName, osVersion, osLocale) = extractOSData(ping, payload)
 
 
     val row = Row(
@@ -410,18 +432,10 @@ object SyncPingConversion {
         case _ => return None // a required field.
       },
 
-      payload \ "os" \ "name" match {
-        case JString(x) => x
-        case _ => null
-      },
-      payload \ "os" \ "version" match {
-        case JString(x) => x
-        case _ => null
-      },
-      payload \ "os" \ "locale" match {
-        case JString(x) => x
-        case _ => null
-      },
+      osName,
+      osVersion,
+      osLocale,
+
       // Info about the sync.
       stringFromSyncOrPayload("uid") match {
         case null => return None // a required field.
@@ -473,6 +487,7 @@ object SyncPingConversion {
       case JInt(x) => x.toLong
       case _ => return List.empty
     }
+    val (osName, osVersion, osLocale) = extractOSData(ping, payload)
 
     val syncDay = new DateTime(when).toDateTime.toString("yyyyMMdd")
 
@@ -499,18 +514,9 @@ object SyncPingConversion {
         case _ => return List.empty // a required field.
       },
 
-      payload \ "os" \ "name" match {
-        case JString(x) => x
-        case _ => null
-      },
-      payload \ "os" \ "version" match {
-        case JString(x) => x
-        case _ => null
-      },
-      payload \ "os" \ "locale" match {
-        case JString(x) => x
-        case _ => null
-      },
+      osName,
+      osVersion,
+      osLocale,
 
       // Info about the sync.
       stringFromSyncOrPayload("uid") match {

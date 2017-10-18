@@ -5,7 +5,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.json4s.JsonAST.JNothing
-import org.json4s.{DefaultFormats, JValue}
+import org.json4s.{DefaultFormats, JValue, JObject}
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.collection.mutable
@@ -169,6 +169,11 @@ class SyncViewTest extends FlatSpec with Matchers{
     }
   }
 
+  private def getOS(ping: JValue): JValue =  ping \ "os" match {
+    case obj @ JObject(_) => obj
+    case _ => ping \ "payload" \ "os"
+  }
+
   // A helper to check the contents of the multi-sync ping.
   private def validateMultiSyncPing(rows: Array[Row], ping: JValue) {
     implicit val formats = DefaultFormats
@@ -182,9 +187,9 @@ class SyncViewTest extends FlatSpec with Matchers{
     firstSync.getAs[String]("app_version") should be ((ping \ "application" \ "version").extract[String])
     firstSync.getAs[String]("app_channel") should be ((ping \ "application" \ "channel").extract[String])
 
-    firstSync.getAs[String]("os") should be ((ping \ "payload" \ "os" \ "name").extract[String])
-    firstSync.getAs[String]("os_version") should be ((ping \ "payload" \ "os" \ "version").extract[String])
-    firstSync.getAs[String]("os_locale") should be ((ping \ "payload" \ "os" \ "locale").extract[String])
+    firstSync.getAs[String]("os") should be ((getOS(ping) \ "name").extract[String])
+    firstSync.getAs[String]("os_version") should be ((getOS(ping) \ "version").extract[String])
+    firstSync.getAs[String]("os_locale") should be ((getOS(ping) \ "locale").extract[String])
 
     val firstPing = (ping \ "payload" \ "syncs")(0)
     firstSync.getAs[Long]("when") should be ((firstPing \ "when").extract[Long])
@@ -206,9 +211,9 @@ class SyncViewTest extends FlatSpec with Matchers{
     secondSync.getAs[String]("app_version") should be ((ping \ "application" \ "version").extract[String])
     secondSync.getAs[String]("app_channel") should be ((ping \ "application" \ "channel").extract[String])
 
-    secondSync.getAs[String]("os") should be ((ping \ "payload" \ "os" \ "name").extract[String])
-    secondSync.getAs[String]("os_version") should be ((ping \ "payload" \ "os" \ "version").extract[String])
-    secondSync.getAs[String]("os_locale") should be ((ping \ "payload" \ "os" \ "locale").extract[String])
+    secondSync.getAs[String]("os") should be ((getOS(ping) \ "name").extract[String])
+    secondSync.getAs[String]("os_version") should be ((getOS(ping) \ "version").extract[String])
+    secondSync.getAs[String]("os_locale") should be ((getOS(ping) \ "locale").extract[String])
 
     val secondPing = (ping \ "payload" \ "syncs")(1)
 
@@ -237,9 +242,9 @@ class SyncViewTest extends FlatSpec with Matchers{
     sync.getAs[String]("app_name") should be ((ping \ "application" \ "name").extract[String])
     sync.getAs[String]("app_version") should be ((ping \ "application" \ "version").extract[String])
 
-    sync.getAs[String]("os") should be ((ping \ "payload" \ "os" \ "name").extract[String])
-    sync.getAs[String]("os_version") should be ((ping \ "payload" \ "os" \ "version").extract[String])
-    sync.getAs[String]("os_locale") should be ((ping \ "payload" \ "os" \ "locale").extract[String])
+    sync.getAs[String]("os") should be ((getOS(ping) \ "name").extract[String])
+    sync.getAs[String]("os_version") should be ((getOS(ping) \ "version").extract[String])
+    sync.getAs[String]("os_locale") should be ((getOS(ping) \ "locale").extract[String])
 
     val pingPayload = (ping \ "payload" \ "syncs")(0)
     sync.getAs[Long]("when") should be ((pingPayload \ "when").extract[Long])

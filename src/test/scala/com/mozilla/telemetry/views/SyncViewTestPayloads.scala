@@ -291,6 +291,7 @@ object SyncViewTestPayloads {
       |}
     """.stripMargin)
 
+  // This also stores the os at the top level for compatibility with android (bug 1409860)
   def multiSyncPingWithTopLevelIds = parse(
     """
       |{
@@ -309,12 +310,12 @@ object SyncViewTestPayloads {
       |    "xpcomAbi": "x86_64-msvc",
       |    "channel": "nightly"
       |  },
+      |  "os": {
+      |    "name": "Darwin",
+      |    "version": "15.6.0",
+      |    "locale": "en-US"
+      |  },
       |  "payload": {
-      |    "os": {
-      |      "name": "Darwin",
-      |      "version": "15.6.0",
-      |      "locale": "en-US"
-      |    },
       |    "why": "schedule",
       |    "version": 1,
       |    "uid": "12345678912345678912345678912345",
