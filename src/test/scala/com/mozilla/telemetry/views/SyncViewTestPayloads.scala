@@ -298,7 +298,7 @@ object SyncViewTestPayloads {
       |  "type": "sync",
       |  "id": "a1d969b7-0084-4a78-a841-2abaf887f1b4",
       |  "creationDate": "2016-09-08T18:19:09.808Z",
-      |  "version": 4,
+      |  "version": 5,
       |  "application": {
       |    "architecture": "x86-64",
       |    "buildId": "20160907030427",
