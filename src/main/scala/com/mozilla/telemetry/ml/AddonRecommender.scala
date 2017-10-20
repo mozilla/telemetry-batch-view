@@ -159,11 +159,13 @@ object AddonRecommender {
   }
 
   private def train(localOutputDir: String, runDate: String, privateBucket: String, publicBucket: String) = {
+    // The AMODatabase init needs to happen before we get the SparkContext,
+    // otherwise the job will fail due to all the workers being idle.
+    AMODatabase.init()
+
     val spark = getOrCreateSparkSession("AddonRecommenderTest", enableHiveSupport = true)
     val sc = spark.sparkContext
     import spark.implicits._
-
-    AMODatabase.init()
 
     val blacklist = List("loop@mozilla.org", "firefox@getpocket.com", "e10srollout@mozilla.org", "firefox-hotfix@mozilla.org")
     val clientAddons = getAddonData(spark, blacklist)
