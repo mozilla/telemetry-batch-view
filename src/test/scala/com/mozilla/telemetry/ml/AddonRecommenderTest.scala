@@ -140,6 +140,7 @@ class AddonRecommenderTest extends FlatSpec with BeforeAndAfterAll with Matchers
 
   override def afterAll(): Unit = {
     Files.deleteIfExists(AMODatabase.getLocalCachePath())
+    spark.stop()
   }
 
   "hash" must "return positive hash codes" in {
