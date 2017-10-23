@@ -1,13 +1,13 @@
 package com.mozilla.telemetry
 
-import com.mozilla.telemetry.heka.{File, RichMessage}
+import com.mozilla.telemetry.heka.{File, Message, RichMessage}
 import com.mozilla.telemetry.metrics._
-import com.mozilla.telemetry.utils.{Events, MainPing}
-import com.mozilla.telemetry.views.MainSummaryView
+import com.mozilla.telemetry.utils.MainPing
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
+import com.mozilla.telemetry.views.{MainSummaryView, UserPref}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, StringType, StructType}
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{FlatSpec, Matchers}
 
@@ -20,7 +20,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     override protected val getURL = scalarUrlMock
   }
 
-  val scalarDefs = scalars.definitions(true).toList.sortBy(_._1)
+  val scalarDefs = scalars.definitions(includeOptin = true).toList.sortBy(_._1)
 
   val histogramUrlMock = (a: String, b: String) => Source.fromFile("src/test/resources/ShortHistograms.json")
 
@@ -30,30 +30,45 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
   val histogramDefs = MainSummaryView.filterHistogramDefinitions(histograms.definitions(true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true))
 
-  "MainSummary records" can "be serialized" in {
-    val sparkConf = new SparkConf().setAppName("MainSummary")
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
-    val sc = new SparkContext(sparkConf)
-    sc.setLogLevel("WARN")
+  val userPrefs = MainSummaryView.userPrefsList
 
-    val spark = SparkSession
-      .builder()
-      .appName("MainSummary")
-      .getOrCreate()
+  val testUserPrefs =
+    UserPref("p1", IntegerType) ::
+    UserPref("p2", BooleanType) ::
+    UserPref("P3.MESSY", StringType) :: Nil
+
+  val defaultSchema = MainSummaryView.buildSchema(userPrefs, scalarDefs, histogramDefs)
+
+  val defaultMessageToRow = (m: Message) =>
+    MainSummaryView.messageToRow(m, userPrefs, scalarDefs, histogramDefs)
+
+  // Apply the given schema to the given potentially-generic Row.
+  def applySchema(row: Row, schema: StructType): Row = new GenericRowWithSchema(row.toSeq.toArray, schema)
+
+  def checkAddonValues(row: Row, schema: StructType, expected: Map[String,Any]) = {
+    val actual = applySchema(row, schema).getValuesMap(expected.keys.toList)
+    val aid = expected("addon_id")
+    for ((f, v) <- expected) {
+      withClue(s"$aid[$f]:") { actual.get(f) should be (Some(v)) }
+    }
+    actual should be (expected)
+  }
+
+  "MainSummary records" can "be serialized" in {
+    val spark = getOrCreateSparkSession("MainSummaryViewTest")
+    spark.sparkContext.setLogLevel("WARN")
 
     try {
-      val schema = MainSummaryView.buildSchema(scalarDefs, histogramDefs)
-
       // Use an example framed-heka message. It is based on test_main.json.gz,
       // submitted with a URL of
       //    /submit/telemetry/foo/main/Firefox/48.0a1/nightly/20160315030230
       for (hekaFileName <- List("/test_main_hindsight.heka", "/test_main.snappy.heka")) {
         val hekaURL = getClass.getResource(hekaFileName)
         val input = hekaURL.openStream()
-        val rows = File.parse(input).flatMap(i => MainSummaryView.messageToRow(i, scalarDefs, histogramDefs))
+        val rows = File.parse(input).flatMap(i => defaultMessageToRow(i))
 
         // Serialize this one row as Parquet
-        val dataframe = spark.createDataFrame(sc.parallelize(rows.toSeq), schema)
+        val dataframe = spark.sqlContext.createDataFrame(spark.sparkContext.parallelize(rows.toSeq), defaultSchema)
         val tempFile = com.mozilla.telemetry.utils.temporaryFileName()
         dataframe.write.parquet(tempFile.toString)
 
@@ -64,7 +79,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         data.filter(data("document_id") === "foo").count() should be (1)
       }
     } finally {
-      sc.stop()
+      spark.stop()
     }
   }
 
@@ -118,8 +133,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "sum":1
     }
   }"""),
-      None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+      None)
+    val summary = defaultMessageToRow(message)
 
     val expected = Map(
       "document_id" -> "foo",
@@ -130,7 +145,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "plugins_infobar_block" -> 1,
       "plugins_infobar_dismissed" -> 1
     )
-    val actual = applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+    val actual = applySchema(summary.get, defaultSchema)
       .getValuesMap(expected.keys.toList)
     for ((f, v) <- expected) {
       withClue(s"$f:") { actual.get(f) should be (Some(v)) }
@@ -149,14 +164,14 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           "experiment1": { "branch": "alpha" },
           "experiment2": { "branch": "beta" }
         }"""),
-      None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+      None)
+    val summary = defaultMessageToRow(message)
 
     val expected = Map(
       "document_id" -> "foo",
       "experiments" -> Map("experiment1" -> "alpha", "experiment2" -> "beta")
     )
-    val actual = applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+    val actual = applySchema(summary.get, defaultSchema)
       .getValuesMap(expected.keys.toList)
     for ((f, v) <- expected) {
       withClue(s"$f:") { actual.get(f) should be (Some(v)) }
@@ -197,8 +212,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "id": "firefox-compact-light@mozilla.org"
           }
         }"""),
-      None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+      None)
+    val summary = defaultMessageToRow(message)
 
     // This will make sure that:
     // - the disabled addon is in the list;
@@ -207,22 +222,11 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "document_id" -> "foo",
       "disabled_addons_ids" -> List("some-disabled-addon-id")
     )
-    val actual = applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+    val actual = applySchema(summary.get, defaultSchema)
       .getValuesMap(expected.keys.toList)
     actual should be (expected)
   }
 
-  // Apply the given schema to the given potentially-generic Row.
-  def applySchema(row: Row, schema: StructType): Row = new GenericRowWithSchema(row.toSeq.toArray, schema)
-
-  def checkAddonValues(row: Row, schema: StructType, expected: Map[String,Any]) = {
-    val actual = applySchema(row, schema).getValuesMap(expected.keys.toList)
-    val aid = expected("addon_id")
-    for ((f, v) <- expected) {
-      withClue(s"$aid[$f]:") { actual.get(f) should be (Some(v)) }
-    }
-    actual should be (expected)
-  }
 
   "Heka records" can "be summarized" in {
     // Use an example framed-heka message. It is based on test_main.json.gz,
@@ -232,17 +236,15 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       val hekaURL = getClass.getResource(hekaFileName)
       val input = hekaURL.openStream()
 
-      val schema = MainSummaryView.buildSchema(scalarDefs, histogramDefs)
-
       var count = 0
       for (message <- File.parse(input)) {
         message.timestamp should be (1460036116829920000l)
         message.`type`.get should be ("telemetry")
         message.logger.get should be ("telemetry")
 
-        for (summary <- MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)) {
+        for (summary <- defaultMessageToRow(message)) {
           // Apply our schema to a generic Row object
-          val r = applySchema(summary, schema)
+          val r = applySchema(summary, defaultSchema)
 
           val expected = Map(
             "document_id"                       -> "foo",
@@ -492,7 +494,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getUserPrefs(json1 \ "environment" \ "settings" \ "userPrefs") should be (None)
+    MainSummaryView.getOldUserPrefs(json1 \ "environment" \ "settings" \ "userPrefs") should be (None)
+    MainSummaryView.getUserPrefs(json1 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null))
 
     // Doesn't contain any prefs:
     val json2 = parse(
@@ -505,7 +508,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getUserPrefs(json2 \ "environment" \ "settings" \ "userPrefs") should be (None)
+    MainSummaryView.getOldUserPrefs(json2 \ "environment" \ "settings" \ "userPrefs") should be (None)
+    MainSummaryView.getUserPrefs(json2 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null))
 
     // Contains prefs, including dom.ipc.processCount and extensions.allow-non-mpc-extensions
     val json3 = parse(
@@ -523,7 +527,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getUserPrefs(json3 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(2, true)))
+    MainSummaryView.getOldUserPrefs(json3 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(2, true)))
+    MainSummaryView.getUserPrefs(json3 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(2, true, null))
 
     // Contains dom.ipc.processCount and extensions.allow-non-mpc-extensions with bogus data types
     val json4 = parse(
@@ -541,7 +546,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getUserPrefs(json4 \ "environment" \ "settings" \ "userPrefs") should be (None)
+    MainSummaryView.getOldUserPrefs(json4 \ "environment" \ "settings" \ "userPrefs") should be (None)
+    MainSummaryView.getUserPrefs(json4 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null))
 
     // Missing the prefs section entirely:
     val json5 = parse(
@@ -553,7 +559,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getUserPrefs(json5 \ "environment" \ "settings" \ "userPrefs") should be (None)
+    MainSummaryView.getOldUserPrefs(json5 \ "environment" \ "settings" \ "userPrefs") should be (None)
+    MainSummaryView.getUserPrefs(json5 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null))
 
     // Contains dom.ipc.processCount but not extensions.allow-non-mpc-extensions
     val json6 = parse(
@@ -570,7 +577,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getUserPrefs(json6 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(4, null)))
+    MainSummaryView.getOldUserPrefs(json6 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(4, null)))
+    MainSummaryView.getUserPrefs(json6 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(4, null, null))
 
     // Contains extensions.allow-non-mpc-extensions but not dom.ipc.processCount
     val json7 = parse(
@@ -587,7 +595,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getUserPrefs(json7 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(null, false)))
+    MainSummaryView.getOldUserPrefs(json7 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(null, false)))
+    MainSummaryView.getUserPrefs(json7 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, false, null))
   }
 
   "Keyed Scalars" can "be properly shown" in {
@@ -610,8 +619,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     }
   }
 }"""),
-      None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+      None)
+    val summary = defaultMessageToRow(message)
 
     val expected = Map(
       "scalar_parent_mock_keyed_scalar_uint" -> Map(
@@ -621,7 +630,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     )
 
     val actual =
-      applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      applySchema(summary.get, defaultSchema)
       .getValuesMap(expected.keys.toList)
 
     for ((f, v) <- expected) {
@@ -688,15 +697,15 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         "environment.settings" -> """{
           "searchCohort": "helloworld"
         }"""),
-      None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+      None)
+    val summary = defaultMessageToRow(message)
 
     val expected = Map(
       "search_cohort" -> "helloworld"
     )
 
     val actual =
-      applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      applySchema(summary.get, defaultSchema)
       .getValuesMap(expected.keys.toList)
 
     for ((f, v) <- expected) {
@@ -707,12 +716,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   }
 
   "User prefs" can "be properly shown" in {
-    val spark = SparkSession.builder()
-        .appName("Generic Longitudinal Test")
-        .master("local[1]")
-        .getOrCreate()
-
-    val sc = spark.sparkContext
+    val spark = getOrCreateSparkSession("MainSummaryViewTest")
+    spark.sparkContext.setLogLevel("WARN")
     import spark.implicits._
 
     val message = RichMessage(
@@ -725,8 +730,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "dom.ipc.processCount": 2
           }
         }"""),
-      None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+      None)
+    val summary = defaultMessageToRow(message)
 
     val expected = Map(
       "dom_ipc_process_count" -> 2,
@@ -735,7 +740,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val actual =
       spark
-      .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      .createDataFrame(spark.sparkContext.parallelize(List(summary.get)), defaultSchema)
       .first
       .getAs[Row]("user_prefs")
       .getValuesMap(expected.keys.toList)
@@ -749,12 +754,9 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   }
 
   "User prefs" can "handle null" in {
-    val spark = SparkSession.builder()
-        .appName("Generic Longitudinal Test")
-        .master("local[1]")
-        .getOrCreate()
-
+    val spark = getOrCreateSparkSession("MainSummaryViewTest")
     val sc = spark.sparkContext
+    sc.setLogLevel("WARN")
     import spark.implicits._
 
     val message = RichMessage(
@@ -767,8 +769,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "extensions.allow-non-mpc-extensions": true
           }
         }"""),
-      None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+      None)
+    val summary = defaultMessageToRow(message)
 
     val expected = Map(
       "dom_ipc_process_count" -> null,
@@ -777,7 +779,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val actual =
       spark
-      .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      .createDataFrame(sc.parallelize(List(summary.get)), defaultSchema)
       .first
       .getAs[Row]("user_prefs")
       .getValuesMap(expected.keys.toList)
@@ -820,8 +822,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "sum": 12
     }
   }"""),
-      None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+      None)
+    val summary = defaultMessageToRow(message)
 
     val mock_exp_vals = Map(
       1 -> 0,
@@ -840,7 +842,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "histogram_parent_mock_optout" -> mock_lin_vals
     )
 
-    val actual = applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+    val actual = applySchema(summary.get, defaultSchema)
       .getValuesMap(expected.keys.toList)
 
     for ((f, v) <- expected) {
@@ -904,8 +906,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     }
   }
 }"""),
-      None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+      None)
+    val summary = defaultMessageToRow(message)
 
     val mock_lin_vals = Map(
       "hello" -> Map(1->0, 3->1, 9->1),
@@ -922,7 +924,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "histogram_parent_mock_keyed_exponential" -> mock_exp_vals
     )
 
-    val actual = applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+    val actual = applySchema(summary.get, defaultSchema)
       .getValuesMap(expected.keys.toList)
 
     for ((f, v) <- expected) {
@@ -975,14 +977,14 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     }
   }
 }"""),
-      None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+      None)
+    val summary = defaultMessageToRow(message)
 
     val expected = Map(
       "histogram_parent_mock_keyed_linear" -> Map("hello" -> null)
     )
 
-    val actualWithSchema = applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+    val actualWithSchema = applySchema(summary.get, defaultSchema)
     val actual = actualWithSchema.getValuesMap(expected.keys.toList)
 
     intercept[IllegalArgumentException] {
@@ -1006,7 +1008,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     import spark.implicits._
 
     val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(Histograms.definitions(includeOptin = false, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true), useWhitelist = true)
-    val allScalarDefs = Scalars.definitions(true).toList.sortBy(_._1)
+    val allScalarDefs = Scalars.definitions(includeOptin = true).toList.sortBy(_._1)
 
     val fakeHisto = """{
           "sum": 100,
@@ -1076,7 +1078,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
    }
   }"""
       ),
-      None);
+      None)
 
     val expectedProcessHistos = MainPing.ProcessTypes.map{ p =>
       p -> (parse(s"{$histosData}") merge parse(s"{$keyedHistosData}"))
@@ -1096,9 +1098,9 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val expected = expectedHistos ++ expectedScalars
 
-    val summary = MainSummaryView.messageToRow(message, allScalarDefs, allHistogramDefs)
+    val summary = MainSummaryView.messageToRow(message, userPrefs, allScalarDefs, allHistogramDefs)
     val actual = spark
-          .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(allScalarDefs, allHistogramDefs))
+          .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(userPrefs, allScalarDefs, allHistogramDefs))
           .first
           .getValuesMap(expected.keys.toList)
 
@@ -1329,15 +1331,15 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "id": "firefox-compact-light@mozilla.org"
           }
         }"""),
-      None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+      None)
+    val summary = defaultMessageToRow(message)
 
     val expected = Map(
       "quantum_ready" -> true
     )
 
     val actual = spark
-      .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      .createDataFrame(sc.parallelize(List(summary.get)), defaultSchema)
       .first
       .getValuesMap(expected.keys.toList)
 
@@ -1447,7 +1449,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             }
           }
         }"""),
-      None);
+      None)
 
     val expected = Map(
       "histogram_content_mock_exponential_optout" -> Map(1 -> 0, 16 -> 1, 54 -> 1),
@@ -1457,9 +1459,9 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "histogram_content_mock_keyed_linear" -> Map("foo" -> Map(1 -> 0, 16 -> 1, 54 -> 1), "bar" -> Map(1 -> 1))
     )
 
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+    val summary = defaultMessageToRow(message)
     val actual = spark
-          .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+          .createDataFrame(sc.parallelize(List(summary.get)), defaultSchema)
           .first
           .getValuesMap(expected.keys.toList)
 
@@ -1492,8 +1494,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     }
   }
 }"""),
-      None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+      None)
+    val summary = defaultMessageToRow(message)
 
     val expected = Map(
       "scalar_content_mock_keyed_scalar_uint" -> Map(
@@ -1503,7 +1505,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     )
 
     val actual =
-      applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      applySchema(summary.get, defaultSchema)
       .getValuesMap(expected.keys.toList)
 
     for ((f, v) <- expected) {
@@ -1518,7 +1520,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     val migratedScalars = new ScalarsClass {
       override protected val getURL = migratedScalarsUrl
     }
-    val scalarsDef = migratedScalars.definitions(true).toList
+    val scalarsDef = migratedScalars.definitions(includeOptin = true).toList
 
     val messageBothPresent = RichMessage(
       "1234",
@@ -1542,10 +1544,10 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             }
           }
         }"""),
-      None);
+      None)
 
-    val messageSummary = MainSummaryView.messageToRow(messageBothPresent, scalarsDef, histogramDefs)
-    val appliedSummary =  applySchema(messageSummary.get, MainSummaryView.buildSchema(scalarsDef, histogramDefs))
+    val messageSummary = MainSummaryView.messageToRow(messageBothPresent, userPrefs, scalarsDef, histogramDefs)
+    val appliedSummary =  applySchema(messageSummary.get, MainSummaryView.buildSchema(userPrefs, scalarsDef, histogramDefs))
 
     val selectedActiveTicks = appliedSummary.getAs[Int]("active_ticks")
     selectedActiveTicks should be (888)
@@ -1559,7 +1561,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     val migratedScalars = new ScalarsClass {
       override protected val getURL = migratedScalarsUrl
     }
-    val scalarsDef = migratedScalars.definitions(true).toList
+    val scalarsDef = migratedScalars.definitions(includeOptin = true).toList
 
     val messageSMPresent = RichMessage(
       "1234",
@@ -1570,10 +1572,10 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           """{"activeTicks": 111,
               "firstPaint": 222}"""
       ),
-      None);
+      None)
 
-    val messageSummary = MainSummaryView.messageToRow(messageSMPresent, scalarsDef, histogramDefs)
-    val appliedSummary = applySchema(messageSummary.get, MainSummaryView.buildSchema(scalarsDef, histogramDefs))
+    val messageSummary = MainSummaryView.messageToRow(messageSMPresent, userPrefs, scalarsDef, histogramDefs)
+    val appliedSummary = applySchema(messageSummary.get, defaultSchema)
 
     val selectedActiveTicks = appliedSummary.getAs[Int]("active_ticks")
     selectedActiveTicks should be(111)
@@ -1592,11 +1594,11 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           """{"activeTicks": 111,
               "firstPaint": 222}"""
         ),
-      None);
+      None)
 
     // If the scalar's definition does not exist, the simple measurement value should be selected.
-    val msgSummaryNoDefs = MainSummaryView.messageToRow(messageSMPresent, List(), histogramDefs)
-    val appliedSummaryNoDefs = applySchema(msgSummaryNoDefs.get, MainSummaryView.buildSchema(List(), histogramDefs))
+    val msgSummaryNoDefs = MainSummaryView.messageToRow(messageSMPresent, userPrefs, List(), histogramDefs)
+    val appliedSummaryNoDefs = applySchema(msgSummaryNoDefs.get, MainSummaryView.buildSchema(userPrefs, List(), histogramDefs))
 
     val activeTicksVal = appliedSummaryNoDefs.getAs[Int]("active_ticks")
     activeTicksVal should be(111)
@@ -1634,14 +1636,14 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |    "sum": 10
         |  }
         |}""".stripMargin),
-      None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+      None)
+    val summary = defaultMessageToRow(message)
     val expected = Map(
       "histogram_parent_mock_categorical" -> Map("am" -> 0, "a" -> 1, "strange" -> 1, CategoricalHistogram.SpillBucketName -> 1)
     )
 
     val actual = spark
-      .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      .createDataFrame(sc.parallelize(List(summary.get)), defaultSchema)
       .first
       .getValuesMap(expected.keys.toList)
 
@@ -1684,14 +1686,14 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |    }
         |  }
         |}""".stripMargin),
-      None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+      None)
+    val summary = defaultMessageToRow(message)
     val expected = Map(
       "histogram_parent_mock_keyed_categorical" -> Map("gaius" -> Map("all" -> 1, "of" -> 1, "this" -> 1, CategoricalHistogram.SpillBucketName -> 1))
     )
 
     val actual = spark
-      .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      .createDataFrame(sc.parallelize(List(summary.get)), defaultSchema)
       .first
       .getValuesMap(expected.keys.toList)
 
@@ -1734,14 +1736,14 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |    "sum": 10
         |  }
         |}""".stripMargin),
-        None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+        None)
+    val summary = defaultMessageToRow(message)
     val expected = Map(
       "histogram_parent_mock_categorical" -> Map("am" -> 0, "a" -> 1, "strange" -> 1, CategoricalHistogram.SpillBucketName -> 3)
     )
 
     val actual = spark
-      .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      .createDataFrame(sc.parallelize(List(summary.get)), defaultSchema)
       .first
       .getValuesMap(expected.keys.toList)
 
@@ -1762,15 +1764,15 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         "environment.settings" -> """{
           "e10sMultiProcesses": 12
         }"""),
-      None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
+      None)
+    val summary = defaultMessageToRow(message)
 
     val expected = Map(
       "e10s_multi_processes" -> 12
     )
 
     val actual =
-      applySchema(summary.get, MainSummaryView.buildSchema(scalarDefs, histogramDefs))
+      applySchema(summary.get, defaultSchema)
       .getValuesMap(expected.keys.toList)
 
     for ((f, v) <- expected) {
@@ -1780,4 +1782,112 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     actual should be (expected)
   }
 
+  "userPrefs row" can "be built" in {
+    val userPrefsSchema = MainSummaryView.buildUserPrefsSchema(testUserPrefs)
+    userPrefsSchema.fields.length should be (3)
+
+    userPrefsSchema.fieldNames should be (List("user_pref_p1", "user_pref_p2", "user_pref_p3_messy"))
+
+    userPrefsSchema.fields(0).dataType should be (IntegerType)
+    userPrefsSchema.fields(1).dataType should be (BooleanType)
+    userPrefsSchema.fields(2).dataType should be (StringType)
+  }
+
+  "userPrefs fields" can "be added to MainSummary schema" in {
+    val schemaWithPrefs = MainSummaryView.buildSchema(testUserPrefs, List(), List())
+
+    schemaWithPrefs.fieldNames.contains("user_pref_p3_messy") should be (true)
+    schemaWithPrefs.fieldNames.contains("user_pref_p4") should be (false)
+  }
+
+  "userPrefs" can "be extracted" in {
+    val prefsJson = parse("""
+        |{
+        |  "p1": 10,
+        |  "p2": false,
+        |  "P3.MESSY": "bar",
+        |  "p4": "ignore me"
+        |}""".stripMargin)
+
+    val expected = Map(
+      "user_pref_p1" -> 10,
+      "user_pref_p2" -> false,
+      "user_pref_p3_messy" -> "bar"
+    )
+
+    val prefs = MainSummaryView.getUserPrefs(prefsJson, testUserPrefs)
+    prefs should be (Row(10, false, "bar"))
+
+    val prefsSchema = MainSummaryView.buildUserPrefsSchema(testUserPrefs)
+
+    val actual = applySchema(prefs, prefsSchema).getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+    actual should be (expected)
+  }
+
+  "userPrefs" can "be added to MainSummary" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.settings" -> """{
+          "userPrefs": {
+           "p1": 10,
+           "p2": false,
+           "P3.MESSY": "bar"
+          }
+        }"""),
+      None)
+    val summary = MainSummaryView.messageToRow(message, testUserPrefs, List(), List())
+
+    val expected = Map(
+      "user_pref_p1" -> 10,
+      "user_pref_p2" -> false,
+      "user_pref_p3_messy" -> "bar"
+    )
+
+    val actual =
+      applySchema(summary.get, MainSummaryView.buildSchema(testUserPrefs, List(), List()))
+        .getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+    actual should be (expected)
+  }
+
+  "Unknown pref types" can "be ignored" in {
+    val userPrefs = UserPref("p1", ArrayType(IntegerType)) ::
+      UserPref("p2", BooleanType) :: Nil
+
+    val prefsJson = parse("""
+          |{
+          |  "p1": [1, 2, 3],
+          |  "p2": true
+          |}""".stripMargin)
+
+    val expected = Map(
+      "user_pref_p1" -> null,
+      "user_pref_p2" -> true
+    )
+
+    val prefs = MainSummaryView.getUserPrefs(prefsJson, userPrefs)
+    prefs should be (Row(null, true))
+
+    val prefsSchema = MainSummaryView.buildUserPrefsSchema(userPrefs)
+
+    val actual = applySchema(prefs, prefsSchema).getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+    actual should be (expected)
+  }
 }
