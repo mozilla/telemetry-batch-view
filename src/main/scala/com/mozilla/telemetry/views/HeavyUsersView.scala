@@ -284,13 +284,6 @@ object HeavyUsersView {
     import spark.implicits._
 
     val date = getDate(conf)
-    deleteDate(conf.bucket(), date)
-
-    val df = spark.read.option("mergeSchema", "true")
-      .parquet(s"s3://${conf.mainSummaryBucket()}/${MainSummaryView.jobName}/${MainSummaryView.schemaVersion}")
-      .select(MainSummaryRow.Columns: _*)
-      .where("sample_id IS NOT NULL")
-      .as[MainSummaryRow]
 
     /*
      * We have to include the schema here in the case that
@@ -304,6 +297,14 @@ object HeavyUsersView {
       .as[HeavyUsersRow]
 
     senseExistingData(existingData, date, conf.firstRun())
+
+    deleteDate(conf.bucket(), date)
+
+    val df = spark.read.option("mergeSchema", "true")
+      .parquet(s"s3://${conf.mainSummaryBucket()}/${MainSummaryView.jobName}/${MainSummaryView.schemaVersion}")
+      .select(MainSummaryRow.Columns: _*)
+      .where("sample_id IS NOT NULL")
+      .as[MainSummaryRow]
 
     val cutoffs = getCutoffs(spark, conf.bucket())
 
