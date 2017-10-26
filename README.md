@@ -4,6 +4,7 @@ This is a Scala application to build derived datasets, also known as [batch view
 
 [![Build Status](https://travis-ci.org/mozilla/telemetry-batch-view.svg?branch=master)](https://travis-ci.org/mozilla/telemetry-batch-view)
 [![codecov.io](https://codecov.io/github/mozilla/telemetry-batch-view/coverage.svg?branch=master)](https://codecov.io/github/mozilla/telemetry-batch-view?branch=master)
+[![CircleCi Status](https://circleci.com/gh/mozilla/telemetry-batch-view.png?circle-token=ca31167ac42cc39f898e37facb93db70c0af8691)](https://circleci.com/gh/mozilla/telemetry-batch-view.svg?style=shield&circle-token=ca31167ac42cc39f898e37facb93db70c0af8691)
 
 Raw JSON [pings](https://ci.mozilla.org/job/mozilla-central-docs/Tree_Documentation/toolkit/components/telemetry/telemetry/pings.html) are stored on S3 within files containing [framed Heka records](https://hekad.readthedocs.org/en/latest/message/index.html#stream-framing). Reading the raw data in through e.g. Spark can be slow as for a given analysis only a few fields are typically used; not to mention the cost of parsing the JSON blobs. Furthermore, Heka files might contain only a handful of records under certain circumstances.
 
@@ -53,6 +54,12 @@ sbt assembly
 spark-submit --master yarn --deploy-mode client --class com.mozilla.telemetry.views.LongitudinalView target/scala-2.11/telemetry-batch-view-*.jar --from 20160101 --to 20160701 --bucket telemetry-test-bucket
 ```
 
+In the future, we will modify airflow jobs to actually pull the jar from s3 rather than git checkout and sbt assembly
+Something like:
+```bash
+wget https://s3-us-west-2.amazonaws.com/net-mozaws-data-us-west-2-ops-mavenrepo/snapshots/telemetry-batch-view/telemetry-batch-view/1.1/telemetry-batch-view-1.1.jar
+```
+
 ### Caveats
 If you run into memory issues during compilation time or running the test suite, issue the following command before running sbt:
 ```bash
@@ -83,3 +90,4 @@ System.setProperty("spark.sql.warehouse.dir", "file:///C:/somereal-dir/spark-war
 
 See [SPARK-10528](https://issues.apache.org/jira/browse/SPARK-10528). Run "winutils chmod 777 /tmp/hive" from a privileged prompt to make it work.
 
+Any commits to master should also trigger a circleci build that will do the sbt publishing for you to our local maven repo in s3.
