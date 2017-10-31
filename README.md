@@ -19,6 +19,8 @@ For help finding the right dataset for your analysis, see
 [Choosing a Dataset](https://mozilla.github.io/firefox-data-docs/concepts/choosing_a_dataset.html).
 
 ### Development
+Please create a pull request from this repo and not a fork.  We require this because the travisCI build that runs tests needs to have access to env vars which aren't available to forked repos.
+
 There are two possible workflows for hacking on telemetry-batch-view: you can either create a docker container for building the package and running tests, or import the project into IntelliJ's IDEA.
 
 To run the docker tests, just use the provided `Dockerfile` to build a container, then use the `runtests.sh` script to run tests inside it:
