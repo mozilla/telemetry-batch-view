@@ -1,6 +1,8 @@
 javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint")
 
-resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
+val localMaven = "s3://net-mozaws-data-us-west-2-ops-mavenrepo/"
+
+resolvers += "S3 local maven snapshots" at localMaven + "snapshots"
 
 val sparkVersion = "2.0.2"
 
@@ -10,6 +12,10 @@ lazy val root = (project in file(".")).
     version := "1.1",
     scalaVersion := "2.11.8",
     retrieveManaged := true,
+    // disable using the Scala version in output paths and artifacts, since this is how we name currently
+    crossPaths := false,
+    // Hack to get releases to not fail to upload when the same jar name already exists. Later we will need auto versioning
+    isSnapshot := true,
     ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) },
     libraryDependencies += "com.mozilla.telemetry" %% "moztelemetry" % "1.0-SNAPSHOT",
     libraryDependencies += "com.mozilla.telemetry" %% "spark-hyperloglog" % "2.0.0-SNAPSHOT",
@@ -65,3 +71,12 @@ inConfig(Slow)(Defaults.testTasks)
 
 testOptions in Test := Seq(Tests.Argument("-l", "org.scalatest.tags.Slow"))
 testOptions in Slow := Seq()
+
+publishMavenStyle := true
+
+publishTo := {
+  if (isSnapshot.value)
+    Some("snapshots" at localMaven + "snapshots")
+  else
+    Some("releases"  at localMaven + "releases")
+}
