@@ -1,12 +1,15 @@
 sudo: required
 services:
-  - docker
+- docker
 before_install:
-  - env | grep TRAVIS > .travis-env
-  - CI_ENV=`bash <(curl -s https://codecov.io/env)`
-  - docker build -t telemetry-batch-view .
+- env | grep TRAVIS > .travis-env
+- CI_ENV=`bash <(curl -s https://codecov.io/env)`
+- docker build -t telemetry-batch-view .
 script:
-  - docker run -v $PWD:/telemetry-batch-view $CI_ENV --env-file .travis-env telemetry-batch-view ./runtests.sh coverage slow:test coverageReport
+- docker run -v $PWD:/telemetry-batch-view $CI_ENV --env-file .travis-env telemetry-batch-view
+  ./runtests.sh coverage slow:test coverageReport
 branches:
   only:
-    - master
+  - master
+env:
+  secure: dPUCUacqjPElRnqruASZvkZPBoNW+F7kPQGlH1inBGYIPU1ZCLlj+hyRrlhetH85nhDqUREVExQx2NffZfFfcIh6jK246O+RQ4dFy/vbquTytIHmKtQJ3R84T0tRutMfkQUrNJLbp/tItaMAOKRAjE76tO6vp2Qtoh0OrxtfuyOWbIV4pGoRyEypwp7wHi4wZJAjaudKMmZgOOPmQWLPvT6J9hQ4bxm9Fezm99jgPUOVZoAezIerloWs0u34ubFsvLsGOmRIvn9yizQoW0ENsOyTWoUPHJrmQ6cTUHMEGTu6DH1Brk9Luam+fN3NVtzWjAyXpskYVJGgCY0tHHIT6DNqcKtL5ow2HDnNXe2QmcKyDThLOC4AkwEbLljcZLagfU8xQ9fwB9ut+ixVHGnd85S/8fM5StGZBQQo2nVzahiGgo3nE/ckpTlZ4F3DyBWiI3Ya0hstGpnCO37LAdwNQstzFiKU49MzZ7mCZQRA1eKSwgz4rbFA1a4Zqayu/yn1kLI3ANaWxSnysyCe4tIT/UfBJqapqy9UEqwWa5PGS8ki2A0TEqtXkhLNFBew5Pq/vNHDAOHsRhMRLk2fZdvGHqAhuhaccY6u2hnB7OltkO3lSg22c3qwnmHi5MPIMb5S8ok4phrf3wQOEqYESoLcMV6a3MKN3YTz2ZAjHvq3UCM=
