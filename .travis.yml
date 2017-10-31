@@ -8,8 +8,7 @@ before_install:
   - CI_ENV=`bash <(curl -s https://codecov.io/env)`
   - docker build -t telemetry-batch-view .
 script:
-  - docker run -v $PWD:/telemetry-batch-view $CI_ENV --env-file .travis-env telemetry-batch-view
-  ./runtests.sh coverage slow:test coverageReport
+  - docker run -v $PWD:/telemetry-batch-view $CI_ENV --env-file .travis-env telemetry-batch-view ./runtests.sh coverage slow:test coverageReport
 branches:
   only:
   - master
