@@ -165,6 +165,7 @@ object ExperimentAnalysisView {
                                 experiment: String): DataFrame = {
     val topLevelMetadata = metadata.filter(_.subgroup == MetricAnalyzer.topLevelLabel)
     val totalPings = topLevelMetadata.flatMap(_.statistics.get.filter(_.name == "Total Pings").map(_.value)).sum
+    val calculatedPartitions = (totalPings / rowsPerPartition).toInt
     val branchCounts = topLevelMetadata.map {
       r => r.experiment_branch ->
         (r.statistics.get.collectFirst {case s: Statistic if s.name == "Total Clients" => s} match {
@@ -174,12 +175,8 @@ object ExperimentAnalysisView {
     }.toMap
 
     val withPermutations = addPermutations(experimentsSummary.selectUsedColumns, branchCounts, experiment)
-    (totalPings / rowsPerPartition match {
-      case c if c > experimentsSummary.sparkSession.sparkContext.defaultParallelism =>
-        withPermutations.repartition(c.toInt)
-      case _ =>
-        withPermutations
-    }).persist(StorageLevel.MEMORY_AND_DISK)
+    val numPartitions = calculatedPartitions max experimentsSummary.sparkSession.sparkContext.defaultParallelism
+    withPermutations.repartition(numPartitions).persist(StorageLevel.MEMORY_AND_DISK)
   }
 
   def addPermutations(df: DataFrame, branchCounts: Map[String, Long], experiment: String): DataFrame = {

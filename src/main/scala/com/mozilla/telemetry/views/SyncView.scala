@@ -70,7 +70,7 @@ object SyncView {
       .where("sourceName") {
         case "telemetry" => true
       }.where("sourceVersion") {
-        case "4" => true
+        case "4" | "5" => true
       }.where("docType") {
         case "sync" => true
       }.where("submissionDate") {
