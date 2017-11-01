@@ -1,12 +1,14 @@
 sudo: required
 services:
   - docker
+# DO NOT echo out any env variables or the .travis-env file as it contains secret keys
 before_install:
   - env | grep TRAVIS > .travis-env
+  - env | grep AWS >> .travis-env
   - CI_ENV=`bash <(curl -s https://codecov.io/env)`
   - docker build -t telemetry-batch-view .
 script:
   - docker run -v $PWD:/telemetry-batch-view $CI_ENV --env-file .travis-env telemetry-batch-view ./runtests.sh coverage slow:test coverageReport
 branches:
   only:
-    - master
+  - master
