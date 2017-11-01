@@ -6,6 +6,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.col
 import org.scalatest.{FlatSpec, Matchers}
 import org.json4s.jackson.JsonMethods.parse
+import org.joda.time.DateTime
 
 import scala.io.Source
 
@@ -86,12 +87,10 @@ class ExperimentSummaryViewTest extends FlatSpec with Matchers{
     val apiFixturePath = getClass.getResource("/normandy_api_result.json").getPath()
     val json = parse(Source.fromFile(apiFixturePath).mkString)
 
-    val expected = List("shield-public-infobar-display-bug1368141",
-                        "shield-lazy-client-classify",
-                        "pref-flip-test-nightly-1",
-                        "nightly-nothing-burger-1"
-    )
+    val expected831 = Set("shield-public-infobar-display-bug1368141", "shield-lazy-client-classify")
+    val expected830 = expected831 + "nightly-nothing-burger-1"
 
-    assert(ExperimentSummaryView.getExperimentList(json) == expected)
+    assert(ExperimentSummaryView.getExperimentList(json, new DateTime(2017, 8, 30, 0, 0).toDate).toSet == expected830)
+    assert(ExperimentSummaryView.getExperimentList(json, new DateTime(2017, 8, 31, 0, 0).toDate).toSet == expected831)
   }
 }
