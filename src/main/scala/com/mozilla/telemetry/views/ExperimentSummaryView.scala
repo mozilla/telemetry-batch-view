@@ -1,5 +1,7 @@
 package com.mozilla.telemetry.views
 
+import java.util.Date
+
 import com.mozilla.telemetry.utils.{deletePrefix, getOrCreateSparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.SparkSession
@@ -9,7 +11,7 @@ import org.json4s.jackson.JsonMethods._
 import org.json4s._
 
 import scalaj.http.Http
-import scala.util.{Try, Success}
+import scala.util.{Success, Try}
 
 object ExperimentSummaryView {
   def schemaVersion: String = "v1"
@@ -22,7 +24,11 @@ object ExperimentSummaryView {
   private case class NormandyRecipeArguments(branches: List[NormandyRecipeBranch],
                                              slug: Option[String],
                                              name: Option[String])
-  private case class NormandyRecipe(id: Long, enabled: Boolean, action: String, arguments: NormandyRecipeArguments)
+  private case class NormandyRecipe(id: Long,
+                                    last_updated: Date,
+                                    enabled: Boolean,
+                                    action: String,
+                                    arguments: NormandyRecipeArguments)
   case class NormandyException(private val message: String = "",
                                private val cause: Throwable = None.orNull) extends Exception(message, cause)
 
@@ -72,7 +78,7 @@ object ExperimentSummaryView {
       val s3prefix = s"$jobName/$schemaVersion"
       val output = s"s3://$outputBucket/$s3prefix/"
 
-      val experiments = getExperimentList(getExperimentRecipes())
+      val experiments = getExperimentList(getExperimentRecipes(), currentDate.toDate)
 
       experiments.foreach(e => deletePreviousOutput(outputBucket, s3prefix, currentDateString, e))
       writeExperiments(input, output, currentDateString, experiments, spark)
@@ -109,12 +115,12 @@ object ExperimentSummaryView {
     parse(Http(experimentsUrl).params(experimentsUrlParams).asString.body)
   }
 
-  def getExperimentList(json: JValue): List[String] = {
+  def getExperimentList(json: JValue, date: Date): List[String] = {
     json match {
       case JArray(x) => x.flatMap(v =>
         getNormalizedRecipe(v) match {
           case Some(r) =>
-            if (experimentsQualifyingAction.contains(r.action) && !excludedExperiments.contains(r.arguments.slug.get))
+            if (shouldProcessExperiment(r, date))
               List(r.arguments.slug.get)
             else
               List()
@@ -125,10 +131,19 @@ object ExperimentSummaryView {
     }
   }
 
+  def shouldProcessExperiment(r: NormandyRecipe, date: Date) = {
+    experimentsQualifyingAction.contains(r.action) &&
+    !excludedExperiments.contains(r.arguments.slug.get) &&
+    ((r.enabled == true) || r.last_updated.after(date)) // is this experiment enabled for this date?
+  }
+
   private def getNormalizedRecipe(json: JValue): Option[NormandyRecipe] = {
     // Some normandy recipes stuff the slug in a "slug" field and some in a "name" field
     // Here we try to normalize this a bit
-    implicit val formats = DefaultFormats
+    implicit val formats = new DefaultFormats {
+      override def dateFormatter = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+    }
+
     Try(json.extract[NormandyRecipe]) match {
       case Success(r) =>
         Try(r.arguments.slug.getOrElse(r.arguments.name.get)) match {
