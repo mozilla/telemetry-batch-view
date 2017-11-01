@@ -55,7 +55,8 @@ object MainSummaryView {
     "TIME_TO_NON_BLANK_PAINT_MS" ::
     "TIME_TO_RESPONSE_START_MS" ::
     "TOUCH_ENABLED_DEVICE" ::
-    "UPTAKE_REMOTE_CONTENT_RESULT_1" :: Nil
+    "UPTAKE_REMOTE_CONTENT_RESULT_1" ::
+    "WEBVR_USERS_VIEW_IN" :: Nil
 
 
   // Configuration for command line arguments
