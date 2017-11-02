@@ -13,8 +13,6 @@ lazy val root = (project in file(".")).
     version := "1.1",
     scalaVersion := "2.11.8",
     retrieveManaged := true,
-    // disable using the Scala version in output paths and artifacts, since this is how we name currently
-    crossPaths := false,
     // Hack to get releases to not fail to upload when the same jar name already exists. Later we will need auto versioning
     isSnapshot := true,
     ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) },
