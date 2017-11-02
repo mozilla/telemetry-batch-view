@@ -1114,9 +1114,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(
       Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true),
       useWhitelist = true
-    ).map{ case(name, definition) =>
-      (definition.originalName, definition.process.get)
-    }.filter(_._2 == "parent").map(_._1).toSet
+    ).map{ case(name, definition) => definition.originalName }.toSet
 
     val expectedDefs = MainSummaryView.histogramsWhitelist.toSet
 
