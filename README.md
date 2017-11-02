@@ -4,7 +4,7 @@ This is a Scala application to build derived datasets, also known as [batch view
 
 [![Build Status](https://travis-ci.org/mozilla/telemetry-batch-view.svg?branch=master)](https://travis-ci.org/mozilla/telemetry-batch-view)
 [![codecov.io](https://codecov.io/github/mozilla/telemetry-batch-view/coverage.svg?branch=master)](https://codecov.io/github/mozilla/telemetry-batch-view?branch=master)
-[![CircleCi Status](https://circleci.com/gh/mozilla/telemetry-batch-view.png?circle-token=ca31167ac42cc39f898e37facb93db70c0af8691)](https://circleci.com/gh/mozilla/telemetry-batch-view.svg?style=shield&circle-token=ca31167ac42cc39f898e37facb93db70c0af8691)
+[![CircleCi Status](https://circleci.com/gh/mozilla/telemetry-batch-view.svg?style=shield&circle-token=ca31167ac42cc39f898e37facb93db70c0af8691)](https://circleci.com/gh/mozilla/telemetry-batch-view)
 
 Raw JSON [pings](https://ci.mozilla.org/job/mozilla-central-docs/Tree_Documentation/toolkit/components/telemetry/telemetry/pings.html) are stored on S3 within files containing [framed Heka records](https://hekad.readthedocs.org/en/latest/message/index.html#stream-framing). Reading the raw data in through e.g. Spark can be slow as for a given analysis only a few fields are typically used; not to mention the cost of parsing the JSON blobs. Furthermore, Heka files might contain only a handful of records under certain circumstances.
 
