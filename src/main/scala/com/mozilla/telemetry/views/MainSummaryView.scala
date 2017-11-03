@@ -335,16 +335,20 @@ object MainSummaryView {
 
   def getUserPrefs(prefs: JValue): Option[Row] = {
     val pc = prefs \ "dom.ipc.processCount" match {
-      case JInt(pc) => pc.toInt
+      case JInt(x) => x.toInt
       case _ => null
     }
     val anme = prefs \ "extensions.allow-non-mpc-extensions" match {
       case JBool(x) => x
       case _ => null
     }
-    val row = Row(pc, anme)
+    val ele = prefs \ "extensions.legacy.enabled" match {
+      case JBool(x) => x
+      case _ => null
+    }
+    val row = Row(pc, anme, ele)
     row match {
-      case Row(null, null) => None
+      case Row(null, null, null) => None
       case nonempty => Some(nonempty)
     }
   }
@@ -840,7 +844,8 @@ object MainSummaryView {
   // Data for user prefs
   def buildUserPrefsSchema = StructType(List(
     StructField("dom_ipc_process_count", IntegerType, nullable = true), // dom.ipc.processCount
-    StructField("extensions_allow_non_mpc_extensions", BooleanType, nullable = true) // extensions.allow-non-mpc-extensions
+    StructField("extensions_allow_non_mpc_extensions", BooleanType, nullable = true), // extensions.allow-non-mpc-extensions
+    StructField("extensions_legacy_enabled", BooleanType, nullable = true) // extensions.extensions.legacy.enabled
   ))
 
   def buildScalarSchema(scalarDefinitions: List[(String, ScalarDefinition)]): List[StructField] = {
