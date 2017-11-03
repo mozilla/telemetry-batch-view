@@ -142,36 +142,6 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
     res.size should be (0)
   }
 
-  "Permutations column" can "be added" in {
-    import spark.implicits._
-
-    val data = Seq(
-      PermutationsRow("a"),
-      PermutationsRow("a"),
-      PermutationsRow("b"),
-      PermutationsRow("c"),
-      PermutationsRow("d")
-    )
-    val res = ExperimentAnalysisView
-      .addPermutations(data.toDS.toDF, Map("control" -> 2, "branch1" -> 1, "branch2" -> 2), "test_experiment")
-      .select("permutations")
-      .collect()
-    val counts = res
-      .flatMap(_.getAs[Seq[Byte]](0))
-      .groupBy(identity)
-      .mapValues(_.size)
-
-    // 0 should map to "branch1", first alphabetically
-    counts(0x00) should be (100 +- 15)
-    // 1 should map to "branch2", second alphabetically
-    counts(0x01) should be (200 +- 30)
-    // 2 should map to "control", last alphabetically
-    counts(0x02) should be (200 +- 30)
-
-    // the permutations for client_id "a" should be the same
-    res(0).getAs[Seq[Byte]](0) should be (res(1).getAs[Seq[Byte]](0))
-  }
-
   override def afterAll() {
     spark.stop()
   }
