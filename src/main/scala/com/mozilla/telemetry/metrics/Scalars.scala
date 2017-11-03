@@ -8,9 +8,21 @@ import scala.io.Source
 import com.mozilla.telemetry.utils.MainPing
 
 abstract class ScalarDefinition extends MetricDefinition
-case class UintScalar(keyed: Boolean, originalName: String, process: Option[String] = None) extends ScalarDefinition
-case class BooleanScalar(keyed: Boolean, originalName: String, process: Option[String] = None) extends ScalarDefinition
-case class StringScalar(keyed: Boolean, originalName: String, process: Option[String] = None) extends ScalarDefinition
+
+case class UintScalar(keyed: Boolean, originalName: String, process: Option[String] = None)
+  extends ScalarDefinition {
+  val isCategoricalMetric = false
+}
+
+case class BooleanScalar(keyed: Boolean, originalName: String, process: Option[String] = None)
+  extends ScalarDefinition {
+  val isCategoricalMetric = true
+}
+
+case class StringScalar(keyed: Boolean, originalName: String, process: Option[String] = None)
+  extends ScalarDefinition {
+  val isCategoricalMetric = true
+}
 
 class ScalarsClass extends MetricsClass {
   val ScalarColumnNamePrefix = "scalar"
