@@ -17,6 +17,8 @@ case class ScalarExperimentDataset(experiment_id: String,
                                    string_scalar: Option[String],
                                    keyed_string_scalar: Option[Map[String, String]])
 
+case class ConfidenceIntervalsDataset(experiment_id: String, experiment_branch: String, uint_scalar: Option[Int])
+
 
 class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
   val keyed_uint = Map("key1" -> 3, "key2" -> 1)
@@ -162,27 +164,15 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
         booleansToPoints(1, 2),
         Some(List(
           Statistic(Some("branch1"), "Chi-Square Distance", 0.2),
-          Statistic(Some("branch2"), "Chi-Square Distance", 0.02857142857142857),
-          Statistic(None, "Mean", 0.6666666666666666),
-          Statistic(None, "Median", 0.5),
-          Statistic(None, "25th Percentile", 0.0),
-          Statistic(None, "75th Percentile", 1.0)))),
+          Statistic(Some("branch2"), "Chi-Square Distance", 0.02857142857142857)))),
       MetricAnalysis("experiment1", "branch1", MetricAnalyzer.topLevelLabel, 1L, "boolean_scalar", "BooleanScalar",
         booleansToPoints(0, 1),
         Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.2),
-          Statistic(None, "Mean", 1.0),
-          Statistic(None, "Median", 0.5),
-          Statistic(None, "25th Percentile", 0.25),
-          Statistic(None, "75th Percentile", 0.75)))),
+          Statistic(Some("control"), "Chi-Square Distance", 0.2)))),
       MetricAnalysis("experiment1", "branch2", MetricAnalyzer.topLevelLabel, 2L, "boolean_scalar", "BooleanScalar",
         booleansToPoints(1, 1),
         Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.02857142857142857),
-          Statistic(None, "Mean", 0.5),
-          Statistic(None, "Median", 0.0),
-          Statistic(None, "25th Percentile", 0.0),
-          Statistic(None, "75th Percentile", 0.5)))))
+          Statistic(Some("control"), "Chi-Square Distance", 0.02857142857142857)))))
     assert(actual == expected)
   }
 
@@ -200,27 +190,15 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
         booleansToPoints(4, 2),
         Some(List(
           Statistic(Some("branch1"), "Chi-Square Distance", 0.2),
-          Statistic(Some("branch2"), "Chi-Square Distance", 0.008403361344537816),
-          Statistic(None, "Mean", 0.3333333333333333),
-          Statistic(None, "Median", 0.0),
-          Statistic(None, "25th Percentile", 0.0),
-          Statistic(None, "75th Percentile", 0.5)))),
+          Statistic(Some("branch2"), "Chi-Square Distance", 0.008403361344537816)))),
       MetricAnalysis("experiment1", "branch1", MetricAnalyzer.topLevelLabel, 1L, "keyed_boolean_scalar", "BooleanScalar",
         booleansToPoints(2, 0),
         Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.2),
-          Statistic(None, "Mean", 0.0),
-          Statistic(None, "Median", 0.0),
-          Statistic(None, "25th Percentile", 0.0),
-          Statistic(None, "75th Percentile", 0.0)))),
+          Statistic(Some("control"), "Chi-Square Distance", 0.2)))),
       MetricAnalysis("experiment1", "branch2", MetricAnalyzer.topLevelLabel, 2L, "keyed_boolean_scalar", "BooleanScalar",
         booleansToPoints(3, 1),
         Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.008403361344537816),
-          Statistic(None, "Mean", 0.25),
-          Statistic(None, "Median", 0.0),
-          Statistic(None, "25th Percentile", 0.0),
-          Statistic(None, "75th Percentile", 0.0)))))
+          Statistic(Some("control"), "Chi-Square Distance", 0.008403361344537816)))))
     assert(actual == expected)
   }
 
@@ -237,26 +215,14 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
         stringsToPoints(List((0, "hello", 2), (2, "world", 1))),
         Some(List(
           Statistic(Some("branch1"), "Chi-Square Distance", 0.2),
-          Statistic(Some("branch2"), "Chi-Square Distance", 1.0),
-          Statistic(None, "Mean", 0.6666666666666666),
-          Statistic(None, "Median", 0.0),
-          Statistic(None, "25th Percentile", 0.0),
-          Statistic(None, "75th Percentile", 0.5)))),
+          Statistic(Some("branch2"), "Chi-Square Distance", 1.0)))),
       MetricAnalysis("experiment1", "branch1", MetricAnalyzer.topLevelLabel, 1L, "string_scalar", "StringScalar",
         stringsToPoints(List((0, "hello", 1))),
         Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.2),
-          Statistic(None, "Mean", 0.0),
-          Statistic(None, "Median", 0.0),
-          Statistic(None, "25th Percentile", 0.0),
-          Statistic(None, "75th Percentile", 0.0)))),
+          Statistic(Some("control"), "Chi-Square Distance", 0.2)))),
       MetricAnalysis("experiment1", "branch2", MetricAnalyzer.topLevelLabel, 2L, "string_scalar", "StringScalar",
         stringsToPoints(List((1, "ohai", 2))), Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 1.0),
-          Statistic(None, "Mean", 1.0),
-          Statistic(None, "Median", 1.0),
-          Statistic(None, "25th Percentile", 1.0),
-          Statistic(None, "75th Percentile", 1.0)))))
+          Statistic(Some("control"), "Chi-Square Distance", 1.0)))))
     assert(actual == expected)
   }
 
@@ -274,27 +240,15 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
         stringsToPoints(List((0, "hello", 3), (1, "world", 3))),
         Some(List(
           Statistic(Some("branch1"), "Chi-Square Distance", 0.0),
-          Statistic(Some("branch2"), "Chi-Square Distance", 0.0),
-          Statistic(None, "Mean", 0.5),
-          Statistic(None, "Median", 0.0),
-          Statistic(None, "25th Percentile", 0.0),
-          Statistic(None, "75th Percentile", 1.0)))),
+          Statistic(Some("branch2"), "Chi-Square Distance", 0.0)))),
       MetricAnalysis("experiment1", "branch1", MetricAnalyzer.topLevelLabel, 1L, "keyed_string_scalar", "StringScalar",
         stringsToPoints(List((0, "hello", 1), (1, "world", 1))),
         Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.0),
-          Statistic(None, "Mean", 0.5),
-          Statistic(None, "Median", 0.0),
-          Statistic(None, "25th Percentile", 0.0),
-          Statistic(None, "75th Percentile", 0.5)))),
+          Statistic(Some("control"), "Chi-Square Distance", 0.0)))),
       MetricAnalysis("experiment1", "branch2", MetricAnalyzer.topLevelLabel, 2L, "keyed_string_scalar", "StringScalar",
         stringsToPoints(List((0, "hello", 2), (1, "world", 2))),
         Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.0),
-          Statistic(None, "Mean", 0.5),
-          Statistic(None, "Median", 0.0),
-          Statistic(None, "25th Percentile", 0.0),
-          Statistic(None, "75th Percentile", 1.0)))))
+          Statistic(Some("control"), "Chi-Square Distance", 0.0)))))
     assert(actual == expected)
   }
 
@@ -311,7 +265,59 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
       UintScalar(true, "name"),
       df.where(df.col("experiment_id") === "experiment1")
     )
-    val keyed_actual = analyzer.analyze().filter(_.experiment_branch == "control").head
+    val keyed_actual = keyed_analyzer.analyze().filter(_.experiment_branch == "control").head
     assert(keyed_actual.n == 3L)
+  }
+
+  "Confidence intervals" should "be added" in {
+    import spark.implicits._
+
+    val ciFixture: DataFrame = Seq(
+      ConfidenceIntervalsDataset("experiment1", "control", Some(84)),
+      ConfidenceIntervalsDataset("experiment1", "control", Some(46)),
+      ConfidenceIntervalsDataset("experiment1", "control", Some(7)),
+      ConfidenceIntervalsDataset("experiment1", "control", Some(39)),
+      ConfidenceIntervalsDataset("experiment1", "control", Some(44)),
+      ConfidenceIntervalsDataset("experiment1", "control", Some(92)),
+      ConfidenceIntervalsDataset("experiment1", "control", Some(35)),
+      ConfidenceIntervalsDataset("experiment1", "control", Some(54)),
+      ConfidenceIntervalsDataset("experiment1", "control", Some(58)),
+      ConfidenceIntervalsDataset("experiment1", "control", Some(96)),
+      ConfidenceIntervalsDataset("experiment1", "control", Some(115)),
+      ConfidenceIntervalsDataset("experiment1", "control", Some(94)),
+      ConfidenceIntervalsDataset("experiment1", "control", Some(113)),
+      ConfidenceIntervalsDataset("experiment1", "control", Some(66)),
+      ConfidenceIntervalsDataset("experiment1", "control", Some(68))
+    ).toDS().toDF()
+
+    val analyzer = ScalarAnalyzer.getAnalyzer("uint_scalar", UintScalar(false, "name"), ciFixture, true)
+    val actual = analyzer.analyze()
+
+    val expected = List(MetricAnalysis(
+      "experiment1", "control", MetricAnalyzer.topLevelLabel, 15, "uint_scalar", "UintScalar",
+      Map(
+        115L -> HistogramPoint(0.06666666666666667, 1.0, None),
+        46L -> HistogramPoint(0.06666666666666667, 1.0, None),
+        84L -> HistogramPoint(0.06666666666666667, 1.0, None),
+        92L -> HistogramPoint(0.06666666666666667, 1.0, None),
+        96L -> HistogramPoint(0.06666666666666667, 1.0, None),
+        44L -> HistogramPoint(0.06666666666666667, 1.0, None),
+        54L -> HistogramPoint(0.06666666666666667, 1.0, None),
+        113L -> HistogramPoint(0.06666666666666667, 1.0, None),
+        7L -> HistogramPoint(0.06666666666666667, 1.0, None),
+        39L -> HistogramPoint(0.06666666666666667, 1.0, None),
+        66L -> HistogramPoint(0.06666666666666667, 1.0, None),
+        35L -> HistogramPoint(0.06666666666666667, 1.0, None),
+        58L -> HistogramPoint(0.06666666666666667, 1.0, None),
+        94L -> HistogramPoint(0.06666666666666667, 1.0, None),
+        68L -> HistogramPoint(0.06666666666666667, 1.0, None)),
+      Some(List(
+        // These CIs are in line with the numbers from the scipy.bootstrap implementation
+        Statistic(None, "Mean", 67.4, Some(54.93333333333333), Some(86.46666666666667), Some(0.05), None),
+        Statistic(None, "Median", 62.0, Some(41.5), Some(88.0), Some(0.05), None),
+        Statistic(None, "25th Percentile", 42.75, Some(28.0), Some(58.0), Some(0.05), None),
+        Statistic(None, "75th Percentile", 92.5, Some(58.0), Some(100.25), Some(0.05), None)))))
+
+    assert(actual == expected)
   }
 }

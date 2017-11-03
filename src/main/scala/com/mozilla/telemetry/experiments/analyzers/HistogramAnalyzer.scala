@@ -24,8 +24,8 @@ case class KeyedHistogramRow(experiment_id: String, branch: String, subgroup: St
 case class PreAggHistogramRow(experiment_id: String, branch: String, subgroup: String, metric: Option[Map[Int, Long]])
 extends PreAggregateRow[Int]
 
-class HistogramAnalyzer(name: String, hd: HistogramDefinition, df: DataFrame)
-  extends MetricAnalyzer[Int](name, hd, df) {
+class HistogramAnalyzer(name: String, hd: HistogramDefinition, df: DataFrame, bootstrap: Boolean = false)
+  extends MetricAnalyzer[Int](name, hd, df, bootstrap) {
   override type PreAggregateRowType = PreAggHistogramRow
   override val aggregator = UintAggregator
   val buckets = hd.getBuckets
@@ -45,6 +45,19 @@ class HistogramAnalyzer(name: String, hd: HistogramDefinition, df: DataFrame)
       formatted.as[KeyedHistogramRow].map(_.toPreAggregateRow)
     } else {
       formatted.as[HistogramRow].map(_.toPreAggregateRow)
+    }
+  }
+
+  // This implementation is super slow for histograms, so this is currently unused by default
+  def resample(ds: Dataset[PreAggregateRowType],
+               aggregations: List[MetricAnalysis],
+               iterations: Int = 1000): Map[MetricKey, List[MetricAnalysis]] = {
+    (0 to iterations).flatMap {
+      // resample with replacement and aggregate
+      i => aggregate(ds.sample(withReplacement = true, fraction = 1.0, seed = i.toLong))
+    }.toList.groupBy {
+      // group each resampling by branch/subgroup
+      m: MetricAnalysis => m.metricKey
     }
   }
 }
