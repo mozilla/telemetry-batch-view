@@ -1,10 +1,9 @@
 package com.mozilla.telemetry.views
 
-import com.mozilla.telemetry.experiments.Permutations.weightedGenerator
 import com.mozilla.telemetry.experiments.analyzers._
 import com.mozilla.telemetry.metrics._
 import com.mozilla.telemetry.utils.getOrCreateSparkSession
-import org.apache.spark.sql.functions.{col, min, udf}
+import org.apache.spark.sql.functions.{col, min}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.storage.StorageLevel
 import org.rogach.scallop.ScallopConf
@@ -46,6 +45,14 @@ object ExperimentAnalysisView {
     val metric = opt[String]("metric", descr = "Run job on just this metric", required = false)
     val experiment = opt[String]("experiment", descr = "Run job on just this experiment", required = false)
     val date = opt[String]("date", descr = "Run date for this job (defaults to yesterday)", required = false)
+    val bootstrapScalars = toggle(
+      "bootstrapScalars",
+      descrYes = "Run bootstrapped confidence intervals on scalars",
+      default = Some(true))
+    val bootstrapHistograms = toggle(
+      "bootstrapHistograms",
+      descrYes = "Run bootstrapped confidence intervals on histograms (very slow)",
+      default = Some(false))
     verify()
   }
 
@@ -79,6 +86,7 @@ object ExperimentAnalysisView {
 
       val experimentsSummary = spark.read.option("mergeSchema", "true").parquet(conf.inputLocation())
         .where(col("experiment_id") === e)
+        .where(col("submission_date_s3") <= date)
 
       val minDate = experimentsSummary
         .agg(min("submission_date_s3"))
@@ -126,7 +134,7 @@ object ExperimentAnalysisView {
   def getMetrics(conf: Conf, data: DataFrame) = {
     conf.metric.get match {
       case Some(m) => {
-        List((m, (Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _) ++ Scalars.definitions())(m.toUpperCase)))
+        List((m, (Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _) ++ Scalars.definitions())(m.toLowerCase)))
       }
       case _ => {
         val histogramDefs = MainSummaryView.filterHistogramDefinitions(
@@ -139,8 +147,9 @@ object ExperimentAnalysisView {
   }
 
   def getExperimentMetrics(experiment: String, experimentsSummary: DataFrame, errorAggregates: DataFrame, conf: Conf): List[MetricAnalysis] = {
-    val metadata = ExperimentAnalyzer.getExperimentMetadata(experimentsSummary).collect()
-    val persisted = addPermutationsAndPersist(experimentsSummary, metadata, experiment)
+    val persisted = repartitionAndPersist(experimentsSummary, experiment)
+    val bootstrapHistograms = conf.bootstrapHistograms()
+    val bootstrapScalars = conf.bootstrapScalars()
 
     val metricList = getMetrics(conf, experimentsSummary)
 
@@ -148,49 +157,24 @@ object ExperimentAnalysisView {
       case (name: String, md: MetricDefinition) =>
         md match {
           case hd: HistogramDefinition =>
-            new HistogramAnalyzer(name, hd, persisted).analyze()
+            new HistogramAnalyzer(name, hd, persisted, bootstrapHistograms).analyze()
           case sd: ScalarDefinition =>
-            ScalarAnalyzer.getAnalyzer(name, sd, persisted).analyze()
+            ScalarAnalyzer.getAnalyzer(name, sd, persisted, bootstrapScalars).analyze()
           case _ => throw new UnsupportedOperationException("Unsupported metric definition type")
         }
     }
 
     val crashes = CrashAnalyzer.getExperimentCrashes(errorAggregates)
+
+    val metadata = ExperimentAnalyzer.getExperimentMetadata(persisted).collect()
     (metadata ++ metrics ++ crashes).toList
   }
 
-  // Adds a column for permutations, repartitions if warranted, and persists the result for quicker access
-  def addPermutationsAndPersist(experimentsSummary: DataFrame,
-                                metadata: Array[MetricAnalysis],
+  // Repartitions dataset if warranted, and persists the result for quicker access
+  def repartitionAndPersist(experimentsSummary: DataFrame,
                                 experiment: String): DataFrame = {
-    val topLevelMetadata = metadata.filter(_.subgroup == MetricAnalyzer.topLevelLabel)
-    val totalPings = topLevelMetadata.flatMap(_.statistics.get.filter(_.name == "Total Pings").map(_.value)).sum
-    val calculatedPartitions = (totalPings / rowsPerPartition).toInt
-    val branchCounts = topLevelMetadata.map {
-      r => r.experiment_branch ->
-        (r.statistics.get.collectFirst {case s: Statistic if s.name == "Total Clients" => s} match {
-          case Some(s: Statistic) => s.value.toLong
-          case _ => throw new Exception(s"Missing Total Clients metadata for branch ${r.experiment_branch}")
-        })
-    }.toMap
-
-    val withPermutations = addPermutations(experimentsSummary.selectUsedColumns, branchCounts, experiment)
+    val calculatedPartitions = (experimentsSummary.count() / rowsPerPartition).toInt
     val numPartitions = calculatedPartitions max experimentsSummary.sparkSession.sparkContext.defaultParallelism
-    withPermutations.repartition(numPartitions).persist(StorageLevel.MEMORY_AND_DISK)
-  }
-
-  def addPermutations(df: DataFrame, branchCounts: Map[String, Long], experiment: String): DataFrame = {
-    // create the cutoffs from branchCounts
-    val total = branchCounts.values.sum.toDouble
-    val cutoffs = branchCounts
-      .toList
-      .sortBy(_._1) // sort by branch name
-      .scanLeft(0L)(_ + _._2) // transform to cumulative branch counts
-      .tail  // drop the initial 0 from scanLeft
-      .map(_/total) // turn cumulative counts into cutoffs from 0 to 1
-
-    val generator = weightedGenerator(cutoffs, experiment, numPermutations = 100) _
-    val permutationsUDF = udf(generator)
-    df.withColumn("permutations", permutationsUDF(col("client_id")))
+    experimentsSummary.repartition(numPartitions).persist(StorageLevel.MEMORY_AND_DISK)
   }
 }
