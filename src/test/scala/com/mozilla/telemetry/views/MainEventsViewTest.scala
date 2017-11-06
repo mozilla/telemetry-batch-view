@@ -32,6 +32,7 @@ case class TestMainSummary(document_id: String,
                            sample_id: Long,
                            active_experiment_id: String,
                            active_experiment_branch: String,
+                           experiments: Map[String, String],
                            events: Option[Seq[Event]])
 
 
@@ -54,7 +55,7 @@ class MainEventsViewTest extends FlatSpec with Matchers{
       val m = TestMainSummary("6609b4d8-94d4-4e87-9f6f-80183079ff1b",
         "25a00eb7-2fd8-47fd-8d3f-223af3e5c68f", "release", "US", "en-US", "Firefox", "50.1.0", "Windows_NT", "10.0",
         true, "test", "2017-01-23T20:54:10.123Z", 1000, false, 0, 0, 1485205018000000000L, 42, "test_experiment",
-        "test_branch", Some(Seq(e)))
+        "test_branch", Map("experiment1" -> "branch1"), Some(Seq(e)))
 
       val pings : DataFrame = Seq(
         m,

@@ -93,7 +93,7 @@ object MainEventsView {
       .select("document_id", "client_id", "normalized_channel", "country", "locale", "app_name", "app_version", "os",
         "os_version", "e10s_enabled", "e10s_cohort", "subsession_start_date", "subsession_length", "sync_configured",
         "sync_count_desktop", "sync_count_mobile", "timestamp", "sample_id", "active_experiment_id",
-        "active_experiment_branch", "events")
+        "active_experiment_branch", "experiments", "events")
       .where("client_id is not null")
       .where("events is not null")
 
@@ -108,7 +108,7 @@ object MainEventsView {
     exploded.selectExpr("document_id", "client_id", "normalized_channel", "country", "locale", "app_name",
       "app_version", "os", "os_version", "e10s_enabled", "e10s_cohort", "subsession_start_date", "subsession_length",
       "sync_configured", "sync_count_desktop", "sync_count_mobile", "timestamp", "sample_id", "active_experiment_id",
-      "active_experiment_branch",
+      "active_experiment_branch", "experiments",
       // Flatten nested event fields.
       "events.timestamp as event_timestamp",
       "events.category as event_category",
