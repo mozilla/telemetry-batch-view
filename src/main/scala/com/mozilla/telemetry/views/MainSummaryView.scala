@@ -427,7 +427,11 @@ object MainSummaryView {
       lazy val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms("parent") \ "WEAVE_CONFIGURED")
       lazy val weaveDesktop = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_DESKTOP")
       lazy val weaveMobile = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_MOBILE")
-      lazy val parentEvents = payload \ "payload" \ "processes" \ "parent" \ "events"
+
+      lazy val events = ("dynamic" :: MainPing.ProcessTypes).map {
+        p => p -> payload \ "payload" \ "processes" \ p \ "events"
+      }
+
       lazy val experiments = parse(fields.getOrElse("environment.experiments", "{}").asInstanceOf[String])
 
       val sslHandshakeResultKeys = (0 to 671).map(_.toString)
@@ -694,7 +698,8 @@ object MainSummaryView {
           case _ => null
         },
         getOldUserPrefs(settings \ "userPrefs").orNull,
-        Events.getEvents(parentEvents).orNull,
+
+        Option(events.flatMap {case (p, e) => Events.getEvents(e, p)}).filter(!_.isEmpty).orNull,
 
         // bug 1339655
         MainPing.enumHistogramBucketCount(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.head).orNull,
