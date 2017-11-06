@@ -1835,7 +1835,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       Map(
         "documentId" -> "foo",
         "submissionDate" -> "1234",
-        "environment.settings" -> """{
+          "environment.settings" -> """{
           "userPrefs": {
            "p1": 10,
            "p2": false,
@@ -1856,9 +1856,45 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         .getValuesMap(expected.keys.toList)
 
     for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-      actual.get(f) should be (Some(v))
+      withClue(s"$f:") { actual.get(f) should be(Some(v)) }
+      actual.get(f) should be(Some(v))
     }
     actual should be (expected)
+  }
+
+  it can "store multi-process events" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "submission" -> """{
+          "payload": {
+            "processes": {
+              "parent": {
+                "events": [[81994404, "navigation", "search", "searchbar"]]
+              },
+              "content": {
+                "events": [[81994404, "navigation", "search", "searchbar"]]
+              },
+              "dynamic": {
+                "events": [[81994404, "navigation", "search", "searchbar"]]
+              }
+            }
+          }
+        }"""),
+      None);
+    val summary = MainSummaryView.messageToRow(message, userPrefs, scalarDefs, histogramDefs)
+
+    val expected = Set(
+      Row(81994404, "navigation", "search", "searchbar", null, Map("telemetry_process" -> "dynamic")),
+      Row(81994404, "navigation", "search", "searchbar", null, Map("telemetry_process" -> "content")),
+      Row(81994404, "navigation", "search", "searchbar", null, Map("telemetry_process" -> "parent"))
+    )
+
+    val actual = applySchema(summary.get, MainSummaryView.buildSchema(userPrefs, scalarDefs, histogramDefs))
+         .getValuesMap[List[Row]](List("events"))
+
+    actual.get("events").orNull should contain theSameElementsAs (expected)
   }
 }

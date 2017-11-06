@@ -18,18 +18,20 @@ class EventsTest extends FlatSpec with Matchers{
            ["malformed"]
          ]""")
 
-    val eventRows = Events.getEvents(events)
+    val eventRows = Events.getEvents(events, "parent")
+    val processMap = Map("telemetry_process" -> "parent")
 
     eventRows should be (
-      Some(List(
-        Row(533352, "navigation", "search", "urlbar", "enter", Map("engine" -> "other-StartPage - English")),
-        Row(85959, "navigation", "search", "urlbar", "enter", null),
-        Row(81994404, "navigation", "search", "searchbar", null, null),
-        Row(1234, "navigation", "search", "urlbar", null, Map("engine" -> "other-StartPage - English"))
+      List(
+        Row(533352, "navigation", "search", "urlbar", "enter",
+          processMap ++ Map("engine" -> "other-StartPage - English")),
+        Row(85959, "navigation", "search", "urlbar", "enter", processMap),
+        Row(81994404, "navigation", "search", "searchbar", null, processMap),
+        Row(1234, "navigation", "search", "urlbar", null, processMap ++ Map("engine" -> "other-StartPage - English"))
       )
-      ))
-    Events.getEvents(parse("{}") \ "events") should be (None)
-    Events.getEvents(parse("""[]""")) should be (None)
+    )
+    Events.getEvents(parse("{}") \ "events", "parent") should be (List())
+    Events.getEvents(parse("""[]"""), "parent") should be (List())
 
     val eventMapTypeTest = parse(
       """[
@@ -42,18 +44,18 @@ class EventsTest extends FlatSpec with Matchers{
            ]
          ]""")
 
-    val eventMapTypeTestRows = Events.getEvents(eventMapTypeTest)
+    val eventMapTypeTestRows = Events.getEvents(eventMapTypeTest, "parent")
 
     eventMapTypeTestRows should be (
-      Some(List(
-        Row(533352, "navigation", "search", "urlbar", "enter", Map(
+      List(
+        Row(533352, "navigation", "search", "urlbar", "enter", processMap ++ Map(
           "string" -> "hello world",
           "int" -> "0",
           "float" -> "1.0",
           "null" -> "null",
           "boolean" -> "true"
         ))
-      ))
+      )
     )
 
     // Apply events schema to event rows
@@ -66,7 +68,7 @@ class EventsTest extends FlatSpec with Matchers{
       .appName("MainSummary")
       .getOrCreate()
     try {
-      noException should be thrownBy spark.createDataFrame(sc.parallelize(eventRows.get), schema).count()
+      noException should be thrownBy spark.createDataFrame(sc.parallelize(eventRows), schema).count()
     } finally {
       sc.stop
     }
