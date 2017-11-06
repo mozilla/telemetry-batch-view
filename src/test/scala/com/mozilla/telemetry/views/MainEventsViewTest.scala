@@ -1,7 +1,7 @@
 package com.mozilla.telemetry
 
 import com.mozilla.telemetry.views.MainEventsView
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{FlatSpec, Matchers}
 
@@ -62,7 +62,7 @@ class MainEventsViewTest extends FlatSpec with Matchers{
           document_id = "22539231-c1c6-4b9a-bed6-2a8d2e4e5e8c",
           events = Some(Seq(
             e.copy(timestamp = 234),
-            e.copy(timestamp = 345)))),
+            e.copy(timestamp = 345, map_values = e.map_values + ("telemetry_process" -> "parent"))))),
         m.copy(
           document_id = "547b5406-8717-4696-b12b-b6c796bdbf8b",
           events = None),
@@ -71,7 +71,7 @@ class MainEventsViewTest extends FlatSpec with Matchers{
           document_id = "72062950-3daf-450e-adfd-58eda3151a97",
           sample_id = 10,
           events = Some(Seq(
-            e.copy(timestamp = 123))))
+            e.copy(timestamp = 123, map_values = e.map_values + ("telemetry_process" -> "content")))))
       ).toDS().toDF()
 
       pings.count should be(4)
@@ -81,6 +81,8 @@ class MainEventsViewTest extends FlatSpec with Matchers{
 
       events.select("client_id").distinct.count should be(2)
       events.select("document_id").distinct.count should be(3)
+      events.select("event_process").distinct.collect should contain theSameElementsAs List(
+        Row(null), Row("parent"), Row("content"))
 
       val sampledEvents = MainEventsView.eventsFromMain(pings, Some("10"))
       sampledEvents.count should be(1)

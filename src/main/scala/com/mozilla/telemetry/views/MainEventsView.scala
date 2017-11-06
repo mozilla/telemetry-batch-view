@@ -115,6 +115,7 @@ object MainEventsView {
       "events.method as event_method",
       "events.object as event_object",
       "events.string_value as event_string_value",
-      "events.map_values as event_map_values")
+      "events.map_values as event_map_values",
+      "events.map_values['telemetry_process'] as event_process")
   }
 }
