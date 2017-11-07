@@ -41,9 +41,11 @@ abstract class UserPref {
     val cleanedName = name.toLowerCase.replaceAll("[.-]", "_")
     s"user_pref_$cleanedName"
   }
+
   def asField(): StructField = {
     StructField(fieldName(), dataType, nullable = true)
   }
+
   def getValue(v: JValue): Any
 }
 
