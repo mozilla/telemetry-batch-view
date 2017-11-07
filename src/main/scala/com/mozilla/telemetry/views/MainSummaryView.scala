@@ -9,45 +9,11 @@ import org.rogach.scallop._
 import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.utils.{Addon, Attribution, Events,
   Experiment, getOrCreateSparkSession, MainPing, S3Store}
+import com.mozilla.telemetry.utils.{BooleanUserPref, IntegerUserPref, UserPref}
 import org.json4s.{JValue, DefaultFormats}
 import com.mozilla.telemetry.metrics._
 
 import scala.util.{Success, Try}
-
-case class UserPref(name: String, dataType: DataType) {
-  def fieldName(): String = {
-    val cleanedName = name.toLowerCase.replace(".", "_")
-    s"user_pref_$cleanedName"
-  }
-
-  def asField(): StructField = {
-    StructField(fieldName(), dataType, nullable = true)
-  }
-
-  def getValue(v: JValue): Any = {
-    dataType match {
-      case _: IntegerType =>
-        v match {
-          case JInt(x) => x.toInt
-          case _ => null
-        }
-      case _: BooleanType =>
-        v match {
-          case JBool(x) => x
-          case _ => null
-        }
-      case _: StringType =>
-        v match {
-          case JString(x) => x
-          case _ => null
-        }
-      case _ =>
-        // If we don't know how to handle a given type
-        // just fall back to null.
-        null
-    }
-  }
-}
 
 object MainSummaryView {
 
@@ -97,10 +63,22 @@ object MainSummaryView {
     "WEBVR_TIME_SPENT_VIEWING_IN_OPENVR" ::
     "WEBVR_USERS_VIEW_IN" :: Nil
 
+  // The following user prefs will be included as top-level
+  // fields, named according to UserPref.fieldName()
+  //
+  // Prefs where we only record whether a pref has been set should
+  // use StringUserPref as we observe a value of "<user-set>".
+  //
+  // Supported pref data types are:
+  //   nsIPrefBranch.PREF_STRING -> StringUserPref
+  //   nsIPrefBranch.PREF_BOOL -> BooleanUserPref
+  //   nsIPrefBranch.PREF_INT -> IntegerUserPref
+  // See the `_getPrefData()` function in TelemetryEnvironment.jsm
+  // for reference: https://mzl.la/2zo7kyK
   val userPrefsList =
-    UserPref("dom.ipc.processCount", IntegerType) ::
-    UserPref("extensions.allow-non-mpc-extensions", BooleanType) ::
-    UserPref("extensions.legacy.enabled", BooleanType) :: Nil
+    IntegerUserPref("dom.ipc.processCount") ::
+    BooleanUserPref("extensions.allow-non-mpc-extensions") ::
+    BooleanUserPref("extensions.legacy.enabled") :: Nil
 
 
   // Configuration for command line arguments
@@ -363,9 +341,10 @@ object MainSummaryView {
     }
   }
 
+  @deprecated
   def getOldUserPrefs(prefs: JValue): Option[Row] = {
     val pc = prefs \ "dom.ipc.processCount" match {
-      case JInt(pc) => pc.toInt
+      case JInt(x) => x.toInt
       case _ => null
     }
     val anme = prefs \ "extensions.allow-non-mpc-extensions" match {
@@ -881,7 +860,7 @@ object MainSummaryView {
 
   // Bug 1390707 - Include pref fields as top-level fields to support schema evolution.
   def buildUserPrefsSchema(userPrefs: List[UserPref]) = StructType(
-    userPrefs.map(p => StructField(p.fieldName(), p.dataType, nullable = true))
+    userPrefs.map(p => p.asField())
   )
 
   def buildScalarSchema(scalarDefinitions: List[(String, ScalarDefinition)]): List[StructField] = {
