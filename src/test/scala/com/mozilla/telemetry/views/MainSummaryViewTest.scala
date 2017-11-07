@@ -2,9 +2,9 @@ package com.mozilla.telemetry
 
 import com.mozilla.telemetry.heka.{File, Message, RichMessage}
 import com.mozilla.telemetry.metrics._
-import com.mozilla.telemetry.utils.MainPing
-import com.mozilla.telemetry.utils.getOrCreateSparkSession
-import com.mozilla.telemetry.views.{MainSummaryView, UserPref}
+import com.mozilla.telemetry.utils.{MainPing, getOrCreateSparkSession, UserPref,
+  BooleanUserPref, IntegerUserPref, StringUserPref}
+import com.mozilla.telemetry.views.MainSummaryView
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, StringType, StructType}
@@ -32,10 +32,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
   val userPrefs = MainSummaryView.userPrefsList
 
-  val testUserPrefs =
-    UserPref("p1", IntegerType) ::
-    UserPref("p2", BooleanType) ::
-    UserPref("P3.MESSY", StringType) :: Nil
+  val testUserPrefs = IntegerUserPref("p1") :: BooleanUserPref("p2") :: StringUserPref("P3.MESSY") :: Nil
 
   val defaultSchema = MainSummaryView.buildSchema(userPrefs, scalarDefs, histogramDefs)
 
@@ -346,6 +343,9 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "input_event_response_coalesced_ms_content_above_2500"  -> 0,
             "ghost_windows_main_above_1"                            -> 0,
             "ghost_windows_content_above_1"                         -> 0,
+            "user_pref_dom_ipc_processcount"                        -> null,
+            "user_pref_extensions_allow_non_mpc_extensions"         -> null,
+            "user_pref_extensions_legacy_enabled"                   -> null,
             "scalar_parent_mock_keyed_scalar_bool"   -> null,
             "scalar_parent_mock_keyed_scalar_string" -> null,
             "scalar_parent_mock_keyed_scalar_uint"   -> null,
@@ -1854,35 +1854,6 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     val actual =
       applySchema(summary.get, MainSummaryView.buildSchema(testUserPrefs, List(), List()))
         .getValuesMap(expected.keys.toList)
-
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-      actual.get(f) should be (Some(v))
-    }
-    actual should be (expected)
-  }
-
-  "Unknown pref types" can "be ignored" in {
-    val userPrefs = UserPref("p1", ArrayType(IntegerType)) ::
-      UserPref("p2", BooleanType) :: Nil
-
-    val prefsJson = parse("""
-          |{
-          |  "p1": [1, 2, 3],
-          |  "p2": true
-          |}""".stripMargin)
-
-    val expected = Map(
-      "user_pref_p1" -> null,
-      "user_pref_p2" -> true
-    )
-
-    val prefs = MainSummaryView.getUserPrefs(prefsJson, userPrefs)
-    prefs should be (Row(null, true))
-
-    val prefsSchema = MainSummaryView.buildUserPrefsSchema(userPrefs)
-
-    val actual = applySchema(prefs, prefsSchema).getValuesMap(expected.keys.toList)
 
     for ((f, v) <- expected) {
       withClue(s"$f:") { actual.get(f) should be (Some(v)) }
