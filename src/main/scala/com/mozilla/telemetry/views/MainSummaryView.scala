@@ -1,7 +1,7 @@
 package com.mozilla.telemetry.views
 
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.Row
 import org.joda.time.{DateTime, Days, format}
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods.parse
@@ -9,7 +9,8 @@ import org.rogach.scallop._
 import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.utils.{Addon, Attribution, Events,
   Experiment, getOrCreateSparkSession, MainPing, S3Store}
-import org.json4s.{DefaultFormats, Extraction, JValue}
+import com.mozilla.telemetry.utils.{BooleanUserPref, IntegerUserPref, UserPref}
+import org.json4s.{JValue, DefaultFormats}
 import com.mozilla.telemetry.metrics._
 
 import scala.util.{Success, Try}
@@ -55,11 +56,29 @@ object MainSummaryView {
     "TIME_TO_NON_BLANK_PAINT_MS" ::
     "TIME_TO_RESPONSE_START_MS" ::
     "TOUCH_ENABLED_DEVICE" ::
+    "TRACKING_PROTECTION_ENABLED" ::
     "UPTAKE_REMOTE_CONTENT_RESULT_1" ::
     "WEBVR_TIME_SPENT_VIEWING_IN_2D" ::
     "WEBVR_TIME_SPENT_VIEWING_IN_OCULUS" ::
     "WEBVR_TIME_SPENT_VIEWING_IN_OPENVR" ::
     "WEBVR_USERS_VIEW_IN" :: Nil
+
+  // The following user prefs will be included as top-level
+  // fields, named according to UserPref.fieldName()
+  //
+  // Prefs where we only record whether a pref has been set should
+  // use StringUserPref as we observe a value of "<user-set>".
+  //
+  // Supported pref data types are:
+  //   nsIPrefBranch.PREF_STRING -> StringUserPref
+  //   nsIPrefBranch.PREF_BOOL -> BooleanUserPref
+  //   nsIPrefBranch.PREF_INT -> IntegerUserPref
+  // See the `_getPrefData()` function in TelemetryEnvironment.jsm
+  // for reference: https://mzl.la/2zo7kyK
+  val userPrefsList =
+    IntegerUserPref("dom.ipc.processCount") ::
+    BooleanUserPref("extensions.allow-non-mpc-extensions") ::
+    BooleanUserPref("extensions.legacy.enabled") :: Nil
 
 
   // Configuration for command line arguments
@@ -94,17 +113,6 @@ object MainSummaryView {
       val hadoopConf = sc.hadoopConfiguration
       hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
 
-      // We want to end up with reasonably large parquet files on S3.
-      val parquetSize = 512 * 1024 * 1024
-      hadoopConf.setInt("parquet.block.size", parquetSize)
-      hadoopConf.setInt("dfs.blocksize", parquetSize)
-      // Don't write metadata files, because they screw up partition discovery.
-      // This is fixed in Spark 2.0, see:
-      //   https://issues.apache.org/jira/browse/SPARK-13207
-      //   https://issues.apache.org/jira/browse/SPARK-15454
-      //   https://issues.apache.org/jira/browse/SPARK-15895
-      hadoopConf.set("parquet.enable.summary-metadata", "false")
-
       val currentDate = from.plusDays(offset)
       val currentDateString = currentDate.toString("yyyyMMdd")
       val filterChannel = conf.channel.get
@@ -123,7 +131,7 @@ object MainSummaryView {
         Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true),
         useWhitelist = !conf.allHistograms())
 
-      val schema = buildSchema(scalarDefinitions, histogramDefinitions)
+      val schema = buildSchema(userPrefsList, scalarDefinitions, histogramDefinitions)
       val ignoredCount = sc.accumulator(0, "Number of Records Ignored")
       val processedCount = sc.accumulator(0, "Number of Records Processed")
 
@@ -151,7 +159,7 @@ object MainSummaryView {
 
       if(!messages.isEmpty()){
         val rowRDD = messages.flatMap(m => {
-          messageToRow(m, scalarDefinitions, histogramDefinitions) match {
+          messageToRow(m, userPrefsList, scalarDefinitions, histogramDefinitions) match {
             case None =>
               ignoredCount += 1
               None
@@ -267,12 +275,12 @@ object MainSummaryView {
 
   def getQuantumReady(e10sStatus: JValue, addons: JValue, theme: JValue): Option[Boolean] = {
     val e10sEnabled = e10sStatus match {
-      case JBool(e10sStatus) => Some(e10sStatus)
+      case JBool(x) => Some(x)
       case _ => None
     }
 
     val allowedAddons = getActiveAddons(addons) match {
-      case Some(l) if l.length > 0 => Some(
+      case Some(l) if l.nonEmpty => Some(
         l.map(row => {
           val isSystem = row.get(13) match {
             case b: Boolean => b
@@ -333,9 +341,10 @@ object MainSummaryView {
     }
   }
 
-  def getUserPrefs(prefs: JValue): Option[Row] = {
+  @deprecated
+  def getOldUserPrefs(prefs: JValue): Option[Row] = {
     val pc = prefs \ "dom.ipc.processCount" match {
-      case JInt(pc) => pc.toInt
+      case JInt(x) => x.toInt
       case _ => null
     }
     val anme = prefs \ "extensions.allow-non-mpc-extensions" match {
@@ -349,11 +358,16 @@ object MainSummaryView {
     }
   }
 
-  def getExperiments(experiments: JValue): Option[Map[String, String]] = {
+  def getUserPrefs(prefs: JValue, prefsList: List[UserPref]): Row = {
+    val prefValues = prefsList.map(p => p.getValue(prefs \ p.name))
+    Row.fromSeq(prefValues)
+  }
+
+  def getExperiments(jExperiments: JValue): Option[Map[String, String]] = {
     implicit val formats = DefaultFormats
-    Try(experiments.extract[Map[String, Experiment]]) match {
+    Try(jExperiments.extract[Map[String, Experiment]]) match {
       case Success(experiments) => {
-        if (experiments.size > 0) {
+        if (experiments.nonEmpty) {
           Some(experiments.map { case (id, data) => id -> data.branch.orNull })
         } else {
           None
@@ -370,7 +384,7 @@ object MainSummaryView {
 
   // Convert the given Heka message containing a "main" ping
   // to a map containing just the fields we're interested in.
-  def messageToRow(message: Message, scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String, HistogramDefinition)]): Option[Row] = {
+  def messageToRow(message: Message, userPrefs: List[UserPref], scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String, HistogramDefinition)]): Option[Row] = {
     try {
       val fields = message.fieldsAsMap
 
@@ -675,7 +689,7 @@ object MainSummaryView {
           case JBool(x) => x
           case _ => null
         },
-        getUserPrefs(settings \ "userPrefs").orNull,
+        getOldUserPrefs(settings \ "userPrefs").orNull,
         Events.getEvents(parentEvents).orNull,
 
         // bug 1339655
@@ -758,6 +772,8 @@ object MainSummaryView {
         MainPing.histogramToThresholdCount(histograms("content") \ "GHOST_WINDOWS", 1)
       )
 
+      val userPrefsRow = getUserPrefs(settings \ "userPrefs", userPrefs)
+
       val scalarRow = MainPing.scalarsToRow(
         MainPing.ProcessTypes.map{ p => p -> (scalars(p) merge keyedScalars(p)) }.toMap,
         scalarDefinitions
@@ -768,7 +784,7 @@ object MainSummaryView {
         histogramDefinitions
       )
 
-      Some(Row.merge(row, scalarRow, histogramRow))
+      Some(Row.merge(row, userPrefsRow, scalarRow, histogramRow))
     } catch {
       case e: Exception =>
         None
@@ -837,11 +853,15 @@ object MainSummaryView {
     StructField("content",  StringType, nullable = true)
   ))
 
-  // Data for user prefs
-  def buildUserPrefsSchema = StructType(List(
+  def buildOldUserPrefsSchema = StructType(List(
     StructField("dom_ipc_process_count", IntegerType, nullable = true), // dom.ipc.processCount
     StructField("extensions_allow_non_mpc_extensions", BooleanType, nullable = true) // extensions.allow-non-mpc-extensions
   ))
+
+  // Bug 1390707 - Include pref fields as top-level fields to support schema evolution.
+  def buildUserPrefsSchema(userPrefs: List[UserPref]) = StructType(
+    userPrefs.map(p => p.asField())
+  )
 
   def buildScalarSchema(scalarDefinitions: List[(String, ScalarDefinition)]): List[StructField] = {
     scalarDefinitions.map{
@@ -899,7 +919,7 @@ object MainSummaryView {
     StructField("block", IntegerType, nullable = true)
   ))
 
-  def buildSchema(scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String, HistogramDefinition)]): StructType = {
+  def buildSchema(userPrefs: List[UserPref], scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String, HistogramDefinition)]): StructType = {
     StructType(List(
       StructField("document_id", StringType, nullable = false), // id
       StructField("client_id", StringType, nullable = true), // clientId
@@ -1023,7 +1043,10 @@ object MainSummaryView {
       StructField("blocklist_enabled", BooleanType, nullable = true), // environment.settings.blocklistEnabled
       StructField("addon_compatibility_check_enabled", BooleanType, nullable = true), // environment.settings.addonCompatibilityCheckEnabled
       StructField("telemetry_enabled", BooleanType, nullable = true), // environment.settings.telemetryEnabled
-      StructField("user_prefs", buildUserPrefsSchema, nullable = true), // environment.settings.userPrefs
+
+      // TODO: Deprecate and eventually remove this field, preferring the top-level
+      //       user_pref_* fields for easy schema evolution.
+      StructField("user_prefs", buildOldUserPrefsSchema, nullable = true), // environment.settings.userPrefs
 
       StructField("events", ArrayType(Events.buildEventSchema, containsNull = false), nullable = true), // payload.processes.parent.events
 
@@ -1082,7 +1105,8 @@ object MainSummaryView {
 
       StructField("ghost_windows_main_above_1", LongType, nullable = true),
       StructField("ghost_windows_content_above_1", LongType, nullable = true)
-    ) ++ buildScalarSchema(scalarDefinitions)
+    ) ++ buildUserPrefsSchema(userPrefs)
+      ++ buildScalarSchema(scalarDefinitions)
       ++ buildHistogramSchema(histogramDefinitions))
   }
 }

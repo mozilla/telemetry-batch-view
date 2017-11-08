@@ -1,12 +1,10 @@
 package com.mozilla.telemetry.utils
 
 import com.mozilla.telemetry.metrics._
-import org.json4s.jackson.JsonMethods._
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST._
 import org.apache.spark.sql.Row
-
-import scala.util.{Success, Failure, Try}
+import org.apache.spark.sql.types._
 
 import scala.util.{Success, Try}
 
@@ -34,6 +32,46 @@ case class Attribution(source: Option[String],
                        content: Option[String])
 
 case class Experiment(branch: Option[String])
+
+abstract class UserPref {
+  def name: String
+  def dataType: DataType
+
+  def fieldName(): String = {
+    val cleanedName = name.toLowerCase.replaceAll("[.-]", "_")
+    s"user_pref_$cleanedName"
+  }
+
+  def asField(): StructField = {
+    StructField(fieldName(), dataType, nullable = true)
+  }
+
+  def getValue(v: JValue): Any
+}
+
+case class IntegerUserPref(name: String) extends UserPref {
+  override def dataType = IntegerType
+  override def getValue(v: JValue) = v match {
+    case JInt(x) => x.toInt
+    case _ => null
+  }
+}
+
+case class BooleanUserPref(name: String) extends UserPref {
+  override def dataType = BooleanType
+  override def getValue(v: JValue) = v match {
+    case JBool(x) => x
+    case _ => null
+  }
+}
+
+case class StringUserPref(name: String) extends UserPref {
+  override def dataType = StringType
+  override def getValue(v: JValue) = v match {
+    case JString(x) => x
+    case _ => null
+  }
+}
 
 object MainPing{
   val ProcessTypes = "parent" :: "content" :: "gpu" :: Nil
