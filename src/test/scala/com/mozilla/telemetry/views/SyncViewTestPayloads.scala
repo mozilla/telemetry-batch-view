@@ -253,7 +253,14 @@ object SyncViewTestPayloads {
       |            "took": 249
       |          },
       |          {
-      |            "name": "passwords"
+      |            "name": "passwords",
+      |            "took": 50,
+      |            "validation": {
+      |              "version": 1,
+      |              "checked": 10,
+      |              "took": 30,
+      |              "problems": []
+      |            }
       |          },
       |          {
       |            "name": "tabs",
