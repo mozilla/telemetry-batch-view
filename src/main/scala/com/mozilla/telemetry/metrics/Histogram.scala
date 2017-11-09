@@ -13,21 +13,27 @@ sealed abstract class HistogramDefinition extends MetricDefinition {
 }
 case class FlagHistogram(keyed: Boolean, originalName: String, process: Option[String] = None) extends HistogramDefinition {
   def getBuckets: Array[Int] = Array(0, 1)
+  val isCategoricalMetric = true
 }
 case class BooleanHistogram(keyed: Boolean, originalName: String, process: Option[String] = None) extends HistogramDefinition {
   def getBuckets: Array[Int] = Array(0, 1)
+  val isCategoricalMetric = true
 }
 case class CountHistogram(keyed: Boolean, originalName: String, process: Option[String] = None) extends HistogramDefinition {
   def getBuckets: Array[Int] = Array(0, 1)
+  val isCategoricalMetric = false
 }
 case class EnumeratedHistogram(keyed: Boolean, originalName: String, nValues: Int, process: Option[String] = None) extends HistogramDefinition {
   def getBuckets: Array[Int] = (0 to nValues).toArray
+  val isCategoricalMetric = true
 }
 case class LinearHistogram(keyed: Boolean, originalName: String, low: Int, high: Int, nBuckets: Int, process: Option[String] = None) extends HistogramDefinition {
   def getBuckets: Array[Int] = Histograms.linearBuckets(low, high, nBuckets)
+  val isCategoricalMetric = false
 }
 case class ExponentialHistogram(keyed: Boolean, originalName: String, low: Int, high: Int, nBuckets: Int, process: Option[String] = None) extends HistogramDefinition {
   def getBuckets: Array[Int] = Histograms.exponentialBuckets(low, high, nBuckets)
+  val isCategoricalMetric = false
 }
 
 /**
@@ -37,6 +43,7 @@ case class ExponentialHistogram(keyed: Boolean, originalName: String, low: Int, 
 case class CategoricalHistogram(keyed: Boolean, originalName: String, labels: Seq[String], process: Option[String] = None) extends HistogramDefinition {
   def getLabel(i: Int): String = labels.lift(i).getOrElse(CategoricalHistogram.SpillBucketName)
   def getBuckets: Array[Int] = (0 to labels.length).toArray
+  val isCategoricalMetric = true
 }
 object CategoricalHistogram{ val SpillBucketName = "spill" }
 
