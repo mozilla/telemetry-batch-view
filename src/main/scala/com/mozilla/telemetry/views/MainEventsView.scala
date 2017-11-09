@@ -91,7 +91,7 @@ object MainEventsView {
     val eventsSchema = Events.buildEventSchema
     val partialDataFrame = mainSummaryData
       .select("document_id", "client_id", "normalized_channel", "country", "locale", "app_name", "app_version", "os",
-        "os_version", "e10s_enabled", "e10s_cohort", "subsession_start_date", "subsession_length", "sync_configured",
+        "os_version", "e10s_enabled", "subsession_start_date", "subsession_length", "sync_configured",
         "sync_count_desktop", "sync_count_mobile", "timestamp", "sample_id", "active_experiment_id",
         "active_experiment_branch", "experiments", "events")
       .where("client_id is not null")
@@ -106,7 +106,7 @@ object MainEventsView {
     val exploded = records.withColumn("events", explode(when(size(col("events")).gt(0), col("events"))))
 
     exploded.selectExpr("document_id", "client_id", "normalized_channel", "country", "locale", "app_name",
-      "app_version", "os", "os_version", "e10s_enabled", "e10s_cohort", "subsession_start_date", "subsession_length",
+      "app_version", "os", "os_version", "e10s_enabled", "subsession_start_date", "subsession_length",
       "sync_configured", "sync_count_desktop", "sync_count_mobile", "timestamp", "sample_id", "active_experiment_id",
       "active_experiment_branch", "experiments",
       // Flatten nested event fields.

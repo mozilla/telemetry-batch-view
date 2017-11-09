@@ -281,7 +281,6 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "env_build_version"                 -> "48.0a1",
             "env_build_arch"                    -> "x86-64",
             "e10s_enabled"                      -> true,
-            "e10s_cohort"                       -> "unsupportedChannel",
             "e10s_multi_processes"              -> null,
             "locale"                            -> "en-US",
             "active_experiment_id"              -> null,
