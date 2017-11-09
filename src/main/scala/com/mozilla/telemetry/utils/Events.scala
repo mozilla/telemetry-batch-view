@@ -70,14 +70,16 @@ object Event {
       case _ => None
     }
   }
+
+  def fromList(event: List[Any], process: String): Option[Event] = {
+    fromList(event).map(e => e.copy(
+      mapValues = Some(Map("telemetry_process" -> process) ++ e.mapValues.getOrElse(Map()))))
+  }
 }
 
 object Events {
-  def getEvents(events: JValue): Option[List[Row]] = {
-    extractEvents(events).flatMap(eventToRow) match {
-      case Nil => None
-      case x => Some(x)
-    }
+  def getEvents(events: JValue, process: String): List[Row] = {
+    extractEvents(events).flatMap(e => eventToRow(e, process))
   }
 
   def extractEvents(events: JValue): List[List[Any]] = {
@@ -88,8 +90,8 @@ object Events {
     }
   }
 
-  def eventToRow(event: List[Any]): Option[Row] = {
-    Event.fromList(event) match {
+  def eventToRow(event: List[Any], process: String): Option[Row] = {
+    Event.fromList(event, process) match {
       case Some(e) => Some(e.toRow)
       case _ => None
     }
