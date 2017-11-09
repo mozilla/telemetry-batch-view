@@ -90,9 +90,50 @@ case class LongScalarMapRow(experiment_id: String, branch: String, subgroup: Str
 case class StringScalarMapRow(experiment_id: String, branch: String, subgroup: String,
                               metric: Option[Map[String, Long]]) extends PreAggregateRow[String]
 
+trait AggregateResampler {
+  type PreAggregateRowType
 
-class BooleanScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame)
-  extends MetricAnalyzer[Boolean](name, md, df) {
+  // This implementation reaggregates directly from the aggregated histogram, which works when we expect one sample
+  // per ping, such as when we're resampling scalar aggregates
+  def resample(ds: Dataset[PreAggregateRowType],
+               aggregations: List[MetricAnalysis],
+               iterations: Int = 1000): Map[MetricKey, List[MetricAnalysis]] = {
+    aggregations.map { a =>
+      val total = a.histogram.values.map(_.count).sum
+      // We could use the pdf field directly to cumulatively sum but we'd likely run into weird floating point addition
+      // issues
+      val cdf =  a.histogram
+        .map { case (k, v) => k -> v.count }
+        .toList
+        .scanLeft(0L, 0.0) { case((_: Long, c: Double), (k: Long, v: Double)) => (k, c + v)}
+        .tail
+        .map { case (k, v) => (k, v / total) }
+      (a, total, cdf)
+    }.map { case (m, total, cdf) =>
+      val aggs = ds.sparkSession.sparkContext.parallelize(1 to iterations).map { x: Int =>
+        val agg = resampleCdf(cdf, x, total.toInt)
+        m.copy(histogram = agg.map {case (k, v) => k -> HistogramPoint(v / total, v.toDouble, None)})
+      }.collect.toList
+      m.metricKey -> aggs
+    }.toMap
+  }
+
+  private def resampleCdf(cumulativeWeights: List[(Long, Double)], seed: Int, n: Int): Map[Long, Long] = {
+    val rng = new scala.util.Random(seed)
+    (0 to n).foldLeft(Map.empty[Long, Long]) { (agg, _) =>
+      val rand = rng.nextDouble()
+      val sample = cumulativeWeights.collectFirst { case(k, c) if rand <= c => k } match {
+        case Some(k) => k
+        case _ => throw new Exception("Something very strange happened in constructing the cdf")
+      }
+      agg + (sample -> (agg.getOrElse(sample, 0L) + 1L))
+    }
+  }
+}
+
+
+class BooleanScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame, bootstrap: Boolean = false)
+  extends MetricAnalyzer[Boolean](name, md, df, bootstrap) with AggregateResampler {
   override type PreAggregateRowType = BooleanScalarMapRow
   val aggregator = BooleanAggregator
 
@@ -105,8 +146,8 @@ class BooleanScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame)
   }
 }
 
-class UintScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame)
-  extends MetricAnalyzer[Int](name, md, df) {
+class UintScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame, bootstrap: Boolean = false)
+  extends MetricAnalyzer[Int](name, md, df, bootstrap) with AggregateResampler {
   override type PreAggregateRowType = UintScalarMapRow
   val aggregator = UintAggregator
   override def validateRow(row: UintScalarMapRow): Boolean = row.metric match {
@@ -121,8 +162,8 @@ class UintScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame)
   }
 }
 
-class LongScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame)
-  extends MetricAnalyzer[Long](name, md, df) {
+class LongScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame, bootstrap: Boolean = false)
+  extends MetricAnalyzer[Long](name, md, df, bootstrap) with AggregateResampler {
   override type PreAggregateRowType = LongScalarMapRow
   val aggregator = LongAggregator
 
@@ -138,8 +179,8 @@ class LongScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame)
   }
 }
 
-class StringScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame)
-  extends MetricAnalyzer[String](name, md, df) {
+class StringScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame, bootstrap: Boolean = false)
+  extends MetricAnalyzer[String](name, md, df, bootstrap) with AggregateResampler {
   override type PreAggregateRowType = StringScalarMapRow
   val aggregator = StringAggregator
 
@@ -174,11 +215,11 @@ class StringScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame)
 }
 
 object ScalarAnalyzer {
-  def getAnalyzer(name: String, sd: ScalarDefinition, df: DataFrame): MetricAnalyzer[_] = {
+  def getAnalyzer(name: String, sd: ScalarDefinition, df: DataFrame, bootstrap: Boolean = false): MetricAnalyzer[_] = {
     sd match {
-      case s: BooleanScalar => new BooleanScalarAnalyzer(name, s, df)
-      case s: UintScalar => new UintScalarAnalyzer(name, s, df)
-      case s: StringScalar => new StringScalarAnalyzer(name, s, df)
+      case s: BooleanScalar => new BooleanScalarAnalyzer(name, s, df, bootstrap)
+      case s: UintScalar => new UintScalarAnalyzer(name, s, df, bootstrap)
+      case s: StringScalar => new StringScalarAnalyzer(name, s, df, bootstrap)
       case _ => throw new UnsupportedOperationException("Unsupported scalar type")
     }
   }

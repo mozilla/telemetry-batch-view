@@ -6,6 +6,7 @@ trait MetricDefinition {
   val keyed: Boolean
   val process: Option[String]
   val originalName: String
+  val isCategoricalMetric: Boolean
 }
 
 class MetricsClass {
