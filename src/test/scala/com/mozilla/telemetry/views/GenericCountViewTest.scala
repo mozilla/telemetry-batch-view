@@ -15,7 +15,6 @@ case class Submission(client_id: String,
                       country: String,
                       locale: String,
                       e10s_enabled: Boolean,
-                      e10s_cohort: String,
                       os: String,
                       os_version: String,
                       devtools_toolbox_opened_count: Int,
@@ -32,7 +31,6 @@ object Submission{
     "country" -> List("IT", "US"),
     "locale" -> List("en-US"),
     "e10s_enabled" -> List(true, false),
-    "e10s_cohort" -> List("control", "test"),
     "os" -> List("Windows", "Darwin"),
     "os_version" -> List("1.0", "1.1"),
     "devtools_toolbox_opened_count" -> List(0, 42),
@@ -49,7 +47,6 @@ object Submission{
       country <- dimensions("country")
       locale <- dimensions("locale")
       e10sEnabled <- dimensions("e10s_enabled")
-      e10sCohort <- dimensions("e10s_cohort")
       os <- dimensions("os")
       osVersion <- dimensions("os_version")
       devtoolsToolboxOpenedCount <- dimensions("devtools_toolbox_opened_count")
@@ -64,7 +61,6 @@ object Submission{
                  country.asInstanceOf[String],
                  locale.asInstanceOf[String],
                  e10sEnabled.asInstanceOf[Boolean],
-                 e10sCohort.asInstanceOf[String],
                  os.asInstanceOf[String],
                  osVersion.asInstanceOf[String],
                  devtoolsToolboxOpenedCount.asInstanceOf[Int],
@@ -96,7 +92,6 @@ class GenericCountTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     "app_name" ::
     "app_version" ::
     "e10s_enabled" ::
-    "e10s_cohort" ::
     "os" ::
     "os_version" :: Nil
 

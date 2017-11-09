@@ -3,7 +3,7 @@
    "clientId": "my-client-id",
    "creationTimestamp": 1.483495356792E18,
    "appName": "Fennec",
-   "environment.settings": "{\"locale\":\"pt-BR\",\"telemetryEnabled\":true,\"userPrefs\":{\"browser.cache.disk.capacity\":204800},\"update\":{\"enabled\":false,\"autoDownload\":true,\"channel\":\"beta\"},\"e10sEnabled\":true,\"e10sCohort\":\"test\",\"blocklistEnabled\":true}",
+   "environment.settings": "{\"locale\":\"pt-BR\",\"telemetryEnabled\":true,\"userPrefs\":{\"browser.cache.disk.capacity\":204800},\"update\":{\"enabled\":false,\"autoDownload\":true,\"channel\":\"beta\"},\"e10sEnabled\":true,\"blocklistEnabled\":true}",
    "geoCity": "Santo Ângelo",
    "appUpdateChannel": "beta",
    "appVersion": "40.0",

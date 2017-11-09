@@ -27,7 +27,6 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
     ("experiment_id",     List(null, "displayport-tuning-nightly@experiments.mozilla.org")),
     ("experiment_branch", List("control", "experiment")),
     ("e10s",              List(true, false)),
-    ("e10s_cohort",       List("control", "test")),
     ("gfx_compositor",    List("simple", "none", null))
   )
 
@@ -116,8 +115,7 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
           ("features" ->
             ("compositor" -> dimensions("gfx_compositor").asInstanceOf[String])))
       val settings =
-        ("e10sEnabled" -> dimensions("e10s").asInstanceOf[Boolean]) ~
-        ("e10sCohort" -> dimensions("e10s_cohort").asInstanceOf[String])
+        ("e10sEnabled" -> dimensions("e10s").asInstanceOf[Boolean])
       val build =
         ("version" -> dimensions("build_version").asInstanceOf[String]) ~
         ("buildId" -> dimensions("build_id").asInstanceOf[String]) ~
@@ -208,7 +206,6 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
       assert(dimensionValues("experiment_id")     contains dimensions.getOrElse("experiment_id", null))
       assert(dimensionValues("experiment_branch") contains dimensions.getOrElse("experiment_branch", null))
       assert(List("True", "False")                contains dimensions.getOrElse("e10s_enabled", null))
-      assert(dimensionValues("e10s_cohort")       contains dimensions.getOrElse("e10s_cohort", null))
       assert(dimensionValues("gfx_compositor")    contains dimensions.getOrElse("gfx_compositor", null))
     }
   }

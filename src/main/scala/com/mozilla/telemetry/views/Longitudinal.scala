@@ -284,7 +284,6 @@ object LongitudinalView {
           .endRecord()
         .name("search_cohort").`type`().optional().stringType()
         .name("e10s_enabled").`type`().optional().booleanType()
-        .name("e10s_cohort").`type`().optional().stringType()
         .name("telemetry_enabled").`type`().optional().booleanType()
         .name("locale").`type`().optional().stringType()
         .name("update").`type`().optional()

@@ -48,7 +48,6 @@ case class Settings(
     blocklistEnabled: Option[Boolean],
     isDefaultBrowser: Option[Boolean],
     e10sEnabled: Option[Boolean],
-    e10sCohort: Option[String],
     locale: String,
     telemetryEnabled: Boolean)
 
@@ -118,7 +117,6 @@ case class CrashSummary (
     experiment_id: Option[String],
     experiment_branch: Option[String],
     e10s_enabled: Option[Boolean],
-    e10s_cohort: Option[String],
     gfx_compositor: Option[String],
     profile_created: Option[Int],
     payload: Payload) {
@@ -142,7 +140,6 @@ case class CrashSummary (
         x <- ping.meta.`environment.addons`.activeExperiment
       } yield x.branch,
       e10s_enabled = ping.meta.`environment.settings`.e10sEnabled,
-      e10s_cohort = ping.meta.`environment.settings`.e10sCohort,
       gfx_compositor = for {
         x <- ping.meta.`environment.system`.gfx
         y <-  x.features
