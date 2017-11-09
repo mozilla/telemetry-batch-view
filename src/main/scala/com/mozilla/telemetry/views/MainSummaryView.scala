@@ -519,6 +519,10 @@ object MainSummaryView {
           case JInt(x) => x.toInt
           case _ => null
         },
+        system \ "appleModelId" match {
+          case JString(x) => x
+          case _ => null
+        },
         profile \ "creationDate" match {
           case JInt(x) => x.toLong
           case _ => null
@@ -945,6 +949,7 @@ object MainSummaryView {
       StructField("is_wow64", BooleanType, nullable = true), // environment/system/isWow64
 
       StructField("memory_mb", IntegerType, nullable = true), // environment/system/memoryMB
+      StructField("apple_model_id", StringType, nullable = true), // environment/system/appleModelId
 
       // TODO: use proper 'date' type for date columns.
       StructField("profile_creation_date", LongType, nullable = true), // environment/profile/creationDate
