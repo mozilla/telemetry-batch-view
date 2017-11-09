@@ -20,6 +20,7 @@ root
  |-- install_year: long (nullable = true)
  |-- is_wow64: boolean (nullable = true)
  |-- memory_mb: integer (nullable = true)
+ |-- apple_model_id: string (nullable = true)
  |-- profile_creation_date: long (nullable = true)
  |-- subsession_start_date: string (nullable = true)
  |-- subsession_length: long (nullable = true)
