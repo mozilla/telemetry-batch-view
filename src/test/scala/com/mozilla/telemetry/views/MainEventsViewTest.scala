@@ -1,7 +1,7 @@
 package com.mozilla.telemetry
 
 import com.mozilla.telemetry.views.MainEventsView
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{FlatSpec, Matchers}
 
@@ -32,6 +32,7 @@ case class TestMainSummary(document_id: String,
                            sample_id: Long,
                            active_experiment_id: String,
                            active_experiment_branch: String,
+                           experiments: Map[String, String],
                            events: Option[Seq[Event]])
 
 
@@ -54,7 +55,7 @@ class MainEventsViewTest extends FlatSpec with Matchers{
       val m = TestMainSummary("6609b4d8-94d4-4e87-9f6f-80183079ff1b",
         "25a00eb7-2fd8-47fd-8d3f-223af3e5c68f", "release", "US", "en-US", "Firefox", "50.1.0", "Windows_NT", "10.0",
         true, "test", "2017-01-23T20:54:10.123Z", 1000, false, 0, 0, 1485205018000000000L, 42, "test_experiment",
-        "test_branch", Some(Seq(e)))
+        "test_branch", Map("experiment1" -> "branch1"), Some(Seq(e)))
 
       val pings : DataFrame = Seq(
         m,
@@ -62,7 +63,7 @@ class MainEventsViewTest extends FlatSpec with Matchers{
           document_id = "22539231-c1c6-4b9a-bed6-2a8d2e4e5e8c",
           events = Some(Seq(
             e.copy(timestamp = 234),
-            e.copy(timestamp = 345)))),
+            e.copy(timestamp = 345, map_values = e.map_values + ("telemetry_process" -> "parent"))))),
         m.copy(
           document_id = "547b5406-8717-4696-b12b-b6c796bdbf8b",
           events = None),
@@ -71,7 +72,7 @@ class MainEventsViewTest extends FlatSpec with Matchers{
           document_id = "72062950-3daf-450e-adfd-58eda3151a97",
           sample_id = 10,
           events = Some(Seq(
-            e.copy(timestamp = 123))))
+            e.copy(timestamp = 123, map_values = e.map_values + ("telemetry_process" -> "content")))))
       ).toDS().toDF()
 
       pings.count should be(4)
@@ -81,6 +82,8 @@ class MainEventsViewTest extends FlatSpec with Matchers{
 
       events.select("client_id").distinct.count should be(2)
       events.select("document_id").distinct.count should be(3)
+      events.select("event_process").distinct.collect should contain theSameElementsAs List(
+        Row(null), Row("parent"), Row("content"))
 
       val sampledEvents = MainEventsView.eventsFromMain(pings, Some("10"))
       sampledEvents.count should be(1)

@@ -36,27 +36,29 @@ case class MetricAnalysis(experiment_id: String,
                           metric_name: String,
                           metric_type: String,
                           histogram: Map[Long, HistogramPoint],
-                          statistics: Option[Seq[Statistic]])
+                          statistics: Option[Seq[Statistic]]) {
+  lazy val metricKey: MetricKey = MetricKey(experiment_id, experiment_branch, subgroup)
+}
 
-abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFrame) extends java.io.Serializable {
+abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFrame, bootstrap: Boolean = false)
+  extends java.io.Serializable {
   type PreAggregateRowType <: PreAggregateRow[T]
   val aggregator: MetricAggregator[T]
   def validateRow(row: PreAggregateRowType): Boolean
+
 
   import df.sparkSession.implicits._
 
   def analyze(): List[MetricAnalysis] = {
     format match {
       case Some(d: DataFrame) => {
-        val agg_column = aggregator.toColumn.name("metric_aggregate")
-        val output = collapseKeys(d)
+        val cleanData = collapseKeys(d)
           .filter(validateRow _)
-          .groupByKey(x => MetricKey(x.experiment_id, x.branch, x.subgroup))
-          .agg(agg_column, count("*"))
-          .map(toOutputSchema)
-          .collect
-          .toList
-        addStatistics(reindex(output))
+
+        val output = aggregate(cleanData)
+
+        val resampled = if (bootstrap && !md.isCategoricalMetric) Some(resample(cleanData, output)) else None
+        addStatistics(reindex(output), resampled)
       }
       case _ => List.empty[MetricAnalysis]
     }
@@ -78,13 +80,34 @@ abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFra
 
   def collapseKeys(formatted: DataFrame): Dataset[PreAggregateRowType]
 
+  def aggregate(ds: Dataset[PreAggregateRowType]): List[MetricAnalysis] = {
+    val agg_column = aggregator.toColumn.name("metric_aggregate")
+
+    ds.groupByKey(x => MetricKey(x.experiment_id, x.branch, x.subgroup))
+      .agg(agg_column, count("*"))
+      .map(toOutputSchema)
+      .collect
+      .toList
+  }
+
+  def resample(ds: Dataset[PreAggregateRowType],
+               aggregations: List[MetricAnalysis],
+               iterations: Int = 1000): Map[MetricKey, List[MetricAnalysis]]
+
   protected def reindex(aggregates: List[MetricAnalysis]): List[MetricAnalysis] = {
     // This is meant as a finishing step for string scalars only
     aggregates
   }
 
-  private def addStatistics(aggregates: List[MetricAnalysis]): List[MetricAnalysis] = {
-    val descriptiveStatsMap = aggregates.map(m => m -> DescriptiveStatistics(m).getStatistics).toMap
+  private def addStatistics(aggregates: List[MetricAnalysis],
+                            resampled: Option[Map[MetricKey, List[MetricAnalysis]]]): List[MetricAnalysis] = {
+    val descriptiveStatsMap = if (!md.isCategoricalMetric) {
+      aggregates.map {
+        m => m -> DescriptiveStatistics(m, resampled.flatMap(_.get(m.metricKey))).getStatistics
+      }.toMap
+    } else {
+      Map.empty[MetricAnalysis, List[Statistic]]
+    }
 
     val grouped = aggregates.groupBy(_.subgroup)
 
