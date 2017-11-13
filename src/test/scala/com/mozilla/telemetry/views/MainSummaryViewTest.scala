@@ -496,7 +496,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |}
       """.stripMargin)
     MainSummaryView.getOldUserPrefs(json1 \ "environment" \ "settings" \ "userPrefs") should be (None)
-    MainSummaryView.getUserPrefs(json1 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null))
+    MainSummaryView.getUserPrefs(json1 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null, null))
 
     // Doesn't contain any prefs:
     val json2 = parse(
@@ -510,7 +510,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |}
       """.stripMargin)
     MainSummaryView.getOldUserPrefs(json2 \ "environment" \ "settings" \ "userPrefs") should be (None)
-    MainSummaryView.getUserPrefs(json2 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null))
+    MainSummaryView.getUserPrefs(json2 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null, null))
 
     // Contains prefs, including dom.ipc.processCount and extensions.allow-non-mpc-extensions
     val json3 = parse(
@@ -529,7 +529,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |}
       """.stripMargin)
     MainSummaryView.getOldUserPrefs(json3 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(2, true)))
-    MainSummaryView.getUserPrefs(json3 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(2, true, null))
+    MainSummaryView.getUserPrefs(json3 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(2, true, null, null))
 
     // Contains dom.ipc.processCount and extensions.allow-non-mpc-extensions with bogus data types
     val json4 = parse(
@@ -548,7 +548,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |}
       """.stripMargin)
     MainSummaryView.getOldUserPrefs(json4 \ "environment" \ "settings" \ "userPrefs") should be (None)
-    MainSummaryView.getUserPrefs(json4 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null))
+    MainSummaryView.getUserPrefs(json4 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null, null))
 
     // Missing the prefs section entirely:
     val json5 = parse(
@@ -561,7 +561,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |}
       """.stripMargin)
     MainSummaryView.getOldUserPrefs(json5 \ "environment" \ "settings" \ "userPrefs") should be (None)
-    MainSummaryView.getUserPrefs(json5 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null))
+    MainSummaryView.getUserPrefs(json5 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null, null))
 
     // Contains dom.ipc.processCount but not extensions.allow-non-mpc-extensions
     val json6 = parse(
@@ -579,7 +579,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |}
       """.stripMargin)
     MainSummaryView.getOldUserPrefs(json6 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(4, null)))
-    MainSummaryView.getUserPrefs(json6 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(4, null, null))
+    MainSummaryView.getUserPrefs(json6 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(4, null, null, null))
 
     // Contains extensions.allow-non-mpc-extensions but not dom.ipc.processCount
     val json7 = parse(
@@ -597,7 +597,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |}
       """.stripMargin)
     MainSummaryView.getOldUserPrefs(json7 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(null, false)))
-    MainSummaryView.getUserPrefs(json7 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, false, null))
+    MainSummaryView.getUserPrefs(json7 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, false, null, null))
   }
 
   "Keyed Scalars" can "be properly shown" in {
