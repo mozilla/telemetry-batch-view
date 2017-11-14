@@ -78,7 +78,8 @@ object MainSummaryView {
   val userPrefsList =
     IntegerUserPref("dom.ipc.processCount") ::
     BooleanUserPref("extensions.allow-non-mpc-extensions") ::
-    BooleanUserPref("extensions.legacy.enabled") :: Nil
+    BooleanUserPref("extensions.legacy.enabled") ::
+    BooleanUserPref("browser.search.widget.inNavBar") :: Nil
 
 
   // Configuration for command line arguments
