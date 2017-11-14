@@ -48,7 +48,7 @@ object ExperimentAnalysisView {
     val bootstrapScalars = toggle(
       "bootstrapScalars",
       descrYes = "Run bootstrapped confidence intervals on scalars",
-      default = Some(true))
+      default = Some(false))
     val bootstrapHistograms = toggle(
       "bootstrapHistograms",
       descrYes = "Run bootstrapped confidence intervals on histograms (very slow)",
