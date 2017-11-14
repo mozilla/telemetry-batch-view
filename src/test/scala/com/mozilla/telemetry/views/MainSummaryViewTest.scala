@@ -522,14 +522,15 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |    "dom.ipc.processCount": 2,
         |    "browser.newtabpage.enhanced": true,
         |    "browser.startup.page": 3,
-        |    "extensions.allow-non-mpc-extensions": true
+        |    "extensions.allow-non-mpc-extensions": true,
+        |    "browser.search.widget.inNavBar": false
         |   }
         |  }
         | }
         |}
       """.stripMargin)
     MainSummaryView.getOldUserPrefs(json3 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(2, true)))
-    MainSummaryView.getUserPrefs(json3 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(2, true, null, null))
+    MainSummaryView.getUserPrefs(json3 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(2, true, null, false))
 
     // Contains dom.ipc.processCount and extensions.allow-non-mpc-extensions with bogus data types
     val json4 = parse(
