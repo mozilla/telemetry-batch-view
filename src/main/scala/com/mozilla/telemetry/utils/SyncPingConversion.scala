@@ -292,8 +292,14 @@ object SyncPingConversion {
           case _ => 0L
         },
         validation \ "problems" match {
-          case JArray(problems) =>
-            problems.flatMap(validationProblemToRow)
+          case JArray(problems) => {
+            val problemRows = problems.flatMap(validationProblemToRow)
+            if (problemRows.isEmpty) {
+              null
+            } else {
+              problemRows
+            }
+          }
           case _ => null
         },
         failureReasonToRow(validation \ "failureReason")
