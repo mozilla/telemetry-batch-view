@@ -150,7 +150,7 @@ object MainSummaryView {
         }.where("sourceVersion") {
           case "4" => true
         }.where("docType") {
-          case filterDocType => true
+          case dt => dt == filterDocType
         }.where("appName") {
           case "Firefox" => true
         }.where("submissionDate") {
