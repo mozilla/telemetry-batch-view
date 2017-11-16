@@ -277,14 +277,18 @@ class SyncViewTest extends FlatSpec with Matchers{
     bmarkValidationRow.getAs[Long]("version") should be ((bmarkValidationJson \ "version").extract[Long])
     bmarkValidationRow.getAs[Long]("took") should be ((bmarkValidationJson \ "took").extract[Long])
     bmarkValidationRow.getAs[Long]("checked") should be ((bmarkValidationJson \ "checked").extract[Long])
-    val bmarkProblems = bmarkValidationRow.getAs[mutable.WrappedArray[GenericRowWithSchema]]("problems")
-    val bmarkProblemsJson= (bmarkValidationJson \ "problems").extract[List[JValue]]
+    val bmarkProblemsJson = (bmarkValidationJson \ "problems").extract[List[JValue]]
+    if (bmarkProblemsJson.isEmpty) {
+      bmarkValidationRow.getAs[GenericRowWithSchema]("problems") should be(null)
+    } else {
+      val bmarkProblems = bmarkValidationRow.getAs[mutable.WrappedArray[GenericRowWithSchema]]("problems")
 
-    bmarkProblems.length should be (bmarkProblemsJson.length)
+      bmarkProblems.length should be(bmarkProblemsJson.length)
 
-    for (i <- 0 to 1) {
-      bmarkProblems(i).getAs[String]("name") should be ((bmarkProblemsJson(i) \ "name").extract[String])
-      bmarkProblems(i).getAs[Long]("count") should be ((bmarkProblemsJson(i) \ "count").extract[Long])
+      for (i <- 0 to 1) {
+        bmarkProblems(i).getAs[String]("name") should be((bmarkProblemsJson(i) \ "name").extract[String])
+        bmarkProblems(i).getAs[Long]("count") should be((bmarkProblemsJson(i) \ "count").extract[Long])
+      }
     }
   }
 }
