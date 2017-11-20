@@ -392,38 +392,39 @@ object FirstShutdownView {
 
       // Don't compute the expensive stuff until we need it. We may skip a record
       // due to missing required fields.
+      lazy val submission = parse(message.payload.getOrElse(fields.getOrElse("submission", "{}")).asInstanceOf[String])
+
       lazy val addons = parse(fields.getOrElse("environment.addons", "{}").asInstanceOf[String])
-      lazy val addonDetails = parse(fields.getOrElse("payload.addonDetails", "{}").asInstanceOf[String])
-      lazy val payload = parse(message.payload.getOrElse(fields.getOrElse("submission", "{}")).asInstanceOf[String])
-      lazy val application = payload \ "application"
+      lazy val addonDetails = submission \ "payload" \ "addonDetails"
+      lazy val application = submission \ "application"
       lazy val build = parse(fields.getOrElse("environment.build", "{}").asInstanceOf[String])
       lazy val profile = parse(fields.getOrElse("environment.profile", "{}").asInstanceOf[String])
       lazy val partner = parse(fields.getOrElse("environment.partner", "{}").asInstanceOf[String])
       lazy val settings = parse(fields.getOrElse("environment.settings", "{}").asInstanceOf[String])
       lazy val system = parse(fields.getOrElse("environment.system", "{}").asInstanceOf[String])
-      lazy val info = parse(fields.getOrElse("payload.info", "{}").asInstanceOf[String])
-      lazy val simpleMeasures = parse(fields.getOrElse("payload.simpleMeasurements", "{}").asInstanceOf[String])
+      lazy val info = submission \ "payload" \ "info"
+      lazy val simpleMeasures = submission \ "payload" \ "simpleMeasurements"
 
       lazy val histograms = MainPing.ProcessTypes.map{
         _ match {
-          case "parent" => "parent" -> parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
-          case p => p -> payload \ "payload" \ "processes" \ p \ "histograms"
+          case "parent" => "parent" -> submission \ "payload" \ "histograms"
+          case p => p -> submission \ "payload" \ "processes" \ p \ "histograms"
         }
       }.toMap
 
       lazy val keyedHistograms = MainPing.ProcessTypes.map{
         _ match {
-          case "parent" => "parent" -> parse(fields.getOrElse("payload.keyedHistograms", "{}").asInstanceOf[String])
-          case p => p -> payload \ "payload" \ "processes" \ p \ "keyedHistograms"
+          case "parent" => "parent" -> submission \ "payload" \ "keyedHistograms"
+          case p => p -> submission \ "payload" \ "processes" \ p \ "keyedHistograms"
         }
       }.toMap
 
       lazy val scalars = MainPing.ProcessTypes.map{
-        p => p -> payload \ "payload" \ "processes" \ p \ "scalars"
+        p => p -> submission \ "payload" \ "processes" \ p \ "scalars"
       }.toMap
 
       lazy val keyedScalars = MainPing.ProcessTypes.map{
-        p => p -> payload \ "payload" \ "processes" \ p \ "keyedScalars"
+        p => p -> submission \ "payload" \ "processes" \ p \ "keyedScalars"
       }.toMap
 
       lazy val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms("parent") \ "WEAVE_CONFIGURED")
@@ -431,7 +432,7 @@ object FirstShutdownView {
       lazy val weaveMobile = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_MOBILE")
 
       lazy val events = ("dynamic" :: MainPing.ProcessTypes).map {
-        p => p -> payload \ "payload" \ "processes" \ p \ "events"
+        p => p -> submission \ "payload" \ "processes" \ p \ "events"
       }
 
       lazy val experiments = parse(fields.getOrElse("environment.experiments", "{}").asInstanceOf[String])
@@ -545,7 +546,7 @@ object FirstShutdownView {
           case JInt(x) => x.toInt
           case _ => null
         },
-        payload \ "creationDate" match {
+        submission \ "creationDate" match {
           case JString(x) => x
           case _ => null
         },
