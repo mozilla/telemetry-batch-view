@@ -78,7 +78,8 @@ object MainSummaryView {
   val userPrefsList =
     IntegerUserPref("dom.ipc.processCount") ::
     BooleanUserPref("extensions.allow-non-mpc-extensions") ::
-    BooleanUserPref("extensions.legacy.enabled") :: Nil
+    BooleanUserPref("extensions.legacy.enabled") ::
+    BooleanUserPref("browser.search.widget.inNavBar") :: Nil
 
 
   // Configuration for command line arguments
@@ -90,6 +91,7 @@ object MainSummaryView {
     val channel = opt[String]("channel", descr = "Only process data from the given channel", required = false)
     val appVersion = opt[String]("version", descr = "Only process data from the given app version", required = false)
     val allHistograms = opt[Boolean]("all-histograms", descr = "Flag to use all histograms", required = false)
+    val docType = opt[String]("doc-type", descr = "DocType of pings conforming to main ping schema", required=false, default=Some("main"))
     verify()
   }
 
@@ -117,9 +119,11 @@ object MainSummaryView {
       val currentDateString = currentDate.toString("yyyyMMdd")
       val filterChannel = conf.channel.get
       val filterVersion = conf.appVersion.get
+      val filterDocType = conf.docType()
 
       println("=======================================================================================")
       println(s"BEGINNING JOB $jobName FOR $currentDateString")
+      println(s" Filtering for docType = '${filterDocType}'")
       if (filterChannel.nonEmpty)
         println(s" Filtering for channel = '${filterChannel.get}'")
       if (filterVersion.nonEmpty)
@@ -146,7 +150,7 @@ object MainSummaryView {
         }.where("sourceVersion") {
           case "4" => true
         }.where("docType") {
-          case "main" => true
+          case dt => dt == filterDocType
         }.where("appName") {
           case "Firefox" => true
         }.where("submissionDate") {
@@ -182,7 +186,7 @@ object MainSummaryView {
         //    loaded, so we can't do single day incremental updates.
         //  - "ignore" causes new data not to be saved.
         // So we manually add the "submission_date_s3" parameter to the s3path.
-        val s3prefix = s"$jobName/$schemaVersion/submission_date_s3=$currentDateString"
+        val s3prefix = s"${filterDocType}_summary/$schemaVersion/submission_date_s3=$currentDateString"
         val s3path = s"s3://${conf.outputBucket()}/$s3prefix"
 
         // Repartition the dataframe by sample_id before saving.
@@ -591,10 +595,6 @@ object MainSummaryView {
           case JBool(x) => x
           case _ => null
         },
-        settings \ "e10sCohort" match {
-          case JString(x) => x
-          case _ => null
-        },
         settings \ "e10sMultiProcesses" match {
           case JInt(x) => x.toLong
           case _ => null
@@ -977,7 +977,6 @@ object MainSummaryView {
 
       // See bug 1251259
       StructField("e10s_enabled", BooleanType, nullable = true), // environment/settings/e10sEnabled
-      StructField("e10s_cohort", StringType, nullable = true), // environment/settings/e10sCohort
 
       // Bug 1406238
       StructField("e10s_multi_processes", LongType, nullable = true), // environment/settings/e10sMultiProcesses

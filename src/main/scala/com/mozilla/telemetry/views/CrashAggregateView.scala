@@ -102,7 +102,6 @@ object CrashAggregateView {
     List("environment.addons", "activeExperiment", "id"),
     List("environment.addons", "activeExperiment", "branch"),
     List("environment.settings", "e10sEnabled"),
-    List("environment.settings", "e10sCohort"),
     List("environment.system", "gfx", "features", "compositor")
   )
 
@@ -119,7 +118,6 @@ object CrashAggregateView {
     "experiment_id",
     "experiment_branch",
     "e10s_enabled",
-    "e10s_cohort",
     "gfx_compositor"
   )
 

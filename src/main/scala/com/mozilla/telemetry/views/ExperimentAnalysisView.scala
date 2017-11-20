@@ -17,6 +17,7 @@ object ExperimentAnalysisView {
   def schemaVersion = "v1"
   // This gives us ~120MB partitions with the columns we have now. We should tune this as we add more columns.
   def rowsPerPartition = 25000
+  val bootstrapLimit = 25000000 // Empirically tested to take ~1 hour with this many pings
 
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getSimpleName)
 
@@ -48,7 +49,7 @@ object ExperimentAnalysisView {
     val bootstrapScalars = toggle(
       "bootstrapScalars",
       descrYes = "Run bootstrapped confidence intervals on scalars",
-      default = Some(true))
+      default = None)
     val bootstrapHistograms = toggle(
       "bootstrapHistograms",
       descrYes = "Run bootstrapped confidence intervals on histograms (very slow)",
@@ -147,9 +148,10 @@ object ExperimentAnalysisView {
   }
 
   def getExperimentMetrics(experiment: String, experimentsSummary: DataFrame, errorAggregates: DataFrame, conf: Conf): List[MetricAnalysis] = {
-    val persisted = repartitionAndPersist(experimentsSummary, experiment)
+    val pingCount = experimentsSummary.count()
+    val persisted = repartitionAndPersist(experimentsSummary, pingCount, experiment)
     val bootstrapHistograms = conf.bootstrapHistograms()
-    val bootstrapScalars = conf.bootstrapScalars()
+    val bootstrapScalars = shouldBootstrapScalars(pingCount, conf)
 
     val metricList = getMetrics(conf, experimentsSummary)
 
@@ -172,9 +174,14 @@ object ExperimentAnalysisView {
 
   // Repartitions dataset if warranted, and persists the result for quicker access
   def repartitionAndPersist(experimentsSummary: DataFrame,
-                                experiment: String): DataFrame = {
-    val calculatedPartitions = (experimentsSummary.count() / rowsPerPartition).toInt
+                            pingCount: Long,
+                            experiment: String): DataFrame = {
+    val calculatedPartitions = (pingCount / rowsPerPartition).toInt
     val numPartitions = calculatedPartitions max experimentsSummary.sparkSession.sparkContext.defaultParallelism
     experimentsSummary.repartition(numPartitions).persist(StorageLevel.MEMORY_AND_DISK)
+  }
+
+  def shouldBootstrapScalars(pingCount: Long, conf: Conf): Boolean = {
+    conf.bootstrapScalars.get.getOrElse(pingCount < bootstrapLimit)
   }
 }
