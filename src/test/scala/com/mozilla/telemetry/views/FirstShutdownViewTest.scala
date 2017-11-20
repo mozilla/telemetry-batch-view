@@ -1,19 +1,17 @@
-package com.mozilla.telemetry
+package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.heka.{File, Message, RichMessage}
 import com.mozilla.telemetry.metrics._
-import com.mozilla.telemetry.utils.{MainPing, getOrCreateSparkSession, UserPref,
-  BooleanUserPref, IntegerUserPref, StringUserPref}
-import com.mozilla.telemetry.views.MainSummaryView
-import org.apache.spark.sql.{Row, SparkSession}
+import com.mozilla.telemetry.utils._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType, StructType}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.io.Source
 
-class MainSummaryViewTest extends FlatSpec with Matchers{
+class FirstShutdownViewTest extends FlatSpec with Matchers{
   val scalarUrlMock = (a: String, b: String) => Source.fromFile("src/test/resources/Scalars.yaml")
 
   val scalars =  new ScalarsClass {
@@ -28,16 +26,16 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     override protected val getURL = histogramUrlMock
   }
 
-  val histogramDefs = MainSummaryView.filterHistogramDefinitions(histograms.definitions(true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true))
+  val histogramDefs = FirstShutdownView.filterHistogramDefinitions(histograms.definitions(true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true))
 
-  val userPrefs = MainSummaryView.userPrefsList
+  val userPrefs = FirstShutdownView.userPrefsList
 
   val testUserPrefs = IntegerUserPref("p1") :: BooleanUserPref("p2") :: StringUserPref("P3.MESSY") :: Nil
 
-  val defaultSchema = MainSummaryView.buildSchema(userPrefs, scalarDefs, histogramDefs)
+  val defaultSchema = FirstShutdownView.buildSchema(userPrefs, scalarDefs, histogramDefs)
 
   val defaultMessageToRow = (m: Message) =>
-    MainSummaryView.messageToRow(m, userPrefs, scalarDefs, histogramDefs)
+    FirstShutdownView.messageToRow(m, userPrefs, scalarDefs, histogramDefs)
 
   // Apply the given schema to the given potentially-generic Row.
   def applySchema(row: Row, schema: StructType): Row = new GenericRowWithSchema(row.toSeq.toArray, schema)
@@ -52,7 +50,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   }
 
   "MainSummary records" can "be serialized" in {
-    val spark = getOrCreateSparkSession("MainSummaryViewTest")
+    val spark = getOrCreateSparkSession("FirstShutdownViewTest")
     spark.sparkContext.setLogLevel("WARN")
 
     try {
@@ -364,7 +362,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           }
           actual should be (expected)
 
-          val searchSchema = MainSummaryView.buildSearchSchema
+          val searchSchema = FirstShutdownView.buildSearchSchema
           val searches = r.getSeq[Row](r.fieldIndex("search_counts"))
           val searchCounter = searches.map(search => {
             val sW = applySchema(search, searchSchema)
@@ -380,7 +378,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "web-notifications" -> Row(2,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0))
           popup should be (expectedPopup)
 
-          val addonSchema = MainSummaryView.buildAddonSchema
+          val addonSchema = FirstShutdownView.buildAddonSchema
           checkAddonValues(r.getStruct(r.fieldIndex("active_theme")), addonSchema, Map(
             "addon_id"              -> "{972ce4c6-7e08-4474-a285-3208198ce6fd}",
             "blocklisted"           -> false,
@@ -473,9 +471,9 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   }
 
   "Job parameters" can "conform to expected values" in {
-    MainSummaryView.jobName should be ("main_summary")
+    FirstShutdownView.jobName should be ("main_summary")
     val versionPattern = "^v[0-9]+$".r
-    (versionPattern findAllIn MainSummaryView.schemaVersion).mkString("Oops") should be (MainSummaryView.schemaVersion)
+    (versionPattern findAllIn FirstShutdownView.schemaVersion).mkString("Oops") should be (FirstShutdownView.schemaVersion)
   }
 
   "User prefs" can "be extracted" in {
@@ -494,8 +492,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getOldUserPrefs(json1 \ "environment" \ "settings" \ "userPrefs") should be (None)
-    MainSummaryView.getUserPrefs(json1 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null, null))
+    FirstShutdownView.getOldUserPrefs(json1 \ "environment" \ "settings" \ "userPrefs") should be (None)
+    FirstShutdownView.getUserPrefs(json1 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null, null))
 
     // Doesn't contain any prefs:
     val json2 = parse(
@@ -508,8 +506,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getOldUserPrefs(json2 \ "environment" \ "settings" \ "userPrefs") should be (None)
-    MainSummaryView.getUserPrefs(json2 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null, null))
+    FirstShutdownView.getOldUserPrefs(json2 \ "environment" \ "settings" \ "userPrefs") should be (None)
+    FirstShutdownView.getUserPrefs(json2 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null, null))
 
     // Contains prefs, including dom.ipc.processCount and extensions.allow-non-mpc-extensions
     val json3 = parse(
@@ -528,8 +526,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getOldUserPrefs(json3 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(2, true)))
-    MainSummaryView.getUserPrefs(json3 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(2, true, null, false))
+    FirstShutdownView.getOldUserPrefs(json3 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(2, true)))
+    FirstShutdownView.getUserPrefs(json3 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(2, true, null, false))
 
     // Contains dom.ipc.processCount and extensions.allow-non-mpc-extensions with bogus data types
     val json4 = parse(
@@ -547,8 +545,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getOldUserPrefs(json4 \ "environment" \ "settings" \ "userPrefs") should be (None)
-    MainSummaryView.getUserPrefs(json4 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null, null))
+    FirstShutdownView.getOldUserPrefs(json4 \ "environment" \ "settings" \ "userPrefs") should be (None)
+    FirstShutdownView.getUserPrefs(json4 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null, null))
 
     // Missing the prefs section entirely:
     val json5 = parse(
@@ -560,8 +558,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getOldUserPrefs(json5 \ "environment" \ "settings" \ "userPrefs") should be (None)
-    MainSummaryView.getUserPrefs(json5 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null, null))
+    FirstShutdownView.getOldUserPrefs(json5 \ "environment" \ "settings" \ "userPrefs") should be (None)
+    FirstShutdownView.getUserPrefs(json5 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, null, null, null))
 
     // Contains dom.ipc.processCount but not extensions.allow-non-mpc-extensions
     val json6 = parse(
@@ -578,8 +576,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getOldUserPrefs(json6 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(4, null)))
-    MainSummaryView.getUserPrefs(json6 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(4, null, null, null))
+    FirstShutdownView.getOldUserPrefs(json6 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(4, null)))
+    FirstShutdownView.getUserPrefs(json6 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(4, null, null, null))
 
     // Contains extensions.allow-non-mpc-extensions but not dom.ipc.processCount
     val json7 = parse(
@@ -596,8 +594,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getOldUserPrefs(json7 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(null, false)))
-    MainSummaryView.getUserPrefs(json7 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, false, null, null))
+    FirstShutdownView.getOldUserPrefs(json7 \ "environment" \ "settings" \ "userPrefs") should be (Some(Row(null, false)))
+    FirstShutdownView.getUserPrefs(json7 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, false, null, null))
   }
 
   "Keyed Scalars" can "be properly shown" in {
@@ -655,7 +653,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getAttribution(json1 \ "environment" \ "settings" \ "attribution") should be (
+    FirstShutdownView.getAttribution(json1 \ "environment" \ "settings" \ "attribution") should be (
       Some(Row("sample_source", null, null, null)))
 
     // Contains no attributes
@@ -667,7 +665,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getAttribution(json2 \ "environment" \ "settings" \ "attribution") should be (None)
+    FirstShutdownView.getAttribution(json2 \ "environment" \ "settings" \ "attribution") should be (None)
 
     // Contains all attributes, in no particular order
     val json3 = parse(
@@ -685,7 +683,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         | }
         |}
       """.stripMargin)
-    MainSummaryView.getAttribution(json3 \ "environment" \ "settings" \ "attribution") should be (
+    FirstShutdownView.getAttribution(json3 \ "environment" \ "settings" \ "attribution") should be (
       Some(Row("sample_source", "sample_medium", "sample_campaign", "sample_content")))
   }
 
@@ -717,9 +715,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   }
 
   "User prefs" can "be properly shown" in {
-    val spark = getOrCreateSparkSession("MainSummaryViewTest")
+    val spark = getOrCreateSparkSession("FirstShutdownViewTest")
     spark.sparkContext.setLogLevel("WARN")
-    import spark.implicits._
 
     val message = RichMessage(
       "1234",
@@ -755,10 +752,9 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   }
 
   "User prefs" can "handle null" in {
-    val spark = getOrCreateSparkSession("MainSummaryViewTest")
+    val spark = getOrCreateSparkSession("FirstShutdownViewTest")
     val sc = spark.sparkContext
     sc.setLogLevel("WARN")
-    import spark.implicits._
 
     val message = RichMessage(
       "1234",
@@ -1006,9 +1002,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
        .getOrCreate()
 
     val sc = spark.sparkContext
-    import spark.implicits._
 
-    val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(Histograms.definitions(includeOptin = false, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true), useWhitelist = true)
+    val allHistogramDefs = FirstShutdownView.filterHistogramDefinitions(Histograms.definitions(includeOptin = false, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true), useWhitelist = true)
     val allScalarDefs = Scalars.definitions(includeOptin = true).toList.sortBy(_._1)
 
     val fakeHisto = """{
@@ -1099,9 +1094,9 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val expected = expectedHistos ++ expectedScalars
 
-    val summary = MainSummaryView.messageToRow(message, userPrefs, allScalarDefs, allHistogramDefs)
+    val summary = FirstShutdownView.messageToRow(message, userPrefs, allScalarDefs, allHistogramDefs)
     val actual = spark
-          .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(userPrefs, allScalarDefs, allHistogramDefs))
+          .createDataFrame(sc.parallelize(List(summary.get)), FirstShutdownView.buildSchema(userPrefs, allScalarDefs, allHistogramDefs))
           .first
           .getValuesMap(expected.keys.toList)
 
@@ -1114,12 +1109,12 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   }
 
   "Histogram filter" can "include all whitelisted histograms" in {
-    val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(
+    val allHistogramDefs = FirstShutdownView.filterHistogramDefinitions(
       Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true),
       useWhitelist = true
     ).map{ case(name, definition) => definition.originalName }.toSet
 
-    val expectedDefs = MainSummaryView.histogramsWhitelist.toSet
+    val expectedDefs = FirstShutdownView.histogramsWhitelist.toSet
 
     allHistogramDefs should be (expectedDefs)
   }
@@ -1141,7 +1136,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val json0theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
 
-    MainSummaryView.getQuantumReady(json0e10s, json0addons, json0theme) should be (Some(true))
+    FirstShutdownView.getQuantumReady(json0e10s, json0addons, json0theme) should be (Some(true))
 
     // not quantum ready with no e10s
     val json1e10s = parse("false")
@@ -1160,7 +1155,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val json1theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
 
-    MainSummaryView.getQuantumReady(json1e10s, json1addons, json1theme) should be (Some(false))
+    FirstShutdownView.getQuantumReady(json1e10s, json1addons, json1theme) should be (Some(false))
 
     // not quantum ready with non-system and non-webextension addon
     val json2e10s = parse("true")
@@ -1179,7 +1174,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val json2theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
 
-    MainSummaryView.getQuantumReady(json2e10s, json2addons, json2theme) should be (Some(false))
+    FirstShutdownView.getQuantumReady(json2e10s, json2addons, json2theme) should be (Some(false))
 
     // not quantum ready with non-webextension and non-system addon
     val json3e10s = parse("true")
@@ -1198,7 +1193,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val json3theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
 
-    MainSummaryView.getQuantumReady(json3e10s, json3addons, json3theme) should be (Some(false))
+    FirstShutdownView.getQuantumReady(json3e10s, json3addons, json3theme) should be (Some(false))
 
     // not quantum-ready with old-style theme
     val json4e10s = parse("true")
@@ -1217,7 +1212,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val json4theme = parse("""{"id": "old-style@mozilla.org"}""")
 
-    MainSummaryView.getQuantumReady(json4e10s, json4addons, json4theme) should be (Some(false))
+    FirstShutdownView.getQuantumReady(json4e10s, json4addons, json4theme) should be (Some(false))
 
     // not quantum-ready if addon is missing isSystem and isWebExtension
     val json5e10s = parse("true")
@@ -1236,7 +1231,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val json5theme = parse("""{"id": "old-style@mozilla.org"}""")
 
-    MainSummaryView.getQuantumReady(json5e10s, json5addons, json5theme) should be (Some(false))
+    FirstShutdownView.getQuantumReady(json5e10s, json5addons, json5theme) should be (Some(false))
 
     // null quantum-ready if theme is missing
     val json6e10s = parse("true")
@@ -1255,7 +1250,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val json6theme = parse("{}")
 
-    MainSummaryView.getQuantumReady(json6e10s, json6addons, json6theme) should be (None)
+    FirstShutdownView.getQuantumReady(json6e10s, json6addons, json6theme) should be (None)
 
     // null quantum-ready if e10s is gibberish
     val json7e10s = parse(""""fewfkew"""")
@@ -1274,14 +1269,14 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val json7theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
 
-    MainSummaryView.getQuantumReady(json7e10s, json7addons, json7theme) should be (None)
+    FirstShutdownView.getQuantumReady(json7e10s, json7addons, json7theme) should be (None)
 
     // Quantum ready if no addons
     val json8e10s = parse("true")
     val json8addons = parse("{}")
     val json8theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
 
-    MainSummaryView.getQuantumReady(json8e10s, json8addons, json8theme) should be (Some(true))
+    FirstShutdownView.getQuantumReady(json8e10s, json8addons, json8theme) should be (Some(true))
 
     // quantum-ready if an addon is missing isSystem or isWebExtension, but the other is true
     val json9e10s = parse("true")
@@ -1297,7 +1292,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     )
     val json9theme = parse("""{"id": "firefox-compact-light@mozilla.org"}""")
 
-    MainSummaryView.getQuantumReady(json9e10s, json9addons, json9theme) should be (Some(true))
+    FirstShutdownView.getQuantumReady(json9e10s, json9addons, json9theme) should be (Some(true))
   }
 
   "Quantum Readiness" can "be properly parsed" in {
@@ -1307,7 +1302,6 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         .getOrCreate()
 
     val sc = spark.sparkContext
-    import spark.implicits._
 
     val message = RichMessage(
       "1234",
@@ -1361,7 +1355,6 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         .getOrCreate()
 
     val sc = spark.sparkContext
-    import spark.implicits._
 
     val message = RichMessage(
       "2235",
@@ -1547,8 +1540,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         }"""),
       None)
 
-    val messageSummary = MainSummaryView.messageToRow(messageBothPresent, userPrefs, scalarsDef, histogramDefs)
-    val appliedSummary =  applySchema(messageSummary.get, MainSummaryView.buildSchema(userPrefs, scalarsDef, histogramDefs))
+    val messageSummary = FirstShutdownView.messageToRow(messageBothPresent, userPrefs, scalarsDef, histogramDefs)
+    val appliedSummary =  applySchema(messageSummary.get, FirstShutdownView.buildSchema(userPrefs, scalarsDef, histogramDefs))
 
     val selectedActiveTicks = appliedSummary.getAs[Int]("active_ticks")
     selectedActiveTicks should be (888)
@@ -1575,7 +1568,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       ),
       None)
 
-    val messageSummary = MainSummaryView.messageToRow(messageSMPresent, userPrefs, scalarsDef, histogramDefs)
+    val messageSummary = FirstShutdownView.messageToRow(messageSMPresent, userPrefs, scalarsDef, histogramDefs)
     val appliedSummary = applySchema(messageSummary.get, defaultSchema)
 
     val selectedActiveTicks = appliedSummary.getAs[Int]("active_ticks")
@@ -1598,8 +1591,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       None)
 
     // If the scalar's definition does not exist, the simple measurement value should be selected.
-    val msgSummaryNoDefs = MainSummaryView.messageToRow(messageSMPresent, userPrefs, List(), histogramDefs)
-    val appliedSummaryNoDefs = applySchema(msgSummaryNoDefs.get, MainSummaryView.buildSchema(userPrefs, List(), histogramDefs))
+    val msgSummaryNoDefs = FirstShutdownView.messageToRow(messageSMPresent, userPrefs, List(), histogramDefs)
+    val appliedSummaryNoDefs = applySchema(msgSummaryNoDefs.get, FirstShutdownView.buildSchema(userPrefs, List(), histogramDefs))
 
     val activeTicksVal = appliedSummaryNoDefs.getAs[Int]("active_ticks")
     activeTicksVal should be(111)
@@ -1615,7 +1608,6 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         .getOrCreate()
 
     val sc = spark.sparkContext
-    import spark.implicits._
 
     val message = RichMessage(
       "1234",
@@ -1663,7 +1655,6 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         .getOrCreate()
 
     val sc = spark.sparkContext
-    import spark.implicits._
 
     val message = RichMessage(
       "1234",
@@ -1713,7 +1704,6 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         .getOrCreate()
 
     val sc = spark.sparkContext
-    import spark.implicits._
 
     val message = RichMessage(
       "1234",
@@ -1784,7 +1774,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   }
 
   "userPrefs row" can "be built" in {
-    val userPrefsSchema = MainSummaryView.buildUserPrefsSchema(testUserPrefs)
+    val userPrefsSchema = FirstShutdownView.buildUserPrefsSchema(testUserPrefs)
     userPrefsSchema.fields.length should be (3)
 
     userPrefsSchema.fieldNames should be (List("user_pref_p1", "user_pref_p2", "user_pref_p3_messy"))
@@ -1795,7 +1785,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   }
 
   "userPrefs fields" can "be added to MainSummary schema" in {
-    val schemaWithPrefs = MainSummaryView.buildSchema(testUserPrefs, List(), List())
+    val schemaWithPrefs = FirstShutdownView.buildSchema(testUserPrefs, List(), List())
 
     schemaWithPrefs.fieldNames.contains("user_pref_p3_messy") should be (true)
     schemaWithPrefs.fieldNames.contains("user_pref_p4") should be (false)
@@ -1816,10 +1806,10 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "user_pref_p3_messy" -> "bar"
     )
 
-    val prefs = MainSummaryView.getUserPrefs(prefsJson, testUserPrefs)
+    val prefs = FirstShutdownView.getUserPrefs(prefsJson, testUserPrefs)
     prefs should be (Row(10, false, "bar"))
 
-    val prefsSchema = MainSummaryView.buildUserPrefsSchema(testUserPrefs)
+    val prefsSchema = FirstShutdownView.buildUserPrefsSchema(testUserPrefs)
 
     val actual = applySchema(prefs, prefsSchema).getValuesMap(expected.keys.toList)
 
@@ -1844,7 +1834,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           }
         }"""),
       None)
-    val summary = MainSummaryView.messageToRow(message, testUserPrefs, List(), List())
+    val summary = FirstShutdownView.messageToRow(message, testUserPrefs, List(), List())
 
     val expected = Map(
       "user_pref_p1" -> 10,
@@ -1853,7 +1843,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     )
 
     val actual =
-      applySchema(summary.get, MainSummaryView.buildSchema(testUserPrefs, List(), List()))
+      applySchema(summary.get, FirstShutdownView.buildSchema(testUserPrefs, List(), List()))
         .getValuesMap(expected.keys.toList)
 
     for ((f, v) <- expected) {
@@ -1885,7 +1875,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           }
         }"""),
       None);
-    val summary = MainSummaryView.messageToRow(message, userPrefs, scalarDefs, histogramDefs)
+    val summary = FirstShutdownView.messageToRow(message, userPrefs, scalarDefs, histogramDefs)
 
     val expected = Set(
       Row(81994404, "navigation", "search", "searchbar", null, Map("telemetry_process" -> "dynamic")),
@@ -1893,7 +1883,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       Row(81994404, "navigation", "search", "searchbar", null, Map("telemetry_process" -> "parent"))
     )
 
-    val actual = applySchema(summary.get, MainSummaryView.buildSchema(userPrefs, scalarDefs, histogramDefs))
+    val actual = applySchema(summary.get, FirstShutdownView.buildSchema(userPrefs, scalarDefs, histogramDefs))
          .getValuesMap[List[Row]](List("events"))
 
     actual.get("events").orNull should contain theSameElementsAs (expected)
