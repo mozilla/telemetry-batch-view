@@ -35,15 +35,16 @@ class AMODatabaseTest extends FlatSpec with Matchers with BeforeAndAfterEach {
       .willReturn(okJson("{\"result\": {}}")))
 
     // Point the AMODatabase to the stub server.
+    var amoDB: scala.collection.Map[String, AMOAddonInfo] = Map[String, AMOAddonInfo]()
     intercept[MappingException] {
-      AMODatabase.init(s"http://$Host:$Port$path")
+      amoDB = AMODatabase.getAddonMap(s"http://$Host:$Port$path")
     }
 
     // Using any function should not throw an exception.
     val unknownAddonId = "{unknown-guid}"
-    assert(!AMODatabase.contains(unknownAddonId))
-    assert(AMODatabase.getAddonNameById(unknownAddonId).isEmpty)
-    assert(AMODatabase.isWebextension(unknownAddonId).isEmpty)
+    assert(!amoDB.contains(unknownAddonId))
+    assert(AMODatabase.getAddonNameById(unknownAddonId, amoDB).isEmpty)
+    assert(AMODatabase.isWebextension(unknownAddonId, amoDB).isEmpty)
   }
 
   "AMODatabase" must "parse responses correctly" in {
@@ -95,20 +96,20 @@ class AMODatabaseTest extends FlatSpec with Matchers with BeforeAndAfterEach {
       .willReturn(okJson(sampleResponse)))
 
     // Point the AMODatabase to the stub server.
-    AMODatabase.init(s"http://$Host:$Port$path")
+    val amoDB = AMODatabase.getAddonMap(s"http://$Host:$Port$path")
 
     // Verify that the response is correctly parsed and that the expected
     // addon is returned.
     val existingAddonId = "{addon-guid}"
-    assert(AMODatabase.contains(existingAddonId))
-    assert(AMODatabase.getAddonNameById(existingAddonId).contains("Nice addon name"))
-    assert(AMODatabase.isWebextension(existingAddonId).contains(true))
+    assert(amoDB.contains(existingAddonId))
+    assert(AMODatabase.getAddonNameById(existingAddonId, amoDB).contains("Nice addon name"))
+    assert(AMODatabase.isWebextension(existingAddonId, amoDB).contains(true))
 
     // Verify that the functions behave correctly for unknown addons.
     val unknownAddonId = "{unknown-guid}"
-    assert(!AMODatabase.contains(unknownAddonId))
-    assert(AMODatabase.getAddonNameById(unknownAddonId).isEmpty)
-    assert(AMODatabase.isWebextension(unknownAddonId).isEmpty)
+    assert(!amoDB.contains(unknownAddonId))
+    assert(AMODatabase.getAddonNameById(unknownAddonId, amoDB).isEmpty)
+    assert(AMODatabase.isWebextension(unknownAddonId, amoDB).isEmpty)
   }
 }
 

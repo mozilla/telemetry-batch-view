@@ -97,10 +97,11 @@ object AddonRecommender {
     * Get a new dataset from the Longitudinal dataset containing only the relevant addon data.
     * @param sparkSession The SparkSession used for loading the Longitudinal dataset.
     * @param addonBlacklist The a list of addon GUIDs to exclude.
+    * @param amoDB The AMO database fetched by AMODatabase.
     * @return A 4 columns Dataset with each row having the client id, the addon GUID
     *         and the hashed client id and GUID.
     */
-  private def getAddonData(sparkSession: SparkSession, addonBlacklist: List[String]) = {
+  private def getAddonData(sparkSession: SparkSession, addonBlacklist: List[String], amoDB: Map[String, Any]) = {
     import sparkSession.sqlContext.implicits._
     sparkSession.sqlContext.sql("select * from longitudinal")
       .where("active_addons is not null")
@@ -110,7 +111,7 @@ object AddonRecommender {
       .flatMap { case Addons(Some(clientId), Some(addons)) =>
         for {
           (addonId, meta) <- addons
-          if !addonBlacklist.contains(addonId) && AMODatabase.contains(addonId)
+          if !addonBlacklist.contains(addonId) && amoDB.contains(addonId)
           addonName <- meta.name
           blocklisted <- meta.blocklisted
           signedState <- meta.signed_state
@@ -161,14 +162,14 @@ object AddonRecommender {
   private def train(localOutputDir: String, runDate: String, privateBucket: String, publicBucket: String) = {
     // The AMODatabase init needs to happen before we get the SparkContext,
     // otherwise the job will fail due to all the workers being idle.
-    AMODatabase.init()
+    val amoDbMap = AMODatabase.getAddonMap()
 
     val spark = getOrCreateSparkSession("AddonRecommenderTest", enableHiveSupport = true)
     val sc = spark.sparkContext
     import spark.implicits._
 
     val blacklist = List("loop@mozilla.org", "firefox@getpocket.com", "e10srollout@mozilla.org", "firefox-hotfix@mozilla.org")
-    val clientAddons = getAddonData(spark, blacklist)
+    val clientAddons = getAddonData(spark, blacklist, amoDbMap)
 
     val ratings = clientAddons
       .map{ case (_, _, hashedClientId, hashedAddonId) => Rating(hashedClientId, hashedAddonId, 1.0f)}
@@ -215,9 +216,9 @@ object AddonRecommender {
     val serializedMapping = pretty(render(addonMapping.map {
       case (k, addonId) =>
         (k.toString,
-          Map[String, JValue]("name" -> JString(AMODatabase.getAddonNameById(addonId).getOrElse("Unknown")),
+          Map[String, JValue]("name" -> JString(AMODatabase.getAddonNameById(addonId, amoDbMap).getOrElse("Unknown")),
                               "id" -> addonId,
-                              "isWebextension" -> JBool(AMODatabase.isWebextension(addonId).getOrElse(false))).toMap)
+                              "isWebextension" -> JBool(AMODatabase.isWebextension(addonId, amoDbMap).getOrElse(false))).toMap)
     }))
     val addonMappingPath = Paths.get(s"$localOutputDir/addon_mapping.json")
     val privateS3prefix = s"telemetry-ml/addon_recommender/${runDate}"
