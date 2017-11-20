@@ -29,6 +29,7 @@ private case class TestLongitudinalRow(client_id: Option[String],
                                        build: Option[Seq[TestBuildData]])
 
 class AddonRecommenderTest extends FlatSpec with BeforeAndAfterAll with Matchers with PrivateMethodTester{
+  private var amoDB: Map[String, AMOAddonInfo] = Map[String, AMOAddonInfo]()
   private val spark = getOrCreateSparkSession("AddonRecommenderTest", enableHiveSupport = true)
   import spark.implicits._
 
@@ -135,7 +136,7 @@ class AddonRecommenderTest extends FlatSpec with BeforeAndAfterAll with Matchers
     Files.write(cacheFile, sampleAMODatabase.getBytes(StandardCharsets.UTF_8))
 
     // Init the AMO Database.
-    AMODatabase.init()
+    amoDB = AMODatabase.getAddonMap()
   }
 
   override def afterAll(): Unit = {
@@ -198,7 +199,7 @@ class AddonRecommenderTest extends FlatSpec with BeforeAndAfterAll with Matchers
     val hash = PrivateMethod[Int]('hash)
 
     // Filter the dataframe, collect and validate the results.
-    val df = AddonRecommender invokePrivate getAddonData(spark, List("{blacklisted-addon-guid}"))
+    val df = AddonRecommender invokePrivate getAddonData(spark, List("{blacklisted-addon-guid}"), amoDB)
 
     val data = df.collect()
     assert(data.length == 2)

@@ -14,18 +14,18 @@ import scala.io.Source
 import scalaj.http.Http
 
 private case class AMOAddonPage(previous: String, next: String, results: List[AMOAddonInfo])
-private case class AMOAddonFile(id: Long, platform: String, status: String, is_webextension: Boolean)
-private case class AMOAddonVersion(files: List[AMOAddonFile])
-private case class AMOAddonInfo(guid: String,
-                                categories: Map[String, List[String]],
-                                default_locale: String,
-                                description: Option[Map[String, String]],
-                                name: Map[String,String],
-                                current_version: AMOAddonVersion,
-                                ratings: Map[String, Double],
-                                summary: Option[Map[String, String]],
-                                tags: List[String],
-                                weekly_downloads: Long)
+case class AMOAddonFile(id: Long, platform: String, status: String, is_webextension: Boolean)
+case class AMOAddonVersion(files: List[AMOAddonFile])
+case class AMOAddonInfo(guid: String,
+                        categories: Map[String, List[String]],
+                        default_locale: String,
+                        description: Option[Map[String, String]],
+                        name: Map[String,String],
+                        current_version: AMOAddonVersion,
+                        ratings: Map[String, Double],
+                        summary: Option[Map[String, String]],
+                        tags: List[String],
+                        weekly_downloads: Long)
 
 /**
   * The AMODatabase singleton encapsulates a local version of the addons.mozilla.org (AMO)
@@ -44,7 +44,6 @@ private case class AMOAddonInfo(guid: String,
 final object AMODatabase {
   implicit val formats = Serialization.formats(NoTypeHints)
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
-  private var addonDB: Map[String, AMOAddonInfo] = Map()
   // This API URI will fetch all the public addons for Firefox, sorting them by creation date.
   private val defaultAMORequestURI = "https://addons.mozilla.org/api/v3/addons/search/"
   private val queryParams = "?app=firefox&sort=created&type=extension"
@@ -107,9 +106,9 @@ final object AMODatabase {
     * Initialize this object by downloading the AMO addons.
     * @param apiURI The AMO api URI to use to fetch the data.
     */
-  def init(apiURI: String = defaultAMORequestURI): Unit = {
+  def getAddonMap(apiURI: String = defaultAMORequestURI): Map[String, AMOAddonInfo] = {
     logger.info(s"Downloading AMO data from $apiURI")
-    addonDB = getDatabase(apiURI)
+    getDatabase(apiURI)
   }
 
   /**
@@ -118,7 +117,7 @@ final object AMODatabase {
     * @return The addon name, if available, or an empty Option. The name should always be available,
     *         unless the database is corrupted.
     */
-  def getAddonNameById(addonId: String): Option[String] = {
+  def getAddonNameById(addonId: String, addonDB: Map[String, AMOAddonInfo]): Option[String] = {
     // The addon info contains the default_locale for the addon as a mandatory field, which is a string
     // containing the name of the default locale (e.g. "it_IT"). This is the locale used as a reference
     // for translations and, as such, the "preferred" one.
@@ -135,7 +134,7 @@ final object AMODatabase {
     * @param addonId The GUID for the desired addon.
     * @return True if the latest version of the addon uses Webextensions, False otherwise.
     */
-  def isWebextension(addonId: String): Option[Boolean] = {
+  def isWebextension(addonId: String, addonDB: Map[String, AMOAddonInfo]): Option[Boolean] = {
     // Each adddon can contain multiple files for each version. To ensure the addon is not
     // a legacy addon, we verify that the latest version contains at least a Webextension
     // compatible file which is publicly visible (status = "public").
@@ -148,15 +147,6 @@ final object AMODatabase {
         logger.warn(s"Addon GUID not in AMO DB: $addonId")
         None
     }
-  }
-
-  /**
-    * Tests whether the addon id is contained in the database.
-    * @param addonId The GUID for the desired addon.
-    * @return True if the addon database contains the addon, False otherwise.
-    */
-  def contains(addonId: String): Boolean = {
-    addonDB.contains(addonId)
   }
 
   /**
