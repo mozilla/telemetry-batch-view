@@ -1,21 +1,19 @@
 package com.mozilla.telemetry.views
 
-import org.apache.spark.sql.types._
+import com.mozilla.telemetry.heka.{Dataset, Message}
+import com.mozilla.telemetry.metrics._
+import com.mozilla.telemetry.utils._
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.types._
 import org.joda.time.{DateTime, Days, format}
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods.parse
+import org.json4s.{DefaultFormats, JValue}
 import org.rogach.scallop._
-import com.mozilla.telemetry.heka.{Dataset, Message}
-import com.mozilla.telemetry.utils.{Addon, Attribution, Events,
-  Experiment, getOrCreateSparkSession, MainPing, S3Store}
-import com.mozilla.telemetry.utils.{BooleanUserPref, IntegerUserPref, UserPref}
-import org.json4s.{JValue, DefaultFormats}
-import com.mozilla.telemetry.metrics._
 
 import scala.util.{Success, Try}
 
-object MainSummaryView {
+object FirstShutdownView {
 
   def schemaVersion: String = "v4"
   def jobName: String = "main_summary"
@@ -91,7 +89,7 @@ object MainSummaryView {
     val channel = opt[String]("channel", descr = "Only process data from the given channel", required = false)
     val appVersion = opt[String]("version", descr = "Only process data from the given app version", required = false)
     val allHistograms = opt[Boolean]("all-histograms", descr = "Flag to use all histograms", required = false)
-    val docType = opt[String]("doc-type", descr = "DocType of pings conforming to main ping schema", required=false, default=Some("main"))
+    val docType = opt[String]("doc-type", descr = "DocType of pings conforming to main ping schema", required=false, default=Some("first_shutdown"))
     verify()
   }
 
