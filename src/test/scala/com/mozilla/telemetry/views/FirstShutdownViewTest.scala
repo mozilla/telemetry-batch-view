@@ -26,11 +26,11 @@ class FirstShutdownViewTest extends FlatSpec with Matchers {
     override protected val getURL = histogramUrlMock
   }
 
-  val histogramDefs = FirstShutdownView.filterHistogramDefinitions(histograms.definitions(true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true))
+  val histogramDefs = MainSummaryView.filterHistogramDefinitions(histograms.definitions(true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true))
 
-  val userPrefs = FirstShutdownView.userPrefsList
+  val userPrefs = MainSummaryView.userPrefsList
 
-  val defaultSchema = FirstShutdownView.buildSchema(userPrefs, scalarDefs, histogramDefs)
+  val defaultSchema = MainSummaryView.buildSchema(userPrefs, scalarDefs, histogramDefs)
 
   val defaultMessageToRow = (m: Message) =>
     FirstShutdownView.messageToRow(m, userPrefs, scalarDefs, histogramDefs)
