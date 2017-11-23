@@ -4,7 +4,7 @@ import com.github.nscala_time.time.Imports._
 import com.mozilla.telemetry.views.HeavyUsersView
 import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import org.apache.spark.sql.Dataset
-import org.scalatest.{FlatSpec, Matchers, BeforeAndAfterAll}
+import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import org.scalatest.Assertions._
 
 import scala.io.Source
@@ -32,6 +32,8 @@ class HeavyUsersViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
       .map{ case (i, date) => HeavyUsersView.HeavyUsersRow(date, clientId, sampleId, pcd, 1, i + 1, hus(i), hus(i)) }
       .toDS
   }
+
+  def dummyRow(d: String) = HeavyUsersView.HeavyUsersRow(d, "client1", 42, 1, 2, 2, Some(false), Some(false))
 
   // case regular history
   "Heavy Users View" can "run with enough data" in {
@@ -125,16 +127,32 @@ class HeavyUsersViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   }
 
   it can "sense that previous data exists" in {
-    val ds = List(
-      HeavyUsersView.HeavyUsersRow("20170901", "client1", 42, 1, 2, 2, Some(false), Some(false))).toDS
+    val ds = List(dummyRow("20170901")).toDS
 
     // will fail if this throws IllegalStateException
     HeavyUsersView.senseExistingData(ds, "20170902", false)
   }
 
   it can "sense that previous data is missing" in {
-    val ds = List(
-      HeavyUsersView.HeavyUsersRow("20170901", "client1", 42, 1, 2, 2, Some(false), Some(false))).toDS
+    val ds = List(dummyRow("20170901")).toDS
+
+    intercept[java.lang.IllegalStateException] {
+      HeavyUsersView.senseExistingData(ds, "20170903", false)
+    }
+  }
+
+  it can "sense that previous data exists in the middle" in {
+    val ds = List(dummyRow("20170901"),
+                  dummyRow("20170902"),
+                  dummyRow("20170904")).toDS
+
+    HeavyUsersView.senseExistingData(ds, "20170903", false)
+  }
+
+  it can "sense that previous data is missing in the middle" in {
+    val ds = List(dummyRow("20170901"),
+                  dummyRow("20170903"),
+                  dummyRow("20170904")).toDS
 
     intercept[java.lang.IllegalStateException] {
       HeavyUsersView.senseExistingData(ds, "20170903", false)
