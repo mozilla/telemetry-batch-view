@@ -245,9 +245,7 @@ object HeavyUsersView {
   def senseExistingData(existingData: Dataset[HeavyUsersRow], date: String, firstRun: Boolean): Unit = {
     if(!firstRun) {
       val yesterday = fmt.print(fmt.parseDateTime(date) - 1.days)
-      val ydayRow = existingData.select(col("submission_date_s3"))
-                                .filter(r => r(0) == yesterday)
-                                .limit(1).collect()
+      val ydayRow = existingData.filter(_.submission_date_s3 == yesterday).take(1)
       if(ydayRow.isEmpty) {
         throw new java.lang.IllegalStateException(
           s"Missing previous day's heavy_users data: '$date' depends on '$yesterday'")
