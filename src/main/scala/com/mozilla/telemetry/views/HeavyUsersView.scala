@@ -7,7 +7,7 @@ import com.mozilla.telemetry.utils.deletePrefix
 import com.mozilla.telemetry.utils.CustomPartitioners._
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.expressions.scalalang.typed.sumLong
-import org.apache.spark.sql.functions.{col, first, max, min}
+import org.apache.spark.sql.functions.{col, first, min}
 import org.rogach.scallop._
 import scala.util.Try
 
@@ -244,10 +244,13 @@ object HeavyUsersView {
 
   def senseExistingData(existingData: Dataset[HeavyUsersRow], date: String, firstRun: Boolean): Unit = {
     if(!firstRun) {
-      val lastDateRow = existingData.select(max(col("submission_date_s3"))).collect()
-      val lastDate = fmt.parseDateTime(lastDateRow(0).getString(0))
-      if((lastDate + 1.days) != fmt.parseDateTime(date)){
-        throw new java.lang.IllegalStateException("Missing previous day's heavy_users data")
+      val yesterday = fmt.print(fmt.parseDateTime(date) - 1.days)
+      val ydayRow = existingData.select(col("submission_date_s3"))
+                                .filter(r => r(0) == yesterday)
+                                .limit(1).collect()
+      if(ydayRow.isEmpty) {
+        throw new java.lang.IllegalStateException(
+          s"Missing previous day's heavy_users data: '$date' depends on '$yesterday'")
       }
     }
   }
