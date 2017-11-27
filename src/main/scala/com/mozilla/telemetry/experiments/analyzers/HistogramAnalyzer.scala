@@ -17,7 +17,11 @@ case class KeyedHistogramRow(experiment_id: String, branch: String, subgroup: St
                              metric: Option[Map[String, Map[Int, Int]]]) {
   def toPreAggregateRow: PreAggHistogramRow = {
     import HistogramAnalyzer._
-    PreAggHistogramRow(experiment_id, branch, subgroup, metric.collapse.toLongValues)
+    try {
+      PreAggHistogramRow(experiment_id, branch, subgroup, metric.collapse.toLongValues)
+    } catch {
+      case _: java.lang.NullPointerException => PreAggHistogramRow(experiment_id, branch, subgroup, None)
+    }
   }
 }
 
