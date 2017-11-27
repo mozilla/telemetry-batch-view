@@ -159,4 +159,17 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
     val actual = analyzer.analyze().filter(_.experiment_branch == "control").head
     assert(actual.n == 3L)
   }
+
+  "Keyed histogram with null value" should "be discarded" in {
+    import spark.implicits._
+    val df = Seq(
+      HistogramExperimentDataset("experiment1", "control", Some(m1), Some(Map("key1" -> null, "key2" -> m2)))
+    ).toDS().toDF()
+    val analyzer = new HistogramAnalyzer("keyed_histogram",
+      EnumeratedHistogram(keyed = true, "name", 150), df
+    )
+    val actual = analyzer.analyze()
+    val expected = List()
+    assert(expected == actual)
+  }
 }
