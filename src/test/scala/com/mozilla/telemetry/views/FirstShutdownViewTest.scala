@@ -38,68 +38,53 @@ class FirstShutdownViewTest extends FlatSpec with Matchers {
   // Apply the given schema to the given potentially-generic Row.
   def applySchema(row: Row, schema: StructType): Row = new GenericRowWithSchema(row.toSeq.toArray, schema)
 
-  "MainSummary plugin counts" can "be summarized" in {
+  "Parent and Process histograms" can "be summarized" in {
     val message = RichMessage(
       "1234",
       Map(
         "documentId" -> "foo",
         "submissionDate" -> "1234",
         "submission" ->
-          """{ "payload": {"histograms": {
-    "PLUGINS_NOTIFICATION_SHOWN":{
-      "range":[1,2],
-      "histogram_type":2,
-      "values":{"1":3,"0":0,"2":0},
-      "bucket_count":3,
-      "sum":3
-    },
-    "PLUGINS_NOTIFICATION_USER_ACTION":{
-      "range":[1,3],
-      "histogram_type":1,
-      "values":{"1":0,"0":3},
-      "bucket_count":4,
-      "sum":0
-    },
-    "PLUGINS_INFOBAR_SHOWN": {
-       "range": [1,2],
-       "histogram_type": 2,
-       "values":{"1":12,"0":0,"2":0},
-       "bucket_count":3,
-       "sum":12
-    },
-    "PLUGINS_INFOBAR_ALLOW":{
-      "range":[1,2],
-      "histogram_type":2,
-      "values":{"1":2,"0":0,"2":0},
-      "bucket_count":3,
-      "sum":2
-    },
-    "PLUGINS_INFOBAR_BLOCK":{
-      "range":[1,2],
-      "histogram_type":2,
-      "values":{"1":1,"0":0,"2":0},
-      "bucket_count":3,
-      "sum":1
-    },
-    "PLUGINS_INFOBAR_DISMISSED":{
-      "range":[1,2],
-      "histogram_type":2,
-      "values":{"1":1,"0":0,"2":0},
-      "bucket_count":3,
-      "sum":1
-    }
-  }}}"""),
+          """{
+               "payload":{
+                  "histograms":{
+                     "PLUGINS_NOTIFICATION_SHOWN":{
+                        "range":[
+                           1,
+                           2
+                        ],
+                        "histogram_type":2,
+                        "values":{
+                           "1":3,
+                           "0":0,
+                           "2":0
+                        },
+                        "bucket_count":3,
+                        "sum":3
+                     }
+                  },
+                  "processes":{
+                     "parent":{
+                        "keyedScalars":{
+                           "mock.keyed.scalar.uint":{
+                              "search_enter":1,
+                              "search_suggestion":2
+                           }
+                        }
+                     }
+                  }
+               }
+            }"""),
       None)
     val summary = defaultMessageToRow(message)
 
     val expected = Map(
       "document_id" -> "foo",
       "plugins_notification_shown" -> 3,
-      "plugins_notification_user_action" -> Row(3, 0, 0),
-      "plugins_infobar_shown" -> 12,
-      "plugins_infobar_allow" -> 2,
-      "plugins_infobar_block" -> 1,
-      "plugins_infobar_dismissed" -> 1
+      "scalar_parent_mock_keyed_scalar_uint" -> Map(
+        "search_enter" -> 1,
+        "search_suggestion" -> 2
+      )
     )
     val actual = applySchema(summary.get, defaultSchema)
       .getValuesMap(expected.keys.toList)
@@ -112,7 +97,41 @@ class FirstShutdownViewTest extends FlatSpec with Matchers {
     actual should be(expected)
   }
 
-  "MainSummary experiments" can "be summarized" in {
+  "Info" can "be summarized" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "submission" ->
+          """{
+               "payload":{
+                 "info": {
+                   "subsessionLength": 14557,
+                   "subsessionCounter": 12
+                 }
+               }
+            }"""),
+      None)
+    val summary = defaultMessageToRow(message)
+
+    val expected = Map(
+      "document_id" -> "foo",
+      "subsession_length" -> 14557l,
+      "subsession_counter" -> 12
+    )
+    val actual = applySchema(summary.get, defaultSchema)
+      .getValuesMap(expected.keys.toList)
+    for ((f, v) <- expected) {
+      withClue(s"$f:") {
+        actual.get(f) should be(Some(v))
+      }
+      actual.get(f) should be(Some(v))
+    }
+    actual should be(expected)
+  }
+
+  "Experiments" can "be summarized" in {
     val message = RichMessage(
       "1234",
       Map(
@@ -141,7 +160,7 @@ class FirstShutdownViewTest extends FlatSpec with Matchers {
     actual should be(expected)
   }
 
-  "MainSummary legacy addons" can "be summarized" in {
+  "Legacy addons" can "be summarized" in {
     val message = RichMessage(
       "1234",
       Map(
@@ -186,5 +205,39 @@ class FirstShutdownViewTest extends FlatSpec with Matchers {
     val actual = applySchema(summary.get, defaultSchema)
       .getValuesMap(expected.keys.toList)
     actual should be (expected)
+  }
+
+  "Simple measurements" can "fall back to simple measurements values" in {
+    val migratedScalarsUrl = (a: String, b: String) => Source.fromFile("src/test/resources/ScalarsFromSimpleMeasures.yaml")
+    val migratedScalars = new ScalarsClass {
+      override protected val getURL = migratedScalarsUrl
+    }
+    val scalarsDef = migratedScalars.definitions(includeOptin = true).toList
+
+    val messageSMPresent = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "submission" ->
+          """{
+             "payload": {
+               "simpleMeasurements": {
+                 "activeTicks": 111,
+                 "firstPaint": 222
+               }
+             }
+             }"""
+      ),
+      None)
+
+    val messageSummary = defaultMessageToRow(messageSMPresent)
+    val appliedSummary = applySchema(messageSummary.get, defaultSchema)
+
+    val selectedActiveTicks = appliedSummary.getAs[Int]("active_ticks")
+    selectedActiveTicks should be(111)
+
+    val selectedFirstPaint = appliedSummary.getAs[Int]("first_paint")
+    selectedFirstPaint should be(222)
   }
 }
