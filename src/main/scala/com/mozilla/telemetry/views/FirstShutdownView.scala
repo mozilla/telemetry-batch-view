@@ -471,6 +471,10 @@ object FirstShutdownView {
           case JInt(x) => x.toLong
           case _ => null
         },
+        profile \ "resetDate" match {
+          case JInt(x) => x.toLong
+          case _ => null
+        },
         info \ "subsessionStartDate" match {
           case JString(x) => x
           case _ => null

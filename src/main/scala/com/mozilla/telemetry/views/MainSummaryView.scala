@@ -531,6 +531,10 @@ object MainSummaryView {
           case JInt(x) => x.toLong
           case _ => null
         },
+        profile \ "resetDate" match {
+          case JInt(x) => x.toLong
+          case _ => null
+        },
         info \ "subsessionStartDate" match {
           case JString(x) => x
           case _ => null
@@ -953,6 +957,7 @@ object MainSummaryView {
 
       // TODO: use proper 'date' type for date columns.
       StructField("profile_creation_date", LongType, nullable = true), // environment/profile/creationDate
+      StructField("profile_reset_date", LongType, nullable = true), // environment/profile/resetDate
       StructField("subsession_start_date", StringType, nullable = true), // info/subsessionStartDate
       StructField("subsession_length", LongType, nullable = true), // info/subsessionLength
       StructField("subsession_counter", IntegerType, nullable = true), // info/subsessionCounter
