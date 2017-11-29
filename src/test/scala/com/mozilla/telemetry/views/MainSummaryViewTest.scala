@@ -262,6 +262,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
             "memory_mb"                         -> 16384,
             "apple_model_id"                    -> null,
             "profile_creation_date"             -> 16861l,
+            "profile_reset_date"                -> null,
             "subsession_start_date"             -> "2016-03-28T00:00:00.0-03:00",
             "subsession_length"                 -> 14557l,
             "subsession_counter"                -> 12,
