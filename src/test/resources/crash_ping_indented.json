@@ -25,7 +25,8 @@
    "sampleId": 26.0,
    "Host": "incoming.telemetry.mozilla.org",
    "docType": "crash",
-   "environment.profile": "{\"creationDate\": 16446, \"resetDate\": 16446}"
+   "environment.profile": "{\"creationDate\": 16446, \"resetDate\": 16446}",
+   "environment.experiments": "{\"e10sCohort\":{\"branch\":\"webextensions-multiBucket4\"}}"
   },
   "payload": {
     "creationDate": "2017-01-05T04:41:27.796Z",
