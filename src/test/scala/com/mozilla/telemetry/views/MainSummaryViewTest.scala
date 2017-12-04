@@ -37,7 +37,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   val defaultSchema = MainSummaryView.buildSchema(userPrefs, scalarDefs, histogramDefs)
 
   val defaultMessageToRow = (m: Message) =>
-    MainSummaryView.messageToRow(m, userPrefs, scalarDefs, histogramDefs)
+    MainSummaryView.messageToRow(m, scalarDefs, histogramDefs)
 
   // Apply the given schema to the given potentially-generic Row.
   def applySchema(row: Row, schema: StructType): Row = new GenericRowWithSchema(row.toSeq.toArray, schema)
@@ -1100,7 +1100,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val expected = expectedHistos ++ expectedScalars
 
-    val summary = MainSummaryView.messageToRow(message, userPrefs, allScalarDefs, allHistogramDefs)
+    val summary = MainSummaryView.messageToRow(message, allScalarDefs, allHistogramDefs)
     val actual = spark
           .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(userPrefs, allScalarDefs, allHistogramDefs))
           .first
@@ -1548,7 +1548,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         }"""),
       None)
 
-    val messageSummary = MainSummaryView.messageToRow(messageBothPresent, userPrefs, scalarsDef, histogramDefs)
+    val messageSummary = MainSummaryView.messageToRow(messageBothPresent, scalarsDef, histogramDefs)
     val appliedSummary =  applySchema(messageSummary.get, MainSummaryView.buildSchema(userPrefs, scalarsDef, histogramDefs))
 
     val selectedActiveTicks = appliedSummary.getAs[Int]("active_ticks")
@@ -1576,7 +1576,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       ),
       None)
 
-    val messageSummary = MainSummaryView.messageToRow(messageSMPresent, userPrefs, scalarsDef, histogramDefs)
+    val messageSummary = MainSummaryView.messageToRow(messageSMPresent, scalarsDef, histogramDefs)
     val appliedSummary = applySchema(messageSummary.get, defaultSchema)
 
     val selectedActiveTicks = appliedSummary.getAs[Int]("active_ticks")
@@ -1599,7 +1599,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       None)
 
     // If the scalar's definition does not exist, the simple measurement value should be selected.
-    val msgSummaryNoDefs = MainSummaryView.messageToRow(messageSMPresent, userPrefs, List(), histogramDefs)
+    val msgSummaryNoDefs = MainSummaryView.messageToRow(messageSMPresent, List(), histogramDefs)
     val appliedSummaryNoDefs = applySchema(msgSummaryNoDefs.get, MainSummaryView.buildSchema(userPrefs, List(), histogramDefs))
 
     val activeTicksVal = appliedSummaryNoDefs.getAs[Int]("active_ticks")
@@ -1845,7 +1845,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           }
         }"""),
       None)
-    val summary = MainSummaryView.messageToRow(message, testUserPrefs, List(), List())
+    val summary = MainSummaryView.messageToRow(message, List(), List(), testUserPrefs)
 
     val expected = Map(
       "user_pref_p1" -> 10,
@@ -1886,7 +1886,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           }
         }"""),
       None);
-    val summary = MainSummaryView.messageToRow(message, userPrefs, scalarDefs, histogramDefs)
+    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
 
     val expected = Set(
       Row(81994404, "navigation", "search", "searchbar", null, Map("telemetry_process" -> "dynamic")),
