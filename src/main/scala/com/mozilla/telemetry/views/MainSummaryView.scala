@@ -163,7 +163,7 @@ object MainSummaryView {
 
       if(!messages.isEmpty()){
         val rowRDD = messages.flatMap(m => {
-          messageToRow(m, userPrefsList, scalarDefinitions, histogramDefinitions) match {
+          messageToRow(m, scalarDefinitions, histogramDefinitions) match {
             case None =>
               ignoredCount += 1
               None
@@ -388,7 +388,7 @@ object MainSummaryView {
 
   // Convert the given Heka message containing a "main" ping
   // to a map containing just the fields we're interested in.
-  def messageToRow(message: Message, userPrefs: List[UserPref], scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String, HistogramDefinition)]): Option[Row] = {
+  def messageToRow(message: Message, scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String, HistogramDefinition)], userPrefs: List[UserPref] = userPrefsList): Option[Row] = {
     try {
       val fields = message.fieldsAsMap
 
