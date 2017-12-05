@@ -1,6 +1,7 @@
 package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.heka.Dataset
+import com.mozilla.telemetry.utils.Experiment
 import org.apache.spark.sql.{SaveMode, SparkSession}
 import org.joda.time.{DateTime, Days, format}
 import org.json4s._
@@ -83,7 +84,13 @@ case class Meta(
     `environment.settings`: Settings,
     `environment.system`: System,
     `environment.profile`: Profile,
-    `environment.addons`: Addons)
+    `environment.addons`: Addons,
+    `environment.experiments`: Option[Map[String, Experiment]]) {
+
+  def getExperiments: Map[String, Option[String]] =
+    this.`environment.experiments`.getOrElse(Map.empty).mapValues(_.branch)
+
+}
 
 case class Payload(
     crashDate: String,
@@ -98,7 +105,6 @@ case class CrashPing(
     creationDate: String,
     meta: Meta,
     id: String,
-    // TODO: verify the use of reserved words for members' name
     `type`: String,
     version: Int,
     payload: Payload)
@@ -116,6 +122,7 @@ case class CrashSummary (
     country: String,
     experiment_id: Option[String],
     experiment_branch: Option[String],
+    experiments: Map[String, Option[String]],
     e10s_enabled: Option[Boolean],
     gfx_compositor: Option[String],
     profile_created: Option[Int],
@@ -139,6 +146,7 @@ case class CrashSummary (
       experiment_branch = for {
         x <- ping.meta.`environment.addons`.activeExperiment
       } yield x.branch,
+      experiments = ping.meta.getExperiments,
       e10s_enabled = ping.meta.`environment.settings`.e10sEnabled,
       gfx_compositor = for {
         x <- ping.meta.`environment.system`.gfx
@@ -181,7 +189,8 @@ object CrashSummaryView {
     "environment.settings",
     "environment.system",
     "environment.profile",
-    "environment.addons"
+    "environment.addons",
+    "environment.experiments"
     )
     val jsonObj = Extraction.decompose(fields)
     // Transform json fields into JValues
