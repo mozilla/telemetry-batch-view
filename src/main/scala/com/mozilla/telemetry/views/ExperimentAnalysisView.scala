@@ -12,7 +12,7 @@ import scala.util.{Failure, Success, Try}
 
 object ExperimentAnalysisView {
   def defaultErrorAggregatesBucket = "net-mozaws-prod-us-west-2-pipeline-data"
-  def errorAggregatesPath = "error_aggregates/v2"
+  def errorAggregatesPath = "experiment_error_aggregates/v1"
   def jobName = "experiment_analysis"
   def schemaVersion = "v1"
   // This gives us ~120MB partitions with the columns we have now. We should tune this as we add more columns.
@@ -94,7 +94,7 @@ object ExperimentAnalysisView {
         .first.getAs[String](0)
 
       val errorAggregates = Try(spark.read.parquet(s"s3://${conf.errorAggregatesBucket()}/$errorAggregatesPath")) match {
-        case Success(df) => df.where(col("experiment_id") === e && col("submission_date") >= minDate)
+        case Success(df) => df.where(col("experiment_id") === e && col("submission_date_s3") >= minDate)
         case Failure(_) => spark.emptyDataFrame
       }
 
