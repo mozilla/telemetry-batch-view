@@ -16,7 +16,7 @@ case class ExperimentSummaryRow(
 case class ErrorAggRow(
   experiment_id: String,
   experiment_branch: String,
-  usage_hours: Int,
+  usage_hours: Double,
   subsession_count: Int,
   main_crashes: Int,
   content_crashes: Int,
