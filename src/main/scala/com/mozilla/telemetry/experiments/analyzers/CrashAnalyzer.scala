@@ -17,11 +17,13 @@ object CrashAnalyzer {
   val ComplexCrashTypes: Map[String, Column] = Map(
     "main_plus_content_crashes"                -> (sum("main_crashes") + sum("content_crashes")),
     "content_minus_shutdown_crashes"           -> (sum("content_crashes") - sum("content_shutdown_crashes")),
-    "main_plus_content_minus_shutdown_crashes" -> (sum("main_crashes") + sum("content_crashes") - sum("content_shutdown_crashes")))
+    "main_plus_content_minus_shutdown_crashes" -> (sum("main_crashes") + sum("content_crashes") - sum("content_shutdown_crashes"))
+  )
 
-  val Extras =
-    "usage_hours"      ::
-    "subsession_count" :: Nil
+  val Extras = Map(
+    "usage_hours"      -> "Float",
+    "subsession_count" -> "Long"
+  )
 
   def makeRateName(name: String): String = name.dropRight(2) + "_rate"
 
@@ -37,7 +39,7 @@ object CrashAnalyzer {
   private def getNonemptyExperimentCrashes(errorAggregates: DataFrame): Seq[MetricAnalysis] = {
     import errorAggregates.sparkSession.implicits._
 
-    val aggregates = Extras.map{ c => sum(c).as(c) } ++
+    val aggregates = Extras.keys.toList.map{ c => sum(c).as(c) } ++
       CrashTypes.map{ c => sum(c).as(c) } ++
       ComplexCrashTypes.map{ case (k, v) => v.as(k) } ++
       CrashTypes.map{ c => (sum(c) / sum("usage_hours")).as(makeRateName(c)) } ++
@@ -49,8 +51,7 @@ object CrashAnalyzer {
       .agg(aggregates.head, aggregates.tail: _*)
       .collect()
 
-    val longMetrics = (Extras ++
-      CrashTypes ++
+    val longMetrics = (CrashTypes ++
       ComplexCrashTypes.keys.toList)
       .map((_, "Long"))
 
@@ -58,7 +59,7 @@ object CrashAnalyzer {
       ComplexCrashTypes.keys.toList.map(makeRateName))
       .map((_, "Float"))
 
-    val metrics = longMetrics ++ doubleMetrics
+    val metrics = longMetrics ++ doubleMetrics ++ Extras.toList
 
     metrics.flatMap{ case (metric, metricType) =>
       crashes.map { r =>
