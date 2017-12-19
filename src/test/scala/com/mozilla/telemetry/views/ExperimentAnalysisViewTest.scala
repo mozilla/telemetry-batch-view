@@ -52,6 +52,11 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
     ErrorAggRow("id2", "branch1", 4, 4, 3, 3, 0, 0, 0, 0)
   )
 
+  val experimentMetrics = List(
+    "scalar_content_browser_usage_graphite",
+    "histogram_content_gc_max_pause_ms"
+  )
+
   "Child Scalars" can "be counted" in {
     import spark.implicits._
 
@@ -61,7 +66,8 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
       "--output" :: "telemetry-mock-bucket" :: Nil
     val conf = new ExperimentAnalysisView.Conf(args.toArray)
 
-    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, spark.emptyDataset[ErrorAggRow].toDF(), conf)
+    val res = ExperimentAnalysisView.getExperimentMetrics("id1",data, spark.emptyDataset[ErrorAggRow].toDF(), conf,
+      experimentMetrics)
     val agg = res.filter(_.metric_name == "scalar_content_browser_usage_graphite").head
     agg.histogram(1).pdf should be (1.0)
   }
@@ -75,7 +81,8 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
       "--output" :: "telemetry-mock-bucket" :: Nil
     val conf = new ExperimentAnalysisView.Conf(args.toArray)
 
-    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, spark.emptyDataset[ErrorAggRow].toDF(), conf)
+    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, spark.emptyDataset[ErrorAggRow].toDF(), conf,
+      experimentMetrics)
     val agg = res.filter(_.metric_name == "histogram_content_gc_max_pause_ms").head
     agg.histogram(1).pdf should be (1.0)
   }
@@ -89,7 +96,8 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
       "--output" :: "telemetry-mock-bucket" :: Nil
     val conf = new ExperimentAnalysisView.Conf(args.toArray)
 
-    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, spark.emptyDataset[ErrorAggRow].toDF(), conf)
+    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, spark.emptyDataset[ErrorAggRow].toDF(), conf,
+      experimentMetrics)
     val metadata = res.filter(_.metric_name == "Experiment Metadata")
     metadata.length should be (1)
 
@@ -109,7 +117,8 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
     val conf = new ExperimentAnalysisView.Conf(args.toArray)
 
     val results = errorAgg.map(_.experiment_id).distinct.map{ id =>
-      id -> ExperimentAnalysisView.getExperimentMetrics(id, spark.emptyDataset[ExperimentSummaryRow].toDF(), data.filter(col("experiment_id") === id), conf)
+      id -> ExperimentAnalysisView.getExperimentMetrics(id, spark.emptyDataset[ExperimentSummaryRow].toDF(),
+        data.filter(col("experiment_id") === id), conf, experimentMetrics)
     }.toMap
 
     errorAgg.foreach{ e =>
@@ -138,7 +147,8 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
       "--output" :: "telemetry-mock-bucket" :: Nil
     val conf = new ExperimentAnalysisView.Conf(args.toArray)
 
-    val res = ExperimentAnalysisView.getExperimentMetrics("id1", spark.emptyDataset[ExperimentSummaryRow].toDF(), df, conf)
+    val res = ExperimentAnalysisView.getExperimentMetrics("id1", spark.emptyDataset[ExperimentSummaryRow].toDF(), df,
+      conf, experimentMetrics)
     res.size should be (0)
   }
 
