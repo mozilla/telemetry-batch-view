@@ -17,6 +17,7 @@ import com.mozilla.telemetry.avro
 import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.metrics._
 import com.mozilla.telemetry.utils._
+import com.mozilla.telemetry.utils.deletePrefix
 
 protected class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHistorySize: Int = 1000) extends Iterator[List[Map[String, Any]]] {
   // Less than 1% of clients in a sampled dataset over a 3 months period has more than 1000 fragments.
@@ -162,91 +163,90 @@ object LongitudinalView {
   private def run(opts: Opts, messages: RDD[Message]): Unit = {
     val prefix = s"${jobName}/v${opts.to()}"
     val outputBucket = opts.outputBucket()
-    val lockfileName = "RUNNING"
 
     val includeOptin = opts.includeOptin.get match {
         case Some(v) => v.toBoolean // fail loudly on invalid string
         case _ => false
     }
 
-    require(S3Store.isPrefixEmpty(outputBucket, prefix), s"s3://${outputBucket}/${prefix} already exists!")
+    // Cleans out prefix if data already exists
+    deletePrefix(outputBucket, prefix)
 
-    // Bug 1321424 -- add a lockfile into the folder to prevent duplicate jobs from running
-    val lockfile = new java.io.File(lockfileName)
-    lockfile.createNewFile()
-    S3Store.uploadFile(lockfile, outputBucket, prefix, lockfileName)
+    try {
+      // Sort submissions in descending order
+      implicit val ordering = Ordering[(String, String, Int)].reverse
+      val clientMessages = messages
+        .flatMap {
+          (message) =>
+            val fields = message.fieldsAsMap
+            val payload = message.payload.getOrElse(fields.getOrElse("submission", "{}")) match {
+              case p: String => parse(p) \ "payload"
+              case _ => JObject()
+            }
+            for {
+              clientId <- fields.get("clientId").asInstanceOf[Option[String]]
+              json <- fields.get("payload.info").asInstanceOf[Option[String]]
 
-    // Sort submissions in descending order
-    implicit val ordering = Ordering[(String, String, Int)].reverse
-    val clientMessages = messages
-      .flatMap {
-        (message) =>
-          val fields = message.fieldsAsMap
-          val payload = message.payload.getOrElse(fields.getOrElse("submission", "{}")) match {
-            case p: String => parse(p) \ "payload"
-            case _ => JObject()
-          }
-          for {
-            clientId <- fields.get("clientId").asInstanceOf[Option[String]]
-            json <- fields.get("payload.info").asInstanceOf[Option[String]]
+              info = parse(json)
+              JString(startDate) <- (info \ "subsessionStartDate").toOption
+              JInt(counter) <- (info \ "profileSubsessionCounter").toOption
+            } yield ((clientId, startDate, counter.toInt),
+              fields + ("payload" -> compact(render(payload))) - "submission")
+        }
+        .repartitionAndSortWithinPartitions(new ClientIdPartitioner(480))
+        .map { case (key, value) => (key._1, value) }
 
-            info = parse(json)
-            JString(startDate) <- (info \ "subsessionStartDate").toOption
-            JInt(counter) <- (info \ "profileSubsessionCounter").toOption
-          } yield ((clientId, startDate, counter.toInt),
-                   fields + ("payload" -> compact(render(payload))) - "submission")
-      }
-      .repartitionAndSortWithinPartitions(new ClientIdPartitioner(480))
-      .map { case (key, value) => (key._1, value) }
-
-    /* One file per partition is generated at the end of the job. We want to have
+      /* One file per partition is generated at the end of the job. We want to have
        few big files but at the same time we need a high enough degree of parallelism
        to keep all workers busy. Since the cluster typically used for this job has
        8 workers and 20 executors, 320 partitions provide a good compromise. */
 
-    val histogramDefinitions = Histograms.definitions(includeOptin)
+      val histogramDefinitions = Histograms.definitions(includeOptin)
 
-    // Only show parent scalars
-    val scalarDefinitions = Scalars.definitions(includeOptin).filter(_._2.process == Some("parent"))
+      // Only show parent scalars
+      val scalarDefinitions = Scalars.definitions(includeOptin).filter(_._2.process == Some("parent"))
 
-    val partitionCounts = clientMessages
-      .mapPartitions{ case it =>
-        val clientIterator = new ClientIterator(it)
-        val schema = buildSchema(histogramDefinitions, scalarDefinitions)
+      val partitionCounts = clientMessages
+        .mapPartitions { case it =>
+          val clientIterator = new ClientIterator(it)
+          val schema = buildSchema(histogramDefinitions, scalarDefinitions)
 
-        val allRecords = for {
-          client <- clientIterator
-          record = buildRecord(client, schema, histogramDefinitions, scalarDefinitions)
-        } yield record
+          val allRecords = for {
+            client <- clientIterator
+            record = buildRecord(client, schema, histogramDefinitions, scalarDefinitions)
+          } yield record
 
-        var ignoredCount = 0
-        var processedCount = 0
-        val records = allRecords.map(r => r match {
-          case Some(record) =>
-            processedCount += 1
-            r
-          case None =>
-            ignoredCount += 1
-            r
-        }).flatten
+          var ignoredCount = 0
+          var processedCount = 0
+          val records = allRecords.map(r => r match {
+            case Some(record) =>
+              processedCount += 1
+              r
+            case None =>
+              ignoredCount += 1
+              r
+          }).flatten
 
-        while(records.nonEmpty) {
-          // Block size has to be increased to pack more than a couple hundred profiles
-          // within the same row group.
-          val localFile = new java.io.File(ParquetFile.serialize(records, schema, 8).toUri())
-          S3Store.uploadFile(localFile, outputBucket, prefix)
-          localFile.delete()
+          while (records.nonEmpty) {
+            // Block size has to be increased to pack more than a couple hundred profiles
+            // within the same row group.
+            val localFile = new java.io.File(ParquetFile.serialize(records, schema, 8).toUri())
+            S3Store.uploadFile(localFile, outputBucket, prefix)
+            localFile.delete()
+          }
+
+          List((processedCount + ignoredCount, ignoredCount)).toIterator
         }
 
-        List((processedCount + ignoredCount, ignoredCount)).toIterator
-      }
-
-    val counts = partitionCounts.reduce( (x, y) => (x._1 + y._1, x._2 + y._2))
-    println("Clients seen: %d".format(counts._1))
-    println("Clients ignored: %d".format(counts._2))
-
-    // NOTE: This line must be after the reduce above due to lazy eval, or else this will execute before any real work
-    S3Store.deleteKey(outputBucket,  s"${prefix}/${lockfileName}")
+      val counts = partitionCounts.reduce((x, y) => (x._1 + y._1, x._2 + y._2))
+      println("Clients seen: %d".format(counts._1))
+      println("Clients ignored: %d".format(counts._2))
+    } catch {
+      // Delete incomplete data
+      case e: Exception =>
+        deletePrefix(outputBucket, prefix)
+        throw e
+    }
   }
 
   private def buildSchema(histogramDefinitions: Map[String, HistogramDefinition], scalarDefinitions: Map[String, ScalarDefinition]): Schema = {
