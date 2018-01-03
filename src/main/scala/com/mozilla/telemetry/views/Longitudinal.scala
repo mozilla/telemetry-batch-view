@@ -156,11 +156,11 @@ object LongitudinalView {
         case channel if channels.map(_.contains(channel)).getOrElse(true) => true
       }
 
-    run(opts: Opts, messages)
+    run(opts: Opts, messages, sc.defaultParallelism)
     sc.stop()
   }
 
-  private def run(opts: Opts, messages: RDD[Message]): Unit = {
+  private def run(opts: Opts, messages: RDD[Message], numPartitions: Int): Unit = {
     val prefix = s"${jobName}/v${opts.to()}"
     val outputBucket = opts.outputBucket()
 
@@ -193,13 +193,8 @@ object LongitudinalView {
             } yield ((clientId, startDate, counter.toInt),
               fields + ("payload" -> compact(render(payload))) - "submission")
         }
-        .repartitionAndSortWithinPartitions(new ClientIdPartitioner(480))
+        .repartitionAndSortWithinPartitions(new ClientIdPartitioner(numPartitions))
         .map { case (key, value) => (key._1, value) }
-
-      /* One file per partition is generated at the end of the job. We want to have
-       few big files but at the same time we need a high enough degree of parallelism
-       to keep all workers busy. Since the cluster typically used for this job has
-       8 workers and 20 executors, 320 partitions provide a good compromise. */
 
       val histogramDefinitions = Histograms.definitions(includeOptin)
 
