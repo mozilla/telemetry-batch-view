@@ -189,8 +189,10 @@ object MainSummaryView {
         val s3prefix = s"${filterDocType}_summary/$schemaVersion/submission_date_s3=$currentDateString"
         val s3path = s"s3://${conf.outputBucket()}/$s3prefix"
 
-        // Repartition the dataframe by sample_id before saving.
-        val partitioned = records.repartition(100, records.col("sample_id"))
+        // Repartition the dataframe by document_id before saving.
+        // This results in 4 buckets that are distinct from sample_id, so that
+        // there are 4 files per sample_id partition.
+        val partitioned = records.repartition(4, records.col("document_id"))
 
         // Then write to S3 using the given fields as path name partitions. Overwrites
         // existing data.
