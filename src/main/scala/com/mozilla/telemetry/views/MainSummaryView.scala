@@ -12,6 +12,7 @@ import com.mozilla.telemetry.utils.{Addon, Attribution, Events,
 import com.mozilla.telemetry.utils.{BooleanUserPref, IntegerUserPref, UserPref}
 import org.json4s.{JValue, DefaultFormats}
 import com.mozilla.telemetry.metrics._
+import java.util.zip.CRC32
 
 import scala.util.{Success, Try}
 
@@ -92,6 +93,7 @@ object MainSummaryView {
     val appVersion = opt[String]("version", descr = "Only process data from the given app version", required = false)
     val allHistograms = opt[Boolean]("all-histograms", descr = "Flag to use all histograms", required = false)
     val docType = opt[String]("doc-type", descr = "DocType of pings conforming to main ping schema", required=false, default=Some("main"))
+    val filesPerPartition = opt[Int]("files-per-partition", descr = "Number of files to create in every partition in S3", required = false, default=Some(4))
     verify()
   }
 
@@ -189,8 +191,18 @@ object MainSummaryView {
         val s3prefix = s"${filterDocType}_summary/$schemaVersion/submission_date_s3=$currentDateString"
         val s3path = s"s3://${conf.outputBucket()}/$s3prefix"
 
-        // Repartition the dataframe by sample_id before saving.
-        val partitioned = records.repartition(100, records.col("sample_id"))
+        // Add temporary part_id column to control repartition
+        val filesPerPartition = conf.filesPerPartition()
+        val partitionId = (clientId: String, sampleId: Int) => {
+          val crc = new CRC32
+          crc.update(if (clientId == null) "".getBytes else clientId.getBytes)
+          sampleId * filesPerPartition + crc.getValue % filesPerPartition
+        }
+        sqlContext.udf.register("partid", partitionId)
+        val recordsWithPartId = records.selectExpr("*", "partid(client_id, sample_id) as part_id")
+
+        // Repartition the dataframe before saving
+        val partitioned = recordsWithPartId.repartition(recordsWithPartId.col("part_id")).drop("part_id")
 
         // Then write to S3 using the given fields as path name partitions. Overwrites
         // existing data.
