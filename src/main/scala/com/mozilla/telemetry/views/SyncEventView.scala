@@ -1,7 +1,7 @@
 package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.heka.{Dataset, Message}
-import com.mozilla.telemetry.utils.{Event, Events, S3Store}
+import com.mozilla.telemetry.utils.{Event, Events, S3Store, SyncPingConversion}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.{SparkConf, SparkContext}
@@ -152,7 +152,11 @@ object SyncEventConverter {
     // These fields are unique to the sync pings.
     StructField("uid", StringType, nullable = false), // payload/uid
     StructField("why", StringType, nullable = true),  // payload/why
-    StructField("device_id", StringType, nullable = true) // payload/deviceID
+    StructField("device_id", StringType, nullable = true), // payload/deviceID
+
+    StructField("device_os_name", StringType, nullable = true), // payload/os/name
+    StructField("device_os_version", StringType, nullable = true), // payload/os/version
+    StructField("device_os_locale", StringType, nullable = true) // payload/os/locale
   ) ++ eventFields
     ++ List(
       StructField("event_device_id", StringType, nullable = true), // present in most events
@@ -176,6 +180,8 @@ object SyncEventConverter {
   private def eventToRow(ping: JValue, event: List[Any]): Option[Row] = {
     val application = ping \ "application"
     val payload = ping \ "payload"
+
+    val (os_name, os_version, os_locale) = SyncPingConversion.extractOSData(ping, payload)
 
     val common = List(
       ping \ "id" match {
@@ -215,7 +221,10 @@ object SyncEventConverter {
       payload \ "deviceID" match {
         case JString(x) => x
         case _ => null
-      }
+      },
+      os_name,
+      os_version,
+      os_locale
     )
     val eventObject = Event.fromList(event) match {
       case None => return None
