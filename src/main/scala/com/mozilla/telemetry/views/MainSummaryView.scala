@@ -94,6 +94,8 @@ object MainSummaryView {
     val appVersion = opt[String]("version", descr = "Only process data from the given app version", required = false)
     val allHistograms = opt[Boolean]("all-histograms", descr = "Flag to use all histograms", required = false)
     val docType = opt[String]("doc-type", descr = "DocType of pings conforming to main ping schema", required=false, default=Some("main"))
+    // 500,000 rows yields ~ 200MB files in snappy+parquet
+    val maxRecordsPerFile = opt[Int]("max-records-per-file", descr = "Max number of rows to write to output files before splitting", required = false, default=Some(500000))
     verify()
   }
 
@@ -194,9 +196,12 @@ object MainSummaryView {
         // Repartition the dataframe by sample_id before saving.
         val partitioned = records.repartition(100, records.col("sample_id"))
 
+        // limit the size of output files so they don't break during s3 upload
+        val maxRecordsPerFile = conf.maxRecordsPerFile()
+
         // Then write to S3 using the given fields as path name partitions. Overwrites
         // existing data.
-        partitioned.write.partitionBy("sample_id").mode("overwrite").parquet(s3path)
+        partitioned.write.partitionBy("sample_id").mode("overwrite").option("maxRecordsPerFile", maxRecordsPerFile).parquet(s3path)
 
         // Then remove the _SUCCESS file so we don't break Spark partition discovery.
         S3Store.deleteKey(conf.outputBucket(), s"$s3prefix/_SUCCESS")
