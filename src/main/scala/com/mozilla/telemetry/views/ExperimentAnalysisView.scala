@@ -12,7 +12,7 @@ import scala.util.{Failure, Success, Try}
 
 object ExperimentAnalysisView {
   def defaultErrorAggregatesBucket = "net-mozaws-prod-us-west-2-pipeline-data"
-  def errorAggregatesPath = "error_aggregates/v2"
+  def errorAggregatesPath = "experiment_error_aggregates/v1"
   def jobName = "experiment_analysis"
   def schemaVersion = "v1"
   // This gives us ~120MB partitions with the columns we have now. We should tune this as we add more columns.
@@ -21,17 +21,38 @@ object ExperimentAnalysisView {
 
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getSimpleName)
 
-  // scalar_ and histogram_ columns are automatically added
-  private val usedColumns = List(
+  private val columnsWhitelist = List(
     "client_id",
     "experiment_id",
-    "experiment_branch"
+    "experiment_branch",
+    // Add default histograms & scalars here
+    "scalar_parent_browser_engagement_active_ticks",
+    "scalar_parent_browser_engagement_max_concurrent_tab_count",
+    "scalar_parent_browser_engagement_max_concurrent_window_count",
+    "scalar_parent_browser_engagement_navigation_about_home",
+    "scalar_parent_browser_engagement_navigation_about_newtab",
+    "scalar_parent_browser_engagement_navigation_contextmenu",
+    "scalar_parent_browser_engagement_navigation_searchbar",
+    "scalar_parent_browser_engagement_navigation_urlbar",
+    "scalar_parent_browser_engagement_restored_pinned_tabs_count",
+    "scalar_parent_browser_engagement_tab_open_event_count",
+    "scalar_parent_browser_engagement_total_uri_count",
+    "scalar_parent_browser_engagement_unfiltered_uri_count",
+    "scalar_parent_browser_engagement_unique_domains_count",
+    "scalar_parent_browser_engagement_window_open_event_count",
+    "histogram_content_time_to_first_click_ms",
+    "histogram_content_time_to_first_interaction_ms",
+    "histogram_content_time_to_first_key_input_ms",
+    "histogram_content_time_to_first_mouse_move_ms",
+    "histogram_content_time_to_first_scroll_ms",
+    "histogram_content_time_to_non_blank_paint_ms",
+    "histogram_content_time_to_response_start_ms"
   )
 
   implicit class ExperimentDataFrame(df: DataFrame) {
-    def selectUsedColumns: DataFrame = {
-      val columns = (usedColumns
-      ++ (df.schema.map(_.name).filter { s: String => s.startsWith("histogram_") || s.startsWith("scalar_") }))
+    def selectUsedColumns(extra: List[String] = List()): DataFrame = {
+      val whitelist = columnsWhitelist ++ extra
+      val columns = df.schema.map(_.name).filter(whitelist.contains(_))
       df.select(columns.head, columns.tail: _*)
     }
   }
@@ -94,7 +115,7 @@ object ExperimentAnalysisView {
         .first.getAs[String](0)
 
       val errorAggregates = Try(spark.read.parquet(s"s3://${conf.errorAggregatesBucket()}/$errorAggregatesPath")) match {
-        case Success(df) => df.where(col("experiment_id") === e && col("submission_date") >= minDate)
+        case Success(df) => df.where(col("experiment_id") === e && col("submission_date_s3") >= minDate)
         case Failure(_) => spark.emptyDataFrame
       }
 
@@ -147,13 +168,18 @@ object ExperimentAnalysisView {
     }
   }
 
-  def getExperimentMetrics(experiment: String, experimentsSummary: DataFrame, errorAggregates: DataFrame, conf: Conf): List[MetricAnalysis] = {
+  def getExperimentMetrics(experiment: String,
+                           experimentsSummary: DataFrame,
+                           errorAggregates: DataFrame, conf: Conf,
+                           experimentMetrics: List[String] = List()): List[MetricAnalysis] = {
     val pingCount = experimentsSummary.count()
-    val persisted = repartitionAndPersist(experimentsSummary, pingCount, experiment)
+    val persisted = repartitionAndPersist(experimentsSummary, pingCount, experiment, experimentMetrics)
     val bootstrapHistograms = conf.bootstrapHistograms()
     val bootstrapScalars = shouldBootstrapScalars(pingCount, conf)
 
-    val metricList = getMetrics(conf, experimentsSummary)
+    val schemaFields = experimentsSummary.schema.map(_.name)
+
+    val metricList = getMetrics(conf, experimentsSummary).filter {case (name, md) => schemaFields.contains(name)}
 
     val metrics = metricList.flatMap {
       case (name: String, md: MetricDefinition) =>
@@ -175,10 +201,14 @@ object ExperimentAnalysisView {
   // Repartitions dataset if warranted, and persists the result for quicker access
   def repartitionAndPersist(experimentsSummary: DataFrame,
                             pingCount: Long,
-                            experiment: String): DataFrame = {
+                            experiment: String,
+                            experimentMetrics: List[String]): DataFrame = {
     val calculatedPartitions = (pingCount / rowsPerPartition).toInt
     val numPartitions = calculatedPartitions max experimentsSummary.sparkSession.sparkContext.defaultParallelism
-    experimentsSummary.repartition(numPartitions).persist(StorageLevel.MEMORY_AND_DISK)
+    experimentsSummary
+      .selectUsedColumns(extra = experimentMetrics)
+      .repartition(numPartitions)
+      .persist(StorageLevel.MEMORY_AND_DISK)
   }
 
   def shouldBootstrapScalars(pingCount: Long, conf: Conf): Boolean = {
