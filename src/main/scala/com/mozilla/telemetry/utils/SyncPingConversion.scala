@@ -380,7 +380,7 @@ object SyncPingConversion {
     case _ => null
   }
 
-  private def extractOSData(ping: JValue, payload: JValue): (String, String, String) = {
+  def extractOSData(ping: JValue, payload: JValue): (String, String, String) = {
     val os = payload \ "os" match {
       case obj @ JObject(_) => obj
       // Android stores it at the top level, unfortunately

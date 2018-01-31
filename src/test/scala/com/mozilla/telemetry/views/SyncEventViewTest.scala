@@ -147,6 +147,47 @@ class SyncEventViewTest extends FlatSpec with Matchers{
       |}
     """.stripMargin)
 
+  def sync_payload_with_os = parse(
+    """
+      |{
+      |  "type": "sync",
+      |  "id": "a1d969b7-0084-4a78-a841-2abaf887f1b4",
+      |  "creationDate": "2016-09-08T18:19:09.808Z",
+      |  "version": 4,
+      |  "application": {
+      |    "architecture": "x86-64",
+      |    "buildId": "20160907030427",
+      |    "name": "Firefox",
+      |    "version": "51.0a1",
+      |    "displayVersion": "51.0a1",
+      |    "vendor": "Mozilla",
+      |    "platformVersion": "51.0a1",
+      |    "xpcomAbi": "x86_64-msvc",
+      |    "channel": "nightly"
+      |  },
+      |  "payload": {
+      |    "why": "schedule",
+      |    "version": 1,
+      |    "uid": "12345678912345678912345678912345",
+      |    "deviceID": "2222222222222222222222222222222222222222222222222222222222222222",
+      |    "os": {
+      |      "name": "iOS",
+      |      "version": "10.0",
+      |      "locale": "en_US"
+      |    },
+      |    "syncs": [],
+      |    "events": [
+      |      [1234, "sync", "displayURI", "sendcommand", null,
+      |        {
+      |          "deviceID": "3333333333333333333333333333333333333333333333333333333333333333",
+      |          "flowID": "aaaaaaaaaaaaa"
+      |        }
+      |      ]
+      |    ]
+      |  }
+      |}
+    """.stripMargin)
+
   "Sync Events" can "be serialized" in {
     val sparkConf = new SparkConf().setAppName("SyncEventViewTest")
     sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
@@ -178,6 +219,10 @@ class SyncEventViewTest extends FlatSpec with Matchers{
       checkRow.getAs[String]("why") should be ((payload \ "why").extract[String])
       checkRow.getAs[String]("uid") should be ((payload \ "uid").extract[String])
       checkRow.getAs[String]("device_id") should be ((payload \ "deviceID").extract[String])
+      // not present in this ping (common, need to make sure this works)
+      checkRow.getAs[String]("device_os_name") should be (null)
+      checkRow.getAs[String]("device_os_version") should be (null)
+      checkRow.getAs[String]("device_os_locale") should be (null)
 
       val event = (payload \ "events")(0)
       checkRow.getAs[Long]("event_timestamp") should be (event(0).extract[Long])
@@ -190,6 +235,42 @@ class SyncEventViewTest extends FlatSpec with Matchers{
       checkRow.getAs[String]("event_flow_id") should be ((event(5) \ "flowID").extract[String])
       checkRow.getAs[String]("event_device_version") should be ("55.0a1")
       checkRow.getAs[String]("event_device_os") should be ("WINNT")
+    } finally {
+      sc.stop()
+    }
+  }
+
+  "Sync Events" can "contain os information for sending device" in {
+    val sparkConf = new SparkConf().setAppName("SyncEventViewTest")
+    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
+    val sc = new SparkContext(sparkConf)
+    implicit val formats = DefaultFormats
+    sc.setLogLevel("WARN")
+    try {
+      val row = SyncEventConverter.pingToRows(sync_payload_with_os)
+      val spark = SparkSession
+        .builder()
+        .appName("SyncEventsViewTest")
+        .getOrCreate()
+      val rdd = sc.parallelize(row)
+
+      val dataframe = spark.createDataFrame(rdd, SyncEventConverter.syncEventSchema)
+
+      // verify the contents.
+      dataframe.count() should be (1)
+      val checkRow = dataframe.first()
+
+      val payload = sync_payload \ "payload"
+
+      checkRow.getAs[String]("device_os_name") should be ("iOS")
+      checkRow.getAs[String]("device_os_version") should be ("10.0")
+      checkRow.getAs[String]("device_os_locale") should be ("en_US")
+      // Check that we handle the case where the target device isn't in the ping since
+      // it's convenient, somewhat common, and not tested by the previous test.
+      val event = (payload \ "events")(0)
+      checkRow.getAs[String]("event_device_id") should be ((event(5) \ "deviceID").extract[String])
+      checkRow.getAs[String]("event_device_version") should be (null)
+      checkRow.getAs[String]("event_device_os") should be (null)
     } finally {
       sc.stop()
     }
