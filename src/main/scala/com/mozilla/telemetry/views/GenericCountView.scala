@@ -105,7 +105,7 @@ object GenericCountView {
 
     val df = conf.inputTablename.get match {
       case Some(t) => spark.sql(s"SELECT * FROM $t")
-      case _ => spark.read.load(conf.inputFiles())
+      case _ => spark.read.option("mergeSchema", "true").load(conf.inputFiles())
     }
 
     df.registerTempTable(tempTableName)
