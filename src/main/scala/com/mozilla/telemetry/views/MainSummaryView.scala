@@ -388,16 +388,35 @@ object MainSummaryView {
     }
   }
 
-  def asInt(v: JValue): Integer = v match {
-    case JInt(x) => x.toInt
-    case _ => null
+  implicit val formats = DefaultFormats
+
+  // A note on json4s JValue extraction:
+  //
+  // JValue provides an `.extract[T]` interface for deconstructing values to
+  // native types. However, fields in the schema are mostly nullable. One
+  // way to extract the value is to use a boxed type e.g. `scala.Long` or
+  // `java.lang.Long`. These are wrappers around the primitive types and
+  // support nullable values. This can increase the the latency of the
+  // program by introducing extra overhead. [1].
+  //
+  // Here, we choose to extract the value into an Option and unwrap into a primitive Any.
+  // `JValue.extract[Option[T]].orNull -> Any`. A general short hand that works for most primitive
+  // types is to use `JValue.extractOpt[T]`. Exceptions should be noted.
+  //
+  // [1]: https://blog.scalac.io/2017/05/25/scala-specialization.html
+  //
+  implicit class RichJValue(val self: JValue) extends AnyVal {
+    @inline def toNullableInt: Any = self.extractOpt[Int].orNull
+    @inline def toNullableLong: Any = self.extractOpt[Long].orNull
+    @inline def toNullableBool: Any = self.extractOpt[Boolean].orNull
+    @inline def toNullableString: Any = self.extractOpt[String].orNull
+    @inline def toNullableSeqString: Any = self.extract[Option[Seq[String]]].orNull
   }
 
   // Convert the given Heka message containing a "main" ping
   // to a map containing just the fields we're interested in.
   def messageToRow(message: Message, scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String, HistogramDefinition)], userPrefs: List[UserPref] = userPrefsList): Option[Row] = {
     try {
-      implicit val formats = DefaultFormats
       val fields = message.fieldsAsMap
 
       // Don't compute the expensive stuff until we need it. We may skip a record
@@ -456,10 +475,7 @@ object MainSummaryView {
       // Get the "sum" field from histogram h as an Int. Consider a
       // wonky histogram (one for which the "sum" field is not a
       // valid number) as null.
-      val hsum = (h: JValue) => h \ "sum" match {
-        case JInt(x) => x.toInt
-        case _ => null
-      }
+      @inline def hsum(h: JValue): Any = (h \ "sum").extractOpt[Int].orNull
 
       val row = Row(
         // Row fields must match the structure in 'buildSchema'
@@ -494,83 +510,27 @@ object MainSummaryView {
           case x: String => x
           case _ => ""
         },
-        system \ "os" \ "name" match {
-          case JString(x) => x
-          case _ => null
-        },
-        system \ "os" \ "version" match {
-          case JString(x) => x
-          case JInt(x) => x.toString()
-          case _ => null
-        },
-        system \ "os" \ "servicePackMajor" match {
-          case JInt(x) => x.toLong
-          case _ => null
-        },
-        system \ "os" \ "servicePackMinor" match {
-          case JInt(x) => x.toLong
-          case _ => null
-        },
-        system \ "os" \ "windowsBuildNumber" match {
-          case JInt(x) => x.toLong
-          case _ => null
-        },
-        system \ "os" \ "windowsUBR" match {
-          case JInt(x) => x.toLong
-          case _ => null
-        },
-        system \ "os" \ "installYear" match {
-          case JInt(x) => x.toLong
-          case _ => null
-        },
-        system \ "isWow64" match {
-          case JBool(x) => x
-          case _ => null
-        },
-        system \ "memoryMB" match {
-          case JInt(x) => x.toInt
-          case _ => null
-        },
-        system \ "appleModelId" match {
-          case JString(x) => x
-          case _ => null
-        },
-        // unfortunately, JNull.extractOpt[Seq[String]] -> List()
-        (system \ "sec" \ "antivirus").extract[Option[Seq[String]]].orNull,
-        (system \ "sec" \ "antispyware").extract[Option[Seq[String]]].orNull,
-        (system \ "sec" \ "firewall").extract[Option[Seq[String]]].orNull,
-        profile \ "creationDate" match {
-          case JInt(x) => x.toLong
-          case _ => null
-        },
-        profile \ "resetDate" match {
-          case JInt(x) => x.toLong
-          case _ => null
-        },
-        info \ "subsessionStartDate" match {
-          case JString(x) => x
-          case _ => null
-        },
-        info \ "subsessionLength" match {
-          case JInt(x) => x.toLong
-          case _ => null
-        },
-        info \ "subsessionCounter" match {
-          case JInt(x) => x.toInt
-          case _ => null
-        },
-        info \ "profileSubsessionCounter" match {
-          case JInt(x) => x.toInt
-          case _ => null
-        },
-        payload \ "creationDate" match {
-          case JString(x) => x
-          case _ => null
-        },
-        partner \ "distributionId" match {
-          case JString(x) => x
-          case _ => null
-        },
+        (system \ "os" \ "name").toNullableString,
+        (system \ "os" \ "version").toNullableString,
+        (system \ "os" \ "servicePackMajor").toNullableLong,
+        (system \ "os" \ "servicePackMinor").toNullableLong,
+        (system \ "os" \ "windowsBuildNumber").toNullableLong,
+        (system \ "os" \ "windowsUBR").toNullableLong,
+        (system \ "os" \ "installYear").toNullableLong,
+        (system \ "isWow64").toNullableBool,
+        (system \ "memoryMB").toNullableInt,
+        (system \ "appleModelId").toNullableString,
+        (system \ "sec" \ "antivirus").toNullableSeqString,
+        (system \ "sec" \ "antispyware").toNullableSeqString,
+        (system \ "sec" \ "firewall").toNullableSeqString,
+        (profile \ "creationDate").toNullableLong,
+        (profile \ "resetDate").toNullableLong,
+        (info \ "subsessionStartDate").toNullableString,
+        (info \ "subsessionLength").toNullableLong,
+        (info \ "subsessionCounter").toNullableInt,
+        (info \ "profileSubsessionCounter").toNullableInt,
+        (payload \ "creationDate").toNullableString,
+        (partner \ "distributionId").toNullableString,
         fields.getOrElse("submissionDate", None) match {
           case x: String => x
           case _ => return None // required
@@ -578,61 +538,22 @@ object MainSummaryView {
         weaveConfigured.orNull,
         weaveDesktop.orNull,
         weaveMobile.orNull,
-        application \ "buildId" match {
-          case JString(x) => x
-          case _ => null
-        },
-        application \ "displayVersion" match {
-          case JString(x) => x
-          case _ => null
-        },
-        application \ "name" match {
-          case JString(x) => x
-          case _ => null
-        },
-        application \ "version" match {
-          case JString(x) => x
-          case _ => null
-        },
+        (application \ "buildId").toNullableString,
+        (application \ "displayVersion").toNullableString,
+        (application \ "name").toNullableString,
+        (application \ "version").toNullableString,
         message.timestamp, // required
-        build \ "buildId" match {
-          case JString(x) => x
-          case _ => null
-        },
-        build \ "version" match {
-          case JString(x) => x
-          case _ => null
-        },
-        build \ "architecture" match {
-          case JString(x) => x
-          case _ => null
-        },
-        settings \ "e10sEnabled" match {
-          case JBool(x) => x
-          case _ => null
-        },
-        settings \ "e10sMultiProcesses" match {
-          case JInt(x) => x.toLong
-          case _ => null
-        },
-        settings \ "locale" match {
-          case JString(x) => x
-          case _ => null
-        },
+        (build \ "buildId").toNullableString,
+        (build \ "version").toNullableString,
+        (build \ "architecture").toNullableString,
+        (settings \ "e10sEnabled").toNullableBool,
+        (settings \ "e10sMultiProcesses").toNullableLong,
+        (settings \ "locale").toNullableString,
         getAttribution(settings \ "attribution").orNull,
-        addons \ "activeExperiment" \ "id" match {
-          case JString(x) => x
-          case _ => null
-        },
-        addons \ "activeExperiment" \ "branch" match {
-          case JString(x) => x
-          case _ => null
-        },
-        info \ "reason" match {
-          case JString(x) => x
-          case _ => null
-        },
-        asInt(info \ "timezoneOffset"),
+        (addons \ "activeExperiment" \ "id").toNullableString,
+        (addons \ "activeExperiment" \ "branch").toNullableString,
+        (info \ "reason").toNullableString,
+        (info \ "timezoneOffset").toNullableInt,
         hsum(keyedHistograms("parent") \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "pluginhang"),
         hsum(keyedHistograms("parent") \ "SUBPROCESS_ABNORMAL_ABORT" \ "plugin"),
         hsum(keyedHistograms("parent") \ "SUBPROCESS_ABNORMAL_ABORT" \ "content"),
@@ -647,42 +568,15 @@ object MainSummaryView {
         hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash"),
         hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash"),
         hsum(keyedHistograms("parent") \ "SUBPROCESS_KILL_HARD" \ "ShutDownKill"),
-        MainPing.countKeys(addons \ "activeAddons") match {
-          case Some(x) => x
-          case _ => null
-        },
-        MainPing.getFlashVersion(addons) match {
-          case Some(x) => x
-          case _ => null
-        },
-        application \ "vendor" match {
-          case JString(x) => x
-          case _ => null
-        },
-        settings \ "isDefaultBrowser" match {
-          case JBool(x) => x
-          case _ => null
-        },
-        settings \ "defaultSearchEngineData" \ "name" match {
-          case JString(x) => x
-          case _ => null
-        },
-        settings \ "defaultSearchEngineData" \ "loadPath" match {
-          case JString(x) => x
-          case _ => null
-        },
-        settings \ "defaultSearchEngineData" \ "origin" match {
-          case JString(x) => x
-          case _ => null
-        },
-        settings \ "defaultSearchEngineData" \ "submissionURL" match {
-          case JString(x) => x
-          case _ => null
-        },
-        settings \ "defaultSearchEngine" match {
-          case JString(x) => x
-          case _ => null
-        },
+        MainPing.countKeys(addons \ "activeAddons").orNull,
+        MainPing.getFlashVersion(addons).orNull,
+        (application \ "vendor").toNullableString,
+        (settings \ "isDefaultBrowser").toNullableBool,
+        (settings \ "defaultSearchEngineData" \ "name").toNullableString,
+        (settings \ "defaultSearchEngineData" \ "loadPath").toNullableString,
+        (settings \ "defaultSearchEngineData" \ "origin").toNullableString,
+        (settings \ "defaultSearchEngineData" \ "submissionURL").toNullableString,
+        (settings \ "defaultSearchEngine").toNullableString,
         hsum(histograms("parent") \ "DEVTOOLS_TOOLBOX_OPENED_COUNT"),
         fields.getOrElse("Date", None) match {
           case x: String => x
@@ -701,18 +595,9 @@ object MainSummaryView {
         getActiveAddons(addons \ "activeAddons").orNull,
         getDisabledAddons(addons \ "activeAddons", addonDetails \ "XPI").orNull,
         getTheme(addons \ "theme").orNull,
-        settings \ "blocklistEnabled" match {
-          case JBool(x) => x
-          case _ => null
-        },
-        settings \ "addonCompatibilityCheckEnabled" match {
-          case JBool(x) => x
-          case _ => null
-        },
-        settings \ "telemetryEnabled" match {
-          case JBool(x) => x
-          case _ => null
-        },
+        (settings \ "blocklistEnabled").toNullableBool,
+        (settings \ "addonCompatibilityCheckEnabled").toNullableBool,
+        (settings \ "telemetryEnabled").toNullableBool,
         getOldUserPrefs(settings \ "userPrefs").orNull,
 
         Option(events.flatMap {case (p, e) => Events.getEvents(e, p)}).filter(!_.isEmpty).orNull,
@@ -725,21 +610,21 @@ object MainSummaryView {
         // bug 1382002 - use scalar version when available.
         Try(MainPing.getScalarByName(scalars, scalarDefinitions, "scalar_parent_browser_engagement_active_ticks")) match {
           case Success(x: Integer) => x
-          case _ => asInt (simpleMeasures \ "activeTicks")
+          case _ => (simpleMeasures \ "activeTicks").toNullableInt
         },
 
         // bug 1353114 - payload.simpleMeasurements.*
-        asInt(simpleMeasures \ "main"),
+        (simpleMeasures \ "main").toNullableInt,
 
         // Use scalar version when available.
         Try(MainPing.getScalarByName(scalars, scalarDefinitions, "scalar_parent_timestamps_first_paint")) match {
           case Success(x: Integer) => x
-          case _ => asInt (simpleMeasures \ "firstPaint")
+          case _ => (simpleMeasures \ "firstPaint").toNullableInt
         },
 
         // bug 1353114 - payload.simpleMeasurements.*
-        asInt(simpleMeasures \ "sessionRestored"),
-        asInt(simpleMeasures \ "totalTime"),
+        (simpleMeasures \ "sessionRestored").toNullableInt,
+        (simpleMeasures \ "totalTime").toNullableInt,
 
         // bug 1362520 - plugin notifications
         hsum(histograms("parent") \ "PLUGINS_NOTIFICATION_SHOWN"),
@@ -752,16 +637,10 @@ object MainSummaryView {
         // bug 1366253 - active experiments
         getExperiments(experiments).orNull,
 
-        settings \ "searchCohort" match {
-          case JString(x) => x
-          case _ => null
-        },
+        (settings \ "searchCohort").toNullableString,
 
         // bug 1366838 - Quantum Release Criteria
-        system \ "gfx" \ "features" \ "compositor" match {
-          case JString(x) => x
-          case _ => null
-        },
+        (system \ "gfx" \ "features" \ "compositor").toNullableString,
 
         getQuantumReady(
           settings \ "e10sEnabled",
