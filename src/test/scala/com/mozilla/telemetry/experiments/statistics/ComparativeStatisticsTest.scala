@@ -30,6 +30,20 @@ class ComparativeStatisticsTest extends FlatSpec with Matchers {
     actual._2.value should be(0.05333333333333332)
   }
 
+  "MWU statistic" should "compute correctly" in {
+    val no_distance = MWUDistance(control, control).asStatistics
+    no_distance._1.value should be(12.5)
+    no_distance._2.value should be(12.5)
+    no_distance._1.p_value should be(Some(0.4528018676189998))
+    no_distance._2.p_value should be(Some(0.4528018676189998))
+
+    val actual = MWUDistance(control, experimental).asStatistics
+    actual._1.value should be(10.5)
+    actual._2.value should be(10.5)
+    actual._1.p_value should be(Some(0.36686506477846537))
+    actual._2.p_value should be(Some(0.36686506477846537))
+  }
+
   "Comparative statistics" can "be returned" in  {
     val stats_obj = ComparativeStatistics(control, experimental)
     val stat_count = stats_obj.statisticsList.length

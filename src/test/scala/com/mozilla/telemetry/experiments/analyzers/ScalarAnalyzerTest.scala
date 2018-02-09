@@ -85,7 +85,9 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
         Map(1L -> toPointControl(1), 5L -> toPointControl(2)),
         Some(List(
           Statistic(Some("branch1"), "Chi-Square Distance", 0.5),
+          Statistic(Some("branch1"), "Mann-Whitney-U Distance", 0.5, None, None, None, Some(0.3085375372760059)),
           Statistic(Some("branch2"), "Chi-Square Distance", 0.5),
+          Statistic(Some("branch2"), "Mann-Whitney-U Distance", 1.0, None, None, None, Some(0.15865526383236367)),
           Statistic(None, "Mean", 3.6666666666666665),
           Statistic(None, "Median", 3.0),
           Statistic(None, "25th Percentile", 1.0),
@@ -94,6 +96,7 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
         Map(1L -> toPointBranch1(1)),
         Some(List(
           Statistic(Some("control"), "Chi-Square Distance", 0.5, None, None, None, None),
+          Statistic(Some("control"), "Mann-Whitney-U Distance", 0.5, None, None, None, Some(0.3085375372760059)),
           Statistic(None, "Mean", 1.0),
           Statistic(None, "Median", 1.0),
           Statistic(None, "25th Percentile", 1.0),
@@ -102,6 +105,7 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
         Map(1L -> toPointBranch2(2)),
         Some(List(
           Statistic(Some("control"), "Chi-Square Distance", 0.5),
+          Statistic(Some("control"), "Mann-Whitney-U Distance", 1.0, None, None, None, Some(0.15865526383236367)),
           Statistic(None, "Mean", 1.0),
           Statistic(None, "Median", 1.0),
           Statistic(None, "25th Percentile", 1.0),
@@ -127,7 +131,9 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
         Map(1L -> toPointControl(3), 3L -> toPointControl(3)),
         Some(List(
           Statistic(Some("branch1"), "Chi-Square Distance", 0.0),
+          Statistic(Some("branch1"), "Mann-Whitney-U Distance", 6.0, None, None, None, Some(0.42428606222331366)),
           Statistic(Some("branch2"), "Chi-Square Distance", 0.0),
+          Statistic(Some("branch2"), "Mann-Whitney-U Distance", 12.0, None, None, None, Some(0.45126158423731005)),
           Statistic(None, "Mean", 2.0),
           Statistic(None, "Median", 1.0),
           Statistic(None, "25th Percentile", 1.0),
@@ -136,6 +142,7 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
         Map(1L -> toPointBranch1(1), 3L -> toPointBranch1(1)),
         Some(List(
           Statistic(Some("control"), "Chi-Square Distance", 0.0),
+          Statistic(Some("control"), "Mann-Whitney-U Distance", 6.0, None, None, None, Some(0.42428606222331366)),
           Statistic(None, "Mean", 2.0),
           Statistic(None, "Median", 1.0),
           Statistic(None, "25th Percentile", 1.0),
@@ -144,6 +151,7 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
         Map(1L -> toPointBranch2(2), 3L -> toPointBranch2(2)),
         Some(List(
           Statistic(Some("control"), "Chi-Square Distance", 0.0),
+          Statistic(Some("control"), "Mann-Whitney-U Distance", 12.0, None, None, None, Some(0.45126158423731005)),
           Statistic(None, "Mean", 2.0),
           Statistic(None, "Median", 1.0),
           Statistic(None, "25th Percentile", 1.0),
@@ -164,15 +172,19 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
         booleansToPoints(1, 2),
         Some(List(
           Statistic(Some("branch1"), "Chi-Square Distance", 0.2),
-          Statistic(Some("branch2"), "Chi-Square Distance", 0.02857142857142857)))),
+          Statistic(Some("branch1"), "Mann-Whitney-U Distance", 1.0, None, None, None, Some(0.5000000005)),
+          Statistic(Some("branch2"), "Chi-Square Distance", 0.02857142857142857),
+          Statistic(Some("branch2"), "Mann-Whitney-U Distance", 2.5, None, None, None, Some(0.5000000005))))),
       MetricAnalysis("experiment1", "branch1", MetricAnalyzer.topLevelLabel, 1L, "boolean_scalar", "BooleanScalar",
         booleansToPoints(0, 1),
         Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.2)))),
+          Statistic(Some("control"), "Chi-Square Distance", 0.2),
+          Statistic(Some("control"), "Mann-Whitney-U Distance", 1.0, None, None, None, Some(0.5000000005))))),
       MetricAnalysis("experiment1", "branch2", MetricAnalyzer.topLevelLabel, 2L, "boolean_scalar", "BooleanScalar",
         booleansToPoints(1, 1),
         Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.02857142857142857)))))
+          Statistic(Some("control"), "Chi-Square Distance", 0.02857142857142857),
+          Statistic(Some("control"), "Mann-Whitney-U Distance", 2.5, None, None, None, Some(0.5000000005))))))
     assert(actual == expected)
   }
 
@@ -190,15 +202,19 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
         booleansToPoints(4, 2),
         Some(List(
           Statistic(Some("branch1"), "Chi-Square Distance", 0.2),
-          Statistic(Some("branch2"), "Chi-Square Distance", 0.008403361344537816)))),
+          Statistic(Some("branch1"), "Mann-Whitney-U Distance", 4.0, None, None, None, Some(0.2541657222661252)),
+          Statistic(Some("branch2"), "Chi-Square Distance", 0.008403361344537816),
+          Statistic(Some("branch2"), "Mann-Whitney-U Distance", 11.0, None, None, None, Some(0.44684730310744686))))),
       MetricAnalysis("experiment1", "branch1", MetricAnalyzer.topLevelLabel, 1L, "keyed_boolean_scalar", "BooleanScalar",
         booleansToPoints(2, 0),
         Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.2)))),
+          Statistic(Some("control"), "Chi-Square Distance", 0.2),
+          Statistic(Some("control"), "Mann-Whitney-U Distance", 4.0, None, None, None, Some(0.2541657222661252))))),
       MetricAnalysis("experiment1", "branch2", MetricAnalyzer.topLevelLabel, 2L, "keyed_boolean_scalar", "BooleanScalar",
         booleansToPoints(3, 1),
         Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.008403361344537816)))))
+          Statistic(Some("control"), "Chi-Square Distance", 0.008403361344537816),
+          Statistic(Some("control"), "Mann-Whitney-U Distance", 11.0, None, None, None, Some(0.44684730310744686))))))
     assert(actual == expected)
   }
 
@@ -215,14 +231,18 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
         stringsToPoints(List((0, "hello", 2), (2, "world", 1))),
         Some(List(
           Statistic(Some("branch1"), "Chi-Square Distance", 0.2),
-          Statistic(Some("branch2"), "Chi-Square Distance", 1.0)))),
+          Statistic(Some("branch1"), "Mann-Whitney-U Distance", 1.0, None, None, None, Some(0.5000000005)),
+          Statistic(Some("branch2"), "Chi-Square Distance", 1.0),
+          Statistic(Some("branch2"), "Mann-Whitney-U Distance", 2.0, None, None, None, Some(0.3804534321513065))))),
       MetricAnalysis("experiment1", "branch1", MetricAnalyzer.topLevelLabel, 1L, "string_scalar", "StringScalar",
         stringsToPoints(List((0, "hello", 1))),
         Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.2)))),
+          Statistic(Some("control"), "Chi-Square Distance", 0.2),
+          Statistic(Some("control"), "Mann-Whitney-U Distance", 1.0, None, None, None, Some(0.5000000005))))),
       MetricAnalysis("experiment1", "branch2", MetricAnalyzer.topLevelLabel, 2L, "string_scalar", "StringScalar",
         stringsToPoints(List((1, "ohai", 2))), Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 1.0)))))
+          Statistic(Some("control"), "Chi-Square Distance", 1.0),
+          Statistic(Some("control"), "Mann-Whitney-U Distance", 2.0, None, None, None, Some(0.3804534321513065))))))
     assert(actual == expected)
   }
 
@@ -240,15 +260,19 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
         stringsToPoints(List((0, "hello", 3), (1, "world", 3))),
         Some(List(
           Statistic(Some("branch1"), "Chi-Square Distance", 0.0),
-          Statistic(Some("branch2"), "Chi-Square Distance", 0.0)))),
+          Statistic(Some("branch1"), "Mann-Whitney-U Distance", 6.0, None, None, None, Some(0.42428606222331366)),
+          Statistic(Some("branch2"), "Chi-Square Distance", 0.0),
+          Statistic(Some("branch2"), "Mann-Whitney-U Distance", 12.0, None, None, None, Some(0.45126158423731005))))),
       MetricAnalysis("experiment1", "branch1", MetricAnalyzer.topLevelLabel, 1L, "keyed_string_scalar", "StringScalar",
         stringsToPoints(List((0, "hello", 1), (1, "world", 1))),
         Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.0)))),
+          Statistic(Some("control"), "Chi-Square Distance", 0.0),
+          Statistic(Some("control"), "Mann-Whitney-U Distance", 6.0, None, None, None, Some(0.42428606222331366))))),
       MetricAnalysis("experiment1", "branch2", MetricAnalyzer.topLevelLabel, 2L, "keyed_string_scalar", "StringScalar",
         stringsToPoints(List((0, "hello", 2), (1, "world", 2))),
         Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.0)))))
+          Statistic(Some("control"), "Chi-Square Distance", 0.0),
+          Statistic(Some("control"), "Mann-Whitney-U Distance", 12.0, None, None, None, Some(0.45126158423731005))))))
     assert(actual == expected)
   }
 

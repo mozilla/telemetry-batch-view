@@ -1,6 +1,7 @@
 package com.mozilla.telemetry.experiments.statistics
 
 import com.mozilla.telemetry.experiments.analyzers.{HistogramPoint, MetricAnalysis, Statistic}
+import com.mozilla.telemetry.statistics
 
 
 sealed abstract class ComparativeStatistic(control: MetricAnalysis, experimental: MetricAnalysis) {
@@ -35,9 +36,33 @@ case class ChiSquareDistance(control: MetricAnalysis, experimental: MetricAnalys
   }
 }
 
+case class MWUDistance(control: MetricAnalysis, experimental: MetricAnalysis)
+  extends ComparativeStatistic(control, experimental) {
+  val name = "Mann-Whitney-U Distance"
+
+  def run: (Double, Double) = {
+    val c = control.histogram map {
+      case (k, v) => (k, v.count.toLong)
+    }
+    val e = experimental.histogram map {
+      case (k, v) => (k, v.count.toLong)
+    }
+    statistics.mwu(c, e)
+  }
+
+  override def asStatistics: (Statistic, Statistic) = {
+    val (u, p) = run
+    (
+      Statistic(Some(experimental.experiment_branch), name, u, p_value=Some(p)),
+      Statistic(Some(control.experiment_branch), name, u, p_value=Some(p))
+    )
+  }
+}
+
 case class ComparativeStatistics(control: MetricAnalysis, experimental: MetricAnalysis) {
   val statisticsList = List(
-    ChiSquareDistance(control, experimental)
+    ChiSquareDistance(control, experimental),
+    MWUDistance(control, experimental)
   )
 
   def getStatistics: Map[MetricAnalysis, List[Statistic]] = {
