@@ -1899,4 +1899,38 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     actual.get("events").orNull should contain theSameElementsAs (expected)
   }
+
+  "Security" can "be properly shown" in {
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.system" -> """{
+          "sec": {
+            "antivirus": ["av_1"],
+            "antispyware": ["asw_1", "asw_2"],
+            "firewall": null
+          }
+        }"""),
+      None)
+    val summary = defaultMessageToRow(message)
+
+    val expected = Map(
+      "antivirus" -> Seq("av_1"),
+      "antispyware" -> Seq("asw_1", "asw_2"),
+      "firewall" -> null
+    )
+
+    val actual =
+      applySchema(summary.get, MainSummaryView.buildSchema(userPrefs, scalarDefs, histogramDefs))
+        .getValuesMap(expected.keys.toList)
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+    actual should be (expected)
+  }
 }

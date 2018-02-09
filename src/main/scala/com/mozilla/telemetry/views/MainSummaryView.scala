@@ -390,6 +390,7 @@ object MainSummaryView {
   // to a map containing just the fields we're interested in.
   def messageToRow(message: Message, scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String, HistogramDefinition)], userPrefs: List[UserPref] = userPrefsList): Option[Row] = {
     try {
+      implicit val formats = DefaultFormats
       val fields = message.fieldsAsMap
 
       // Don't compute the expensive stuff until we need it. We may skip a record
@@ -527,6 +528,10 @@ object MainSummaryView {
           case JString(x) => x
           case _ => null
         },
+        // unfortunately, JNull.extractOpt[Seq[String]] -> List()
+        (system \ "sec" \ "antivirus").extract[Option[Seq[String]]].orNull,
+        (system \ "sec" \ "antispyware").extract[Option[Seq[String]]].orNull,
+        (system \ "sec" \ "firewall").extract[Option[Seq[String]]].orNull,
         profile \ "creationDate" match {
           case JInt(x) => x.toLong
           case _ => null
@@ -954,6 +959,11 @@ object MainSummaryView {
 
       StructField("memory_mb", IntegerType, nullable = true), // environment/system/memoryMB
       StructField("apple_model_id", StringType, nullable = true), // environment/system/appleModelId
+
+      // Bug 1431198 - Windows 8 only
+      StructField("antivirus", ArrayType(StringType, containsNull=false), nullable=true), // environment/system/sec/antivirus
+      StructField("antispyware", ArrayType(StringType, containsNull=false), nullable=true), // environment/system/sec/antispyware
+      StructField("firewall", ArrayType(StringType, containsNull=false), nullable=true), // environment/system/sec/firewall
 
       // TODO: use proper 'date' type for date columns.
       StructField("profile_creation_date", LongType, nullable = true), // environment/profile/creationDate
