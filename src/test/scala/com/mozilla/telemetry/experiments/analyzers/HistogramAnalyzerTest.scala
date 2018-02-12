@@ -8,7 +8,8 @@ import org.scalatest.{FlatSpec, Matchers}
 import scala.collection.Map
 
 
-case class HistogramExperimentDataset(experiment_id: String,
+case class HistogramExperimentDataset(block_id: Int,
+                                      experiment_id: String,
                                       experiment_branch: String,
                                       histogram: Option[Map[Int, Int]],
                                       keyed_histogram: Option[Map[String, Map[Int, Int]]])
@@ -22,18 +23,18 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
   def fixture: DataFrame = {
     import spark.implicits._
     Seq(
-      HistogramExperimentDataset("experiment1", "control", Some(m1), Some(Map("key1" -> m1, "key2" -> m2))),
-      HistogramExperimentDataset("experiment1", "control", None, None),
-      HistogramExperimentDataset("experiment1", "control", Some(Map(0 -> 1, 10000 -> 2)), None),
-      HistogramExperimentDataset("experiment1", "control", Some(Map(0 -> 1, 1 -> -2)), None),
-      HistogramExperimentDataset("experiment1", "control", Some(m2), Some(Map("hi" -> m2, "there" -> m3))),
-      HistogramExperimentDataset("experiment1", "control", Some(m4), Some(Map("hi" -> m3, "there" -> m3))),
-      HistogramExperimentDataset("experiment1", "branch1", Some(m1), Some(Map("key1" -> m1, "key2" -> m2))),
-      HistogramExperimentDataset("experiment1", "branch2", Some(m4), Some(Map("hi" -> m3, "there" -> m3))),
-      HistogramExperimentDataset("experiment1", "branch2", Some(m4), Some(Map("hi" -> m3, "there" -> m3))),
-      HistogramExperimentDataset("experiment2", "control", None, Some(Map("hi" -> m3, "there" -> m3))),
-      HistogramExperimentDataset("experiment3", "control", Some(m4), Some(Map("hi" -> m3, "there" -> m3))),
-      HistogramExperimentDataset("experiment3", "branch2", Some(m1), Some(Map("key1" -> m1, "key2" -> m2)))
+      HistogramExperimentDataset(1, "experiment1", "control", Some(m1), Some(Map("key1" -> m1, "key2" -> m2))),
+      HistogramExperimentDataset(2, "experiment1", "control", None, None),
+      HistogramExperimentDataset(3, "experiment1", "control", Some(Map(0 -> 1, 10000 -> 2)), None),
+      HistogramExperimentDataset(1, "experiment1", "control", Some(Map(0 -> 1, 1 -> -2)), None),
+      HistogramExperimentDataset(2, "experiment1", "control", Some(m2), Some(Map("hi" -> m2, "there" -> m3))),
+      HistogramExperimentDataset(3, "experiment1", "control", Some(m4), Some(Map("hi" -> m3, "there" -> m3))),
+      HistogramExperimentDataset(1, "experiment1", "branch1", Some(m1), Some(Map("key1" -> m1, "key2" -> m2))),
+      HistogramExperimentDataset(2, "experiment1", "branch2", Some(m4), Some(Map("hi" -> m3, "there" -> m3))),
+      HistogramExperimentDataset(3, "experiment1", "branch2", Some(m4), Some(Map("hi" -> m3, "there" -> m3))),
+      HistogramExperimentDataset(1, "experiment2", "control", None, Some(Map("hi" -> m3, "there" -> m3))),
+      HistogramExperimentDataset(2, "experiment3", "control", Some(m4), Some(Map("hi" -> m3, "there" -> m3))),
+      HistogramExperimentDataset(3, "experiment3", "branch2", Some(m1), Some(Map("key1" -> m1, "key2" -> m2)))
     ).toDS().toDF()
   }
 
@@ -45,7 +46,8 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
     val df = fixture
     val categoricalAnalyzer = new HistogramAnalyzer("histogram",
       EnumeratedHistogram(keyed = false, "name", 150),
-      df.where(df.col("experiment_id") === "experiment1")
+      df.where(df.col("experiment_id") === "experiment1"),
+      3
     )
     val actualCategorical = categoricalAnalyzer.analyze().toSet
 
@@ -76,50 +78,45 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
 
     val numericAnalyzer = new HistogramAnalyzer("histogram",
       LinearHistogram(keyed = false, "name", 0, 149, 150),
-      df.where(df.col("experiment_id") === "experiment1")
+      df.where(df.col("experiment_id") === "experiment1"),
+      3
     )
 
     val actualNumeric = numericAnalyzer.analyze().toSet
 
     val expectedNumeric = Set(
       MetricAnalysis("experiment1", "control", MetricAnalyzer.topLevelLabel, 3L, "histogram", "LinearHistogram",
-        Map(0L -> toPointControl(4), 1L -> toPointControl(8), 2L -> toPointControl(12), 5L -> toPointControl(0)),
-        Some(List(
-          Statistic(Some("branch1"), "Chi-Square Distance", 0.0),
-          Statistic(Some("branch1"), "Mann-Whitney-U Distance", 72.0, None, None, None, Some(0.48867856487858774)),
-          Statistic(Some("branch2"), "Chi-Square Distance", 0.0),
-          Statistic(Some("branch2"), "Mann-Whitney-U Distance", 144.0, None, None, None, Some(0.49267049900579374)),
-          Statistic(None, "Mean", 1.3333333333333333),
-          Statistic(None, "Median", 1.0),
-          Statistic(None, "25th Percentile", 1.0),
-          Statistic(None, "75th Percentile", 2.0)))),
+        Map(0L -> toPointControl(4), 1L -> toPointControl(8), 2L -> toPointControl(12), 5L -> toPointControl(0)), None),
       MetricAnalysis("experiment1", "branch1", MetricAnalyzer.topLevelLabel, 1L, "histogram", "LinearHistogram",
-        Map(0L -> toPointBranch1(1), 1L -> toPointBranch1(2), 2L -> toPointBranch1(3)),
-        Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.0),
-          Statistic(Some("control"), "Mann-Whitney-U Distance", 72.0, None, None, None, Some(0.48867856487858774)),
-          Statistic(None, "Mean", 1.3333333333333333),
-          Statistic(None, "Median", 1.0),
-          Statistic(None, "25th Percentile", 0.5),
-          Statistic(None, "75th Percentile", 2.0)))),
+        Map(0L -> toPointBranch1(1), 1L -> toPointBranch1(2), 2L -> toPointBranch1(3)), None),
       MetricAnalysis("experiment1", "branch2", MetricAnalyzer.topLevelLabel, 2L, "histogram", "LinearHistogram",
-        Map(0L -> toPointBranch2(2), 1L -> toPointBranch2(4), 2L -> toPointBranch2(6), 5L -> toPointBranch2(0)),
-        Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.0),
-          Statistic(Some("control"), "Mann-Whitney-U Distance", 144.0, None, None, None, Some(0.49267049900579374)),
-          Statistic(None, "Mean", 1.3333333333333333),
-          Statistic(None, "Median", 1.0),
-          Statistic(None, "25th Percentile", 1.0),
-          Statistic(None, "75th Percentile", 2.0)))))
+        Map(0L -> toPointBranch2(2), 1L -> toPointBranch2(4), 2L -> toPointBranch2(6), 5L -> toPointBranch2(0)), None))
 
-    assert(actualNumeric == expectedNumeric)
+    val expectedStats = Set(
+      "Chi-Square Distance",
+      "Mann-Whitney-U Distance",
+      "Mean",
+      "Median",
+      "10th Percentile",
+      "20th Percentile",
+      "30th Percentile",
+      "40th Percentile",
+      "60th Percentile",
+      "70th Percentile",
+      "80th Percentile",
+      "90th Percentile"
+    )
+
+    assert(actualNumeric.map(_.copy(statistics = None)) == expectedNumeric)
+    actualNumeric.map(_.statistics.get.map(_.name).toSet).foreach(s => assert(s == expectedStats))
   }
 
   "Keyed Histograms" can "be aggregated" in {
     val df = fixture
     val analyzer = new HistogramAnalyzer("keyed_histogram",
       EnumeratedHistogram(keyed = true, "name", 150),
-      df.where(df.col("experiment_id") === "experiment1")
+      df.where(df.col("experiment_id") === "experiment1"),
+      3
     )
     val actual = analyzer.analyze().toSet
 
@@ -152,11 +149,11 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
     val df = fixture
     val analyzer = new HistogramAnalyzer("unknown_histogram",
       EnumeratedHistogram(keyed = true, "name", 150),
-      df.where(df.col("experiment_id") === "experiment1")
+      df.where(df.col("experiment_id") === "experiment1"),
+      3
     )
     val actual = analyzer.analyze()
 
-    import spark.implicits._
     val expected = List()
     assert(expected == actual)
   }
@@ -165,7 +162,8 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
     val df = fixture
     val analyzer = new HistogramAnalyzer("histogram",
       EnumeratedHistogram(keyed = false, "name", 150),
-      df.where(df.col("experiment_id") === "experiment1")
+      df.where(df.col("experiment_id") === "experiment1"),
+      3
     )
 
     val actual = analyzer.analyze().filter(_.experiment_branch == "control").head
@@ -175,10 +173,10 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
   "Keyed histogram with null value" should "be discarded" in {
     import spark.implicits._
     val df = Seq(
-      HistogramExperimentDataset("experiment1", "control", Some(m1), Some(Map("key1" -> null, "key2" -> m2)))
+      HistogramExperimentDataset(1, "experiment1", "control", Some(m1), Some(Map("key1" -> null, "key2" -> m2)))
     ).toDS().toDF()
     val analyzer = new HistogramAnalyzer("keyed_histogram",
-      EnumeratedHistogram(keyed = true, "name", 150), df
+      EnumeratedHistogram(keyed = true, "name", 150), df, 3
     )
     val actual = analyzer.analyze()
     val expected = List()

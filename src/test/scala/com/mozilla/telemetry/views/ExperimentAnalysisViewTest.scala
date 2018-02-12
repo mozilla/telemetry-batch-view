@@ -149,24 +149,6 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
     res.size should be (0)
   }
 
-  "Bootstrapping scalars" should "depend on ping counts" in {
-    val args =
-      "--input" :: "telemetry-mock-bucket" ::
-      "--output" :: "telemetry-mock-bucket" :: Nil
-    val conf = new ExperimentAnalysisView.Conf(args.toArray)
-
-    ExperimentAnalysisView.shouldBootstrapScalars(1, conf) should be(true)
-    ExperimentAnalysisView.shouldBootstrapScalars(ExperimentAnalysisView.bootstrapLimit + 1, conf) should be(false)
-
-    val withBootstrap = new ExperimentAnalysisView.Conf(("--bootstrapScalars" :: args).toArray)
-    ExperimentAnalysisView.shouldBootstrapScalars(1,  withBootstrap) should be(true)
-    ExperimentAnalysisView.shouldBootstrapScalars(ExperimentAnalysisView.bootstrapLimit + 1,  withBootstrap) should be(true)
-
-    val withoutBootstrap = new ExperimentAnalysisView.Conf(("--nobootstrapScalars" :: args).toArray)
-    ExperimentAnalysisView.shouldBootstrapScalars(1,  withoutBootstrap) should be(false)
-    ExperimentAnalysisView.shouldBootstrapScalars(ExperimentAnalysisView.bootstrapLimit + 1,  withoutBootstrap) should be(false)
-  }
-
   override def afterAll() {
     spark.stop()
   }

@@ -8,7 +8,8 @@ import org.scalatest.{FlatSpec, Matchers}
 import scala.collection.Map
 
 
-case class ScalarExperimentDataset(experiment_id: String,
+case class ScalarExperimentDataset(block_id: Int,
+                                   experiment_id: String,
                                    experiment_branch: String,
                                    uint_scalar: Option[Int],
                                    keyed_uint_scalar: Option[Map[String, Int]],
@@ -29,25 +30,25 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
   def fixture: DataFrame = {
     import spark.implicits._
     Seq(
-      ScalarExperimentDataset("experiment1", "control", Some(1), Some(keyed_uint),
+      ScalarExperimentDataset(1, "experiment1", "control", Some(1), Some(keyed_uint),
         Some(true), Some(keyed_boolean1), Some("hello"), Some(keyed_string)),
-      ScalarExperimentDataset("experiment1", "control", None, None, None, None, None, None),
-      ScalarExperimentDataset("experiment1", "control", Some(5), Some(keyed_uint),
+      ScalarExperimentDataset(2, "experiment1", "control", None, None, None, None, None, None),
+      ScalarExperimentDataset(2, "experiment1", "control", Some(5), Some(keyed_uint),
         Some(false), Some(keyed_boolean2), Some("world"), Some(keyed_string)),
-      ScalarExperimentDataset("experiment1", "control", Some(5), Some(keyed_uint),
+      ScalarExperimentDataset(3, "experiment1", "control", Some(5), Some(keyed_uint),
         Some(true), Some(keyed_boolean2), Some("hello"), Some(keyed_string)),
-      ScalarExperimentDataset("experiment1", "control", Some(-1), Some(Map("test" -> -1)), None, None, None, None),
-      ScalarExperimentDataset("experiment1", "branch1", Some(1), Some(keyed_uint),
+      ScalarExperimentDataset(3, "experiment1", "control", Some(-1), Some(Map("test" -> -1)), None, None, None, None),
+      ScalarExperimentDataset(1, "experiment1", "branch1", Some(1), Some(keyed_uint),
         Some(true), Some(keyed_boolean1), Some("hello"), Some(keyed_string)),
-      ScalarExperimentDataset("experiment1", "branch2", Some(1), Some(keyed_uint),
+      ScalarExperimentDataset(1, "experiment1", "branch2", Some(1), Some(keyed_uint),
         Some(true), Some(keyed_boolean1), Some("ohai"), Some(keyed_string)),
-      ScalarExperimentDataset("experiment1", "branch2", Some(1), Some(keyed_uint),
+      ScalarExperimentDataset(2, "experiment1", "branch2", Some(1), Some(keyed_uint),
         Some(false), Some(keyed_boolean2), Some("ohai"), Some(keyed_string)),
-      ScalarExperimentDataset("experiment2", "control", None, Some(keyed_uint),
+      ScalarExperimentDataset(1, "experiment2", "control", None, Some(keyed_uint),
         Some(true), Some(keyed_boolean1), Some("ohai"), Some(keyed_string)),
-      ScalarExperimentDataset("experiment3", "control", None, Some(keyed_uint),
+      ScalarExperimentDataset(1, "experiment3", "control", None, Some(keyed_uint),
         Some(false), Some(keyed_boolean1), Some("ohai"), Some(keyed_string)),
-      ScalarExperimentDataset("experiment3", "branch2", Some(2), Some(keyed_uint),
+      ScalarExperimentDataset(2, "experiment3", "branch2", Some(2), Some(keyed_uint),
         Some(false), Some(keyed_boolean1), Some("orly"), Some(keyed_string))
     ).toDS().toDF()
   }
@@ -72,7 +73,8 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
     val df = fixture
     val analyzer = ScalarAnalyzer.getAnalyzer("uint_scalar",
       UintScalar(false, "name"),
-      df.where(df.col("experiment_id") === "experiment1")
+      df.where(df.col("experiment_id") === "experiment1"),
+      3
     )
     val actual = analyzer.analyze().toSet
 
@@ -82,42 +84,37 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
 
     val expected = Set(
       MetricAnalysis("experiment1", "control", MetricAnalyzer.topLevelLabel, 3L, "uint_scalar", "UintScalar",
-        Map(1L -> toPointControl(1), 5L -> toPointControl(2)),
-        Some(List(
-          Statistic(Some("branch1"), "Chi-Square Distance", 0.5),
-          Statistic(Some("branch1"), "Mann-Whitney-U Distance", 0.5, None, None, None, Some(0.3085375372760059)),
-          Statistic(Some("branch2"), "Chi-Square Distance", 0.5),
-          Statistic(Some("branch2"), "Mann-Whitney-U Distance", 1.0, None, None, None, Some(0.15865526383236367)),
-          Statistic(None, "Mean", 3.6666666666666665),
-          Statistic(None, "Median", 3.0),
-          Statistic(None, "25th Percentile", 1.0),
-          Statistic(None, "75th Percentile", 5.0)))),
+        Map(1L -> toPointControl(1), 5L -> toPointControl(2)), None),
       MetricAnalysis("experiment1", "branch1", MetricAnalyzer.topLevelLabel, 1L, "uint_scalar", "UintScalar",
-        Map(1L -> toPointBranch1(1)),
-        Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.5, None, None, None, None),
-          Statistic(Some("control"), "Mann-Whitney-U Distance", 0.5, None, None, None, Some(0.3085375372760059)),
-          Statistic(None, "Mean", 1.0),
-          Statistic(None, "Median", 1.0),
-          Statistic(None, "25th Percentile", 1.0),
-          Statistic(None, "75th Percentile", 1.0)))),
+        Map(1L -> toPointBranch1(1)), None),
       MetricAnalysis("experiment1", "branch2", MetricAnalyzer.topLevelLabel, 2L, "uint_scalar", "UintScalar",
-        Map(1L -> toPointBranch2(2)),
-        Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.5),
-          Statistic(Some("control"), "Mann-Whitney-U Distance", 1.0, None, None, None, Some(0.15865526383236367)),
-          Statistic(None, "Mean", 1.0),
-          Statistic(None, "Median", 1.0),
-          Statistic(None, "25th Percentile", 1.0),
-          Statistic(None, "75th Percentile", 1.0)))))
-    assert(actual == expected)
+        Map(1L -> toPointBranch2(2)), None))
+
+    val expectedStats = Set(
+      "Chi-Square Distance",
+      "Mann-Whitney-U Distance",
+      "Mean",
+      "Median",
+      "10th Percentile",
+      "20th Percentile",
+      "30th Percentile",
+      "40th Percentile",
+      "60th Percentile",
+      "70th Percentile",
+      "80th Percentile",
+      "90th Percentile"
+    )
+
+    assert(actual.map(_.copy(statistics = None)) == expected)
+    actual.map(_.statistics.get.map(_.name).toSet).foreach(s => assert(s == expectedStats))
   }
 
   "Keyed Uint Scalars" can "be aggregated" in {
     val df = fixture
     val analyzer = ScalarAnalyzer.getAnalyzer("keyed_uint_scalar",
       UintScalar(true, "name"),
-      df.where(df.col("experiment_id") === "experiment1")
+      df.where(df.col("experiment_id") === "experiment1"),
+      3
     )
     val actual = analyzer.analyze().toSet
 
@@ -128,42 +125,37 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
 
     val expected = Set(
       MetricAnalysis("experiment1", "control", MetricAnalyzer.topLevelLabel, 3L, "keyed_uint_scalar", "UintScalar",
-        Map(1L -> toPointControl(3), 3L -> toPointControl(3)),
-        Some(List(
-          Statistic(Some("branch1"), "Chi-Square Distance", 0.0),
-          Statistic(Some("branch1"), "Mann-Whitney-U Distance", 6.0, None, None, None, Some(0.42428606222331366)),
-          Statistic(Some("branch2"), "Chi-Square Distance", 0.0),
-          Statistic(Some("branch2"), "Mann-Whitney-U Distance", 12.0, None, None, None, Some(0.45126158423731005)),
-          Statistic(None, "Mean", 2.0),
-          Statistic(None, "Median", 1.0),
-          Statistic(None, "25th Percentile", 1.0),
-          Statistic(None, "75th Percentile", 3.0)))),
+        Map(1L -> toPointControl(3), 3L -> toPointControl(3)), None),
       MetricAnalysis("experiment1", "branch1", MetricAnalyzer.topLevelLabel, 1L, "keyed_uint_scalar", "UintScalar",
-        Map(1L -> toPointBranch1(1), 3L -> toPointBranch1(1)),
-        Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.0),
-          Statistic(Some("control"), "Mann-Whitney-U Distance", 6.0, None, None, None, Some(0.42428606222331366)),
-          Statistic(None, "Mean", 2.0),
-          Statistic(None, "Median", 1.0),
-          Statistic(None, "25th Percentile", 1.0),
-          Statistic(None, "75th Percentile", 2.0)))),
+        Map(1L -> toPointBranch1(1), 3L -> toPointBranch1(1)), None),
       MetricAnalysis("experiment1", "branch2", MetricAnalyzer.topLevelLabel, 2L, "keyed_uint_scalar", "UintScalar",
-        Map(1L -> toPointBranch2(2), 3L -> toPointBranch2(2)),
-        Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.0),
-          Statistic(Some("control"), "Mann-Whitney-U Distance", 12.0, None, None, None, Some(0.45126158423731005)),
-          Statistic(None, "Mean", 2.0),
-          Statistic(None, "Median", 1.0),
-          Statistic(None, "25th Percentile", 1.0),
-          Statistic(None, "75th Percentile", 3.0)))))
-    assert(actual == expected)
+        Map(1L -> toPointBranch2(2), 3L -> toPointBranch2(2)), None))
+
+    val expectedStats = Set(
+      "Chi-Square Distance",
+      "Mann-Whitney-U Distance",
+      "Mean",
+      "Median",
+      "10th Percentile",
+      "20th Percentile",
+      "30th Percentile",
+      "40th Percentile",
+      "60th Percentile",
+      "70th Percentile",
+      "80th Percentile",
+      "90th Percentile"
+    )
+
+    assert(actual.map(_.copy(statistics = None)) == expected)
+    actual.map(_.statistics.get.map(_.name).toSet).foreach(s => assert(s == expectedStats))
   }
 
   "Boolean Scalars" can "be aggregated" in {
     val df = fixture
     val analyzer = ScalarAnalyzer.getAnalyzer("boolean_scalar",
       BooleanScalar(false, "name"),
-      df.where(df.col("experiment_id") === "experiment1")
+      df.where(df.col("experiment_id") === "experiment1"),
+      3
     )
     val actual = analyzer.analyze().toSet
 
@@ -185,6 +177,7 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
         Some(List(
           Statistic(Some("control"), "Chi-Square Distance", 0.02857142857142857),
           Statistic(Some("control"), "Mann-Whitney-U Distance", 2.5, None, None, None, Some(0.5000000005))))))
+
     assert(actual == expected)
   }
 
@@ -193,7 +186,8 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
     val df = fixture
     val analyzer = ScalarAnalyzer.getAnalyzer("keyed_boolean_scalar",
       BooleanScalar(true, "name"),
-      df.where(df.col("experiment_id") === "experiment1")
+      df.where(df.col("experiment_id") === "experiment1"),
+      3
     )
     val actual = analyzer.analyze().toSet
 
@@ -222,7 +216,8 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
     val df = fixture
     val analyzer = ScalarAnalyzer.getAnalyzer("string_scalar",
       StringScalar(false, "name"),
-      df.where(df.col("experiment_id") === "experiment1")
+      df.where(df.col("experiment_id") === "experiment1"),
+      3
     )
     val actual = analyzer.analyze().toSet
 
@@ -251,7 +246,8 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
     val df = fixture
     val analyzer = ScalarAnalyzer.getAnalyzer("keyed_string_scalar",
       StringScalar(true, "name"),
-      df.where(df.col("experiment_id") === "experiment1")
+      df.where(df.col("experiment_id") === "experiment1"),
+      3
     )
     val actual = analyzer.analyze().toSet
 
@@ -280,68 +276,18 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
     val df = fixture
     val analyzer = ScalarAnalyzer.getAnalyzer("uint_scalar",
       UintScalar(false, "name"),
-      df.where(df.col("experiment_id") === "experiment1")
+      df.where(df.col("experiment_id") === "experiment1"),
+      3
     )
     val actual = analyzer.analyze().filter(_.experiment_branch == "control").head
     assert(actual.n == 3L)
 
     val keyed_analyzer = ScalarAnalyzer.getAnalyzer("keyed_uint_scalar",
       UintScalar(true, "name"),
-      df.where(df.col("experiment_id") === "experiment1")
+      df.where(df.col("experiment_id") === "experiment1"),
+      3
     )
     val keyed_actual = keyed_analyzer.analyze().filter(_.experiment_branch == "control").head
     assert(keyed_actual.n == 3L)
-  }
-
-  "Confidence intervals" should "be added" in {
-    import spark.implicits._
-
-    val ciFixture: DataFrame = Seq(
-      ConfidenceIntervalsDataset("experiment1", "control", Some(84)),
-      ConfidenceIntervalsDataset("experiment1", "control", Some(46)),
-      ConfidenceIntervalsDataset("experiment1", "control", Some(7)),
-      ConfidenceIntervalsDataset("experiment1", "control", Some(39)),
-      ConfidenceIntervalsDataset("experiment1", "control", Some(44)),
-      ConfidenceIntervalsDataset("experiment1", "control", Some(92)),
-      ConfidenceIntervalsDataset("experiment1", "control", Some(35)),
-      ConfidenceIntervalsDataset("experiment1", "control", Some(54)),
-      ConfidenceIntervalsDataset("experiment1", "control", Some(58)),
-      ConfidenceIntervalsDataset("experiment1", "control", Some(96)),
-      ConfidenceIntervalsDataset("experiment1", "control", Some(115)),
-      ConfidenceIntervalsDataset("experiment1", "control", Some(94)),
-      ConfidenceIntervalsDataset("experiment1", "control", Some(113)),
-      ConfidenceIntervalsDataset("experiment1", "control", Some(66)),
-      ConfidenceIntervalsDataset("experiment1", "control", Some(68))
-    ).toDS().toDF()
-
-    val analyzer = ScalarAnalyzer.getAnalyzer("uint_scalar", UintScalar(false, "name"), ciFixture, true)
-    val actual = analyzer.analyze()
-
-    val expected = List(MetricAnalysis(
-      "experiment1", "control", MetricAnalyzer.topLevelLabel, 15, "uint_scalar", "UintScalar",
-      Map(
-        115L -> HistogramPoint(0.06666666666666667, 1.0, None),
-        46L -> HistogramPoint(0.06666666666666667, 1.0, None),
-        84L -> HistogramPoint(0.06666666666666667, 1.0, None),
-        92L -> HistogramPoint(0.06666666666666667, 1.0, None),
-        96L -> HistogramPoint(0.06666666666666667, 1.0, None),
-        44L -> HistogramPoint(0.06666666666666667, 1.0, None),
-        54L -> HistogramPoint(0.06666666666666667, 1.0, None),
-        113L -> HistogramPoint(0.06666666666666667, 1.0, None),
-        7L -> HistogramPoint(0.06666666666666667, 1.0, None),
-        39L -> HistogramPoint(0.06666666666666667, 1.0, None),
-        66L -> HistogramPoint(0.06666666666666667, 1.0, None),
-        35L -> HistogramPoint(0.06666666666666667, 1.0, None),
-        58L -> HistogramPoint(0.06666666666666667, 1.0, None),
-        94L -> HistogramPoint(0.06666666666666667, 1.0, None),
-        68L -> HistogramPoint(0.06666666666666667, 1.0, None)),
-      Some(List(
-        // These CIs are in line with the numbers from the scipy.bootstrap implementation
-        Statistic(None, "Mean", 67.4, Some(54.93333333333333), Some(86.46666666666667), Some(0.05), None),
-        Statistic(None, "Median", 62.0, Some(41.5), Some(88.0), Some(0.05), None),
-        Statistic(None, "25th Percentile", 42.75, Some(28.0), Some(58.0), Some(0.05), None),
-        Statistic(None, "75th Percentile", 92.5, Some(58.0), Some(100.25), Some(0.05), None)))))
-
-    assert(actual == expected)
   }
 }

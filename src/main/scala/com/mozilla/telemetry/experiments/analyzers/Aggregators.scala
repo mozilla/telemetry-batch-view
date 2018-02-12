@@ -7,8 +7,8 @@ import org.apache.spark.sql.expressions.Aggregator
 import scala.collection.Map
 
 
-abstract class MetricAggregator[T]
-  extends Aggregator[PreAggregateRow[T], Map[T, Long], Map[Long, HistogramPoint]] {
+abstract class GroupAggregator[T]
+  extends Aggregator[PreAggregateRow[T], Map[T, Long], Map[T, Long]] {
   def zero: Map[T, Long] = Map[T, Long]()
 
   def reduce(b: Map[T, Long], s: PreAggregateRow[T]): Map[T, Long] = {
@@ -20,10 +20,43 @@ abstract class MetricAggregator[T]
 
   def merge(l: Map[T, Long], r: Map[T, Long]): Map[T, Long] = addHistograms[T](l, r)
 
+  def finish(b: Map[T, Long]): Map[T, Long] = b
+}
+
+object GroupBooleanAggregator extends GroupAggregator[Boolean] {
+  def bufferEncoder: Encoder[Map[Boolean, Long]] = ExpressionEncoder()
+  def outputEncoder: Encoder[Map[Boolean, Long]] = ExpressionEncoder()
+}
+
+object GroupUintAggregator extends GroupAggregator[Int] {
+  def bufferEncoder: Encoder[Map[Int, Long]] = ExpressionEncoder()
+  def outputEncoder: Encoder[Map[Int, Long]] = ExpressionEncoder()
+}
+
+object GroupLongAggregator extends GroupAggregator[Long] {
+  def bufferEncoder: Encoder[Map[Long, Long]] = ExpressionEncoder()
+  def outputEncoder: Encoder[Map[Long, Long]] = ExpressionEncoder()
+}
+
+object GroupStringAggregator extends GroupAggregator[String] {
+  def bufferEncoder: Encoder[Map[String, Long]] = ExpressionEncoder()
+  def outputEncoder: Encoder[Map[String, Long]] = ExpressionEncoder()
+}
+
+abstract class MapAggregator[T]
+  extends Aggregator[BlockAggregate[T], Map[T, Long], Map[Long, HistogramPoint]] {
+  def zero: Map[T, Long] = Map[T, Long]()
+
+  def reduce(b: Map[T, Long], s: BlockAggregate[T]): Map[T, Long] = {
+    addHistograms(b, s.metric_aggregate)
+  }
+
+  def merge(l: Map[T, Long], r: Map[T, Long]): Map[T, Long] = addHistograms[T](l, r)
+
   def outputEncoder: Encoder[Map[Long, HistogramPoint]] = ExpressionEncoder()
 }
 
-object BooleanAggregator extends MetricAggregator[Boolean] {
+object BooleanAggregator extends MapAggregator[Boolean] {
   def finish(b: Map[Boolean, Long]): Map[Long, HistogramPoint] = {
     val sum = b.values.sum.toDouble
     if (sum == 0) return Map.empty[Long, HistogramPoint]
@@ -36,7 +69,7 @@ object BooleanAggregator extends MetricAggregator[Boolean] {
   def bufferEncoder: Encoder[Map[Boolean, Long]] = ExpressionEncoder()
 }
 
-object UintAggregator extends MetricAggregator[Int] {
+object UintAggregator extends MapAggregator[Int] {
   def finish(b: Map[Int, Long]): Map[Long, HistogramPoint] = {
     val sum = b.values.sum.toDouble
     if (sum == 0) return Map.empty[Long, HistogramPoint]
@@ -46,7 +79,7 @@ object UintAggregator extends MetricAggregator[Int] {
   def bufferEncoder: Encoder[Map[Int, Long]] = ExpressionEncoder()
 }
 
-object LongAggregator extends MetricAggregator[Long] {
+object LongAggregator extends MapAggregator[Long] {
   def finish(b: Map[Long, Long]): Map[Long, HistogramPoint] = {
     val sum = b.values.sum.toDouble
     if (sum == 0) return Map.empty[Long, HistogramPoint]
@@ -56,7 +89,7 @@ object LongAggregator extends MetricAggregator[Long] {
   def bufferEncoder: Encoder[Map[Long, Long]] = ExpressionEncoder()
 }
 
-object StringAggregator extends MetricAggregator[String] {
+object StringAggregator extends MapAggregator[String] {
   def finish(b: Map[String, Long]): Map[Long, HistogramPoint] = {
     val sum = b.values.sum.toDouble
     if (sum == 0) return Map.empty[Long, HistogramPoint]

@@ -1,5 +1,7 @@
 package com.mozilla.telemetry
 
+import java.util.zip.CRC32
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 
@@ -130,5 +132,12 @@ package object utils{
     if (!S3Store.isPrefixEmpty(bucket, prefix)) {
       S3Store.listKeys(bucket, prefix).foreach(o => S3Store.deleteKey(bucket, o.key))
     }
+  }
+
+  // Generate a deterministic block ID from a string -- e.g. sample_id from client_id
+  def blockIdFromString(numBlocks: Long)(inString: String): Integer = {
+    val crc = new CRC32
+    crc.update(inString.getBytes)
+    (crc.getValue % numBlocks).toInt
   }
 }
