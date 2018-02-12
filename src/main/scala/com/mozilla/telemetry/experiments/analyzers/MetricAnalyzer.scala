@@ -3,9 +3,10 @@ package com.mozilla.telemetry.experiments.analyzers
 import com.mozilla.telemetry.experiments.statistics.{ComparativeStatistics, DescriptiveStatistics}
 import com.mozilla.telemetry.metrics.MetricDefinition
 import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.functions.{col, count, lit}
+import org.apache.spark.sql.functions.{col, count, lit, sum}
 
 import scala.collection.Map
+import scala.reflect.runtime.universe.TypeTag
 import scala.util.{Failure, Success, Try}
 
 
@@ -14,7 +15,10 @@ trait PreAggregateRow[T] {
   val branch: String
   val subgroup: String
   val metric: Option[Map[T, Long]]
+  val block_id: Int
 }
+
+case class BlockAggregate[T](key: (MetricKey, Int), metric_aggregate: Map[T, Long], val count: Long)
 
 case class MetricKey(experiment_id: String, branch: String, subgroup: String)
 
@@ -37,13 +41,14 @@ case class MetricAnalysis(experiment_id: String,
                           metric_type: String,
                           histogram: Map[Long, HistogramPoint],
                           statistics: Option[Seq[Statistic]]) {
-  lazy val metricKey: MetricKey = MetricKey(experiment_id, experiment_branch, subgroup)
+  def metricKey: MetricKey = MetricKey(experiment_id, experiment_branch, subgroup)
 }
 
-abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFrame, bootstrap: Boolean = false)
+abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFrame, numJackknifeBlocks: Int)(implicit tag: TypeTag[T])
   extends java.io.Serializable {
   type PreAggregateRowType <: PreAggregateRow[T]
-  val aggregator: MetricAggregator[T]
+  val groupAggregator: GroupAggregator[T]
+  val finalAggregator: MapAggregator[T]
   def validateRow(row: PreAggregateRowType): Boolean
 
 
@@ -55,10 +60,12 @@ abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFra
         val cleanData = collapseKeys(d)
           .filter(validateRow _)
 
-        val output = aggregate(cleanData)
-
-        val resampled = if (bootstrap && !md.isCategoricalMetric) Some(resample(cleanData, output)) else None
-        addStatistics(reindex(output), resampled)
+        val groupedDF = aggregateBlocks(cleanData).persist
+        val trueAggregates = aggregateAll(groupedDF)
+        val jackknifeAggregates = if (!md.isCategoricalMetric) Some(aggregatePseudosamples(groupedDF)) else None
+        val output = addStatistics(reindex(trueAggregates), jackknifeAggregates)
+        groupedDF.unpersist()
+        output
       }
       case _ => List.empty[MetricAnalysis]
     }
@@ -69,7 +76,8 @@ abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFra
       col("experiment_id"),
       col("experiment_branch").as("branch"),
       lit(MetricAnalyzer.topLevelLabel).as("subgroup"),
-      col(name).as("metric"))
+      col(name).as("metric"),
+      col("block_id"))
     ) match {
       case Success(x) => Some(x)
       // expected failure, if the dataset doesn't include this metric (e.g. it's newly added)
@@ -80,19 +88,40 @@ abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFra
 
   def collapseKeys(formatted: DataFrame): Dataset[PreAggregateRowType]
 
-  def aggregate(ds: Dataset[PreAggregateRowType]): List[MetricAnalysis] = {
-    val agg_column = aggregator.toColumn.name("metric_aggregate")
+  def aggregateBlocks(ds: Dataset[PreAggregateRowType]): Dataset[BlockAggregate[T]] = {
+    val agg_column = groupAggregator.toColumn.name("metric_aggregate")
+    ds.groupByKey(x => (MetricKey(x.experiment_id, x.branch, x.subgroup), x.block_id))
+      .agg(agg_column, count("*").name("count"))
+      .as[BlockAggregate[T]]
+  }
 
-    ds.groupByKey(x => MetricKey(x.experiment_id, x.branch, x.subgroup))
-      .agg(agg_column, count("*"))
+  def aggregateAll(ds: Dataset[BlockAggregate[T]]): List[MetricAnalysis] = {
+    val agg_column = finalAggregator.toColumn.name("metric_aggregate")
+
+    ds.groupByKey(x => x.key._1)
+      .agg(agg_column, sum("count").as[Long])
       .map(toOutputSchema)
       .collect
       .toList
   }
 
-  def resample(ds: Dataset[PreAggregateRowType],
-               aggregations: List[MetricAnalysis],
-               iterations: Int = 1000): Map[MetricKey, List[MetricAnalysis]]
+  def aggregatePseudosamples(ds: Dataset[BlockAggregate[T]]): Dataset[MetricAnalysis] = {
+    // We're using the block or delete-d jackknife variant
+    val agg_column = finalAggregator.toColumn.name("metric_aggregate")
+    // This is a bit of a hack so we can reuse aggregators -- the input dataset is the original dataset aggregated over
+    // block_id -- that is, there's one row per block_id and the metric_aggregate is the summed up map for each block.
+    // The flatmap below duplicates each row (total_blocks - 1) times, omitting the row for the dropped block it
+    // belongs to and re-keying the other copies with the block_id. The grouping + aggregation step then groups by the
+    // new key and aggregates the results.
+    val flatMapped = ds
+      .flatMap[BlockAggregate[T]] {
+        row: BlockAggregate[T] => (0 until numJackknifeBlocks).filter(_ != row.key._2).map(s => row.copy(key = (row.key._1, s)))
+      }
+    flatMapped
+      .groupByKey(_.key)
+      .agg(agg_column)
+      .map(r => toOutputSchema(r._1._1, r._2, 0L))
+  }
 
   protected def reindex(aggregates: List[MetricAnalysis]): List[MetricAnalysis] = {
     // This is meant as a finishing step for string scalars only
@@ -100,10 +129,12 @@ abstract class MetricAnalyzer[T](name: String, md: MetricDefinition, df: DataFra
   }
 
   private def addStatistics(aggregates: List[MetricAnalysis],
-                            resampled: Option[Map[MetricKey, List[MetricAnalysis]]]): List[MetricAnalysis] = {
+                            jackknifed: Option[Dataset[MetricAnalysis]]): List[MetricAnalysis] = {
     val descriptiveStatsMap = if (!md.isCategoricalMetric) {
       aggregates.map {
-        m => m -> DescriptiveStatistics(m, resampled.flatMap(_.get(m.metricKey))).getStatistics
+        m =>
+          val filtered = jackknifed.map(o => o.filter(x => x.metricKey == m.metricKey))
+          m -> DescriptiveStatistics(m, filtered).getStatistics
       }.toMap
     } else {
       Map.empty[MetricAnalysis, List[Statistic]]

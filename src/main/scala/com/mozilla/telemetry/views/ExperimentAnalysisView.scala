@@ -2,8 +2,8 @@ package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.experiments.analyzers._
 import com.mozilla.telemetry.metrics._
-import com.mozilla.telemetry.utils.getOrCreateSparkSession
-import org.apache.spark.sql.functions.{col, min}
+import com.mozilla.telemetry.utils.{getOrCreateSparkSession, blockIdFromString}
+import org.apache.spark.sql.functions.{col, min, udf}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.storage.StorageLevel
 import org.rogach.scallop.ScallopConf
@@ -17,7 +17,7 @@ object ExperimentAnalysisView {
   def schemaVersion = "v1"
   // This gives us ~120MB partitions with the columns we have now. We should tune this as we add more columns.
   def rowsPerPartition = 25000
-  val bootstrapLimit = 25000000 // Empirically tested to take ~1 hour with this many pings
+  val defaultJackknifeBlocks = 100
 
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getSimpleName)
 
@@ -67,14 +67,8 @@ object ExperimentAnalysisView {
     val metric = opt[String]("metric", descr = "Run job on just this metric", required = false)
     val experiment = opt[String]("experiment", descr = "Run job on just this experiment", required = false)
     val date = opt[String]("date", descr = "Run date for this job (defaults to yesterday)", required = false)
-    val bootstrapScalars = toggle(
-      "bootstrapScalars",
-      descrYes = "Run bootstrapped confidence intervals on scalars",
-      default = None)
-    val bootstrapHistograms = toggle(
-      "bootstrapHistograms",
-      descrYes = "Run bootstrapped confidence intervals on histograms (very slow)",
-      default = Some(false))
+    val jackknifeBlocks = opt[Int]("jackknifeBlocks", descr = "Number of jackknife blocks to use", required = false,
+      default = Some(defaultJackknifeBlocks))
     verify()
   }
 
@@ -173,9 +167,8 @@ object ExperimentAnalysisView {
                            errorAggregates: DataFrame, conf: Conf,
                            experimentMetrics: List[String] = List()): List[MetricAnalysis] = {
     val pingCount = experimentsSummary.count()
-    val persisted = repartitionAndPersist(experimentsSummary, pingCount, experiment, experimentMetrics)
-    val bootstrapHistograms = conf.bootstrapHistograms()
-    val bootstrapScalars = shouldBootstrapScalars(pingCount, conf)
+    val numJackknifeBlocks = conf.jackknifeBlocks()
+    val persisted = repartitionAndPersist(experimentsSummary, pingCount, experiment, experimentMetrics, numJackknifeBlocks)
 
     val schemaFields = experimentsSummary.schema.map(_.name)
 
@@ -185,9 +178,9 @@ object ExperimentAnalysisView {
       case (name: String, md: MetricDefinition) =>
         md match {
           case hd: HistogramDefinition =>
-            new HistogramAnalyzer(name, hd, persisted, bootstrapHistograms).analyze()
+            new HistogramAnalyzer(name, hd, persisted, numJackknifeBlocks).analyze()
           case sd: ScalarDefinition =>
-            ScalarAnalyzer.getAnalyzer(name, sd, persisted, bootstrapScalars).analyze()
+            ScalarAnalyzer.getAnalyzer(name, sd, persisted, numJackknifeBlocks).analyze()
           case _ => throw new UnsupportedOperationException("Unsupported metric definition type")
         }
     }
@@ -198,20 +191,20 @@ object ExperimentAnalysisView {
     (metadata ++ metrics ++ crashes).toList
   }
 
-  // Repartitions dataset if warranted, and persists the result for quicker access
+
+  // Repartitions dataset if warranted, adds a jackknife block id, and persists the result for quicker access
   def repartitionAndPersist(experimentsSummary: DataFrame,
                             pingCount: Long,
                             experiment: String,
-                            experimentMetrics: List[String]): DataFrame = {
+                            experimentMetrics: List[String],
+                            numJackknifeBlocks: Int): DataFrame = {
     val calculatedPartitions = (pingCount / rowsPerPartition).toInt
     val numPartitions = calculatedPartitions max experimentsSummary.sparkSession.sparkContext.defaultParallelism
+    val generateBlockId = udf(blockIdFromString(numJackknifeBlocks.toLong) _)
     experimentsSummary
       .selectUsedColumns(extra = experimentMetrics)
+      .select(col("*"), generateBlockId(col("client_id")).alias("block_id"))
       .repartition(numPartitions)
       .persist(StorageLevel.MEMORY_AND_DISK)
-  }
-
-  def shouldBootstrapScalars(pingCount: Long, conf: Conf): Boolean = {
-    conf.bootstrapScalars.get.getOrElse(pingCount < bootstrapLimit)
   }
 }

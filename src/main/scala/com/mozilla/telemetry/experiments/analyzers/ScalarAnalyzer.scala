@@ -18,6 +18,7 @@ trait ScalarRow[T] {
   val branch: String
   val subgroup: String
   val metric: Option[T]
+  val block_id: Int
 
   def scalarMapRowMetric: Option[Map[T, Long]] = {
     metric match {
@@ -27,21 +28,21 @@ trait ScalarRow[T] {
   }
 }
 
-case class BooleanScalarRow(experiment_id: String, branch: String, subgroup: String, metric: Option[Boolean])
+case class BooleanScalarRow(experiment_id: String, branch: String, subgroup: String, metric: Option[Boolean], block_id: Int)
   extends ScalarRow[Boolean] with definesToScalarMapRow[BooleanScalarMapRow] {
-  def toScalarMapRow: BooleanScalarMapRow = BooleanScalarMapRow(experiment_id, branch, subgroup, scalarMapRowMetric)
+  def toScalarMapRow: BooleanScalarMapRow = BooleanScalarMapRow(experiment_id, branch, subgroup, scalarMapRowMetric, block_id)
 }
-case class UintScalarRow(experiment_id: String, branch: String, subgroup: String, metric: Option[Int])
+case class UintScalarRow(experiment_id: String, branch: String, subgroup: String, metric: Option[Int], block_id: Int)
   extends ScalarRow[Int] with definesToScalarMapRow[UintScalarMapRow] {
-  def toScalarMapRow: UintScalarMapRow = UintScalarMapRow(experiment_id, branch, subgroup, scalarMapRowMetric)
+  def toScalarMapRow: UintScalarMapRow = UintScalarMapRow(experiment_id, branch, subgroup, scalarMapRowMetric, block_id)
 }
-case class LongScalarRow(experiment_id: String, branch: String, subgroup: String, metric: Option[Long])
+case class LongScalarRow(experiment_id: String, branch: String, subgroup: String, metric: Option[Long], block_id: Int)
   extends ScalarRow[Long] with definesToScalarMapRow[LongScalarMapRow] {
-  def toScalarMapRow: LongScalarMapRow = LongScalarMapRow(experiment_id, branch, subgroup, scalarMapRowMetric)
+  def toScalarMapRow: LongScalarMapRow = LongScalarMapRow(experiment_id, branch, subgroup, scalarMapRowMetric, block_id)
 }
-case class StringScalarRow(experiment_id: String, branch: String, subgroup: String, metric: Option[String])
+case class StringScalarRow(experiment_id: String, branch: String, subgroup: String, metric: Option[String], block_id: Int)
   extends ScalarRow[String] with definesToScalarMapRow[StringScalarMapRow] {
-  def toScalarMapRow: StringScalarMapRow = StringScalarMapRow(experiment_id, branch, subgroup, scalarMapRowMetric)
+  def toScalarMapRow: StringScalarMapRow = StringScalarMapRow(experiment_id, branch, subgroup, scalarMapRowMetric, block_id)
 }
 
 trait KeyedScalarRow[T] {
@@ -49,6 +50,7 @@ trait KeyedScalarRow[T] {
   val branch: String
   val subgroup: String
   val metric: Option[Map[String, T]]
+  val block_id: Int
 
   def collapsedMetric: Option[Map[T, Long]] = {
     metric match {
@@ -61,81 +63,42 @@ trait KeyedScalarRow[T] {
 }
 
 case class KeyedBooleanScalarRow(experiment_id: String, branch: String, subgroup: String,
-                                 metric: Option[Map[String, Boolean]])
+                                 metric: Option[Map[String, Boolean]], block_id: Int)
   extends KeyedScalarRow[Boolean] with definesToScalarMapRow[BooleanScalarMapRow] {
-  def toScalarMapRow: BooleanScalarMapRow = BooleanScalarMapRow(experiment_id, branch, subgroup, collapsedMetric)
+  def toScalarMapRow: BooleanScalarMapRow = BooleanScalarMapRow(experiment_id, branch, subgroup, collapsedMetric,
+    block_id)
 }
 case class KeyedUintScalarRow(experiment_id: String, branch: String, subgroup: String,
-                              metric: Option[Map[String, Int]])
+                              metric: Option[Map[String, Int]], block_id: Int)
   extends KeyedScalarRow[Int] with definesToScalarMapRow[UintScalarMapRow] {
-  def toScalarMapRow: UintScalarMapRow = UintScalarMapRow(experiment_id, branch, subgroup, collapsedMetric)
+  def toScalarMapRow: UintScalarMapRow = UintScalarMapRow(experiment_id, branch, subgroup, collapsedMetric, block_id)
 }
 case class KeyedLongScalarRow(experiment_id: String, branch: String, subgroup: String,
-                              metric: Option[Map[String, Long]])
+                              metric: Option[Map[String, Long]], block_id: Int)
   extends KeyedScalarRow[Long] with definesToScalarMapRow[LongScalarMapRow] {
-  def toScalarMapRow: LongScalarMapRow = LongScalarMapRow(experiment_id, branch, subgroup, collapsedMetric)
+  def toScalarMapRow: LongScalarMapRow = LongScalarMapRow(experiment_id, branch, subgroup, collapsedMetric, block_id)
 }
 case class KeyedStringScalarRow(experiment_id: String, branch: String, subgroup: String,
-                                metric: Option[Map[String, String]])
+                                metric: Option[Map[String, String]], block_id: Int)
   extends KeyedScalarRow[String] with definesToScalarMapRow[StringScalarMapRow] {
-  def toScalarMapRow: StringScalarMapRow = StringScalarMapRow(experiment_id, branch, subgroup, collapsedMetric)
+  def toScalarMapRow: StringScalarMapRow = StringScalarMapRow(experiment_id, branch, subgroup, collapsedMetric, block_id)
 }
 
 case class BooleanScalarMapRow(experiment_id: String, branch: String, subgroup: String,
-                               metric: Option[Map[Boolean, Long]]) extends PreAggregateRow[Boolean]
+                               metric: Option[Map[Boolean, Long]], block_id: Int) extends PreAggregateRow[Boolean]
 case class UintScalarMapRow(experiment_id: String, branch: String, subgroup: String,
-                            metric: Option[Map[Int, Long]]) extends PreAggregateRow[Int]
+                            metric: Option[Map[Int, Long]], block_id: Int) extends PreAggregateRow[Int]
 case class LongScalarMapRow(experiment_id: String, branch: String, subgroup: String,
-                            metric: Option[Map[Long, Long]]) extends PreAggregateRow[Long]
+                            metric: Option[Map[Long, Long]], block_id: Int) extends PreAggregateRow[Long]
 case class StringScalarMapRow(experiment_id: String, branch: String, subgroup: String,
-                              metric: Option[Map[String, Long]]) extends PreAggregateRow[String]
-
-trait AggregateResampler {
-  type PreAggregateRowType
-
-  // This implementation reaggregates directly from the aggregated histogram, which works when we expect one sample
-  // per ping, such as when we're resampling scalar aggregates
-  def resample(ds: Dataset[PreAggregateRowType],
-               aggregations: List[MetricAnalysis],
-               iterations: Int = 1000): Map[MetricKey, List[MetricAnalysis]] = {
-    aggregations.map { a =>
-      val total = a.histogram.values.map(_.count).sum
-      // We could use the pdf field directly to cumulatively sum but we'd likely run into weird floating point addition
-      // issues
-      val cdf =  a.histogram
-        .map { case (k, v) => k -> v.count }
-        .toList
-        .scanLeft(0L, 0.0) { case((_: Long, c: Double), (k: Long, v: Double)) => (k, c + v)}
-        .tail
-        .map { case (k, v) => (k, v / total) }
-      (a, total, cdf)
-    }.map { case (m, total, cdf) =>
-      val aggs = ds.sparkSession.sparkContext.parallelize(1 to iterations).map { x: Int =>
-        val agg = resampleCdf(cdf, x, total.toInt)
-        m.copy(histogram = agg.map {case (k, v) => k -> HistogramPoint(v / total, v.toDouble, None)})
-      }.collect.toList
-      m.metricKey -> aggs
-    }.toMap
-  }
-
-  private def resampleCdf(cumulativeWeights: List[(Long, Double)], seed: Int, n: Int): Map[Long, Long] = {
-    val rng = new scala.util.Random(seed)
-    (0 to n).foldLeft(Map.empty[Long, Long]) { (agg, _) =>
-      val rand = rng.nextDouble()
-      val sample = cumulativeWeights.collectFirst { case(k, c) if rand <= c => k } match {
-        case Some(k) => k
-        case _ => throw new Exception("Something very strange happened in constructing the cdf")
-      }
-      agg + (sample -> (agg.getOrElse(sample, 0L) + 1L))
-    }
-  }
-}
+                              metric: Option[Map[String, Long]], block_id: Int) extends PreAggregateRow[String]
 
 
-class BooleanScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame, bootstrap: Boolean = false)
-  extends MetricAnalyzer[Boolean](name, md, df, bootstrap) with AggregateResampler {
+class BooleanScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame, numJackknifeBlocks: Int)
+  extends MetricAnalyzer[Boolean](name, md, df, numJackknifeBlocks) {
   override type PreAggregateRowType = BooleanScalarMapRow
-  val aggregator = BooleanAggregator
+  val groupAggregator = GroupBooleanAggregator
+  val finalAggregator = BooleanAggregator
 
   override def validateRow(row: BooleanScalarMapRow): Boolean = row.metric.isDefined
 
@@ -146,10 +109,12 @@ class BooleanScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame, b
   }
 }
 
-class UintScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame, bootstrap: Boolean = false)
-  extends MetricAnalyzer[Int](name, md, df, bootstrap) with AggregateResampler {
+class UintScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame, numJackknifeBlocks: Int)
+  extends MetricAnalyzer[Int](name, md, df, numJackknifeBlocks) {
   override type PreAggregateRowType = UintScalarMapRow
-  val aggregator = UintAggregator
+  val groupAggregator = GroupUintAggregator
+  val finalAggregator = UintAggregator
+
   override def validateRow(row: UintScalarMapRow): Boolean = row.metric match {
     case Some(m) => m.keys.forall(_ >= 0)
     case None => false
@@ -162,10 +127,11 @@ class UintScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame, boot
   }
 }
 
-class LongScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame, bootstrap: Boolean = false)
-  extends MetricAnalyzer[Long](name, md, df, bootstrap) with AggregateResampler {
+class LongScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame, numJackknifeBlocks: Int)
+  extends MetricAnalyzer[Long](name, md, df, numJackknifeBlocks) {
   override type PreAggregateRowType = LongScalarMapRow
-  val aggregator = LongAggregator
+  val groupAggregator = GroupLongAggregator
+  val finalAggregator = LongAggregator
 
   override def validateRow(row: LongScalarMapRow): Boolean = row.metric match {
     case Some(m) => m.keys.forall(_ >= 0L)
@@ -179,10 +145,11 @@ class LongScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame, boot
   }
 }
 
-class StringScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame, bootstrap: Boolean = false)
-  extends MetricAnalyzer[String](name, md, df, bootstrap) with AggregateResampler {
+class StringScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame, numJackknifeBlocks: Int)
+  extends MetricAnalyzer[String](name, md, df, numJackknifeBlocks) {
   override type PreAggregateRowType = StringScalarMapRow
-  val aggregator = StringAggregator
+  val groupAggregator = GroupStringAggregator
+  val finalAggregator = StringAggregator
 
   override def validateRow(row: StringScalarMapRow): Boolean = row.metric.isDefined
 
@@ -215,11 +182,11 @@ class StringScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame, bo
 }
 
 object ScalarAnalyzer {
-  def getAnalyzer(name: String, sd: ScalarDefinition, df: DataFrame, bootstrap: Boolean = false): MetricAnalyzer[_] = {
+  def getAnalyzer(name: String, sd: ScalarDefinition, df: DataFrame, numJackknifeBlocks: Int): MetricAnalyzer[_] = {
     sd match {
-      case s: BooleanScalar => new BooleanScalarAnalyzer(name, s, df, bootstrap)
-      case s: UintScalar => new UintScalarAnalyzer(name, s, df, bootstrap)
-      case s: StringScalar => new StringScalarAnalyzer(name, s, df, bootstrap)
+      case s: BooleanScalar => new BooleanScalarAnalyzer(name, s, df, numJackknifeBlocks)
+      case s: UintScalar => new UintScalarAnalyzer(name, s, df, numJackknifeBlocks)
+      case s: StringScalar => new StringScalarAnalyzer(name, s, df, numJackknifeBlocks)
       case _ => throw new UnsupportedOperationException("Unsupported scalar type")
     }
   }

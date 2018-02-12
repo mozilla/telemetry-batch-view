@@ -6,32 +6,34 @@ import org.apache.spark.sql._
 import scala.collection.Map
 
 
-case class HistogramRow(experiment_id: String, branch: String, subgroup: String, metric: Option[Map[Int, Int]]) {
+case class HistogramRow(experiment_id: String, branch: String, subgroup: String, metric: Option[Map[Int, Int]],
+                        block_id: Int) {
   def toPreAggregateRow: PreAggHistogramRow = {
     import HistogramAnalyzer._
-    PreAggHistogramRow(experiment_id, branch, subgroup, metric.toLongValues)
+    PreAggHistogramRow(experiment_id, branch, subgroup, metric.toLongValues, block_id)
   }
 }
 
 case class KeyedHistogramRow(experiment_id: String, branch: String, subgroup: String,
-                             metric: Option[Map[String, Map[Int, Int]]]) {
+                             metric: Option[Map[String, Map[Int, Int]]], block_id: Int) {
   def toPreAggregateRow: PreAggHistogramRow = {
     import HistogramAnalyzer._
     try {
-      PreAggHistogramRow(experiment_id, branch, subgroup, metric.collapse.toLongValues)
+      PreAggHistogramRow(experiment_id, branch, subgroup, metric.collapse.toLongValues, block_id)
     } catch {
-      case _: java.lang.NullPointerException => PreAggHistogramRow(experiment_id, branch, subgroup, None)
+      case _: java.lang.NullPointerException => PreAggHistogramRow(experiment_id, branch, subgroup, None, block_id)
     }
   }
 }
 
-case class PreAggHistogramRow(experiment_id: String, branch: String, subgroup: String, metric: Option[Map[Int, Long]])
+case class PreAggHistogramRow(experiment_id: String, branch: String, subgroup: String, metric: Option[Map[Int, Long]], block_id: Int)
 extends PreAggregateRow[Int]
 
-class HistogramAnalyzer(name: String, hd: HistogramDefinition, df: DataFrame, bootstrap: Boolean = false)
-  extends MetricAnalyzer[Int](name, hd, df, bootstrap) {
+class HistogramAnalyzer(name: String, hd: HistogramDefinition, df: DataFrame, numJackknifeBlocks: Int)
+  extends MetricAnalyzer[Int](name, hd, df, numJackknifeBlocks) {
   override type PreAggregateRowType = PreAggHistogramRow
-  override val aggregator = UintAggregator
+  override val groupAggregator = GroupUintAggregator
+  override val finalAggregator = UintAggregator
   val buckets = hd.getBuckets
 
   // Checks that 1. all the buckets keys are expected values and 2. bucket values are positive numbers
@@ -49,19 +51,6 @@ class HistogramAnalyzer(name: String, hd: HistogramDefinition, df: DataFrame, bo
       formatted.as[KeyedHistogramRow].map(_.toPreAggregateRow)
     } else {
       formatted.as[HistogramRow].map(_.toPreAggregateRow)
-    }
-  }
-
-  // This implementation is super slow for histograms, so this is currently unused by default
-  def resample(ds: Dataset[PreAggregateRowType],
-               aggregations: List[MetricAnalysis],
-               iterations: Int = 1000): Map[MetricKey, List[MetricAnalysis]] = {
-    (0 to iterations).flatMap {
-      // resample with replacement and aggregate
-      i => aggregate(ds.sample(withReplacement = true, fraction = 1.0, seed = i.toLong))
-    }.toList.groupBy {
-      // group each resampling by branch/subgroup
-      m: MetricAnalysis => m.metricKey
     }
   }
 }
