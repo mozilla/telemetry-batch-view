@@ -13,6 +13,8 @@ import org.rogach.scallop._
 
 object GenericLongitudinalView {
 
+  val DefaultWriteMode = "overwrite"
+
   class Opts(args: Array[String]) extends ScallopConf(args) {
     val inputTablename = opt[String](
       "tablename",
@@ -67,6 +69,11 @@ object GenericLongitudinalView {
       "version",
       descr = "The version for the output. Defaults to v<from><to>",
       required = false)
+    val writeMode = opt[String](
+      "write-mode",
+      descr = "Spark write mode. Defaults to overwrite",
+      required = false,
+      default = Some(DefaultWriteMode))
     requireOne(inputTablename, inputFiles)
     verify()
   }
@@ -114,6 +121,7 @@ object GenericLongitudinalView {
     run(sqlContext, opts)
       .repartition(numParquetFiles)
       .write
+      .mode(opts.writeMode())
       .parquet(s"s3://$outputPath/$version")
 
     sc.stop()
