@@ -51,6 +51,31 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     actual should be (expected)
   }
 
+  def compare(message: Message,
+              expected: Map[String, Any],
+              userPreferences: List[UserPref] = userPrefs,
+              scalarDefinitions: List[(String, ScalarDefinition)] = scalarDefs,
+              histogramDefinitions: List[(String, HistogramDefinition)] = histogramDefs,
+              testInvalidFields: List[String] = Nil
+             ): Unit = {
+
+    val summary = MainSummaryView.messageToRow(message, scalarDefinitions, histogramDefinitions, userPreferences)
+    val applied = applySchema(summary.get, MainSummaryView.buildSchema(userPreferences, scalarDefinitions, histogramDefinitions))
+    val actual = applied.getValuesMap(expected.keys.toList)
+
+    if(!testInvalidFields.isEmpty) {
+      intercept[IllegalArgumentException] {
+        applied.fieldIndex("noncurrent_histogram")
+      }
+    }
+
+    for ((f, v) <- expected) {
+      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
+      actual.get(f) should be (Some(v))
+    }
+    actual should be (expected)
+  }
+
   "MainSummary records" can "be serialized" in {
     val spark = getOrCreateSparkSession("MainSummaryViewTest")
     spark.sparkContext.setLogLevel("WARN")
@@ -79,151 +104,6 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       spark.stop()
     }
   }
-
-  "MainSummary plugin counts" can "be summarized" in {
-    val message = RichMessage(
-      "1234",
-      Map(
-        "documentId" -> "foo",
-        "submissionDate" -> "1234",
-        "payload.histograms" -> """{
-    "PLUGINS_NOTIFICATION_SHOWN":{
-      "range":[1,2],
-      "histogram_type":2,
-      "values":{"1":3,"0":0,"2":0},
-      "bucket_count":3,
-      "sum":3
-    },
-    "PLUGINS_NOTIFICATION_USER_ACTION":{
-      "range":[1,3],
-      "histogram_type":1,
-      "values":{"1":0,"0":3},
-      "bucket_count":4,
-      "sum":0
-    },
-    "PLUGINS_INFOBAR_SHOWN": {
-       "range": [1,2],
-       "histogram_type": 2,
-       "values":{"1":12,"0":0,"2":0},
-       "bucket_count":3,
-       "sum":12
-    },
-    "PLUGINS_INFOBAR_ALLOW":{
-      "range":[1,2],
-      "histogram_type":2,
-      "values":{"1":2,"0":0,"2":0},
-      "bucket_count":3,
-      "sum":2
-    },
-    "PLUGINS_INFOBAR_BLOCK":{
-      "range":[1,2],
-      "histogram_type":2,
-      "values":{"1":1,"0":0,"2":0},
-      "bucket_count":3,
-      "sum":1
-    },
-    "PLUGINS_INFOBAR_DISMISSED":{
-      "range":[1,2],
-      "histogram_type":2,
-      "values":{"1":1,"0":0,"2":0},
-      "bucket_count":3,
-      "sum":1
-    }
-  }"""),
-      None)
-    val summary = defaultMessageToRow(message)
-
-    val expected = Map(
-      "document_id" -> "foo",
-      "plugins_notification_shown" -> 3,
-      "plugins_notification_user_action" -> Row(3, 0, 0),
-      "plugins_infobar_shown" -> 12,
-      "plugins_infobar_allow" -> 2,
-      "plugins_infobar_block" -> 1,
-      "plugins_infobar_dismissed" -> 1
-    )
-    val actual = applySchema(summary.get, defaultSchema)
-      .getValuesMap(expected.keys.toList)
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-      actual.get(f) should be (Some(v))
-    }
-    actual should be (expected)
-  }
-
-  "MainSummary experiments" can "be summarized" in {
-    val message = RichMessage(
-      "1234",
-      Map(
-        "documentId" -> "foo",
-        "submissionDate" -> "1234",
-        "environment.experiments" -> """{
-          "experiment1": { "branch": "alpha" },
-          "experiment2": { "branch": "beta" }
-        }"""),
-      None)
-    val summary = defaultMessageToRow(message)
-
-    val expected = Map(
-      "document_id" -> "foo",
-      "experiments" -> Map("experiment1" -> "alpha", "experiment2" -> "beta")
-    )
-    val actual = applySchema(summary.get, defaultSchema)
-      .getValuesMap(expected.keys.toList)
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-      actual.get(f) should be (Some(v))
-    }
-    actual should be (expected)
-  }
-
-  "MainSummary legacy addons" can "be summarized" in {
-    val message = RichMessage(
-      "1234",
-      Map(
-        "documentId" -> "foo",
-        "submissionDate" -> "1234",
-        "payload.addonDetails" -> """{
-          "XPI": {
-            "some-disabled-addon-id": {
-              "dont-care": "about-this-data",
-              "we-discard-this": 11
-            },
-            "active-addon-id": {
-              "dont-care": 12
-            }
-          }
-        }""",
-        "environment.addons" -> """{
-          "activeAddons": {
-            "active-addon-id": {
-              "isSystem": false,
-              "isWebExtension": true
-            },
-            "gom-jabbar": {
-              "isSystem": false,
-              "isWebExtension": true
-            }
-          },
-          "theme": {
-            "id": "firefox-compact-light@mozilla.org"
-          }
-        }"""),
-      None)
-    val summary = defaultMessageToRow(message)
-
-    // This will make sure that:
-    // - the disabled addon is in the list;
-    // - active addons are filtered out.
-    val expected = Map(
-      "document_id" -> "foo",
-      "disabled_addons_ids" -> List("some-disabled-addon-id")
-    )
-    val actual = applySchema(summary.get, defaultSchema)
-      .getValuesMap(expected.keys.toList)
-    actual should be (expected)
-  }
-
 
   "Heka records" can "be summarized" in {
     // Use an example framed-heka message. It is based on test_main.json.gz,
@@ -601,47 +481,6 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     MainSummaryView.getUserPrefs(json7 \ "environment" \ "settings" \ "userPrefs", userPrefs) should be (Row(null, false, null, null))
   }
 
-  "Keyed Scalars" can "be properly shown" in {
-    val message = RichMessage(
-      "1234",
-      Map(
-        "documentId" -> "foo",
-        "submissionDate" -> "1234",
-        "submission" -> """{
-  "payload": {
-    "processes": {
-      "parent": {
-        "keyedScalars": {
-          "mock.keyed.scalar.uint": {
-            "search_enter": 1,
-            "search_suggestion": 2
-          }
-        }
-      }
-    }
-  }
-}"""),
-      None)
-    val summary = defaultMessageToRow(message)
-
-    val expected = Map(
-      "scalar_parent_mock_keyed_scalar_uint" -> Map(
-        "search_enter" -> 1,
-        "search_suggestion" -> 2
-      )
-    )
-
-    val actual =
-      applySchema(summary.get, defaultSchema)
-      .getValuesMap(expected.keys.toList)
-
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-      actual.get(f) should be (Some(v))
-    }
-    actual should be (expected)
-  }
-
   "Stub attribution" can "be extracted" in {
     // Contains a single attribute
     val json1 = parse(
@@ -690,6 +529,169 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       Some(Row("sample_source", "sample_medium", "sample_campaign", "sample_content")))
   }
 
+  "MainSummary plugin counts" can "be summarized" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.histograms" -> """{
+    "PLUGINS_NOTIFICATION_SHOWN":{
+      "range":[1,2],
+      "histogram_type":2,
+      "values":{"1":3,"0":0,"2":0},
+      "bucket_count":3,
+      "sum":3
+    },
+    "PLUGINS_NOTIFICATION_USER_ACTION":{
+      "range":[1,3],
+      "histogram_type":1,
+      "values":{"1":0,"0":3},
+      "bucket_count":4,
+      "sum":0
+    },
+    "PLUGINS_INFOBAR_SHOWN": {
+       "range": [1,2],
+       "histogram_type": 2,
+       "values":{"1":12,"0":0,"2":0},
+       "bucket_count":3,
+       "sum":12
+    },
+    "PLUGINS_INFOBAR_ALLOW":{
+      "range":[1,2],
+      "histogram_type":2,
+      "values":{"1":2,"0":0,"2":0},
+      "bucket_count":3,
+      "sum":2
+    },
+    "PLUGINS_INFOBAR_BLOCK":{
+      "range":[1,2],
+      "histogram_type":2,
+      "values":{"1":1,"0":0,"2":0},
+      "bucket_count":3,
+      "sum":1
+    },
+    "PLUGINS_INFOBAR_DISMISSED":{
+      "range":[1,2],
+      "histogram_type":2,
+      "values":{"1":1,"0":0,"2":0},
+      "bucket_count":3,
+      "sum":1
+    }
+  }"""),
+      None)
+
+    val expected = Map(
+      "document_id" -> "foo",
+      "plugins_notification_shown" -> 3,
+      "plugins_notification_user_action" -> Row(3, 0, 0),
+      "plugins_infobar_shown" -> 12,
+      "plugins_infobar_allow" -> 2,
+      "plugins_infobar_block" -> 1,
+      "plugins_infobar_dismissed" -> 1
+    )
+
+    compare(message, expected)
+  }
+
+  "MainSummary experiments" can "be summarized" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.experiments" -> """{
+          "experiment1": { "branch": "alpha" },
+          "experiment2": { "branch": "beta" }
+        }"""),
+      None)
+
+    val expected = Map(
+      "document_id" -> "foo",
+      "experiments" -> Map("experiment1" -> "alpha", "experiment2" -> "beta")
+    )
+
+    compare(message, expected)
+  }
+
+  "MainSummary legacy addons" can "be summarized" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.addonDetails" -> """{
+          "XPI": {
+            "some-disabled-addon-id": {
+              "dont-care": "about-this-data",
+              "we-discard-this": 11
+            },
+            "active-addon-id": {
+              "dont-care": 12
+            }
+          }
+        }""",
+        "environment.addons" -> """{
+          "activeAddons": {
+            "active-addon-id": {
+              "isSystem": false,
+              "isWebExtension": true
+            },
+            "gom-jabbar": {
+              "isSystem": false,
+              "isWebExtension": true
+            }
+          },
+          "theme": {
+            "id": "firefox-compact-light@mozilla.org"
+          }
+        }"""),
+      None)
+
+    // This will make sure that:
+    // - the disabled addon is in the list;
+    // - active addons are filtered out.
+    val expected = Map(
+      "document_id" -> "foo",
+      "disabled_addons_ids" -> List("some-disabled-addon-id")
+    )
+
+    compare(message, expected)
+  }
+
+  "Keyed Scalars" can "be properly shown" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "submission" -> """{
+  "payload": {
+    "processes": {
+      "parent": {
+        "keyedScalars": {
+          "mock.keyed.scalar.uint": {
+            "search_enter": 1,
+            "search_suggestion": 2
+          }
+        }
+      }
+    }
+  }
+}"""),
+      None)
+
+    val expected = Map(
+      "scalar_parent_mock_keyed_scalar_uint" -> Map(
+        "search_enter" -> 1,
+        "search_suggestion" -> 2
+      )
+    )
+
+    compare(message, expected)
+  }
+
+
   "Search cohort" can "be properly shown" in {
     val message = RichMessage(
       "1234",
@@ -700,28 +702,15 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           "searchCohort": "helloworld"
         }"""),
       None)
-    val summary = defaultMessageToRow(message)
 
     val expected = Map(
       "search_cohort" -> "helloworld"
     )
 
-    val actual =
-      applySchema(summary.get, defaultSchema)
-      .getValuesMap(expected.keys.toList)
-
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-      actual.get(f) should be (Some(v))
-    }
-    actual should be (expected)
+    compare(message, expected)
   }
 
   "User prefs" can "be properly shown" in {
-    val spark = getOrCreateSparkSession("MainSummaryViewTest")
-    spark.sparkContext.setLogLevel("WARN")
-    import spark.implicits._
-
     val message = RichMessage(
       "1234",
       Map(
@@ -733,34 +722,13 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           }
         }"""),
       None)
-    val summary = defaultMessageToRow(message)
 
-    val expected = Map(
-      "dom_ipc_process_count" -> 2,
-      "extensions_allow_non_mpc_extensions" -> null
-    )
+    val expected = Map("user_prefs" -> Row(2, null))
 
-    val actual =
-      spark
-      .createDataFrame(spark.sparkContext.parallelize(List(summary.get)), defaultSchema)
-      .first
-      .getAs[Row]("user_prefs")
-      .getValuesMap(expected.keys.toList)
-
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-      actual.get(f) should be (Some(v))
-    }
-    actual should be (expected)
-    spark.stop()
+    compare(message, expected)
   }
 
-  "User prefs" can "handle null" in {
-    val spark = getOrCreateSparkSession("MainSummaryViewTest")
-    val sc = spark.sparkContext
-    sc.setLogLevel("WARN")
-    import spark.implicits._
-
+  it can "handle null" in {
     val message = RichMessage(
       "1234",
       Map(
@@ -772,26 +740,10 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           }
         }"""),
       None)
-    val summary = defaultMessageToRow(message)
 
-    val expected = Map(
-      "dom_ipc_process_count" -> null,
-      "extensions_allow_non_mpc_extensions" -> true
-    )
+    val expected = Map("user_prefs" -> Row(null, true))
 
-    val actual =
-      spark
-      .createDataFrame(sc.parallelize(List(summary.get)), defaultSchema)
-      .first
-      .getAs[Row]("user_prefs")
-      .getValuesMap(expected.keys.toList)
-
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-      actual.get(f) should be (Some(v))
-    }
-    actual should be (expected)
-    spark.stop()
+    compare(message, expected)
   }
 
   "Histograms" can "be stored" in {
@@ -825,7 +777,6 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
     }
   }"""),
       None)
-    val summary = defaultMessageToRow(message)
 
     val mock_exp_vals = Map(
       1 -> 0,
@@ -844,14 +795,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "histogram_parent_mock_optout" -> mock_lin_vals
     )
 
-    val actual = applySchema(summary.get, defaultSchema)
-      .getValuesMap(expected.keys.toList)
-
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-      actual.get(f) should be (Some(v))
-    }
-    actual should be (expected)
+    compare(message, expected)
   }
 
   "Keyed Histograms" can "be stored" in {
@@ -909,7 +853,6 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   }
 }"""),
       None)
-    val summary = defaultMessageToRow(message)
 
     val mock_lin_vals = Map(
       "hello" -> Map(1->0, 3->1, 9->1),
@@ -926,14 +869,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "histogram_parent_mock_keyed_exponential" -> mock_exp_vals
     )
 
-    val actual = applySchema(summary.get, defaultSchema)
-      .getValuesMap(expected.keys.toList)
-
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-      actual.get(f) should be (Some(v))
-    }
-    actual should be (expected)
+    compare(message, expected)
   }
 
   "Bad histograms" can "be handled" in {
@@ -986,29 +922,10 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "histogram_parent_mock_keyed_linear" -> Map("hello" -> null)
     )
 
-    val actualWithSchema = applySchema(summary.get, defaultSchema)
-    val actual = actualWithSchema.getValuesMap(expected.keys.toList)
-
-    intercept[IllegalArgumentException] {
-      actualWithSchema.fieldIndex("noncurrent_histogram")
-    }
-
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-      actual.get(f) should be (Some(v))
-    }
-    actual should be (expected)
+    compare(message, expected, testInvalidFields = List("noncurrent_histogram"))
   }
 
   "All possible histograms and scalars" can "be included" in {
-    val spark = SparkSession.builder()
-       .appName("")
-       .master("local[1]")
-       .getOrCreate()
-
-    val sc = spark.sparkContext
-    import spark.implicits._
-
     val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(Histograms.definitions(includeOptin = false, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true), useWhitelist = true)
     val allScalarDefs = Scalars.definitions(includeOptin = true).toList.sortBy(_._1)
 
@@ -1100,18 +1017,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
 
     val expected = expectedHistos ++ expectedScalars
 
-    val summary = MainSummaryView.messageToRow(message, allScalarDefs, allHistogramDefs)
-    val actual = spark
-          .createDataFrame(sc.parallelize(List(summary.get)), MainSummaryView.buildSchema(userPrefs, allScalarDefs, allHistogramDefs))
-          .first
-          .getValuesMap(expected.keys.toList)
-
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-    }
-    actual should be (expected)
-
-    spark.stop()
+    compare(message, expected, userPrefs, allScalarDefs, allHistogramDefs)
   }
 
   "Histogram filter" can "include all whitelisted histograms" in {
@@ -1302,14 +1208,6 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   }
 
   "Quantum Readiness" can "be properly parsed" in {
-    val spark = SparkSession.builder()
-        .appName("test quantum readiness")
-        .master("local[1]")
-        .getOrCreate()
-
-    val sc = spark.sparkContext
-    import spark.implicits._
-
     val message = RichMessage(
       "1234",
       Map(
@@ -1334,36 +1232,15 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           }
         }"""),
       None)
-    val summary = defaultMessageToRow(message)
 
     val expected = Map(
       "quantum_ready" -> true
     )
 
-    val actual = spark
-      .createDataFrame(sc.parallelize(List(summary.get)), defaultSchema)
-      .first
-      .getValuesMap(expected.keys.toList)
-
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-      actual.get(f) should be (Some(v))
-    }
-
-    actual should be (expected)
-
-    spark.stop()
+    compare(message, expected)
   }
 
   "Process Histograms" can "be stored" in {
-    val spark = SparkSession.builder()
-        .appName("test quantum readiness")
-        .master("local[1]")
-        .getOrCreate()
-
-    val sc = spark.sparkContext
-    import spark.implicits._
-
     val message = RichMessage(
       "2235",
       Map(
@@ -1461,19 +1338,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "histogram_content_mock_keyed_linear" -> Map("foo" -> Map(1 -> 0, 16 -> 1, 54 -> 1), "bar" -> Map(1 -> 1))
     )
 
-    val summary = defaultMessageToRow(message)
-    val actual = spark
-          .createDataFrame(sc.parallelize(List(summary.get)), defaultSchema)
-          .first
-          .getValuesMap(expected.keys.toList)
-
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-      actual.get(f) should be (Some(v))
-    }
-    actual should be (expected)
-
-    spark.stop()
+    compare(message, expected)
   }
 
   "Process Scalars" can "be properly shown" in {
@@ -1497,7 +1362,6 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
   }
 }"""),
       None)
-    val summary = defaultMessageToRow(message)
 
     val expected = Map(
       "scalar_content_mock_keyed_scalar_uint" -> Map(
@@ -1506,15 +1370,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       )
     )
 
-    val actual =
-      applySchema(summary.get, defaultSchema)
-      .getValuesMap(expected.keys.toList)
-
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-      actual.get(f) should be (Some(v))
-    }
-    actual should be (expected)
+    compare(message, expected)
   }
 
   "Migrated scalar values" can "be properly selected" in {
@@ -1548,14 +1404,12 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         }"""),
       None)
 
-    val messageSummary = MainSummaryView.messageToRow(messageBothPresent, scalarsDef, histogramDefs)
-    val appliedSummary =  applySchema(messageSummary.get, MainSummaryView.buildSchema(userPrefs, scalarsDef, histogramDefs))
+    val expected = Map(
+      "active_ticks" -> 888,
+      "first_paint" -> 999
+    )
 
-    val selectedActiveTicks = appliedSummary.getAs[Int]("active_ticks")
-    selectedActiveTicks should be (888)
-
-    val selectedFirstPaint = appliedSummary.getAs[Int]("first_paint")
-    selectedFirstPaint should be (999)
+    compare(messageBothPresent, expected, scalarDefinitions = scalarsDef)
   }
 
   "Migrated scalar values" can "fall back to simple measurements values" in {
@@ -1576,14 +1430,12 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       ),
       None)
 
-    val messageSummary = MainSummaryView.messageToRow(messageSMPresent, scalarsDef, histogramDefs)
-    val appliedSummary = applySchema(messageSummary.get, defaultSchema)
+    val expected = Map(
+      "active_ticks" -> 111,
+      "first_paint" -> 222
+    )
 
-    val selectedActiveTicks = appliedSummary.getAs[Int]("active_ticks")
-    selectedActiveTicks should be(111)
-
-    val selectedFirstPaint = appliedSummary.getAs[Int]("first_paint")
-    selectedFirstPaint should be(222)
+    compare(messageSMPresent, expected, scalarDefinitions = scalarsDef)
   }
 
   "Simple measurements values" can "be selected in the absence of a scalar definition." in {
@@ -1598,26 +1450,15 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         ),
       None)
 
-    // If the scalar's definition does not exist, the simple measurement value should be selected.
-    val msgSummaryNoDefs = MainSummaryView.messageToRow(messageSMPresent, List(), histogramDefs)
-    val appliedSummaryNoDefs = applySchema(msgSummaryNoDefs.get, MainSummaryView.buildSchema(userPrefs, List(), histogramDefs))
+    val expected = Map(
+      "active_ticks" -> 111,
+      "first_paint" -> 222
+    )
 
-    val activeTicksVal = appliedSummaryNoDefs.getAs[Int]("active_ticks")
-    activeTicksVal should be(111)
-
-    val firstPaintVal =  appliedSummaryNoDefs.getAs[Int]("first_paint")
-    firstPaintVal should be(222)
+    compare(messageSMPresent, expected, scalarDefinitions = List())
   }
 
   "Main Summary" can "store categorical histograms" in {
-    val spark = SparkSession.builder()
-        .appName("test categorical")
-        .master("local[1]")
-        .getOrCreate()
-
-    val sc = spark.sparkContext
-    import spark.implicits._
-
     val message = RichMessage(
       "1234",
       Map(
@@ -1639,33 +1480,14 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |  }
         |}""".stripMargin),
       None)
-    val summary = defaultMessageToRow(message)
     val expected = Map(
       "histogram_parent_mock_categorical" -> Map("am" -> 0, "a" -> 1, "strange" -> 1, CategoricalHistogram.SpillBucketName -> 1)
     )
 
-    val actual = spark
-      .createDataFrame(sc.parallelize(List(summary.get)), defaultSchema)
-      .first
-      .getValuesMap(expected.keys.toList)
-
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-    }
-
-    actual should be (expected)
-    spark.stop()
+    compare(message, expected)
   }
 
   it can "store keyed categorical histograms" in {
-    val spark = SparkSession.builder()
-        .appName("test keyed categorical histograms")
-        .master("local[1]")
-        .getOrCreate()
-
-    val sc = spark.sparkContext
-    import spark.implicits._
-
     val message = RichMessage(
       "1234",
       Map(
@@ -1689,33 +1511,14 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |  }
         |}""".stripMargin),
       None)
-    val summary = defaultMessageToRow(message)
     val expected = Map(
       "histogram_parent_mock_keyed_categorical" -> Map("gaius" -> Map("all" -> 1, "of" -> 1, "this" -> 1, CategoricalHistogram.SpillBucketName -> 1))
     )
 
-    val actual = spark
-      .createDataFrame(sc.parallelize(List(summary.get)), defaultSchema)
-      .first
-      .getValuesMap(expected.keys.toList)
-
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-    }
-
-    actual should be (expected)
-    spark.stop()
+    compare(message, expected)
   }
 
   it can "handle incorrect categorical histogram buckets" in {
-    val spark = SparkSession.builder()
-        .appName("test categorical")
-        .master("local[1]")
-        .getOrCreate()
-
-    val sc = spark.sparkContext
-    import spark.implicits._
-
     val message = RichMessage(
       "1234",
       Map(
@@ -1739,22 +1542,11 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
         |  }
         |}""".stripMargin),
         None)
-    val summary = defaultMessageToRow(message)
     val expected = Map(
       "histogram_parent_mock_categorical" -> Map("am" -> 0, "a" -> 1, "strange" -> 1, CategoricalHistogram.SpillBucketName -> 3)
     )
 
-    val actual = spark
-      .createDataFrame(sc.parallelize(List(summary.get)), defaultSchema)
-      .first
-      .getValuesMap(expected.keys.toList)
-
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-    }
-
-    actual should be (expected)
-    spark.stop()
+    compare(message, expected)
   }
 
   it can "properly show e10s_multi_processes" in {
@@ -1767,21 +1559,12 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           "e10sMultiProcesses": 12
         }"""),
       None)
-    val summary = defaultMessageToRow(message)
 
     val expected = Map(
       "e10s_multi_processes" -> 12
     )
 
-    val actual =
-      applySchema(summary.get, defaultSchema)
-      .getValuesMap(expected.keys.toList)
-
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-      actual.get(f) should be (Some(v))
-    }
-    actual should be (expected)
+    compare(message, expected)
   }
 
   "userPrefs row" can "be built" in {
@@ -1845,7 +1628,6 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           }
         }"""),
       None)
-    val summary = MainSummaryView.messageToRow(message, List(), List(), testUserPrefs)
 
     val expected = Map(
       "user_pref_p1" -> 10,
@@ -1853,15 +1635,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
       "user_pref_p3_messy" -> "bar"
     )
 
-    val actual =
-      applySchema(summary.get, MainSummaryView.buildSchema(testUserPrefs, List(), List()))
-        .getValuesMap(expected.keys.toList)
-
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be(Some(v)) }
-      actual.get(f) should be(Some(v))
-    }
-    actual should be (expected)
+    compare(message, expected, testUserPrefs, List(), List())
   }
 
   it can "store multi-process events" in {
@@ -1886,8 +1660,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           }
         }"""),
       None);
-    val summary = MainSummaryView.messageToRow(message, scalarDefs, histogramDefs)
-
+    val summary = defaultMessageToRow(message)
     val expected = Set(
       Row(81994404, "navigation", "search", "searchbar", null, Map("telemetry_process" -> "dynamic")),
       Row(81994404, "navigation", "search", "searchbar", null, Map("telemetry_process" -> "content")),
@@ -1915,22 +1688,12 @@ class MainSummaryViewTest extends FlatSpec with Matchers{
           }
         }"""),
       None)
-    val summary = defaultMessageToRow(message)
 
     val expected = Map(
       "antivirus" -> Seq("av_1"),
       "antispyware" -> Seq("asw_1", "asw_2"),
       "firewall" -> null
     )
-
-    val actual =
-      applySchema(summary.get, MainSummaryView.buildSchema(userPrefs, scalarDefs, histogramDefs))
-        .getValuesMap(expected.keys.toList)
-
-    for ((f, v) <- expected) {
-      withClue(s"$f:") { actual.get(f) should be (Some(v)) }
-      actual.get(f) should be (Some(v))
-    }
-    actual should be (expected)
+    compare(message, expected)
   }
 }
