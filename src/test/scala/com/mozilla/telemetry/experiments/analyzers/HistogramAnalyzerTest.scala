@@ -58,15 +58,19 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
         Map(0L -> toPointControl(4), 1L -> toPointControl(8), 2L -> toPointControl(12), 5L -> toPointControl(0)),
         Some(List(
           Statistic(Some("branch1"), "Chi-Square Distance", 0.0),
-          Statistic(Some("branch2"), "Chi-Square Distance", 0.0)))),
+          Statistic(Some("branch1"), "Mann-Whitney-U Distance", 72.0, None, None, None, Some(0.48867856487858774)),
+          Statistic(Some("branch2"), "Chi-Square Distance", 0.0),
+          Statistic(Some("branch2"), "Mann-Whitney-U Distance", 144.0, None, None, None, Some(0.49267049900579374))))),
       MetricAnalysis("experiment1", "branch1", MetricAnalyzer.topLevelLabel, 1L, "histogram", "EnumeratedHistogram",
         Map(0L -> toPointBranch1(1), 1L -> toPointBranch1(2), 2L -> toPointBranch1(3)),
         Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.0)))),
+          Statistic(Some("control"), "Chi-Square Distance", 0.0),
+          Statistic(Some("control"), "Mann-Whitney-U Distance", 72.0, None, None, None, Some(0.48867856487858774))))),
       MetricAnalysis("experiment1", "branch2", MetricAnalyzer.topLevelLabel, 2L, "histogram", "EnumeratedHistogram",
         Map(0L -> toPointBranch2(2), 1L -> toPointBranch2(4), 2L -> toPointBranch2(6), 5L -> toPointBranch2(0)),
         Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.0)))))
+          Statistic(Some("control"), "Chi-Square Distance", 0.0),
+          Statistic(Some("control"), "Mann-Whitney-U Distance", 144.0, None, None, None, Some(0.49267049900579374))))))
 
       assert(actualCategorical == expectedCategorical)
 
@@ -82,7 +86,9 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
         Map(0L -> toPointControl(4), 1L -> toPointControl(8), 2L -> toPointControl(12), 5L -> toPointControl(0)),
         Some(List(
           Statistic(Some("branch1"), "Chi-Square Distance", 0.0),
+          Statistic(Some("branch1"), "Mann-Whitney-U Distance", 72.0, None, None, None, Some(0.48867856487858774)),
           Statistic(Some("branch2"), "Chi-Square Distance", 0.0),
+          Statistic(Some("branch2"), "Mann-Whitney-U Distance", 144.0, None, None, None, Some(0.49267049900579374)),
           Statistic(None, "Mean", 1.3333333333333333),
           Statistic(None, "Median", 1.0),
           Statistic(None, "25th Percentile", 1.0),
@@ -91,6 +97,7 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
         Map(0L -> toPointBranch1(1), 1L -> toPointBranch1(2), 2L -> toPointBranch1(3)),
         Some(List(
           Statistic(Some("control"), "Chi-Square Distance", 0.0),
+          Statistic(Some("control"), "Mann-Whitney-U Distance", 72.0, None, None, None, Some(0.48867856487858774)),
           Statistic(None, "Mean", 1.3333333333333333),
           Statistic(None, "Median", 1.0),
           Statistic(None, "25th Percentile", 0.5),
@@ -99,6 +106,7 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
         Map(0L -> toPointBranch2(2), 1L -> toPointBranch2(4), 2L -> toPointBranch2(6), 5L -> toPointBranch2(0)),
         Some(List(
           Statistic(Some("control"), "Chi-Square Distance", 0.0),
+          Statistic(Some("control"), "Mann-Whitney-U Distance", 144.0, None, None, None, Some(0.49267049900579374)),
           Statistic(None, "Mean", 1.3333333333333333),
           Statistic(None, "Median", 1.0),
           Statistic(None, "25th Percentile", 1.0),
@@ -124,15 +132,19 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
         Map(0L -> toPointControl(8), 1L -> toPointControl(16), 2L -> toPointControl(24), 100L -> toPointControl(3)),
         Some(List(
           Statistic(Some("branch1"), "Chi-Square Distance", 0.030303030303030304),
-          Statistic(Some("branch2"), "Chi-Square Distance", 0.019470404984423675)))),
+          Statistic(Some("branch1"), "Mann-Whitney-U Distance", 432.0, None, None, None, Some(0.34759898151474267)),
+          Statistic(Some("branch2"), "Chi-Square Distance", 0.019470404984423675),
+          Statistic(Some("branch2"), "Mann-Whitney-U Distance", 654.0, None, None, None, Some(0.2570183003633981))))),
       MetricAnalysis("experiment1", "branch1", MetricAnalyzer.topLevelLabel, 1L, "keyed_histogram", "EnumeratedHistogram",
         Map(0L -> toPointBranch1(3), 1L -> toPointBranch1(6), 2L -> toPointBranch1(9)),
         Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.030303030303030304)))),
+          Statistic(Some("control"), "Chi-Square Distance", 0.030303030303030304),
+          Statistic(Some("control"), "Mann-Whitney-U Distance", 432.0, None, None, None, Some(0.34759898151474267))))),
       MetricAnalysis("experiment1", "branch2", MetricAnalyzer.topLevelLabel, 2L, "keyed_histogram", "EnumeratedHistogram",
         Map(0L -> toPointBranch2(4), 1L -> toPointBranch2(8), 2L -> toPointBranch2(12), 100L -> toPointBranch2(4)),
         Some(List(
-          Statistic(Some("control"), "Chi-Square Distance", 0.019470404984423675)))))
+          Statistic(Some("control"), "Chi-Square Distance", 0.019470404984423675),
+          Statistic(Some("control"), "Mann-Whitney-U Distance", 654.0, None, None, None, Some(0.2570183003633981))))))
     assert(actual == expected)
   }
 
