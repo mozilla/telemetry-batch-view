@@ -121,7 +121,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
       var count = 0
       for (message <- File.parse(input)) {
         message.timestamp should be(1460036116829920000l)
-        message.`type`.get should be("telemetry")
+        message.dtype.get should be("telemetry")
         message.logger.get should be("telemetry")
 
         for (summary <- defaultMessageToRow(message)) {
