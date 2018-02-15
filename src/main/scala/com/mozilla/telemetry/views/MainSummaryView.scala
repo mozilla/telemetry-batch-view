@@ -412,42 +412,49 @@ object MainSummaryView {
   // to a map containing just the fields we're interested in.
   def messageToRow(message: Message, scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String, HistogramDefinition)], userPrefs: List[UserPref] = userPrefsList): Option[Row] = {
     try {
-      val fields = message.fieldsAsMap
+      val doc = message.toJValue match {
+        case Some(doc) => doc
+        case None => return None
+      }
+
+      val environment = doc \ "environment"
+      val payload = doc \ "payload"
+      val meta = doc \ "meta"
 
       // Don't compute the expensive stuff until we need it. We may skip a record
       // due to missing required fields.
-      lazy val addons = parse(fields.getOrElse("environment.addons", "{}").asInstanceOf[String])
-      lazy val addonDetails = parse(fields.getOrElse("payload.addonDetails", "{}").asInstanceOf[String])
-      lazy val payload = parse(message.payload.getOrElse(fields.getOrElse("submission", "{}")).asInstanceOf[String])
-      lazy val application = payload \ "application"
-      lazy val build = parse(fields.getOrElse("environment.build", "{}").asInstanceOf[String])
-      lazy val profile = parse(fields.getOrElse("environment.profile", "{}").asInstanceOf[String])
-      lazy val partner = parse(fields.getOrElse("environment.partner", "{}").asInstanceOf[String])
-      lazy val settings = parse(fields.getOrElse("environment.settings", "{}").asInstanceOf[String])
-      lazy val system = parse(fields.getOrElse("environment.system", "{}").asInstanceOf[String])
-      lazy val info = parse(fields.getOrElse("payload.info", "{}").asInstanceOf[String])
-      lazy val simpleMeasures = parse(fields.getOrElse("payload.simpleMeasurements", "{}").asInstanceOf[String])
+      lazy val addons = environment \ "addons"
+      lazy val addonDetails = payload \ "addonDetails"
+      lazy val application = doc \ "application"
+      lazy val build = environment \ "build"
+      lazy val experiments = environment \ "experiments"
+      lazy val profile = environment \ "profile"
+      lazy val partner = environment \ "partner"
+      lazy val settings = environment \ "settings"
+      lazy val system = environment \ "system"
+      lazy val info = payload \ "info"
+      lazy val simpleMeasures = payload \ "simpleMeasurements"
 
       lazy val histograms = MainPing.ProcessTypes.map{
         _ match {
-          case "parent" => "parent" -> parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
-          case p => p -> payload \ "payload" \ "processes" \ p \ "histograms"
+          case "parent" => "parent" -> payload \ "histograms"
+          case p => p -> payload \ "processes" \ p \ "histograms"
         }
       }.toMap
 
       lazy val keyedHistograms = MainPing.ProcessTypes.map{
         _ match {
-          case "parent" => "parent" -> parse(fields.getOrElse("payload.keyedHistograms", "{}").asInstanceOf[String])
-          case p => p -> payload \ "payload" \ "processes" \ p \ "keyedHistograms"
+          case "parent" => "parent" -> payload \ "keyedHistograms"
+          case p => p -> payload \ "processes" \ p \ "keyedHistograms"
         }
       }.toMap
 
       lazy val scalars = MainPing.ProcessTypes.map{
-        p => p -> payload \ "payload" \ "processes" \ p \ "scalars"
+        p => p -> payload \ "processes" \ p \ "scalars"
       }.toMap
 
       lazy val keyedScalars = MainPing.ProcessTypes.map{
-        p => p -> payload \ "payload" \ "processes" \ p \ "keyedScalars"
+        p => p -> payload \ "processes" \ p \ "keyedScalars"
       }.toMap
 
       lazy val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms("parent") \ "WEAVE_CONFIGURED")
@@ -455,10 +462,8 @@ object MainSummaryView {
       lazy val weaveMobile = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_MOBILE")
 
       lazy val events = ("dynamic" :: MainPing.ProcessTypes).map {
-        p => p -> payload \ "payload" \ "processes" \ p \ "events"
+        p => p -> payload \ "processes" \ p \ "events"
       }
-
-      lazy val experiments = parse(fields.getOrElse("environment.experiments", "{}").asInstanceOf[String])
 
       val sslHandshakeResultKeys = (0 to 671).map(_.toString)
 
@@ -474,37 +479,16 @@ object MainSummaryView {
 
       val row = Row(
         // Row fields must match the structure in 'buildSchema'
-        fields.getOrElse("documentId", None) match {
-          case x: String => x
-          // documentId is required, and must be a string. If either
-          // condition is not satisfied, we skip this record.
-          case _ => return None
+        (meta \ "documentId").toNullableString match {
+          case null => return None  // required, skip this record
+          case x => x
         },
-        fields.getOrElse("clientId", None) match {
-          case x: String => x
-          case _ => null
-        },
-        fields.getOrElse("sampleId", None) match {
-          case x: Long => x
-          case x: Double => x.toLong
-          case _ => null
-        },
-        fields.getOrElse("appUpdateChannel", None) match {
-          case x: String => x
-          case _ => ""
-        },
-        fields.getOrElse("normalizedChannel", None) match {
-          case x: String => x
-          case _ => ""
-        },
-        fields.getOrElse("geoCountry", None) match {
-          case x: String => x
-          case _ => ""
-        },
-        fields.getOrElse("geoCity", None) match {
-          case x: String => x
-          case _ => ""
-        },
+        (meta \ "clientId").toNullableString,
+        (meta \ "sampleId").toNullableLong,
+        (meta \ "appUpdateChannel").toNullableString,
+        (meta \ "normalizedChannel").toNullableString,
+        (meta \ "geoCountry").toNullableString,
+        (meta \ "geoCity").toNullableString,
         (system \ "os" \ "name").toNullableString,
         (system \ "os" \ "version").toNullableString,
         (system \ "os" \ "servicePackMajor").toNullableLong,
@@ -524,11 +508,11 @@ object MainSummaryView {
         (info \ "subsessionLength").toNullableLong,
         (info \ "subsessionCounter").toNullableInt,
         (info \ "profileSubsessionCounter").toNullableInt,
-        (payload \ "creationDate").toNullableString,
+        (doc \ "creationDate").toNullableString,
         (partner \ "distributionId").toNullableString,
-        fields.getOrElse("submissionDate", None) match {
-          case x: String => x
-          case _ => return None // required
+        (meta \ "submissionDate").toNullableString match {
+          case null => return None  // required
+          case x => x
         },
         weaveConfigured.orNull,
         weaveDesktop.orNull,
@@ -573,10 +557,7 @@ object MainSummaryView {
         (settings \ "defaultSearchEngineData" \ "submissionURL").toNullableString,
         (settings \ "defaultSearchEngine").toNullableString,
         hsum(histograms("parent") \ "DEVTOOLS_TOOLBOX_OPENED_COUNT"),
-        fields.getOrElse("Date", None) match {
-          case x: String => x
-          case _ => null
-        },
+        (meta \ "Date").toNullableString,
         MainPing.histogramToMean(histograms("parent") \ "PLACES_BOOKMARKS_COUNT").orNull,
         MainPing.histogramToMean(histograms("parent") \ "PLACES_PAGES_COUNT").orNull,
         hsum(histograms("parent") \ "PUSH_API_NOTIFY"),
