@@ -16,7 +16,7 @@ lazy val root = (project in file(".")).
     // Hack to get releases to not fail to upload when the same jar name already exists. Later we will need auto versioning
     isSnapshot := true,
     ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) },
-    libraryDependencies += "com.mozilla.telemetry" %% "moztelemetry" % "1.0-SNAPSHOT",
+    libraryDependencies += "com.mozilla.telemetry" %% "moztelemetry" % "1.1-SNAPSHOT",
     libraryDependencies += "com.mozilla.telemetry" %% "spark-hyperloglog" % "2.0.0-SNAPSHOT",
     libraryDependencies += "org.apache.avro" % "avro" % "1.7.7",
     libraryDependencies += "org.apache.parquet" % "parquet-avro" % "1.7.0",
