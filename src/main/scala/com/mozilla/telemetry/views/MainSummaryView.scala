@@ -9,7 +9,7 @@ import org.rogach.scallop._
 import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.utils.{Addon, Attribution, Events,
   Experiment, getOrCreateSparkSession, MainPing, S3Store}
-import com.mozilla.telemetry.utils.{BooleanUserPref, IntegerUserPref, UserPref}
+import com.mozilla.telemetry.utils.{BooleanUserPref, IntegerUserPref, StringUserPref, UserPref}
 import org.json4s.{JValue, DefaultFormats}
 import com.mozilla.telemetry.metrics._
 
@@ -79,7 +79,8 @@ object MainSummaryView {
     IntegerUserPref("dom.ipc.processCount") ::
     BooleanUserPref("extensions.allow-non-mpc-extensions") ::
     BooleanUserPref("extensions.legacy.enabled") ::
-    BooleanUserPref("browser.search.widget.inNavBar") :: Nil
+    BooleanUserPref("browser.search.widget.inNavBar") ::
+    StringUserPref("general.config.filename") :: Nil
 
 
   // Configuration for command line arguments
