@@ -191,15 +191,15 @@ object MainSummaryView {
         val s3prefix = s"${filterDocType}_summary/$schemaVersion/submission_date_s3=$currentDateString"
         val s3path = s"s3://${conf.outputBucket()}/$s3prefix"
 
-        // Repartition the dataframe by sample_id before saving.
-        val partitioned = records.repartition(100, records.col("sample_id"))
+        // Order the dataframe by sample_id before saving.
+        val ordered = records.withColumn("sample_id", records.col("sample_id").cast(StringType)).orderBy("sample_id")
 
         // limit the size of output files so they don't break during s3 upload
         val maxRecordsPerFile = conf.maxRecordsPerFile()
 
         // Then write to S3 using the given fields as path name partitions. Overwrites
         // existing data.
-        partitioned.write.partitionBy("sample_id").mode("overwrite").option("maxRecordsPerFile", maxRecordsPerFile).parquet(s3path)
+        ordered.write.mode("overwrite").option("maxRecordsPerFile", maxRecordsPerFile).parquet(s3path)
 
         // Then remove the _SUCCESS file so we don't break Spark partition discovery.
         S3Store.deleteKey(conf.outputBucket(), s"$s3prefix/_SUCCESS")
