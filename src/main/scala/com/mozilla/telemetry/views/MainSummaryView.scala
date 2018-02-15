@@ -421,47 +421,45 @@ object MainSummaryView {
       val payload = doc \ "payload"
       val meta = doc \ "meta"
 
-      // Don't compute the expensive stuff until we need it. We may skip a record
-      // due to missing required fields.
-      lazy val addons = environment \ "addons"
-      lazy val addonDetails = payload \ "addonDetails"
-      lazy val application = doc \ "application"
-      lazy val build = environment \ "build"
-      lazy val experiments = environment \ "experiments"
-      lazy val profile = environment \ "profile"
-      lazy val partner = environment \ "partner"
-      lazy val settings = environment \ "settings"
-      lazy val system = environment \ "system"
-      lazy val info = payload \ "info"
-      lazy val simpleMeasures = payload \ "simpleMeasurements"
+      val addons = environment \ "addons"
+      val addonDetails = payload \ "addonDetails"
+      val application = doc \ "application"
+      val build = environment \ "build"
+      val experiments = environment \ "experiments"
+      val profile = environment \ "profile"
+      val partner = environment \ "partner"
+      val settings = environment \ "settings"
+      val system = environment \ "system"
+      val info = payload \ "info"
+      val simpleMeasures = payload \ "simpleMeasurements"
 
-      lazy val histograms = MainPing.ProcessTypes.map{
+      val histograms = MainPing.ProcessTypes.map{
         _ match {
           case "parent" => "parent" -> payload \ "histograms"
           case p => p -> payload \ "processes" \ p \ "histograms"
         }
       }.toMap
 
-      lazy val keyedHistograms = MainPing.ProcessTypes.map{
+      val keyedHistograms = MainPing.ProcessTypes.map{
         _ match {
           case "parent" => "parent" -> payload \ "keyedHistograms"
           case p => p -> payload \ "processes" \ p \ "keyedHistograms"
         }
       }.toMap
 
-      lazy val scalars = MainPing.ProcessTypes.map{
+      val scalars = MainPing.ProcessTypes.map{
         p => p -> payload \ "processes" \ p \ "scalars"
       }.toMap
 
-      lazy val keyedScalars = MainPing.ProcessTypes.map{
+      val keyedScalars = MainPing.ProcessTypes.map{
         p => p -> payload \ "processes" \ p \ "keyedScalars"
       }.toMap
 
-      lazy val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms("parent") \ "WEAVE_CONFIGURED")
-      lazy val weaveDesktop = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_DESKTOP")
-      lazy val weaveMobile = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_MOBILE")
+      val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms("parent") \ "WEAVE_CONFIGURED")
+      val weaveDesktop = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_DESKTOP")
+      val weaveMobile = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_MOBILE")
 
-      lazy val events = ("dynamic" :: MainPing.ProcessTypes).map {
+      val events = ("dynamic" :: MainPing.ProcessTypes).map {
         p => p -> payload \ "processes" \ p \ "events"
       }
 
