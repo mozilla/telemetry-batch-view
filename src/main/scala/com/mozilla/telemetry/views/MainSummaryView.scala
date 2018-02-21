@@ -402,252 +402,250 @@ object MainSummaryView {
       val documentId = (meta \ "documentId").extractOpt[String]
       val submissionDate = (meta \ "submissionDate").extractOpt[String]
 
-      if (documentId.isDefined && submissionDate.isDefined) {
+      if (documentId.isEmpty || submissionDate.isEmpty) {
+        return None
+      }
 
-        val addons = environment \ "addons"
-        val addonDetails = payload \ "addonDetails"
-        val application = doc \ "application"
-        val build = environment \ "build"
-        val experiments = environment \ "experiments"
-        val profile = environment \ "profile"
-        val partner = environment \ "partner"
-        val settings = environment \ "settings"
-        val system = environment \ "system"
-        val info = payload \ "info"
-        val simpleMeasures = payload \ "simpleMeasurements"
+      val addons = environment \ "addons"
+      val addonDetails = payload \ "addonDetails"
+      val application = doc \ "application"
+      val build = environment \ "build"
+      val experiments = environment \ "experiments"
+      val profile = environment \ "profile"
+      val partner = environment \ "partner"
+      val settings = environment \ "settings"
+      val system = environment \ "system"
+      val info = payload \ "info"
+      val simpleMeasures = payload \ "simpleMeasurements"
 
-        val histograms = MainPing.ProcessTypes.map {
-          _ match {
-            case "parent" => "parent" -> payload \ "histograms"
-            case p => p -> payload \ "processes" \ p \ "histograms"
-          }
-        }.toMap
-
-        val keyedHistograms = MainPing.ProcessTypes.map {
-          _ match {
-            case "parent" => "parent" -> payload \ "keyedHistograms"
-            case p => p -> payload \ "processes" \ p \ "keyedHistograms"
-          }
-        }.toMap
-
-        val scalars = MainPing.ProcessTypes.map {
-          p => p -> payload \ "processes" \ p \ "scalars"
-        }.toMap
-
-        val keyedScalars = MainPing.ProcessTypes.map {
-          p => p -> payload \ "processes" \ p \ "keyedScalars"
-        }.toMap
-
-        val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms("parent") \ "WEAVE_CONFIGURED")
-        val weaveDesktop = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_DESKTOP")
-        val weaveMobile = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_MOBILE")
-
-        val events = ("dynamic" :: MainPing.ProcessTypes).map {
-          p => p -> payload \ "processes" \ p \ "events"
+      val histograms = MainPing.ProcessTypes.map {
+        _ match {
+          case "parent" => "parent" -> payload \ "histograms"
+          case p => p -> payload \ "processes" \ p \ "histograms"
         }
+      }.toMap
 
-        val sslHandshakeResultKeys = (0 to 671).map(_.toString)
+      val keyedHistograms = MainPing.ProcessTypes.map {
+        _ match {
+          case "parent" => "parent" -> payload \ "keyedHistograms"
+          case p => p -> payload \ "processes" \ p \ "keyedHistograms"
+        }
+      }.toMap
 
-        // Messy list of known enum values for POPUP_NOTIFICATION_STATS.
-        val popupNotificationStatsKeys = (0 to 8).union(10 to 11).union(20 to 28).union(30 to 31).map(_.toString)
+      val scalars = MainPing.ProcessTypes.map {
+        p => p -> payload \ "processes" \ p \ "scalars"
+      }.toMap
 
-        val pluginNotificationUserActionKeys = (0 to 2).map(_.toString)
+      val keyedScalars = MainPing.ProcessTypes.map {
+        p => p -> payload \ "processes" \ p \ "keyedScalars"
+      }.toMap
 
-        // Get the "sum" field from histogram h as an Int. Consider a
-        // wonky histogram (one for which the "sum" field is not a
-        // valid number) as null.
-        @inline def hsum(h: JValue): Any = (h \ "sum").extractOpt[Int]
+      val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms("parent") \ "WEAVE_CONFIGURED")
+      val weaveDesktop = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_DESKTOP")
+      val weaveMobile = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_MOBILE")
 
-        val row = Row.fromSeq(Seq(
-          // Row fields must match the structure in 'buildSchema'
-          documentId,
-          (meta \ "clientId").extractOpt[String],
-          (meta \ "sampleId").extractOpt[Long],
-          (meta \ "appUpdateChannel").extractOpt[String],
-          (meta \ "normalizedChannel").extractOpt[String],
-          (meta \ "geoCountry").extractOpt[String],
-          (meta \ "geoCity").extractOpt[String],
-          (system \ "os" \ "name").extractOpt[String],
-          (system \ "os" \ "version").extractOpt[String],
-          (system \ "os" \ "servicePackMajor").extractOpt[Long],
-          (system \ "os" \ "servicePackMinor").extractOpt[Long],
-          (system \ "os" \ "windowsBuildNumber").extractOpt[Long],
-          (system \ "os" \ "windowsUBR").extractOpt[Long],
-          (system \ "os" \ "installYear").extractOpt[Long],
-          (system \ "isWow64").extractOpt[Boolean],
-          (system \ "memoryMB").extractOpt[Int],
-          (system \ "appleModelId").extractOpt[String],
-          (system \ "sec" \ "antivirus").extract[Option[Seq[String]]],
-          (system \ "sec" \ "antispyware").extract[Option[Seq[String]]],
-          (system \ "sec" \ "firewall").extract[Option[Seq[String]]],
-          (profile \ "creationDate").extractOpt[Long],
-          (profile \ "resetDate").extractOpt[Long],
-          (info \ "subsessionStartDate").extractOpt[String],
-          (info \ "subsessionLength").extractOpt[Long],
-          (info \ "subsessionCounter").extractOpt[Int],
-          (info \ "profileSubsessionCounter").extractOpt[Int],
-          (doc \ "creationDate").extractOpt[String],
-          (partner \ "distributionId").extractOpt[String],
-          submissionDate,
-          weaveConfigured,
-          weaveDesktop,
-          weaveMobile,
-          (application \ "buildId").extractOpt[String],
-          (application \ "displayVersion").extractOpt[String],
-          (application \ "name").extractOpt[String],
-          (application \ "version").extractOpt[String],
-          (meta \ "Timestamp").extractOpt[Long], // required
-          (build \ "buildId").extractOpt[String],
-          (build \ "version").extractOpt[String],
-          (build \ "architecture").extractOpt[String],
-          (settings \ "e10sEnabled").extractOpt[Boolean],
-          (settings \ "e10sMultiProcesses").extractOpt[Long],
-          (settings \ "locale").extractOpt[String],
-          getAttribution(settings \ "attribution"),
-          (addons \ "activeExperiment" \ "id").extractOpt[String],
-          (addons \ "activeExperiment" \ "branch").extractOpt[String],
-          (info \ "reason").extractOpt[String],
-          (info \ "timezoneOffset").extractOpt[Int],
-          hsum(keyedHistograms("parent") \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "pluginhang"),
-          hsum(keyedHistograms("parent") \ "SUBPROCESS_ABNORMAL_ABORT" \ "plugin"),
-          hsum(keyedHistograms("parent") \ "SUBPROCESS_ABNORMAL_ABORT" \ "content"),
-          hsum(keyedHistograms("parent") \ "SUBPROCESS_ABNORMAL_ABORT" \ "gmplugin"),
-          hsum(keyedHistograms("parent") \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "plugin"),
-          hsum(keyedHistograms("parent") \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "content"),
-          hsum(keyedHistograms("parent") \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "gmplugin"),
-          hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "main-crash"),
-          hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "content-crash"),
-          hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "plugin-crash"),
-          hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "main-crash"),
-          hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash"),
-          hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash"),
-          hsum(keyedHistograms("parent") \ "SUBPROCESS_KILL_HARD" \ "ShutDownKill"),
-          MainPing.countKeys(addons \ "activeAddons"),
-          MainPing.getFlashVersion(addons),
-          (application \ "vendor").extractOpt[String],
-          (settings \ "isDefaultBrowser").extractOpt[Boolean],
-          (settings \ "defaultSearchEngineData" \ "name").extractOpt[String],
-          (settings \ "defaultSearchEngineData" \ "loadPath").extractOpt[String],
-          (settings \ "defaultSearchEngineData" \ "origin").extractOpt[String],
-          (settings \ "defaultSearchEngineData" \ "submissionURL").extractOpt[String],
-          (settings \ "defaultSearchEngine").extractOpt[String],
-          hsum(histograms("parent") \ "DEVTOOLS_TOOLBOX_OPENED_COUNT"),
-          (meta \ "Date").extractOpt[String],
-          MainPing.histogramToMean(histograms("parent") \ "PLACES_BOOKMARKS_COUNT"),
-          MainPing.histogramToMean(histograms("parent") \ "PLACES_PAGES_COUNT"),
-          hsum(histograms("parent") \ "PUSH_API_NOTIFY"),
-          hsum(histograms("parent") \ "WEB_NOTIFICATION_SHOWN"),
-
-          MainPing.keyedEnumHistogramToMap(keyedHistograms("parent") \ "POPUP_NOTIFICATION_STATS",
-            popupNotificationStatsKeys),
-
-          MainPing.getSearchCounts(keyedHistograms("parent") \ "SEARCH_COUNTS"),
-
-          getActiveAddons(addons \ "activeAddons"),
-          getDisabledAddons(addons \ "activeAddons", addonDetails \ "XPI"),
-          getTheme(addons \ "theme"),
-          (settings \ "blocklistEnabled").extractOpt[Boolean],
-          (settings \ "addonCompatibilityCheckEnabled").extractOpt[Boolean],
-          (settings \ "telemetryEnabled").extractOpt[Boolean],
-          getOldUserPrefs(settings \ "userPrefs"),
-
-          Option(events.flatMap { case (p, e) => Events.getEvents(e, p) }).filter(!_.isEmpty),
-
-          // bug 1339655
-          MainPing.enumHistogramBucketCount(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.head),
-          MainPing.enumHistogramSumCounts(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.tail),
-          MainPing.enumHistogramToMap(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys),
-
-          // bug 1382002 - use scalar version when available.
-          Try(MainPing.getScalarByName(scalars, scalarDefinitions, "scalar_parent_browser_engagement_active_ticks")) match {
-            case Success(x: Integer) => x
-            case _ => (simpleMeasures \ "activeTicks").extractOpt[Int]
-          },
-
-          // bug 1353114 - payload.simpleMeasurements.*
-          (simpleMeasures \ "main").extractOpt[Int],
-
-          // Use scalar version when available.
-          Try(MainPing.getScalarByName(scalars, scalarDefinitions, "scalar_parent_timestamps_first_paint")) match {
-            case Success(x: Integer) => x
-            case _ => (simpleMeasures \ "firstPaint").extractOpt[Int]
-          },
-
-          // bug 1353114 - payload.simpleMeasurements.*
-          (simpleMeasures \ "sessionRestored").extractOpt[Int],
-          (simpleMeasures \ "totalTime").extractOpt[Int],
-
-          // bug 1362520 - plugin notifications
-          hsum(histograms("parent") \ "PLUGINS_NOTIFICATION_SHOWN"),
-          MainPing.enumHistogramToRow(histograms("parent") \ "PLUGINS_NOTIFICATION_USER_ACTION", pluginNotificationUserActionKeys),
-          hsum(histograms("parent") \ "PLUGINS_INFOBAR_SHOWN"),
-          hsum(histograms("parent") \ "PLUGINS_INFOBAR_BLOCK"),
-          hsum(histograms("parent") \ "PLUGINS_INFOBAR_ALLOW"),
-          hsum(histograms("parent") \ "PLUGINS_INFOBAR_DISMISSED"),
-
-          // bug 1366253 - active experiments
-          getExperiments(experiments),
-
-          (settings \ "searchCohort").extractOpt[String],
-
-          // bug 1366838 - Quantum Release Criteria
-          (system \ "gfx" \ "features" \ "compositor").extractOpt[String],
-
-          getQuantumReady(
-            settings \ "e10sEnabled",
-            addons \ "activeAddons",
-            addons \ "theme"
-          ),
-
-          MainPing.histogramToThresholdCount(histograms("parent") \ "GC_MAX_PAUSE_MS_2", 150),
-          MainPing.histogramToThresholdCount(histograms("parent") \ "GC_MAX_PAUSE_MS_2", 250),
-          MainPing.histogramToThresholdCount(histograms("parent") \ "GC_MAX_PAUSE_MS_2", 2500),
-
-          MainPing.histogramToThresholdCount(histograms("content") \ "GC_MAX_PAUSE_MS_2", 150),
-          MainPing.histogramToThresholdCount(histograms("content") \ "GC_MAX_PAUSE_MS_2", 250),
-          MainPing.histogramToThresholdCount(histograms("content") \ "GC_MAX_PAUSE_MS_2", 2500),
-
-          MainPing.histogramToThresholdCount(histograms("parent") \ "CYCLE_COLLECTOR_MAX_PAUSE", 150),
-          MainPing.histogramToThresholdCount(histograms("parent") \ "CYCLE_COLLECTOR_MAX_PAUSE", 250),
-          MainPing.histogramToThresholdCount(histograms("parent") \ "CYCLE_COLLECTOR_MAX_PAUSE", 2500),
-
-          MainPing.histogramToThresholdCount(histograms("content") \ "CYCLE_COLLECTOR_MAX_PAUSE", 150),
-          MainPing.histogramToThresholdCount(histograms("content") \ "CYCLE_COLLECTOR_MAX_PAUSE", 250),
-          MainPing.histogramToThresholdCount(histograms("content") \ "CYCLE_COLLECTOR_MAX_PAUSE", 2500),
-
-          MainPing.histogramToThresholdCount(histograms("parent") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 150),
-          MainPing.histogramToThresholdCount(histograms("parent") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 250),
-          MainPing.histogramToThresholdCount(histograms("parent") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 2500),
-
-          MainPing.histogramToThresholdCount(histograms("content") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 150),
-          MainPing.histogramToThresholdCount(histograms("content") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 250),
-          MainPing.histogramToThresholdCount(histograms("content") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 2500),
-
-          MainPing.histogramToThresholdCount(histograms("parent") \ "GHOST_WINDOWS", 1),
-          MainPing.histogramToThresholdCount(histograms("content") \ "GHOST_WINDOWS", 1)
-        ).map {
-          _ match {
-            case e: Option[Any] => e.orNull
-            case o => o
-          }
-        })
-
-        val userPrefsRow = getUserPrefs(settings \ "userPrefs", userPrefs)
-
-        val scalarRow = MainPing.scalarsToRow(
-          MainPing.ProcessTypes.map { p => p -> (scalars(p) merge keyedScalars(p)) }.toMap,
-          scalarDefinitions
-        )
-        val histogramRow = MainPing.histogramsToRow(
-          MainPing.ProcessTypes.map { p => p -> (histograms(p) merge keyedHistograms(p)) }.toMap,
-          histogramDefinitions
-        )
-
-        Some(Row.merge(row, userPrefsRow, scalarRow, histogramRow))
+      val events = ("dynamic" :: MainPing.ProcessTypes).map {
+        p => p -> payload \ "processes" \ p \ "events"
       }
-      else {
-        None
-      }
+
+      val sslHandshakeResultKeys = (0 to 671).map(_.toString)
+
+      // Messy list of known enum values for POPUP_NOTIFICATION_STATS.
+      val popupNotificationStatsKeys = (0 to 8).union(10 to 11).union(20 to 28).union(30 to 31).map(_.toString)
+
+      val pluginNotificationUserActionKeys = (0 to 2).map(_.toString)
+
+      // Get the "sum" field from histogram h as an Int. Consider a
+      // wonky histogram (one for which the "sum" field is not a
+      // valid number) as null.
+      @inline def hsum(h: JValue): Any = (h \ "sum").extractOpt[Int]
+
+      val row = Row.fromSeq(Seq(
+        // Row fields must match the structure in 'buildSchema'
+        documentId,
+        (meta \ "clientId").extractOpt[String],
+        (meta \ "sampleId").extractOpt[Long],
+        (meta \ "appUpdateChannel").extractOpt[String],
+        (meta \ "normalizedChannel").extractOpt[String],
+        (meta \ "geoCountry").extractOpt[String],
+        (meta \ "geoCity").extractOpt[String],
+        (system \ "os" \ "name").extractOpt[String],
+        (system \ "os" \ "version").extractOpt[String],
+        (system \ "os" \ "servicePackMajor").extractOpt[Long],
+        (system \ "os" \ "servicePackMinor").extractOpt[Long],
+        (system \ "os" \ "windowsBuildNumber").extractOpt[Long],
+        (system \ "os" \ "windowsUBR").extractOpt[Long],
+        (system \ "os" \ "installYear").extractOpt[Long],
+        (system \ "isWow64").extractOpt[Boolean],
+        (system \ "memoryMB").extractOpt[Int],
+        (system \ "appleModelId").extractOpt[String],
+        (system \ "sec" \ "antivirus").extract[Option[Seq[String]]],
+        (system \ "sec" \ "antispyware").extract[Option[Seq[String]]],
+        (system \ "sec" \ "firewall").extract[Option[Seq[String]]],
+        (profile \ "creationDate").extractOpt[Long],
+        (profile \ "resetDate").extractOpt[Long],
+        (info \ "subsessionStartDate").extractOpt[String],
+        (info \ "subsessionLength").extractOpt[Long],
+        (info \ "subsessionCounter").extractOpt[Int],
+        (info \ "profileSubsessionCounter").extractOpt[Int],
+        (doc \ "creationDate").extractOpt[String],
+        (partner \ "distributionId").extractOpt[String],
+        submissionDate,
+        weaveConfigured,
+        weaveDesktop,
+        weaveMobile,
+        (application \ "buildId").extractOpt[String],
+        (application \ "displayVersion").extractOpt[String],
+        (application \ "name").extractOpt[String],
+        (application \ "version").extractOpt[String],
+        (meta \ "Timestamp").extractOpt[Long], // required
+        (build \ "buildId").extractOpt[String],
+        (build \ "version").extractOpt[String],
+        (build \ "architecture").extractOpt[String],
+        (settings \ "e10sEnabled").extractOpt[Boolean],
+        (settings \ "e10sMultiProcesses").extractOpt[Long],
+        (settings \ "locale").extractOpt[String],
+        getAttribution(settings \ "attribution"),
+        (addons \ "activeExperiment" \ "id").extractOpt[String],
+        (addons \ "activeExperiment" \ "branch").extractOpt[String],
+        (info \ "reason").extractOpt[String],
+        (info \ "timezoneOffset").extractOpt[Int],
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "pluginhang"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_ABNORMAL_ABORT" \ "plugin"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_ABNORMAL_ABORT" \ "content"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_ABNORMAL_ABORT" \ "gmplugin"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "plugin"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "content"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "gmplugin"),
+        hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "main-crash"),
+        hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "content-crash"),
+        hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_ATTEMPT" \ "plugin-crash"),
+        hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "main-crash"),
+        hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash"),
+        hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash"),
+        hsum(keyedHistograms("parent") \ "SUBPROCESS_KILL_HARD" \ "ShutDownKill"),
+        MainPing.countKeys(addons \ "activeAddons"),
+        MainPing.getFlashVersion(addons),
+        (application \ "vendor").extractOpt[String],
+        (settings \ "isDefaultBrowser").extractOpt[Boolean],
+        (settings \ "defaultSearchEngineData" \ "name").extractOpt[String],
+        (settings \ "defaultSearchEngineData" \ "loadPath").extractOpt[String],
+        (settings \ "defaultSearchEngineData" \ "origin").extractOpt[String],
+        (settings \ "defaultSearchEngineData" \ "submissionURL").extractOpt[String],
+        (settings \ "defaultSearchEngine").extractOpt[String],
+        hsum(histograms("parent") \ "DEVTOOLS_TOOLBOX_OPENED_COUNT"),
+        (meta \ "Date").extractOpt[String],
+        MainPing.histogramToMean(histograms("parent") \ "PLACES_BOOKMARKS_COUNT"),
+        MainPing.histogramToMean(histograms("parent") \ "PLACES_PAGES_COUNT"),
+        hsum(histograms("parent") \ "PUSH_API_NOTIFY"),
+        hsum(histograms("parent") \ "WEB_NOTIFICATION_SHOWN"),
+
+        MainPing.keyedEnumHistogramToMap(keyedHistograms("parent") \ "POPUP_NOTIFICATION_STATS",
+          popupNotificationStatsKeys),
+
+        MainPing.getSearchCounts(keyedHistograms("parent") \ "SEARCH_COUNTS"),
+
+        getActiveAddons(addons \ "activeAddons"),
+        getDisabledAddons(addons \ "activeAddons", addonDetails \ "XPI"),
+        getTheme(addons \ "theme"),
+        (settings \ "blocklistEnabled").extractOpt[Boolean],
+        (settings \ "addonCompatibilityCheckEnabled").extractOpt[Boolean],
+        (settings \ "telemetryEnabled").extractOpt[Boolean],
+        getOldUserPrefs(settings \ "userPrefs"),
+
+        Option(events.flatMap { case (p, e) => Events.getEvents(e, p) }).filter(!_.isEmpty),
+
+        // bug 1339655
+        MainPing.enumHistogramBucketCount(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.head),
+        MainPing.enumHistogramSumCounts(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.tail),
+        MainPing.enumHistogramToMap(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys),
+
+        // bug 1382002 - use scalar version when available.
+        Try(MainPing.getScalarByName(scalars, scalarDefinitions, "scalar_parent_browser_engagement_active_ticks")) match {
+          case Success(x: Integer) => x
+          case _ => (simpleMeasures \ "activeTicks").extractOpt[Int]
+        },
+
+        // bug 1353114 - payload.simpleMeasurements.*
+        (simpleMeasures \ "main").extractOpt[Int],
+
+        // Use scalar version when available.
+        Try(MainPing.getScalarByName(scalars, scalarDefinitions, "scalar_parent_timestamps_first_paint")) match {
+          case Success(x: Integer) => x
+          case _ => (simpleMeasures \ "firstPaint").extractOpt[Int]
+        },
+
+        // bug 1353114 - payload.simpleMeasurements.*
+        (simpleMeasures \ "sessionRestored").extractOpt[Int],
+        (simpleMeasures \ "totalTime").extractOpt[Int],
+
+        // bug 1362520 - plugin notifications
+        hsum(histograms("parent") \ "PLUGINS_NOTIFICATION_SHOWN"),
+        MainPing.enumHistogramToRow(histograms("parent") \ "PLUGINS_NOTIFICATION_USER_ACTION", pluginNotificationUserActionKeys),
+        hsum(histograms("parent") \ "PLUGINS_INFOBAR_SHOWN"),
+        hsum(histograms("parent") \ "PLUGINS_INFOBAR_BLOCK"),
+        hsum(histograms("parent") \ "PLUGINS_INFOBAR_ALLOW"),
+        hsum(histograms("parent") \ "PLUGINS_INFOBAR_DISMISSED"),
+
+        // bug 1366253 - active experiments
+        getExperiments(experiments),
+
+        (settings \ "searchCohort").extractOpt[String],
+
+        // bug 1366838 - Quantum Release Criteria
+        (system \ "gfx" \ "features" \ "compositor").extractOpt[String],
+
+        getQuantumReady(
+          settings \ "e10sEnabled",
+          addons \ "activeAddons",
+          addons \ "theme"
+        ),
+
+        MainPing.histogramToThresholdCount(histograms("parent") \ "GC_MAX_PAUSE_MS_2", 150),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "GC_MAX_PAUSE_MS_2", 250),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "GC_MAX_PAUSE_MS_2", 2500),
+
+        MainPing.histogramToThresholdCount(histograms("content") \ "GC_MAX_PAUSE_MS_2", 150),
+        MainPing.histogramToThresholdCount(histograms("content") \ "GC_MAX_PAUSE_MS_2", 250),
+        MainPing.histogramToThresholdCount(histograms("content") \ "GC_MAX_PAUSE_MS_2", 2500),
+
+        MainPing.histogramToThresholdCount(histograms("parent") \ "CYCLE_COLLECTOR_MAX_PAUSE", 150),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "CYCLE_COLLECTOR_MAX_PAUSE", 250),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "CYCLE_COLLECTOR_MAX_PAUSE", 2500),
+
+        MainPing.histogramToThresholdCount(histograms("content") \ "CYCLE_COLLECTOR_MAX_PAUSE", 150),
+        MainPing.histogramToThresholdCount(histograms("content") \ "CYCLE_COLLECTOR_MAX_PAUSE", 250),
+        MainPing.histogramToThresholdCount(histograms("content") \ "CYCLE_COLLECTOR_MAX_PAUSE", 2500),
+
+        MainPing.histogramToThresholdCount(histograms("parent") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 150),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 250),
+        MainPing.histogramToThresholdCount(histograms("parent") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 2500),
+
+        MainPing.histogramToThresholdCount(histograms("content") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 150),
+        MainPing.histogramToThresholdCount(histograms("content") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 250),
+        MainPing.histogramToThresholdCount(histograms("content") \ "INPUT_EVENT_RESPONSE_COALESCED_MS", 2500),
+
+        MainPing.histogramToThresholdCount(histograms("parent") \ "GHOST_WINDOWS", 1),
+        MainPing.histogramToThresholdCount(histograms("content") \ "GHOST_WINDOWS", 1)
+      ).map {
+        _ match {
+          case e: Option[Any] => e.orNull
+          case o => o
+        }
+      })
+
+      val userPrefsRow = getUserPrefs(settings \ "userPrefs", userPrefs)
+
+      val scalarRow = MainPing.scalarsToRow(
+        MainPing.ProcessTypes.map { p => p -> (scalars(p) merge keyedScalars(p)) }.toMap,
+        scalarDefinitions
+      )
+      val histogramRow = MainPing.histogramsToRow(
+        MainPing.ProcessTypes.map { p => p -> (histograms(p) merge keyedHistograms(p)) }.toMap,
+        histogramDefinitions
+      )
+
+      Some(Row.merge(row, userPrefsRow, scalarRow, histogramRow))
     } catch {
       case e: Exception =>
         None
