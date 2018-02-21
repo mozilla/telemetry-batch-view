@@ -388,35 +388,12 @@ object MainSummaryView {
     }
   }
 
-  implicit val formats = DefaultFormats
-
-  // A note on json4s JValue extraction:
-  //
-  // JValue provides an `.extract[T]` interface for deconstructing values to
-  // native types. However, fields in the schema are mostly nullable. One
-  // way to extract the value is to use a boxed type e.g. `scala.Long` or
-  // `java.lang.Long`. These are wrappers around the primitive types and
-  // support nullable values. This can increase the the latency of the
-  // program by introducing extra overhead. [1].
-  //
-  // Here, we choose to extract the value into an Option and unwrap into a primitive Any.
-  // `JValue.extract[Option[T]].orNull -> Any`. A general short hand that works for most primitive
-  // types is to use `JValue.extractOpt[T]`. Exceptions should be noted.
-  //
-  // [1]: https://blog.scalac.io/2017/05/25/scala-specialization.html
-  //
-  implicit class RichJValue(val self: JValue) extends AnyVal {
-    @inline def toNullableInt: Any = self.extractOpt[Int].orNull
-    @inline def toNullableLong: Any = self.extractOpt[Long].orNull
-    @inline def toNullableBool: Any = self.extractOpt[Boolean].orNull
-    @inline def toNullableString: Any = self.extractOpt[String].orNull
-    @inline def toNullableSeqString: Any = self.extract[Option[Seq[String]]].orNull
-  }
-
   // Convert the given Heka message containing a "main" ping
   // to a map containing just the fields we're interested in.
   def messageToRow(message: Message, scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String, HistogramDefinition)], userPrefs: List[UserPref] = userPrefsList): Option[Row] = {
     try {
+      implicit val formats = DefaultFormats
+
       val doc = message.toJValue match {
         case Some(doc) => doc
         case None => return None
@@ -478,64 +455,58 @@ object MainSummaryView {
       // Get the "sum" field from histogram h as an Int. Consider a
       // wonky histogram (one for which the "sum" field is not a
       // valid number) as null.
-      @inline def hsum(h: JValue): Any = (h \ "sum").extractOpt[Int].orNull
+      @inline def hsum(h: JValue): Any = (h \ "sum").extractOpt[Int]
 
-      val row = Row(
+      val row = Row.fromSeq(Seq(
         // Row fields must match the structure in 'buildSchema'
-        (meta \ "documentId").toNullableString match {
-          case null => return None  // required, skip this record
-          case x => x
-        },
-        (meta \ "clientId").toNullableString,
-        (meta \ "sampleId").toNullableLong,
-        (meta \ "appUpdateChannel").toNullableString,
-        (meta \ "normalizedChannel").toNullableString,
-        (meta \ "geoCountry").toNullableString,
-        (meta \ "geoCity").toNullableString,
-        (system \ "os" \ "name").toNullableString,
-        (system \ "os" \ "version").toNullableString,
-        (system \ "os" \ "servicePackMajor").toNullableLong,
-        (system \ "os" \ "servicePackMinor").toNullableLong,
-        (system \ "os" \ "windowsBuildNumber").toNullableLong,
-        (system \ "os" \ "windowsUBR").toNullableLong,
-        (system \ "os" \ "installYear").toNullableLong,
-        (system \ "isWow64").toNullableBool,
-        (system \ "memoryMB").toNullableInt,
-        (system \ "appleModelId").toNullableString,
-        (system \ "sec" \ "antivirus").toNullableSeqString,
-        (system \ "sec" \ "antispyware").toNullableSeqString,
-        (system \ "sec" \ "firewall").toNullableSeqString,
-        (profile \ "creationDate").toNullableLong,
-        (profile \ "resetDate").toNullableLong,
-        (info \ "subsessionStartDate").toNullableString,
-        (info \ "subsessionLength").toNullableLong,
-        (info \ "subsessionCounter").toNullableInt,
-        (info \ "profileSubsessionCounter").toNullableInt,
-        (doc \ "creationDate").toNullableString,
-        (partner \ "distributionId").toNullableString,
-        (meta \ "submissionDate").toNullableString match {
-          case null => return None  // required
-          case x => x
-        },
-        weaveConfigured.orNull,
-        weaveDesktop.orNull,
-        weaveMobile.orNull,
-        (application \ "buildId").toNullableString,
-        (application \ "displayVersion").toNullableString,
-        (application \ "name").toNullableString,
-        (application \ "version").toNullableString,
+        (meta \ "documentId").extractOpt[String],
+        (meta \ "clientId").extractOpt[String],
+        (meta \ "sampleId").extractOpt[Long],
+        (meta \ "appUpdateChannel").extractOpt[String],
+        (meta \ "normalizedChannel").extractOpt[String],
+        (meta \ "geoCountry").extractOpt[String],
+        (meta \ "geoCity").extractOpt[String],
+        (system \ "os" \ "name").extractOpt[String],
+        (system \ "os" \ "version").extractOpt[String],
+        (system \ "os" \ "servicePackMajor").extractOpt[Long],
+        (system \ "os" \ "servicePackMinor").extractOpt[Long],
+        (system \ "os" \ "windowsBuildNumber").extractOpt[Long],
+        (system \ "os" \ "windowsUBR").extractOpt[Long],
+        (system \ "os" \ "installYear").extractOpt[Long],
+        (system \ "isWow64").extractOpt[Boolean],
+        (system \ "memoryMB").extractOpt[Int],
+        (system \ "appleModelId").extractOpt[String],
+        (system \ "sec" \ "antivirus").extract[Option[Seq[String]]],
+        (system \ "sec" \ "antispyware").extract[Option[Seq[String]]],
+        (system \ "sec" \ "firewall").extract[Option[Seq[String]]],
+        (profile \ "creationDate").extractOpt[Long],
+        (profile \ "resetDate").extractOpt[Long],
+        (info \ "subsessionStartDate").extractOpt[String],
+        (info \ "subsessionLength").extractOpt[Long],
+        (info \ "subsessionCounter").extractOpt[Int],
+        (info \ "profileSubsessionCounter").extractOpt[Int],
+        (doc \ "creationDate").extractOpt[String],
+        (partner \ "distributionId").extractOpt[String],
+        (meta \ "submissionDate").extractOpt[String],
+        weaveConfigured,
+        weaveDesktop,
+        weaveMobile,
+        (application \ "buildId").extractOpt[String],
+        (application \ "displayVersion").extractOpt[String],
+        (application \ "name").extractOpt[String],
+        (application \ "version").extractOpt[String],
         message.timestamp, // required
-        (build \ "buildId").toNullableString,
-        (build \ "version").toNullableString,
-        (build \ "architecture").toNullableString,
-        (settings \ "e10sEnabled").toNullableBool,
-        (settings \ "e10sMultiProcesses").toNullableLong,
-        (settings \ "locale").toNullableString,
-        getAttribution(settings \ "attribution").orNull,
-        (addons \ "activeExperiment" \ "id").toNullableString,
-        (addons \ "activeExperiment" \ "branch").toNullableString,
-        (info \ "reason").toNullableString,
-        (info \ "timezoneOffset").toNullableInt,
+        (build \ "buildId").extractOpt[String],
+        (build \ "version").extractOpt[String],
+        (build \ "architecture").extractOpt[String],
+        (settings \ "e10sEnabled").extractOpt[Boolean],
+        (settings \ "e10sMultiProcesses").extractOpt[Long],
+        (settings \ "locale").extractOpt[String],
+        getAttribution(settings \ "attribution"),
+        (addons \ "activeExperiment" \ "id").extractOpt[String],
+        (addons \ "activeExperiment" \ "branch").extractOpt[String],
+        (info \ "reason").extractOpt[String],
+        (info \ "timezoneOffset").extractOpt[Int],
         hsum(keyedHistograms("parent") \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "pluginhang"),
         hsum(keyedHistograms("parent") \ "SUBPROCESS_ABNORMAL_ABORT" \ "plugin"),
         hsum(keyedHistograms("parent") \ "SUBPROCESS_ABNORMAL_ABORT" \ "content"),
@@ -550,60 +521,60 @@ object MainSummaryView {
         hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash"),
         hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash"),
         hsum(keyedHistograms("parent") \ "SUBPROCESS_KILL_HARD" \ "ShutDownKill"),
-        MainPing.countKeys(addons \ "activeAddons").orNull,
-        MainPing.getFlashVersion(addons).orNull,
-        (application \ "vendor").toNullableString,
-        (settings \ "isDefaultBrowser").toNullableBool,
-        (settings \ "defaultSearchEngineData" \ "name").toNullableString,
-        (settings \ "defaultSearchEngineData" \ "loadPath").toNullableString,
-        (settings \ "defaultSearchEngineData" \ "origin").toNullableString,
-        (settings \ "defaultSearchEngineData" \ "submissionURL").toNullableString,
-        (settings \ "defaultSearchEngine").toNullableString,
+        MainPing.countKeys(addons \ "activeAddons"),
+        MainPing.getFlashVersion(addons),
+        (application \ "vendor").extractOpt[String],
+        (settings \ "isDefaultBrowser").extractOpt[Boolean],
+        (settings \ "defaultSearchEngineData" \ "name").extractOpt[String],
+        (settings \ "defaultSearchEngineData" \ "loadPath").extractOpt[String],
+        (settings \ "defaultSearchEngineData" \ "origin").extractOpt[String],
+        (settings \ "defaultSearchEngineData" \ "submissionURL").extractOpt[String],
+        (settings \ "defaultSearchEngine").extractOpt[String],
         hsum(histograms("parent") \ "DEVTOOLS_TOOLBOX_OPENED_COUNT"),
-        (meta \ "Date").toNullableString,
-        MainPing.histogramToMean(histograms("parent") \ "PLACES_BOOKMARKS_COUNT").orNull,
-        MainPing.histogramToMean(histograms("parent") \ "PLACES_PAGES_COUNT").orNull,
+        (meta \ "Date").extractOpt[String],
+        MainPing.histogramToMean(histograms("parent") \ "PLACES_BOOKMARKS_COUNT"),
+        MainPing.histogramToMean(histograms("parent") \ "PLACES_PAGES_COUNT"),
         hsum(histograms("parent") \ "PUSH_API_NOTIFY"),
         hsum(histograms("parent") \ "WEB_NOTIFICATION_SHOWN"),
 
         MainPing.keyedEnumHistogramToMap(keyedHistograms("parent") \ "POPUP_NOTIFICATION_STATS",
-          popupNotificationStatsKeys).orNull,
+          popupNotificationStatsKeys),
 
-        MainPing.getSearchCounts(keyedHistograms("parent") \ "SEARCH_COUNTS").orNull,
+        MainPing.getSearchCounts(keyedHistograms("parent") \ "SEARCH_COUNTS"),
 
-        getActiveAddons(addons \ "activeAddons").orNull,
-        getDisabledAddons(addons \ "activeAddons", addonDetails \ "XPI").orNull,
-        getTheme(addons \ "theme").orNull,
-        (settings \ "blocklistEnabled").toNullableBool,
-        (settings \ "addonCompatibilityCheckEnabled").toNullableBool,
-        (settings \ "telemetryEnabled").toNullableBool,
-        getOldUserPrefs(settings \ "userPrefs").orNull,
+        getActiveAddons(addons \ "activeAddons"),
+        getDisabledAddons(addons \ "activeAddons", addonDetails \ "XPI"),
+        getTheme(addons \ "theme"),
+        (settings \ "blocklistEnabled").extractOpt[Boolean],
+        (settings \ "addonCompatibilityCheckEnabled").extractOpt[Boolean],
+        (settings \ "telemetryEnabled").extractOpt[Boolean],
+        getOldUserPrefs(settings \ "userPrefs"),
 
-        Option(events.flatMap {case (p, e) => Events.getEvents(e, p)}).filter(!_.isEmpty).orNull,
+        Option(events.flatMap {case (p, e) => Events.getEvents(e, p)}).filter(!_.isEmpty),
 
         // bug 1339655
-        MainPing.enumHistogramBucketCount(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.head).orNull,
+        MainPing.enumHistogramBucketCount(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.head),
         MainPing.enumHistogramSumCounts(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.tail),
         MainPing.enumHistogramToMap(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys),
 
         // bug 1382002 - use scalar version when available.
         Try(MainPing.getScalarByName(scalars, scalarDefinitions, "scalar_parent_browser_engagement_active_ticks")) match {
           case Success(x: Integer) => x
-          case _ => (simpleMeasures \ "activeTicks").toNullableInt
+          case _ => (simpleMeasures \ "activeTicks").extractOpt[Int]
         },
 
         // bug 1353114 - payload.simpleMeasurements.*
-        (simpleMeasures \ "main").toNullableInt,
+        (simpleMeasures \ "main").extractOpt[Int],
 
         // Use scalar version when available.
         Try(MainPing.getScalarByName(scalars, scalarDefinitions, "scalar_parent_timestamps_first_paint")) match {
           case Success(x: Integer) => x
-          case _ => (simpleMeasures \ "firstPaint").toNullableInt
+          case _ => (simpleMeasures \ "firstPaint").extractOpt[Int]
         },
 
         // bug 1353114 - payload.simpleMeasurements.*
-        (simpleMeasures \ "sessionRestored").toNullableInt,
-        (simpleMeasures \ "totalTime").toNullableInt,
+        (simpleMeasures \ "sessionRestored").extractOpt[Int],
+        (simpleMeasures \ "totalTime").extractOpt[Int],
 
         // bug 1362520 - plugin notifications
         hsum(histograms("parent") \ "PLUGINS_NOTIFICATION_SHOWN"),
@@ -614,18 +585,18 @@ object MainSummaryView {
         hsum(histograms("parent") \ "PLUGINS_INFOBAR_DISMISSED"),
 
         // bug 1366253 - active experiments
-        getExperiments(experiments).orNull,
+        getExperiments(experiments),
 
-        (settings \ "searchCohort").toNullableString,
+        (settings \ "searchCohort").extractOpt[String],
 
         // bug 1366838 - Quantum Release Criteria
-        (system \ "gfx" \ "features" \ "compositor").toNullableString,
+        (system \ "gfx" \ "features" \ "compositor").extractOpt[String],
 
         getQuantumReady(
           settings \ "e10sEnabled",
           addons \ "activeAddons",
           addons \ "theme"
-        ).orNull,
+        ),
 
         MainPing.histogramToThresholdCount(histograms("parent") \ "GC_MAX_PAUSE_MS_2", 150),
         MainPing.histogramToThresholdCount(histograms("parent") \ "GC_MAX_PAUSE_MS_2", 250),
@@ -653,7 +624,12 @@ object MainSummaryView {
 
         MainPing.histogramToThresholdCount(histograms("parent") \ "GHOST_WINDOWS", 1),
         MainPing.histogramToThresholdCount(histograms("content") \ "GHOST_WINDOWS", 1)
-      )
+      ).map {
+        _ match {
+          case e: Option[Any] => e.orNull
+          case o => o
+        }
+      })
 
       val userPrefsRow = getUserPrefs(settings \ "userPrefs", userPrefs)
 
