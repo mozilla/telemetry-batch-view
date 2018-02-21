@@ -37,8 +37,10 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
 
   val defaultSchema = MainSummaryView.buildSchema(userPrefs, scalarDefs, histogramDefs)
 
-  val defaultMessageToRow = (m: Message) =>
-    MainSummaryView.messageToRow(m, scalarDefs, histogramDefs)
+  val defaultMessageToRow = (m: Message) => {
+    val doc = m.toJValue.get
+    MainSummaryView.messageToRow(doc, scalarDefs, histogramDefs)
+  }
 
   // Apply the given schema to the given potentially-generic Row.
   def applySchema(row: Row, schema: StructType): Row = new GenericRowWithSchema(row.toSeq.toArray, schema)
@@ -61,8 +63,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
               histogramDefinitions: List[(String, HistogramDefinition)] = histogramDefs,
               testInvalidFields: List[String] = Nil
              ): Unit = {
-
-    val summary = MainSummaryView.messageToRow(message, scalarDefinitions, histogramDefinitions, userPreferences)
+    val doc = message.toJValue.get
+    val summary = MainSummaryView.messageToRow(doc, scalarDefinitions, histogramDefinitions, userPreferences)
     val applied = applySchema(summary.get, MainSummaryView.buildSchema(userPreferences, scalarDefinitions, histogramDefinitions))
     val actual = applied.getValuesMap(expected.keys.toList)
 
