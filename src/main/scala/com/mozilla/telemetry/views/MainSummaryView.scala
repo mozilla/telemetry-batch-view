@@ -509,6 +509,7 @@ object MainSummaryView {
         (meta \ "sampleId").extractOpt[Long],
         (meta \ "appUpdateChannel").extractOpt[String],
         (meta \ "normalizedChannel").extractOpt[String],
+        (meta \ "normalizedOSVersion").extractOpt[String],
         (meta \ "geoCountry").extractOpt[String],
         (meta \ "geoCity").extractOpt[String],
         (system \ "os" \ "name").extractOpt[String],
@@ -855,6 +856,7 @@ object MainSummaryView {
       StructField("sample_id", LongType, nullable = true), // Fields[sampleId]
       StructField("channel", StringType, nullable = true), // appUpdateChannel
       StructField("normalized_channel", StringType, nullable = true), // normalizedChannel
+      StructField("normalized_os_version", StringType, nullable = true), // normalizedOSVersion
       StructField("country", StringType, nullable = true), // geoCountry
       StructField("city", StringType, nullable = true), // geoCity
       StructField("os", StringType, nullable = true), // environment/system/os/name
