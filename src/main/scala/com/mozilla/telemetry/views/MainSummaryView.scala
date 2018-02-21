@@ -473,6 +473,15 @@ object MainSummaryView {
         (system \ "os" \ "installYear").extractOpt[Long],
         (system \ "isWow64").extractOpt[Boolean],
         (system \ "memoryMB").extractOpt[Int],
+        (system \ "cpu" \ "count").extractOpt[Int],
+        (system \ "cpu" \ "cores").extractOpt[Int],
+        (system \ "cpu" \ "vendor").extractOpt[String],
+        (system \ "cpu" \ "family").extractOpt[Int],
+        (system \ "cpu" \ "model").extractOpt[Int],
+        (system \ "cpu" \ "stepping").extractOpt[Int],
+        (system \ "cpu" \ "l2cacheKB").extractOpt[Int],
+        (system \ "cpu" \ "l3cacheKB").extractOpt[Int],
+        (system \ "cpu" \ "speedMHz").extractOpt[Int],
         (system \ "appleModelId").extractOpt[String],
         (system \ "sec" \ "antivirus").extract[Option[Seq[String]]],
         (system \ "sec" \ "antispyware").extract[Option[Seq[String]]],
@@ -796,6 +805,17 @@ object MainSummaryView {
       StructField("is_wow64", BooleanType, nullable = true), // environment/system/isWow64
 
       StructField("memory_mb", IntegerType, nullable = true), // environment/system/memoryMB
+
+      StructField("cpu_count", IntegerType, nullable = true), // environment/system/cpu/count
+      StructField("cpu_cores", IntegerType, nullable = true), // environment/system/cpu/cores
+      StructField("cpu_vendor", StringType, nullable = true), // environment/system/cpu/vendor
+      StructField("cpu_family", IntegerType, nullable = true), // environment/system/cpu/family
+      StructField("cpu_model", IntegerType, nullable = true), // environment/system/cpu/model
+      StructField("cpu_stepping", IntegerType, nullable = true), // environment/system/cpu/stepping
+      StructField("cpu_l2_cache_kb", IntegerType, nullable = true), // environment/system/cpu/l2cacheKB
+      StructField("cpu_l3_cache_kb", IntegerType, nullable = true), // environment/system/cpu/l3cacheKB
+      StructField("cpu_speed_mhz", IntegerType, nullable = true), // environment/system/cpu/speedMHz
+
       StructField("apple_model_id", StringType, nullable = true), // environment/system/appleModelId
 
       // Bug 1431198 - Windows 8 only
