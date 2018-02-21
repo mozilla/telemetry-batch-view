@@ -1703,4 +1703,17 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
     )
     compare(message, expected)
   }
+
+  "Malformed message" should "be ignored" in {
+
+    var message = RichMessage("1234", Map("documentId" -> "foo", "submissionDate" -> "1234"), None)
+    defaultMessageToRow(message).isDefined should be (true)
+
+    message = RichMessage("1234", Map("submissionDate" -> "1234"), None)
+    defaultMessageToRow(message) should be (None)
+
+    // broken messages should not be parsed
+    message = RichMessage("1234", Map("documentId" -> "foo", "submissionDate" -> "1234", "submission" -> "{broken json}"), None)
+    message.toJValue should be (None)
+  }
 }
