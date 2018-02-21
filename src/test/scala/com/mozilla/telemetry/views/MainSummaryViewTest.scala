@@ -1739,4 +1739,43 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
 
     compare(message, expected)
   }
+
+  "CPU" can "be properly shown" in {
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.system" ->
+          """
+            |{
+            |  "cpu": {
+            |    "count": 16,
+            |    "cores": 8,
+            |    "vendor": "AMD",
+            |    "family": 1,
+            |    "model": 2,
+            |    "stepping": 3,
+            |    "l2cacheKB": 256,
+            |    "l3cacheKB": 2048,
+            |    "speedMHz": 2333
+            |  }
+            |}""".stripMargin),
+      None)
+
+    val expected = Map(
+      "cpu_count" -> 16,
+      "cpu_cores" -> 8,
+      "cpu_vendor" -> "AMD",
+      "cpu_family" -> 1,
+      "cpu_model" -> 2,
+      "cpu_stepping" -> 3,
+      "cpu_l2_cache_kb" -> 256,
+      "cpu_l3_cache_kb" -> 2048,
+      "cpu_speed_mhz" -> 2333
+    )
+
+    compare(message, expected)
+  }
 }
