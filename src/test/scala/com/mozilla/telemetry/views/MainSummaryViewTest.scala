@@ -1928,4 +1928,19 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
     MainSummaryView.getSubmissionLatency(Some("6"), ts) should be(None)
     MainSummaryView.getSubmissionLatency(None, ts) should be(None)
   }
+
+  "Normalized OS Version" can "be properly shown" in {
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "normalizedOSVersion" -> "14.5.0"),
+      None)
+
+    val expected = Map("normalized_os_version" -> "14.5.0")
+
+    compare(message, expected)
+  }
 }
