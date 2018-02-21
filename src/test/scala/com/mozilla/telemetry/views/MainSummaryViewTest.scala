@@ -1716,4 +1716,27 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
     message = RichMessage("1234", Map("documentId" -> "foo", "submissionDate" -> "1234", "submission" -> "{broken json}"), None)
     message.toJValue should be(None)
   }
+
+  "Profile" can "be properly shown" in {
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.profile" ->
+          """
+            |{
+            |  "creationDate": 16446,
+            |  "resetDate": 16446
+            |}""".stripMargin),
+      None)
+
+    val expected = Map(
+      "profile_creation_date" -> 16446,
+      "profile_reset_date" -> 16446
+    )
+
+    compare(message, expected)
+  }
 }
