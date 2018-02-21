@@ -4,9 +4,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.Row
 import org.joda.time.{DateTime, Days, format}
 import org.json4s.JsonAST._
-import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._
-import com.mozilla.telemetry.heka.{Dataset, Message}
+import com.mozilla.telemetry.heka.Dataset
 import com.mozilla.telemetry.utils.{Addon, Attribution, Events,
   Experiment, getOrCreateSparkSession, MainPing, S3Store}
 import com.mozilla.telemetry.utils.{BooleanUserPref, IntegerUserPref, StringUserPref, UserPref}
@@ -167,11 +166,12 @@ object MainSummaryView {
 
       if(!messages.isEmpty()){
         val rowRDD = messages.flatMap(m => {
-          messageToRow(m, scalarDefinitions, histogramDefinitions) match {
+          val row = m.toJValue.map(doc => messageToRow(doc, scalarDefinitions, histogramDefinitions))
+          row match {
             case None =>
               ignoredCount += 1
               None
-            case x =>
+            case Some(x) =>
               processedCount += 1
               x
           }
@@ -390,14 +390,9 @@ object MainSummaryView {
 
   // Convert the given Heka message containing a "main" ping
   // to a map containing just the fields we're interested in.
-  def messageToRow(message: Message, scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String, HistogramDefinition)], userPrefs: List[UserPref] = userPrefsList): Option[Row] = {
+  def messageToRow(doc: JValue, scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String, HistogramDefinition)], userPrefs: List[UserPref] = userPrefsList): Option[Row] = {
     try {
       implicit val formats = DefaultFormats
-
-      val doc = message.toJValue match {
-        case Some(doc) => doc
-        case None => return None
-      }
 
       val environment = doc \ "environment"
       val payload = doc \ "payload"
@@ -495,7 +490,7 @@ object MainSummaryView {
         (application \ "displayVersion").extractOpt[String],
         (application \ "name").extractOpt[String],
         (application \ "version").extractOpt[String],
-        message.timestamp, // required
+        (meta \ "Timestamp").extractOpt[Long], // required
         (build \ "buildId").extractOpt[String],
         (build \ "version").extractOpt[String],
         (build \ "architecture").extractOpt[String],
