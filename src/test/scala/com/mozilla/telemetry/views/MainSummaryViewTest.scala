@@ -1819,4 +1819,31 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
 
     compare(message, expected)
   }
+
+  "Update settings" can "be properly shown" in {
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.settings" ->
+          """
+            |{
+            |  "update": {
+            |     "channel": "release",
+            |     "enabled": true,
+            |     "autoDownload": true
+            |  }
+            |}""".stripMargin),
+      None)
+
+    val expected = Map(
+      "update_channel" -> "release",
+      "update_enabled" -> true,
+      "update_auto_download" -> true
+    )
+
+    compare(message, expected)
+  }
 }
