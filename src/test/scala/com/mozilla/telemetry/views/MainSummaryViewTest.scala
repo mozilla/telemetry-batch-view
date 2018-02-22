@@ -1869,4 +1869,35 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
 
     compare(message, expected)
   }
+
+  "Graphics status" can "be properly shown" in {
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.system" ->
+          """
+            |{
+            |  "gfx": {
+            |    "features": {
+            |      "d3d11": { "status": "disabled" },
+            |      "d2d": { "status": "available" },
+            |      "gpuProcess": { "status": "unavailable" },
+            |      "advancedLayers": { "status": "blocked" }
+            |    }
+            |  }
+            |}""".stripMargin),
+      None)
+
+    val expected = Map(
+      "gfx_features_d3d11_status" -> "disabled",
+      "gfx_features_d2d_status" -> "available",
+      "gfx_features_gpu_process_status" -> "unavailable",
+      "gfx_features_advanced_layers_status" -> "blocked"
+    )
+
+    compare(message, expected)
+  }
 }
