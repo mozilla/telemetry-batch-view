@@ -521,6 +521,9 @@ object MainSummaryView {
         (settings \ "e10sEnabled").extractOpt[Boolean],
         (settings \ "e10sMultiProcesses").extractOpt[Long],
         (settings \ "locale").extractOpt[String],
+        (settings \ "update" \ "channel").extractOpt[String],
+        (settings \ "update" \ "enabled").extractOpt[Boolean],
+        (settings \ "update" \ "autoDownload").extractOpt[Boolean],
         getAttribution(settings \ "attribution"),
         (addons \ "activeExperiment" \ "id").extractOpt[String],
         (addons \ "activeExperiment" \ "branch").extractOpt[String],
@@ -874,9 +877,10 @@ object MainSummaryView {
       StructField("e10s_multi_processes", LongType, nullable = true), // environment/settings/e10sMultiProcesses
 
       StructField("locale", StringType, nullable = true), // environment/settings/locale
-      // See bug 1331082
+      StructField("update_channel", StringType, nullable = true), // environment/settings/update/channel
+      StructField("update_enabled", BooleanType, nullable = true), // environment/settings/update/enabled
+      StructField("update_auto_download", BooleanType, nullable = true), // environment/settings/update/autoDownload
       StructField("attribution", buildAttributionSchema, nullable = true), // environment/settings/attribution/
-
       StructField("active_experiment_id", StringType, nullable = true), // environment/addons/activeExperiment/id
       StructField("active_experiment_branch", StringType, nullable = true), // environment/addons/activeExperiment/branch
       StructField("reason", StringType, nullable = true), // info/reason
