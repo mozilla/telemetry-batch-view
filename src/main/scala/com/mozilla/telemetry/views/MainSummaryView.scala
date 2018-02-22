@@ -487,6 +487,10 @@ object MainSummaryView {
         (system \ "cpu" \ "l2cacheKB").extractOpt[Int],
         (system \ "cpu" \ "l3cacheKB").extractOpt[Int],
         (system \ "cpu" \ "speedMHz").extractOpt[Int],
+        (system \ "gfx" \ "features" \ "d3d11" \ "status").extractOpt[String],
+        (system \ "gfx" \ "features" \ "d2d" \ "status").extractOpt[String],
+        (system \ "gfx" \ "features" \ "gpuProcess" \ "status").extractOpt[String],
+        (system \ "gfx" \ "features" \ "advancedLayers" \ "status").extractOpt[String],
         (system \ "appleModelId").extractOpt[String],
         (system \ "sec" \ "antivirus").extract[Option[Seq[String]]],
         (system \ "sec" \ "antispyware").extract[Option[Seq[String]]],
@@ -831,6 +835,11 @@ object MainSummaryView {
       StructField("cpu_l2_cache_kb", IntegerType, nullable = true), // environment/system/cpu/l2cacheKB
       StructField("cpu_l3_cache_kb", IntegerType, nullable = true), // environment/system/cpu/l3cacheKB
       StructField("cpu_speed_mhz", IntegerType, nullable = true), // environment/system/cpu/speedMHz
+
+      StructField("gfx_features_d3d11_status", StringType, nullable = true), // environment/system/gfx/features/d3d11/status
+      StructField("gfx_features_d2d_status", StringType, nullable = true), // environment/system/gfx/features/d2d/status
+      StructField("gfx_features_gpu_process_status", StringType, nullable = true), // environment/system/gfx/features/gpuProcess/status
+      StructField("gfx_features_advanced_layers_status", StringType, nullable = true), // environment/system/gfx/features/advancedLayers/status
 
       StructField("apple_model_id", StringType, nullable = true), // environment/system/appleModelId
 
