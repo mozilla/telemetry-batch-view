@@ -488,7 +488,11 @@ object MainSummaryView {
         (system \ "sec" \ "firewall").extract[Option[Seq[String]]],
         (profile \ "creationDate").extractOpt[Long],
         (profile \ "resetDate").extractOpt[Long],
+        (info \ "sessionId").extractOpt[String],
+        (info \ "subsessionId").extractOpt[String],
+        (info \ "sessionStartDate").extractOpt[String],
         (info \ "subsessionStartDate").extractOpt[String],
+        (info \ "sessionLength").extractOpt[Long],
         (info \ "subsessionLength").extractOpt[Long],
         (info \ "subsessionCounter").extractOpt[Int],
         (info \ "profileSubsessionCounter").extractOpt[Int],
@@ -826,7 +830,11 @@ object MainSummaryView {
       // TODO: use proper 'date' type for date columns.
       StructField("profile_creation_date", LongType, nullable = true), // environment/profile/creationDate
       StructField("profile_reset_date", LongType, nullable = true), // environment/profile/resetDate
+      StructField("session_id", StringType, nullable = true), // info/sessionId
+      StructField("subsession_id", StringType, nullable = true), // info/subsessionId
+      StructField("session_start_date", StringType, nullable = true), // info/sessionStartDate
       StructField("subsession_start_date", StringType, nullable = true), // info/subsessionStartDate
+      StructField("session_length", LongType, nullable = true), // info/sessionLength
       StructField("subsession_length", LongType, nullable = true), // info/subsessionLength
       StructField("subsession_counter", IntegerType, nullable = true), // info/subsessionCounter
       StructField("profile_subsession_counter", IntegerType, nullable = true), // info/profileSubsessionCounter

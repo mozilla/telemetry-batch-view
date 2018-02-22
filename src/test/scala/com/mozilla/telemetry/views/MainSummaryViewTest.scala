@@ -1778,4 +1778,39 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
 
     compare(message, expected)
   }
+
+  "Session info" can "be properly shown" in {
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.info" ->
+          """
+            |{
+            |  "sessionId": "a",
+            |  "subsessionId": "b",
+            |  "subsessionCounter": 1,
+            |  "profileSubsessionCounter": 2,
+            |  "sessionStartDate": "2017-02-22",
+            |  "subsessionStartDate": "2017-02-23",
+            |  "sessionLength": 60,
+            |  "subsessionLength": 30
+            |}""".stripMargin),
+      None)
+
+    val expected = Map(
+      "session_id" -> "a",
+      "subsession_id" -> "b",
+      "subsession_counter" -> 1,
+      "profile_subsession_counter" -> 2,
+      "session_start_date" -> "2017-02-22",
+      "subsession_start_date" -> "2017-02-23",
+      "session_length" -> 60,
+      "subsession_length" -> 30
+    )
+
+    compare(message, expected)
+  }
 }
