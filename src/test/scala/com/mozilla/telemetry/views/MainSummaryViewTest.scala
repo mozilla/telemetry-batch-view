@@ -1846,4 +1846,27 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
 
     compare(message, expected)
   }
+
+  "Sandbox settings" can "be properly shown" in {
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.settings" ->
+          """
+            |{
+            |  "sandbox": {
+            |     "effectiveContentProcessLevel": 7
+            |  }
+            |}""".stripMargin),
+      None)
+
+    val expected = Map(
+      "sandbox_effective_content_process_level" -> 7
+    )
+
+    compare(message, expected)
+  }
 }

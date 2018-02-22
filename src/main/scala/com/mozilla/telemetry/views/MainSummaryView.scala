@@ -525,6 +525,7 @@ object MainSummaryView {
         (settings \ "update" \ "enabled").extractOpt[Boolean],
         (settings \ "update" \ "autoDownload").extractOpt[Boolean],
         getAttribution(settings \ "attribution"),
+        (settings \ "sandbox" \ "effectiveContentProcessLevel").extractOpt[Int],
         (addons \ "activeExperiment" \ "id").extractOpt[String],
         (addons \ "activeExperiment" \ "branch").extractOpt[String],
         (info \ "reason").extractOpt[String],
@@ -881,6 +882,7 @@ object MainSummaryView {
       StructField("update_enabled", BooleanType, nullable = true), // environment/settings/update/enabled
       StructField("update_auto_download", BooleanType, nullable = true), // environment/settings/update/autoDownload
       StructField("attribution", buildAttributionSchema, nullable = true), // environment/settings/attribution/
+      StructField("sandbox_effective_content_process_level", IntegerType, nullable = true), // environment/settings/sandbox/effectiveContentProcessLevel
       StructField("active_experiment_id", StringType, nullable = true), // environment/addons/activeExperiment/id
       StructField("active_experiment_branch", StringType, nullable = true), // environment/addons/activeExperiment/branch
       StructField("reason", StringType, nullable = true), // info/reason
