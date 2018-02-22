@@ -18,6 +18,7 @@ case class Submission(client_id: String,
                       os: String,
                       os_version: String,
                       devtools_toolbox_opened_count: Int,
+                      scalar_parent_browser_engagement_total_uri_count: Int,
                       distribution_id: String)
 
 object Submission{
@@ -34,6 +35,7 @@ object Submission{
     "os" -> List("Windows", "Darwin"),
     "os_version" -> List("1.0", "1.1"),
     "devtools_toolbox_opened_count" -> List(0, 42),
+    "scalar_parent_browser_engagement_total_uri_count" -> List(0, 3, 8, 19, 45, 50, 60, 80, 150, 200, 250, 251, 255),
     "distribution_id" -> List("canonical", "MozillaOnline", "yandex", "foo", "bar"))
 
   def randomList: List[Submission] = {
@@ -50,6 +52,7 @@ object Submission{
       os <- dimensions("os")
       osVersion <- dimensions("os_version")
       devtoolsToolboxOpenedCount <- dimensions("devtools_toolbox_opened_count")
+      scalarParentBrowserEngagementTotalUriCount <- dimensions("scalar_parent_browser_engagement_total_uri_count")
       distributionId <- dimensions("distribution_id")
     } yield {
       Submission(clientId.asInstanceOf[String],
@@ -64,6 +67,7 @@ object Submission{
                  os.asInstanceOf[String],
                  osVersion.asInstanceOf[String],
                  devtoolsToolboxOpenedCount.asInstanceOf[Int],
+                 scalarParentBrowserEngagementTotalUriCount.asInstanceOf[Int],
                  distributionId.asInstanceOf[String])
     }
   }
@@ -93,18 +97,23 @@ class GenericCountTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     "app_version" ::
     "e10s_enabled" ::
     "os" ::
-    "os_version" :: Nil
+    "os_version" ::
+    "scalar_parent_browser_engagement_total_uri_count" :: Nil
+
+  private val splits = "array(int('0'), int('5'), int('20'), int('50'), int('100'), int('250'))"
 
   private val select =
     "substr(subsession_start_date, 0, 10) as activity_date" ::
     "devtools_toolbox_opened_count > 0 as devtools_toolbox_opened" ::
     "case when distribution_id in ('canonical', 'MozillaOnline', 'yandex') " +
-      "then distribution_id else null end as top_distribution_id" :: base
+      "then distribution_id else null end as top_distribution_id" ::
+    s"bucketed(scalar_parent_browser_engagement_total_uri_count, $splits) as bucketed_uri_count" :: base
 
   private val dimensions =
     "activity_date" ::
     "devtools_toolbox_opened" ::
-    "top_distribution_id" :: base
+    "top_distribution_id" ::
+    "bucketed_uri_count" :: base
 
   private val args =
     "--from" :: "20160101" ::
@@ -146,6 +155,28 @@ class GenericCountTest extends FlatSpec with Matchers with BeforeAndAfterAll {
       .collect()
 
     distributionIdCount.length should be (4)
+  }
+
+  "Correct bucketed values" should "be in bucketed_uri_count" in {
+    val expect: Map[Any, Int] = Map(0 -> 1, 5 -> 1, 20 -> 2, 50 -> 2, 100 -> 2, 250 -> 3, 251 -> 2)
+
+    // aggregates will contain a lot more than one row per
+    // scalar_parent_browser_engagement_total_uri_count
+    // so we use distinct values for this test
+    val distinctUriCount = aggregates
+      .select("scalar_parent_browser_engagement_total_uri_count", "bucketed_uri_count")
+      .distinct
+      .groupBy("bucketed_uri_count")
+      .agg(count($"bucketed_uri_count"))
+      .collect
+
+    distinctUriCount.foreach { x =>
+      (expect contains x(0)) should be (true)
+      // using a tuple here adds context to test failures
+      (x(0), x(1)) should be (x(0), expect(x(0)))
+    }
+
+    distinctUriCount.size should be (expect.size)
   }
 
   override def afterAll() = {
