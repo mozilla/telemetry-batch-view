@@ -524,20 +524,20 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
 
   it can "be built" in {
     val userPrefsSchema = MainSummaryView.buildUserPrefsSchema(testUserPrefs)
-    userPrefsSchema.fields.length should be (3)
+    userPrefsSchema.fields.length should be(3)
 
-    userPrefsSchema.fieldNames should be (List("user_pref_p1", "user_pref_p2", "user_pref_p3_messy"))
+    userPrefsSchema.fieldNames should be(List("user_pref_p1", "user_pref_p2", "user_pref_p3_messy"))
 
-    userPrefsSchema.fields(0).dataType should be (IntegerType)
-    userPrefsSchema.fields(1).dataType should be (BooleanType)
-    userPrefsSchema.fields(2).dataType should be (StringType)
+    userPrefsSchema.fields(0).dataType should be(IntegerType)
+    userPrefsSchema.fields(1).dataType should be(BooleanType)
+    userPrefsSchema.fields(2).dataType should be(StringType)
   }
 
   it can "be added to MainSummary schema" in {
     val schemaWithPrefs = MainSummaryView.buildSchema(testUserPrefs, List(), List())
 
-    schemaWithPrefs.fieldNames.contains("user_pref_p3_messy") should be (true)
-    schemaWithPrefs.fieldNames.contains("user_pref_p4") should be (false)
+    schemaWithPrefs.fieldNames.contains("user_pref_p3_messy") should be(true)
+    schemaWithPrefs.fieldNames.contains("user_pref_p4") should be(false)
   }
 
   it can "be added to the top-level" in {
@@ -1707,13 +1707,13 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
   "Malformed message" should "be ignored" in {
 
     var message = RichMessage("1234", Map("documentId" -> "foo", "submissionDate" -> "1234"), None)
-    defaultMessageToRow(message).isDefined should be (true)
+    defaultMessageToRow(message).isDefined should be(true)
 
     message = RichMessage("1234", Map("submissionDate" -> "1234"), None)
-    defaultMessageToRow(message) should be (None)
+    defaultMessageToRow(message) should be(None)
 
     // broken messages should not be parsed
     message = RichMessage("1234", Map("documentId" -> "foo", "submissionDate" -> "1234", "submission" -> "{broken json}"), None)
-    message.toJValue should be (None)
+    message.toJValue should be(None)
   }
 }
