@@ -488,8 +488,11 @@ object MainSummaryView {
         (system \ "sec" \ "firewall").extract[Option[Seq[String]]],
         (profile \ "creationDate").extractOpt[Long],
         (profile \ "resetDate").extractOpt[Long],
+        (info \ "previousBuildId").extractOpt[String],
         (info \ "sessionId").extractOpt[String],
         (info \ "subsessionId").extractOpt[String],
+        (info \ "previousSessionId").extractOpt[String],
+        (info \ "previousSubsessionId").extractOpt[String],
         (info \ "sessionStartDate").extractOpt[String],
         (info \ "subsessionStartDate").extractOpt[String],
         (info \ "sessionLength").extractOpt[Long],
@@ -830,8 +833,11 @@ object MainSummaryView {
       // TODO: use proper 'date' type for date columns.
       StructField("profile_creation_date", LongType, nullable = true), // environment/profile/creationDate
       StructField("profile_reset_date", LongType, nullable = true), // environment/profile/resetDate
+      StructField("previous_build_id", StringType, nullable = true), // info/previousBuildId
       StructField("session_id", StringType, nullable = true), // info/sessionId
       StructField("subsession_id", StringType, nullable = true), // info/subsessionId
+      StructField("previous_session_id", StringType, nullable = true), // info/previousSessionId
+      StructField("previous_subsession_id", StringType, nullable = true), // info/previousSubsessionId
       StructField("session_start_date", StringType, nullable = true), // info/sessionStartDate
       StructField("subsession_start_date", StringType, nullable = true), // info/subsessionStartDate
       StructField("session_length", LongType, nullable = true), // info/sessionLength
