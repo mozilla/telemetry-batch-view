@@ -1789,8 +1789,11 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
         "payload.info" ->
           """
             |{
+            |  "previousBuildId": "aa",
             |  "sessionId": "a",
             |  "subsessionId": "b",
+            |  "previousSessionId": "cc",
+            |  "previousSubsessionId": "dd",
             |  "subsessionCounter": 1,
             |  "profileSubsessionCounter": 2,
             |  "sessionStartDate": "2017-02-22",
@@ -1801,8 +1804,11 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
       None)
 
     val expected = Map(
+      "previous_build_id" -> "aa",
       "session_id" -> "a",
       "subsession_id" -> "b",
+      "previous_session_id" -> "cc",
+      "previous_subsession_id" -> "dd",
       "subsession_counter" -> 1,
       "profile_subsession_counter" -> 2,
       "session_start_date" -> "2017-02-22",
