@@ -1,5 +1,7 @@
 package com.mozilla.telemetry
 
+import java.time.format.DateTimeFormatter
+
 import com.mozilla.telemetry.heka.{File, Message, RichMessage}
 import com.mozilla.telemetry.metrics._
 import com.mozilla.telemetry.utils._
@@ -200,6 +202,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
             "default_search_engine" -> "google",
             "devtools_toolbox_opened_count" -> 3,
             "client_submission_date" -> null,
+            "client_clock_skew" -> null,
+            "client_submission_latency" -> 855143,
             "push_api_notify" -> null,
             "web_notification_shown" -> null,
             "places_pages_count" -> 104849,
@@ -1899,5 +1903,29 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
     )
 
     compare(message, expected)
+  }
+
+  "Date diffs" can "be calculated" in {
+    val diff = (d: String, t: Long) =>
+      MainSummaryView.diffDateAndTimestamp(d, DateTimeFormatter.ISO_DATE_TIME, t * 1e9.toLong)
+    diff("1970-01-01T00:00:00.000Z", 100).get should be(100)
+    diff("1970-01-0T00:00:00.000Z", 100) should be(None)
+    diff("Nope", 100) should be(None)
+    diff(null, 100) should be(None)
+
+    // 1518898956 is 2018-02-17T20:22:36.000Z
+    val ts = 1518898956691800000l
+    MainSummaryView.getClockSkew(Some("Sat, 17 Feb 2018 20:22:33 GMT"), ts).get should be(3)
+    MainSummaryView.getClockSkew(Some("Sat, 17 Feb 2018 20:22:06 GMT"), ts).get should be(30)
+    MainSummaryView.getClockSkew(Some("Sat, 67 Feb 2018 20:22:33 GMT"), ts) should be(None)
+    MainSummaryView.getClockSkew(Some("6"), ts) should be(None)
+    MainSummaryView.getClockSkew(None, ts) should be(None)
+    MainSummaryView.getClockSkew(null, ts) should be(None)
+
+    MainSummaryView.getSubmissionLatency(Some("2018-02-17T20:22:33.000Z"), ts).get should be(3)
+    MainSummaryView.getSubmissionLatency(Some("2018-02-15T20:22:33.000Z"), ts).get should be(3 + (2 * 24 * 60 * 60))
+    MainSummaryView.getSubmissionLatency(Some("2018-02-67T20:22:33.000Z"), ts) should be(None)
+    MainSummaryView.getSubmissionLatency(Some("6"), ts) should be(None)
+    MainSummaryView.getSubmissionLatency(None, ts) should be(None)
   }
 }
