@@ -1,5 +1,9 @@
 package com.mozilla.telemetry.views
 
+import java.time._
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
+
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.Row
 import org.joda.time.{DateTime, Days, format}
@@ -9,7 +13,7 @@ import com.mozilla.telemetry.heka.Dataset
 import com.mozilla.telemetry.utils.{Addon, Attribution, Events,
   Experiment, getOrCreateSparkSession, MainPing, S3Store}
 import com.mozilla.telemetry.utils.{BooleanUserPref, IntegerUserPref, StringUserPref, UserPref}
-import org.json4s.{JValue, DefaultFormats}
+import org.json4s.{DefaultFormats, JValue}
 import com.mozilla.telemetry.metrics._
 
 import scala.util.{Success, Try}
@@ -391,6 +395,35 @@ object MainSummaryView {
     }
   }
 
+  def diffDateAndTimestamp(dateString: String, dateFormat: DateTimeFormatter, timestamp: Long): Option[Long] = {
+    val diff = for {
+      client <- Try(ZonedDateTime.parse(dateString, dateFormat))
+      server <- Try(ZonedDateTime.ofInstant(Instant.ofEpochSecond(timestamp / 1e9.toLong), ZoneOffset.UTC))
+    } yield ChronoUnit.SECONDS.between(client, server)
+    diff match {
+      case Success(d) => Some(d)
+      case _ => None
+    }
+  }
+
+  // Parse clientDateHeader as a RFC1123 date, compute the difference between
+  // that and `timestamp` (in nanos), return the difference in seconds.
+  def getClockSkew(clientDateHeader: Option[String], timestamp: Long) = {
+    clientDateHeader match {
+      case Some(s) => diffDateAndTimestamp(s, DateTimeFormatter.RFC_1123_DATE_TIME, timestamp)
+      case _ => None
+    }
+  }
+
+  // Parse creationDate field as an ISO date, compute the difference between
+  // that and `timestamp` (in nanos), return the difference in seconds.
+  def getSubmissionLatency(clientCreationDate: Option[String], timestamp: Long) = {
+    clientCreationDate match {
+      case Some(s) => diffDateAndTimestamp(s, DateTimeFormatter.ISO_DATE_TIME, timestamp)
+      case _ => None
+    }
+  }
+
   // Convert the given Heka message containing a "main" ping
   // to a map containing just the fields we're interested in.
   def messageToRow(doc: JValue, scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String, HistogramDefinition)], userPrefs: List[UserPref] = userPrefsList): Option[Row] = {
@@ -404,8 +437,9 @@ object MainSummaryView {
       // required fields
       val documentId = (meta \ "documentId").extractOpt[String]
       val submissionDate = (meta \ "submissionDate").extractOpt[String]
+      val timestamp = (meta \ "Timestamp").extractOpt[Long]
 
-      if (documentId.isEmpty || submissionDate.isEmpty) {
+      if (documentId.isEmpty || submissionDate.isEmpty || timestamp.isEmpty) {
         return None
       }
 
@@ -521,7 +555,7 @@ object MainSummaryView {
         (application \ "displayVersion").extractOpt[String],
         (application \ "name").extractOpt[String],
         (application \ "version").extractOpt[String],
-        (meta \ "Timestamp").extractOpt[Long], // required
+        timestamp, // required
         (build \ "buildId").extractOpt[String],
         (build \ "version").extractOpt[String],
         (build \ "architecture").extractOpt[String],
@@ -562,6 +596,8 @@ object MainSummaryView {
         (settings \ "defaultSearchEngine").extractOpt[String],
         hsum(histograms("parent") \ "DEVTOOLS_TOOLBOX_OPENED_COUNT"),
         (meta \ "Date").extractOpt[String],
+        getClockSkew((meta \ "Date").extractOpt[String], timestamp.get),
+        getSubmissionLatency((doc \ "creationDate").extractOpt[String], timestamp.get),
         MainPing.histogramToMean(histograms("parent") \ "PLACES_BOOKMARKS_COUNT"),
         MainPing.histogramToMean(histograms("parent") \ "PLACES_PAGES_COUNT"),
         hsum(histograms("parent") \ "PUSH_API_NOTIFY"),
@@ -934,6 +970,10 @@ object MainSummaryView {
 
       // client date per bug 1270505
       StructField("client_submission_date", StringType, nullable = true), // Fields[Date], the HTTP Date header sent by the client
+
+      // clock skew per bug 1270183
+      StructField("client_clock_skew", LongType, nullable = true), // Difference between client_submission_date and timestamp, in seconds
+      StructField("client_submission_latency", LongType, nullable = true), // Difference between creation_date and timestamp, in seconds
 
       // We use the mean for bookmarks and pages because we do not expect them to be
       // heavily skewed during the lifetime of a subsession. Using the median for a
