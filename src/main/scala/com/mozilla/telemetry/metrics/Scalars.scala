@@ -41,7 +41,6 @@ class ScalarsClass extends MetricsClass {
   def definitions(includeOptin: Boolean = false, nameJoiner: (String, String) => String = getParquetFriendlyScalarName): Map[String, ScalarDefinition] = {
     val uris = Map("release" -> "https://hg.mozilla.org/releases/mozilla-release/raw-file/tip/toolkit/components/telemetry/Scalars.yaml",
                    "beta" -> "https://hg.mozilla.org/releases/mozilla-beta/raw-file/tip/toolkit/components/telemetry/Scalars.yaml",
-                   "aurora" -> "https://hg.mozilla.org/releases/mozilla-aurora/raw-file/tip/toolkit/components/telemetry/Scalars.yaml",
                    "nightly" -> "https://hg.mozilla.org/mozilla-central/raw-file/tip/toolkit/components/telemetry/Scalars.yaml")
 
     // Scalars are considered to be immutable so it's OK to merge their definitions.
