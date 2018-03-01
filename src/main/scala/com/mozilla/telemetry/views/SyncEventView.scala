@@ -72,8 +72,6 @@ object SyncEventView {
           case "4" | "5" => true
         }.where("docType") {
           case "sync" => true
-        }.where("appName") {
-          case "Firefox" => true
         }.where("submissionDate") {
           case date if date == currentDate.toString("yyyyMMdd") => true
         }.records(conf.limit.get)
