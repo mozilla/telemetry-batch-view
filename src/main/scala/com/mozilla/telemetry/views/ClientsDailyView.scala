@@ -1,0 +1,217 @@
+package com.mozilla.telemetry.views
+
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
+import com.mozilla.telemetry.utils.{AggSearchCounts, AggMapFirst}
+import org.apache.spark.sql.{Column, DataFrame}
+import org.apache.spark.sql.functions._
+import org.rogach.scallop._
+
+object ClientsDailyView {
+  val jobName: String = "clients_daily"
+  val schemaVersion: String = "v6"
+
+  class Conf(args: Array[String]) extends ScallopConf(args) {
+    val date = opt[String](
+      "date",
+      descr = "Submission date to process",
+      required = true)
+    val inputBucket = opt[String](
+      "input-bucket",
+      descr = "Source bucket for main_summary data",
+      required = false,
+      default = Some("telemetry-parquet"))
+    val outputBucket = opt[String](
+      "output-bucket",
+      descr = "Destination bucket for parquet data",
+      required = true)
+    val sampleId = opt[String](
+      "sample-id",
+      descr = "Sample_id to restrict results to",
+      required = false)
+    // 2,000,000 rows yields ~ 200MB files in snappy+parquet
+    val maxRecordsPerFile = opt[Int](
+      "max-records-per-file",
+      descr = "Max number of rows to write to output files before splitting",
+      required = false,
+      default=Some(2000000))
+    verify()
+  }
+
+  def main(args: Array[String]) {
+    val conf = new Conf(args)
+
+    val date = conf.date()
+    val maxRecordsPerFile = conf.maxRecordsPerFile()
+
+    val inputPath = s"s3://${conf.inputBucket()}/main_summary/" +
+      s"${MainSummaryView.schemaVersion}/submission_date_s3=$date"
+    val outputPath = s"s3://${conf.outputBucket()}/clients_daily/" +
+      s"$schemaVersion/submission_date_s3=$date"
+
+    val spark = getOrCreateSparkSession(jobName)
+
+    val df = spark.read.parquet(inputPath)
+    val input = conf.sampleId.get match {
+      case Some(sampleId) => df.where(s"sample_id = '$sampleId'")
+      case _ => df
+    }
+
+    val results = extractDayAggregates(input)
+
+    results
+      .write
+      .mode("overwrite")
+      .option("maxRecordsPerFile", maxRecordsPerFile)
+      .parquet(outputPath)
+  }
+
+  def extractDayAggregates(df: DataFrame): DataFrame = {
+    val aggregates = df
+      .groupBy("client_id")
+      .agg(fieldAggregators.head, fieldAggregators.tail:_*)
+
+    /* expand search_counts with "search_counts.*". fields in search_counts
+     * are prefixed with "search_count_" so this is safe
+     */
+    aggregates
+      .selectExpr(
+        aggregates.schema.map{c => if (c.name == "search_counts") "search_counts.*" else c.name}:_*
+      )
+  }
+
+  def aggFirst(field: String): Column = first(field, ignoreNulls = true).alias(field)
+
+  def aggFirst(expression: Column, alias: String): Column = first(expression, ignoreNulls = true).alias(alias)
+
+  val mapFirst = new AggMapFirst()
+  def aggMapFirst(field: String): Column = mapFirst(col(field)).alias(field)
+
+  def aggMax(field: String): Column = max(field).alias(s"${field}_max")
+
+  def aggMean(field: String): Column = mean(field).alias(s"${field}_mean")
+
+  val searchSources = List(
+    "abouthome",
+    "contextmenu",
+    "newtab",
+    "searchbar",
+    "system",
+    "urlbar"
+  )
+  val searchCounts = new AggSearchCounts(searchSources)
+  def aggSearchCounts(field: String): Column = searchCounts(col(field)).alias(field)
+
+  def aggSum(field: String): Column = sum(field).alias(s"${field}_sum")
+
+  def aggSum(expression: Column, alias: String): Column = sum(expression).alias(alias)
+
+  def fieldAggregators = List(
+    aggSum("aborts_content"),
+    aggSum("aborts_gmplugin"),
+    aggSum("aborts_plugin"),
+    aggMean("active_addons_count"),
+    aggFirst("active_experiment_branch"),
+    aggFirst("active_experiment_id"),
+    aggSum(expr("active_ticks/(3600.0/5)"), "active_hours_sum"),
+    aggFirst("addon_compatibility_check_enabled"),
+    aggFirst("app_build_id"),
+    aggFirst("app_display_version"),
+    aggFirst("app_name"),
+    aggFirst("app_version"),
+    aggFirst("blocklist_enabled"),
+    aggFirst("channel"),
+    aggFirst("city"),
+    aggFirst("country"),
+    aggSum("crashes_detected_content"),
+    aggSum("crashes_detected_gmplugin"),
+    aggSum("crashes_detected_plugin"),
+    aggSum("crash_submit_attempt_content"),
+    aggSum("crash_submit_attempt_main"),
+    aggSum("crash_submit_attempt_plugin"),
+    aggSum("crash_submit_success_content"),
+    aggSum("crash_submit_success_main"),
+    aggSum("crash_submit_success_plugin"),
+    aggFirst("default_search_engine"),
+    aggFirst("default_search_engine_data_load_path"),
+    aggFirst("default_search_engine_data_name"),
+    aggFirst("default_search_engine_data_origin"),
+    aggFirst("default_search_engine_data_submission_url"),
+    aggSum("devtools_toolbox_opened_count"),
+    aggFirst("distribution_id"),
+    aggFirst("e10s_enabled"),
+    aggFirst("env_build_arch"),
+    aggFirst("env_build_id"),
+    aggFirst("env_build_version"),
+    aggMapFirst("experiments"),
+    aggMean("first_paint"),
+    aggFirst("flash_version"),
+    aggFirst("install_year"),
+    aggFirst("is_default_browser"),
+    aggFirst("is_wow64"),
+    aggFirst("locale"),
+    aggFirst("memory_mb"),
+    aggFirst("os"),
+    aggFirst("os_service_pack_major"),
+    aggFirst("os_service_pack_minor"),
+    aggFirst("os_version"),
+    aggFirst("normalized_channel"),
+    countDistinct("document_id").alias("pings_aggregated_by_this_row"),
+    aggMean("places_bookmarks_count"),
+    aggMean("places_pages_count"),
+    aggSum("plugin_hangs"),
+    aggSum("plugins_infobar_allow"),
+    aggSum("plugins_infobar_block"),
+    aggSum("plugins_infobar_shown"),
+    aggSum("plugins_notification_shown"),
+    aggFirst(
+      expr(
+        "datediff(subsession_start_date, from_unixtime(profile_creation_date*24*60*60))"
+      ),
+      "profile_age_in_days"),
+    aggFirst(
+      expr("from_unixtime(profile_creation_date*24*60*60)"),
+      "profile_creation_date"),
+    aggSum("push_api_notify"),
+    aggFirst("sample_id"),
+    aggFirst("scalar_parent_aushelper_websense_reg_version"),
+    aggMax("scalar_parent_browser_engagement_max_concurrent_tab_count"),
+    aggMax("scalar_parent_browser_engagement_max_concurrent_window_count"),
+    aggSum("scalar_parent_browser_engagement_tab_open_event_count"),
+    aggSum("scalar_parent_browser_engagement_total_uri_count"),
+    aggSum("scalar_parent_browser_engagement_unfiltered_uri_count"),
+    aggMax("scalar_parent_browser_engagement_unique_domains_count"),
+    aggMean("scalar_parent_browser_engagement_unique_domains_count"),
+    aggSum("scalar_parent_browser_engagement_window_open_event_count"),
+    aggSum("scalar_parent_devtools_copy_full_css_selector_opened"),
+    aggSum("scalar_parent_devtools_copy_unique_css_selector_opened"),
+    aggSum("scalar_parent_devtools_toolbar_eyedropper_opened"),
+    aggSum("scalar_parent_dom_contentprocess_troubled_due_to_memory"),
+    aggSum("scalar_parent_navigator_storage_estimate_count"),
+    aggSum("scalar_parent_navigator_storage_persist_count"),
+    aggFirst("scalar_parent_services_sync_fxa_verification_method"),
+    aggSum("scalar_parent_storage_sync_api_usage_extensions_using"),
+    aggFirst("scalar_parent_telemetry_os_shutting_down"),
+    aggSum("scalar_parent_webrtc_nicer_stun_retransmits"),
+    aggSum("scalar_parent_webrtc_nicer_turn_401s"),
+    aggSum("scalar_parent_webrtc_nicer_turn_403s"),
+    aggSum("scalar_parent_webrtc_nicer_turn_438s"),
+    aggFirst("search_cohort"),
+    aggSearchCounts("search_counts"),
+    aggMean("session_restored"),
+    aggSum(expr("IF(subsession_counter = 1, 1, 0)"), "sessions_started_on_this_day"),
+    aggSum("shutdown_kill"),
+    aggSum(expr("subsession_length/3600.0"), "subsession_hours_sum"),
+    aggSum("ssl_handshake_result_failure"),
+    aggSum("ssl_handshake_result_success"),
+    aggFirst("sync_configured"),
+    aggSum("sync_count_desktop"),
+    aggSum("sync_count_mobile"),
+    aggFirst("telemetry_enabled"),
+    aggFirst("timezone_offset"),
+    aggSum(expr("total_time/3600.0"), "total_hours_sum"),
+    aggFirst("vendor"),
+    aggSum("web_notification_shown"),
+    aggFirst("windows_build_number"),
+    aggFirst("windows_ubr")
+  )
+}
