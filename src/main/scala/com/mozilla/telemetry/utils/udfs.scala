@@ -163,6 +163,128 @@ class CollectList(inputStruct: StructType, orderCols: List[String], maxLength: O
   }
 }
 
+class AggSearchCounts(validSources: List[String], prefix: String = "search_count_") extends UserDefinedAggregateFunction {
+  /**
+    * Aggregates the search_counts column in main_summary by taking the sum of
+    * valid search counts by source, and creating a struct that maps source to
+    * count with an additional field "all" that is the sum of the others. The
+    * output column should be exploded to avoid issues with schema evolution in
+    * athena. A search count is valid if it has count >= 0 and source is listed
+    * in validSources. prefix is prepended to field names within the struct to
+    * make it safe for star expansion. The input column must have the schema
+    * List[Struct[engine: String, source: String, count: Long] ].
+    **/
+
+  private val numSources = validSources.length
+
+  override def inputSchema: StructType = StructType(
+    Array(
+      StructField(
+        "value",
+        // This is the actual input type
+        ArrayType(
+          StructType(
+            Array(
+              StructField("engine", StringType),
+              StructField("source", StringType),
+              StructField("count", LongType)
+            )
+          )
+        )
+      )
+    )
+  )
+
+  override def bufferSchema: StructType = StructType(
+    List(StructField(prefix + "all", LongType)) ++
+      validSources.map{c => StructField(prefix + c, LongType)}
+  )
+
+  override def dataType: DataType = bufferSchema
+
+  // sum doesn't care about ordering
+  override def deterministic: Boolean = true
+
+  // zeroes out the buffer when the aggregation key changes
+  override def initialize(buffer: MutableAggregationBuffer): Unit = {
+    (0 to numSources).foreach { index =>
+      buffer(index) = 0L
+    }
+  }
+
+  // adds valid sources from Row to the buffer
+  override def update(buffer: MutableAggregationBuffer, input: Row): Unit = {
+    if (!input.isNullAt(0)) {
+      input.getSeq(0).foreach { search_struct: Row =>
+        val source: String = search_struct.getString(1)
+        val count: Long = search_struct.getLong(2)
+        if (count > 0 && validSources.contains(source)) {
+          buffer(0) = buffer.getLong(0) + count
+          // index is offset by one because the first field in the buffer is "all"
+          val index = validSources.indexOf(source) + 1
+          buffer(index) = buffer.getLong(index) + count
+        }
+      }
+    }
+  }
+
+  // merging two buffers results in the sum of values for each key
+  override def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
+    (0 to numSources).foreach { index =>
+      buffer1(index) = buffer1.getLong(index) + buffer2.getLong(index)
+    }
+  }
+
+  // the buffer is the output value
+  override def evaluate(buffer: Row): Any = buffer
+}
+
+class AggMapFirst() extends UserDefinedAggregateFunction {
+  /**
+    * Aggregates a Map[String,String] column by choosing the first non-null
+    * value for each key
+    **/
+
+  override def inputSchema: StructType = StructType(
+    Array(
+      StructField(
+        "value",
+        // This is the actual input type
+        MapType(StringType, StringType)
+      )
+    )
+  )
+
+  override def bufferSchema: StructType = StructType(
+    List(StructField("map", MapType(StringType, StringType)))
+  )
+
+  override def dataType: DataType = MapType(StringType, StringType)
+
+  override def deterministic: Boolean = false
+
+  // empty buffer when the aggregation key changes
+  override def initialize(buffer: MutableAggregationBuffer): Unit = {
+    buffer(0) = Map()
+  }
+
+  // add only keys with non-null values from input that are missing in buffer
+  override def update(buffer: MutableAggregationBuffer, input: Row): Unit = {
+    if (!input.isNullAt(0)) {
+      buffer(0) = input.getMap(0).filter { p: (String, String) => p._2 != null } ++
+        buffer.getMap(0)
+    }
+  }
+
+  // add only keys from buffer2 that are missing in buffer1
+  override def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
+    buffer1(0) = buffer2.getMap(0) ++ buffer1.getMap(0)
+  }
+
+  // the buffer is the output value
+  override def evaluate(buffer: Row): Any = buffer.getMap(0)
+}
+
 object UDFs{
   val HllCreate = "hll_create"
   val HllCardinality = "hll_cardinality"
