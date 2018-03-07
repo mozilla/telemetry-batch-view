@@ -2,8 +2,9 @@ package com.mozilla.telemetry.views
 
 import com.github.nscala_time.time.Imports._
 import com.mozilla.telemetry.utils.UDFs._
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.rogach.scallop._
 
 object GenericCountView {
@@ -131,10 +132,7 @@ object GenericCountView {
   def main(args: Array[String]) {
     val conf = new Conf(args)
 
-    val spark = SparkSession
-      .builder()
-      .appName(s"Generic Count View Job")
-      .getOrCreate()
+    val spark = getOrCreateSparkSession("Generic Count View Job")
 
     spark.registerUDFs
 

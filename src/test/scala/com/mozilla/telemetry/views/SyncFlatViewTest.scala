@@ -1,8 +1,8 @@
 package com.mozilla.telemetry
 
-import com.mozilla.telemetry.utils.SyncPingConversion
+import com.mozilla.telemetry.utils.{SyncPingConversion, getOrCreateSparkSession}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.{Row, SQLContext, SparkSession}
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.joda.time.DateTime
 import org.json4s.JsonAST.{JArray, JNothing, JObject}
@@ -39,7 +39,7 @@ class SyncFlatViewTest extends FlatSpec with Matchers {
     try {
       val row = SyncPingConversion.pingToFlatRows(SyncViewTestPayloads.multiSyncPing)
       // Write a parquet file with the rows.
-      val sqlContext = SparkSession.builder.appName("TestSyncPing").getOrCreate();
+      val sqlContext = getOrCreateSparkSession("TestSyncPing")
       val rdd = sc.parallelize(row.toSeq)
       val dataframe = sqlContext.createDataFrame(rdd, SyncPingConversion.singleEngineFlatSyncType)
       val tempFile = com.mozilla.telemetry.utils.temporaryFileName()

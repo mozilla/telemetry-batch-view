@@ -1,10 +1,10 @@
 package com.mozilla.telemetry
 
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import com.mozilla.telemetry.views.SyncEventConverter
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.{SparkConf, SparkContext}
-import org.json4s.jackson.JsonMethods.parse
 import org.json4s.DefaultFormats
+import org.json4s.jackson.JsonMethods.parse
 import org.scalatest.{FlatSpec, Matchers}
 
 class SyncEventViewTest extends FlatSpec with Matchers{
@@ -196,10 +196,7 @@ class SyncEventViewTest extends FlatSpec with Matchers{
     sc.setLogLevel("WARN")
     try {
       val row = SyncEventConverter.pingToRows(sync_payload)
-      val spark = SparkSession
-        .builder()
-        .appName("SyncEventsViewTest")
-        .getOrCreate()
+      val spark = getOrCreateSparkSession("SyncEventsViewTest")
       val rdd = sc.parallelize(row)
 
       val dataframe = spark.createDataFrame(rdd, SyncEventConverter.syncEventSchema)
@@ -248,10 +245,7 @@ class SyncEventViewTest extends FlatSpec with Matchers{
     sc.setLogLevel("WARN")
     try {
       val row = SyncEventConverter.pingToRows(sync_payload_with_os)
-      val spark = SparkSession
-        .builder()
-        .appName("SyncEventsViewTest")
-        .getOrCreate()
+      val spark = getOrCreateSparkSession("SyncEventsViewTest")
       val rdd = sc.parallelize(row)
 
       val dataframe = spark.createDataFrame(rdd, SyncEventConverter.syncEventSchema)
