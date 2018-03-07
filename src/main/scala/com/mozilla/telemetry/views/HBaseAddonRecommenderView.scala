@@ -151,7 +151,7 @@ object HBaseAddonRecommenderView {
     }
 
     implicit val hbaseConfig = HBaseConfig("hbase.zookeeper.quorum" -> conf.hbaseMaster())
-    implicit val spark = SparkSession.builder().master("yarn").appName("HBaseAddonRecommenderView").getOrCreate()
+    implicit val spark = getOrCreateSparkSession("HBaseAddonRecommenderView")
 
     createHBaseTable()
     etl(from, to, date => spark.read.parquet(s"s3://telemetry-parquet/main_summary/${MainSummaryView.schemaVersion}/submission_date_s3=$date"))

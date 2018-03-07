@@ -3,12 +3,13 @@ package com.mozilla.telemetry.views
 import java.lang.Long
 
 import com.github.nscala_time.time.Imports._
-import com.mozilla.telemetry.utils.deletePrefix
 import com.mozilla.telemetry.utils.CustomPartitioners._
-import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
+import com.mozilla.telemetry.utils.{deletePrefix, getOrCreateSparkSession}
 import org.apache.spark.sql.expressions.scalalang.typed.sumLong
 import org.apache.spark.sql.functions.{col, first, min}
+import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.rogach.scallop._
+
 import scala.util.Try
 
 /**
@@ -277,10 +278,7 @@ object HeavyUsersView {
   def main(args: Array[String]): Unit = {
     val conf = new Conf(args)
 
-    val spark = SparkSession
-      .builder()
-      .appName(s"$DatasetPrefix $Version Job")
-      .getOrCreate()
+    val spark = getOrCreateSparkSession(s"$DatasetPrefix $Version Job")
 
     import spark.implicits._
 

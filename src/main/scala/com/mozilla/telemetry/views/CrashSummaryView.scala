@@ -1,12 +1,12 @@
 package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.heka.Dataset
-import com.mozilla.telemetry.utils.Experiment
-import org.apache.spark.sql.{SaveMode, SparkSession}
+import com.mozilla.telemetry.utils.{Experiment, getOrCreateSparkSession}
+import org.apache.spark.sql.SaveMode
 import org.joda.time.{DateTime, Days, format}
 import org.json4s._
-import org.json4s.jackson.Serialization
 import org.json4s.jackson.JsonMethods._
+import org.json4s.jackson.Serialization
 import org.rogach.scallop.ScallopConf
 
 case class Application(
@@ -207,11 +207,7 @@ object CrashSummaryView {
 
   def main(args: Array[String]): Unit = {
     // Setup spark contexts
-    val spark = SparkSession
-      .builder()
-      .appName(this.getClass.getName)
-      .config("spark.master", "local[*]")
-      .getOrCreate()
+    val spark = getOrCreateSparkSession(this.getClass.getName)
     implicit val sc = spark.sparkContext
     import spark.implicits._
     implicit val formats = Serialization.formats(NoTypeHints)

@@ -1,7 +1,6 @@
 package com.mozilla.telemetry.utils
 
-import org.apache.spark.sql.SparkSession
-import org.scalatest.FlatSpec
+import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
 case class MSRow(
   document_id:Int,
@@ -9,12 +8,8 @@ case class MSRow(
   client_id:Option[String] = None
 )
 
-class DatasetComparatorTest extends FlatSpec {
-  private val spark = SparkSession
-    .builder()
-    .appName("DatasetComparatorTest")
-    .master("local[*]")
-    .getOrCreate()
+class DatasetComparatorTest extends FlatSpec with BeforeAndAfterAll {
+  private val spark = getOrCreateSparkSession("DatasetComparatorTest")
 
   import spark.implicits._
 
@@ -73,5 +68,9 @@ class DatasetComparatorTest extends FlatSpec {
 
   it must "not equal extra column" in {
     assert(!DatasetComparator.validate(spark, getConf("ZeroNulls", "FiveNulls")))
+  }
+
+  override def afterAll() = {
+    spark.stop()
   }
 }
