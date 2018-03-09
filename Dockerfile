@@ -12,11 +12,6 @@ RUN \
   apt-get install sbt && \
   sbt sbtVersion
 
-# Install hbase
-RUN wget -nv https://archive.apache.org/dist/hbase/$HBASE_VERSION/hbase-$HBASE_VERSION-bin.tar.gz
-RUN tar -zxf hbase-$HBASE_VERSION-bin.tar.gz
-RUN rm hbase-$HBASE_VERSION-bin.tar.gz
-
 ENV _JAVA_OPTIONS="-Xms4G -Xmx4G -Xss4M -XX:MaxMetaspaceSize=512M"
 
 WORKDIR /telemetry-batch-view
