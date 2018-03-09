@@ -38,7 +38,7 @@ object DatasetComparator {
   def getDataFrame(spark: SparkSession, view: ScallopOption[String], bucket: ScallopOption[String], dataPath: String, dateField: String, date: String, where: ScallopOption[String]): DataFrame = {
     val df = view.get match {
       case Some(t) => spark.sql(s"SELECT * FROM $t").where(s"$dateField = '$date'")
-      case _ => spark.read.parquet(s"s3://${bucket()}/$dataPath/$dateField=$date")
+      case _ => spark.read.option("mergeSchema", "true").parquet(s"s3://${bucket()}/$dataPath/$dateField=$date")
     }
     where.get match {
       case Some(clause) => df.where(clause)
