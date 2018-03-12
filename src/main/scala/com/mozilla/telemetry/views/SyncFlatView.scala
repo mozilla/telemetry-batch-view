@@ -2,7 +2,6 @@ package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.heka.Dataset
 import com.mozilla.telemetry.utils.{S3Store, SyncPingConversion, getOrCreateSparkSession}
-import org.apache.spark.{SparkConf, SparkContext}
 import org.joda.time.{DateTime, Days, format}
 import org.json4s.jackson.JsonMethods.parse
 import org.json4s.string2JsonInput
@@ -38,10 +37,8 @@ object SyncFlatView {
     }
 
     // Set up Spark
-    val sparkConf = new SparkConf().setAppName(jobName)
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
-    implicit val sc = new SparkContext(sparkConf)
     val spark = getOrCreateSparkSession("SyncFlatEngineView")
+    implicit val sc = spark.sparkContext
     val hadoopConf = sc.hadoopConfiguration
 
     // We want to end up with reasonably large parquet files on S3.
@@ -131,6 +128,6 @@ object SyncFlatView {
       println("=======================================================================================")
     }
 
-    sc.stop()
+    spark.stop()
   }
 }

@@ -4,7 +4,6 @@ import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.utils._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
-import org.apache.spark.{SparkConf, SparkContext}
 import org.joda.time.{DateTime, Days, format}
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods.parse
@@ -40,10 +39,8 @@ object SyncEventView {
     }
 
     // Set up Spark
-    val sparkConf = new SparkConf().setAppName(jobName)
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
-    implicit val sc = new SparkContext(sparkConf)
     val spark = getOrCreateSparkSession("SyncEventView")
+    implicit val sc = spark.sparkContext
     val hadoopConf = sc.hadoopConfiguration
 
     // We want to end up with reasonably large parquet files on S3.
@@ -117,7 +114,7 @@ object SyncEventView {
       println("=======================================================================================")
     }
 
-    sc.stop()
+    spark.stop()
   }
 
   // Convert the given Heka message containing a "sync" ping with event data
