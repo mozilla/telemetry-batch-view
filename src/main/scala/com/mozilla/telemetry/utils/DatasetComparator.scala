@@ -38,7 +38,7 @@ object DatasetComparator {
   def getDataFrame(spark: SparkSession, view: ScallopOption[String], bucket: ScallopOption[String], dataPath: String, dateField: String, date: String, where: ScallopOption[String]): DataFrame = {
     val df = view.get match {
       case Some(t) => spark.sql(s"SELECT * FROM $t").where(s"$dateField = '$date'")
-      case _ => spark.read.parquet(s"s3://${bucket()}/$dataPath/$dateField=$date")
+      case _ => spark.read.option("mergeSchema", "true").parquet(s"s3://${bucket()}/$dataPath/$dateField=$date")
     }
     where.get match {
       case Some(clause) => df.where(clause)
@@ -69,15 +69,21 @@ object DatasetComparator {
     }
 
     // compare null count in each column
+    val intersectCols = (original.columns.toSet & test.columns.toSet).toSeq
+
+    val query = intersectCols.map(col => s"sum(cast(($col is null) as int)) as $col")
+    val originalNulls = original.selectExpr(query:_*).first()
+    val testNulls = test.selectExpr(query:_*).first()
+
+    for ((col, (original, test)) <- intersectCols zip (originalNulls.toSeq zip testNulls.toSeq)) {
+      if (original != test)  {
+        println(s"Wrong number of null values in '$col'. Expected $original. Got $test")
+        same = false
+      }
+    }
+
     original.columns.foreach{ col =>
-      if (test.columns contains col) {
-        val originalNulls = original.filter(s"$col is null").count
-        val testNulls = test.filter(s"$col is null").count
-        if (originalNulls != testNulls) {
-          println(s"Wrong number of null values in '$col'. Expected $originalNulls. Got $testNulls")
-          same = false
-        }
-      } else {
+      if (!(test.columns contains col)) {
         println(s"Missing column '$col'.")
         same = false
       }
