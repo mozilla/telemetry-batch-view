@@ -1,7 +1,8 @@
 package com.mozilla.telemetry
 
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import com.mozilla.telemetry.views.MainEventsView
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{FlatSpec, Matchers}
 
@@ -42,10 +43,7 @@ class MainEventsViewTest extends FlatSpec with Matchers{
     val sc = new SparkContext(sparkConf)
     sc.setLogLevel("WARN")
 
-    val spark = SparkSession
-      .builder()
-      .appName("MainEventsViewTest")
-      .getOrCreate()
+    val spark = getOrCreateSparkSession("MainEventsViewTest")
 
     import spark.implicits._
 

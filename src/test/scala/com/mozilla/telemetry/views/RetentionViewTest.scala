@@ -1,9 +1,10 @@
 package com.mozilla.telemetry
 
-import com.mozilla.telemetry.views.RetentionView
 import com.mozilla.telemetry.utils.UDFs._
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
+import com.mozilla.telemetry.views.RetentionView
 import org.apache.spark.sql.functions.{col, expr}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 case class ProcessedRetentionRow(
@@ -30,11 +31,7 @@ case class ProcessedRetentionRow(
 
 
 class RetentionViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
-  val spark: SparkSession =
-    SparkSession.builder()
-      .appName("Retention Aggregate Test")
-      .master("local[*]")
-      .getOrCreate()
+  val spark: SparkSession = getOrCreateSparkSession("Retention Aggregate Test")
   spark.registerUDFs
 
   val sample = ProcessedRetentionRow(

@@ -1,8 +1,7 @@
 package com.mozilla.telemetry
 
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import com.mozilla.telemetry.views.AddonsView
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{FlatSpec, Matchers}
 
 case class Addon(addon_id: String,
@@ -31,11 +30,7 @@ case class PartialMain(document_id: String,
 
 class AddonsViewTest extends FlatSpec with Matchers{
   "Addon records" can "be extracted from MainSummary" in {
-    val spark = SparkSession
-      .builder()
-      .appName("AddonsViewTest")
-      .master("local[1]")
-      .getOrCreate()
+    val spark = getOrCreateSparkSession("AddonsViewTest")
 
     import spark.implicits._
 

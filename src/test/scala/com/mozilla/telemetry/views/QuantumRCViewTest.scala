@@ -1,8 +1,8 @@
 package com.mozilla.telemetry
 
 import com.mozilla.telemetry.utils.UDFs._
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import com.mozilla.telemetry.views.QuantumRCView
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
@@ -114,11 +114,7 @@ object MainSummarySubmissions {
 }
 
 class QuantumReleaseCriteriaViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
-  private val spark = SparkSession
-    .builder()
-    .appName("QuantumRCViewTest")
-    .master("local[*]")
-    .getOrCreate()
+  private val spark = getOrCreateSparkSession("QuantumRCViewTest")
 
   import spark.implicits._
   spark.registerUDFs

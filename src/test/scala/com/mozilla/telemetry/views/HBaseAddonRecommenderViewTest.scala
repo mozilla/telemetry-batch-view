@@ -1,10 +1,10 @@
 package com.mozilla.telemetry.views
 
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import org.apache.hadoop.hbase.client.HBaseAdmin
-import org.apache.spark.sql.SparkSession
 import org.joda.time.DateTime
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import org.scalatest.tagobjects.Slow
+import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import unicredit.spark.hbase._
 
 case class TestMainSummaryPing(client_id: Option[String],
@@ -29,7 +29,7 @@ class HBaseAddonRecommenderViewTest extends FlatSpec with Matchers with BeforeAn
   implicit lazy val hbaseConfig = HBaseConfig("hbase.fs.tmp.dir" -> "/tmp/hbase-test")
   lazy val admin = new HBaseAdmin(hbaseConfig.get)
 
-  implicit lazy val spark = SparkSession.builder().master("local[*]").appName("HBaseAddonRecommenderView").getOrCreate()
+  implicit lazy val spark = getOrCreateSparkSession("HBaseAddonRecommenderView")
   import spark.implicits._
 
   val now = DateTime.now

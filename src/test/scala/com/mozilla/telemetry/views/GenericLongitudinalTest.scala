@@ -1,6 +1,7 @@
 package com.mozilla.telemetry.views
 
-import org.apache.spark.sql.{Row, SparkSession}
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.types._
 import org.scalatest.FlatSpec
@@ -68,10 +69,7 @@ class GenericLongitudinalTest extends FlatSpec {
 
   val fixture = {
     new {
-      private val spark = SparkSession.builder()
-        .appName("Generic Longitudinal Test")
-        .master("local[1]")
-        .getOrCreate()
+      private val spark = getOrCreateSparkSession("Generic Longitudinal Test")
 
       private val sc = spark.sparkContext
       private val hiveContext = new HiveContext(sc)
