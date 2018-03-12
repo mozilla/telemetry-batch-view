@@ -1,136 +1,103 @@
 package com.mozilla.telemetry
 
-import com.mozilla.telemetry.utils.SyncPingConversion
+import com.mozilla.telemetry.utils.{SyncPingConversion, getOrCreateSparkSession}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.json4s.JsonAST.JNothing
-import org.json4s.{DefaultFormats, JValue, JObject}
-import org.scalatest.{FlatSpec, Matchers}
+import org.json4s.{DefaultFormats, JObject, JValue}
+import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 import scala.collection.mutable
 
-class SyncViewTest extends FlatSpec with Matchers{
+class SyncViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
+
+  var spark: SparkSession = _
+
   "Old Style SyncPing payload" can "be serialized" in {
-    val sparkConf = new SparkConf().setAppName("SyncPing")
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
-    val sc = new SparkContext(sparkConf)
     val ping = SyncViewTestPayloads.singleSyncPing
     implicit val formats = DefaultFormats
-    sc.setLogLevel("WARN")
-    try {
-      val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.singleSyncPing)
-      val sqlContext = new SQLContext(sc)
-      val rdd = sc.parallelize(row.toSeq)
+    val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.singleSyncPing)
+    val rdd = spark.sparkContext.parallelize(row.toSeq)
 
-      val dataframe = sqlContext.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
+    val dataframe = spark.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
 
-      // verify the contents.
-      dataframe.count() should be (1)
-      val checkRow = dataframe.first()
+    // verify the contents.
+    dataframe.count() should be(1)
+    val checkRow = dataframe.first()
 
-      checkRow.getAs[String]("app_build_id") should be ((ping \ "application" \ "buildId").extract[String])
-      checkRow.getAs[String]("app_display_version") should be ((ping \ "application" \ "displayVersion").extract[String])
-      checkRow.getAs[String]("app_name") should be ((ping \ "application" \ "name").extract[String])
-      checkRow.getAs[String]("app_version") should be ((ping \ "application" \ "version").extract[String])
-      checkRow.getAs[String]("app_channel") should be ((ping \ "application" \ "channel").extract[String])
+    checkRow.getAs[String]("app_build_id") should be((ping \ "application" \ "buildId").extract[String])
+    checkRow.getAs[String]("app_display_version") should be((ping \ "application" \ "displayVersion").extract[String])
+    checkRow.getAs[String]("app_name") should be((ping \ "application" \ "name").extract[String])
+    checkRow.getAs[String]("app_version") should be((ping \ "application" \ "version").extract[String])
+    checkRow.getAs[String]("app_channel") should be((ping \ "application" \ "channel").extract[String])
 
-      val payload = ping \ "payload"
-      checkRow.getAs[Long]("when") should be ((payload \ "when").extract[Long])
-      checkRow.getAs[String]("uid") should be ((payload \ "uid").extract[String])
-      checkRow.getAs[Long]("took") should be ((payload \ "took").extract[Long])
+    val payload = ping \ "payload"
+    checkRow.getAs[Long]("when") should be((payload \ "when").extract[Long])
+    checkRow.getAs[String]("uid") should be((payload \ "uid").extract[String])
+    checkRow.getAs[Long]("took") should be((payload \ "took").extract[Long])
 
-      val status = checkRow.getAs[GenericRowWithSchema]("status")
-      status.getAs[String]("service") should be ((payload \ "status" \ "service").extract[String])
-      status.getAs[String]("sync") should be ((payload \ "status" \ "sync").extract[String])
+    val status = checkRow.getAs[GenericRowWithSchema]("status")
+    status.getAs[String]("service") should be((payload \ "status" \ "service").extract[String])
+    status.getAs[String]("sync") should be((payload \ "status" \ "sync").extract[String])
 
-      val engines = checkRow.getAs[mutable.WrappedArray[GenericRowWithSchema]]("engines")
-      validateEngines(engines, (payload \ "engines").extract[List[JValue]])
-    } finally {
-      sc.stop()
-    }
+    val engines = checkRow.getAs[mutable.WrappedArray[GenericRowWithSchema]]("engines")
+    validateEngines(engines, (payload \ "engines").extract[List[JValue]])
   }
 
   "New Style SyncPing payload" can "be serialized" in {
-    val sparkConf = new SparkConf().setAppName("SyncPing")
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
-    val sc = new SparkContext(sparkConf)
-    sc.setLogLevel("WARN")
-    try {
-      val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.multiSyncPing)
-      val sqlContext = new SQLContext(sc)
-      val rdd = sc.parallelize(row.toSeq)
-      val dataframe = sqlContext.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
+    val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.multiSyncPing)
+    val rdd = spark.sparkContext.parallelize(row.toSeq)
+    val dataframe = spark.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
 
-      // verify the contents
-      validateMultiSyncPing(dataframe.collect(), SyncViewTestPayloads.multiSyncPing)
-    } finally {
-      sc.stop()
-    }
+    // verify the contents
+    validateMultiSyncPing(dataframe.collect(), SyncViewTestPayloads.multiSyncPing)
   }
 
   "SyncPing records" can "be round-tripped to parquet" in {
-    val sparkConf = new SparkConf().setAppName("SyncPing")
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
-    val sc = new SparkContext(sparkConf)
-    sc.setLogLevel("WARN")
-    try {
-      val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.multiSyncPing)
-      // Write a parquet file with the rows.
-      val sqlContext = new SQLContext(sc)
-      val rdd = sc.parallelize(row.toSeq)
-      val dataframe = sqlContext.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
-      val tempFile = com.mozilla.telemetry.utils.temporaryFileName()
-      dataframe.write.parquet(tempFile.toString)
-      // read it back in and verify it.
-      val localDataset = sqlContext.read.load(tempFile.toString)
-      localDataset.registerTempTable("sync")
-      val localDataframe = sqlContext.sql("SELECT * FROM sync")
-      validateMultiSyncPing(localDataframe.collect(), SyncViewTestPayloads.multiSyncPing)
-    } finally {
-      sc.stop()
-    }
+    val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.multiSyncPing)
+    // Write a parquet file with the rows.
+    val rdd = spark.sparkContext.parallelize(row.toSeq)
+    val dataframe = spark.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
+    val tempFile = com.mozilla.telemetry.utils.temporaryFileName()
+    dataframe.write.parquet(tempFile.toString)
+    // read it back in and verify it.
+    val localDataset = spark.read.load(tempFile.toString)
+    localDataset.createOrReplaceTempView("sync")
+    val localDataframe = spark.sql("SELECT * FROM sync")
+    validateMultiSyncPing(localDataframe.collect(), SyncViewTestPayloads.multiSyncPing)
   }
 
   "SyncPing records with validation and device data" can "be round-tripped to parquet" in {
-    val sparkConf = new SparkConf().setAppName("SyncPing")
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
-    val sc = new SparkContext(sparkConf)
-    sc.setLogLevel("WARN")
-    try {
-      val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.complexSyncPing)
-      // Write a parquet file with the rows.
-      val sqlContext = new SQLContext(sc)
-      val rdd = sc.parallelize(row.toSeq)
-      val dataframe = sqlContext.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
-      val tempFile = com.mozilla.telemetry.utils.temporaryFileName()
-      dataframe.write.parquet(tempFile.toString)
-      // read it back in and verify it.
-      val localDataset = sqlContext.read.load(tempFile.toString)
-      localDataset.registerTempTable("sync")
-      val localDataframe = sqlContext.sql("SELECT * FROM sync")
-      validateComplexSyncPing(localDataframe.collect(), SyncViewTestPayloads.complexSyncPing)
-    } finally {
-      sc.stop()
-    }
+    val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.complexSyncPing)
+    // Write a parquet file with the rows.
+    val rdd = spark.sparkContext.parallelize(row.toSeq)
+    val dataframe = spark.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
+    val tempFile = com.mozilla.telemetry.utils.temporaryFileName()
+    dataframe.write.parquet(tempFile.toString)
+    // read it back in and verify it.
+    val localDataset = spark.read.load(tempFile.toString)
+    localDataset.createOrReplaceTempView("sync")
+    val localDataframe = spark.sql("SELECT * FROM sync")
+    validateComplexSyncPing(localDataframe.collect(), SyncViewTestPayloads.complexSyncPing)
   }
 
   "SyncPing records with top level ids" can "come through as if they were not at the top level" in {
-    val sparkConf = new SparkConf().setAppName("SyncPing")
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
-    val sc = new SparkContext(sparkConf)
-    sc.setLogLevel("WARN")
-    try {
-      val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.multiSyncPingWithTopLevelIds)
-      // Write a parquet file with the rows.
-      val sqlContext = new SQLContext(sc)
-      val rdd = sc.parallelize(row.toSeq)
-      val dataframe = sqlContext.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
-      // Note: We intentionally validate with a *different* json object from the one we parsed.
-      validateMultiSyncPing(dataframe.collect(), SyncViewTestPayloads.multiSyncPing)
-    } finally {
-      sc.stop()
-    }
+    val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.multiSyncPingWithTopLevelIds)
+    // Write a parquet file with the rows.
+    val rdd = spark.sparkContext.parallelize(row.toSeq)
+    val dataframe = spark.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
+    // Note: We intentionally validate with a *different* json object from the one we parsed.
+    validateMultiSyncPing(dataframe.collect(), SyncViewTestPayloads.multiSyncPing)
+  }
+
+  override protected def beforeAll(): Unit = {
+    spark = getOrCreateSparkSession("SyncPing")
+    spark.sparkContext.setLogLevel("WARN")
+  }
+
+
+  override protected def afterAll(): Unit = {
+    spark.stop()
   }
 
   // A helper to validate rows created for engines against the source JSON payload
