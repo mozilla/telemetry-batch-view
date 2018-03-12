@@ -33,10 +33,9 @@ object AddonsView {
     }
 
     // Set up Spark
-    val sparkConf = new SparkConf().setAppName(jobName)
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
-    implicit val sc = new SparkContext(sparkConf)
-    val hadoopConf = sc.hadoopConfiguration
+    val spark = getOrCreateSparkSession("AddonsView")
+    implicit val sc: SparkContext = spark.sparkContext
+    val hadoopConf = spark.sparkContext.hadoopConfiguration
 
     // We want to end up with reasonably large parquet files on S3.
     val parquetSize = 512 * 1024 * 1024
@@ -49,7 +48,6 @@ object AddonsView {
     //   https://issues.apache.org/jira/browse/SPARK-15895
     hadoopConf.set("parquet.enable.summary-metadata", "false")
 
-    val spark = getOrCreateSparkSession("AddonsView")
 
     val outputBucket = conf.outputBucket()
     val inputBucket = conf.inputBucket.get.getOrElse(outputBucket)
@@ -81,7 +79,7 @@ object AddonsView {
       println("=======================================================================================")
     }
 
-    sc.stop()
+    spark.stop()
   }
 
   def addonsFromMain(mainSummaryData: DataFrame): DataFrame = {

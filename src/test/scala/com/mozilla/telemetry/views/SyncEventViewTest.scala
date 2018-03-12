@@ -2,7 +2,6 @@ package com.mozilla.telemetry
 
 import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import com.mozilla.telemetry.views.SyncEventConverter
-import org.apache.spark.{SparkConf, SparkContext}
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods.parse
 import org.scalatest.{FlatSpec, Matchers}
@@ -189,15 +188,12 @@ class SyncEventViewTest extends FlatSpec with Matchers{
     """.stripMargin)
 
   "Sync Events" can "be serialized" in {
-    val sparkConf = new SparkConf().setAppName("SyncEventViewTest")
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
-    val sc = new SparkContext(sparkConf)
     implicit val formats = DefaultFormats
-    sc.setLogLevel("WARN")
+    val spark = getOrCreateSparkSession("SyncEventsViewTest")
+    spark.sparkContext.setLogLevel("WARN")
     try {
       val row = SyncEventConverter.pingToRows(sync_payload)
-      val spark = getOrCreateSparkSession("SyncEventsViewTest")
-      val rdd = sc.parallelize(row)
+      val rdd = spark.sparkContext.parallelize(row)
 
       val dataframe = spark.createDataFrame(rdd, SyncEventConverter.syncEventSchema)
 
@@ -233,20 +229,17 @@ class SyncEventViewTest extends FlatSpec with Matchers{
       checkRow.getAs[String]("event_device_version") should be ("55.0a1")
       checkRow.getAs[String]("event_device_os") should be ("WINNT")
     } finally {
-      sc.stop()
+      spark.stop()
     }
   }
 
   "Sync Events" can "contain os information for sending device" in {
-    val sparkConf = new SparkConf().setAppName("SyncEventViewTest")
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
-    val sc = new SparkContext(sparkConf)
+    val spark = getOrCreateSparkSession("SyncEventsViewTest")
+    spark.sparkContext.setLogLevel("WARN")
     implicit val formats = DefaultFormats
-    sc.setLogLevel("WARN")
     try {
       val row = SyncEventConverter.pingToRows(sync_payload_with_os)
-      val spark = getOrCreateSparkSession("SyncEventsViewTest")
-      val rdd = sc.parallelize(row)
+      val rdd = spark.sparkContext.parallelize(row)
 
       val dataframe = spark.createDataFrame(rdd, SyncEventConverter.syncEventSchema)
 
@@ -266,7 +259,7 @@ class SyncEventViewTest extends FlatSpec with Matchers{
       checkRow.getAs[String]("event_device_version") should be (null)
       checkRow.getAs[String]("event_device_os") should be (null)
     } finally {
-      sc.stop()
+      spark.stop()
     }
   }
 }

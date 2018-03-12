@@ -3,7 +3,6 @@ package com.mozilla.telemetry.views
 import com.mozilla.telemetry.utils.{Events, S3Store, getOrCreateSparkSession}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
-import org.apache.spark.{SparkConf, SparkContext}
 import org.joda.time.{DateTime, Days, format}
 import org.rogach.scallop._
 
@@ -34,9 +33,8 @@ object MainEventsView {
     }
 
     // Set up Spark
-    val sparkConf = new SparkConf().setAppName(jobName)
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
-    implicit val sc = new SparkContext(sparkConf)
+    val spark = getOrCreateSparkSession("EventsView")
+    implicit val sc = spark.sparkContext
     val hadoopConf = sc.hadoopConfiguration
 
     // We want to end up with reasonably large parquet files on S3.
@@ -50,7 +48,6 @@ object MainEventsView {
     //   https://issues.apache.org/jira/browse/SPARK-15895
     hadoopConf.set("parquet.enable.summary-metadata", "false")
 
-    val spark = getOrCreateSparkSession("EventsView")
 
     val outputBucket = conf.outputBucket()
     val inputBucket = conf.inputBucket.get.getOrElse(outputBucket)
@@ -81,7 +78,7 @@ object MainEventsView {
       println(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
       println("=======================================================================================")
     }
-    sc.stop()
+    spark.stop()
   }
 
   def eventsFromMain(mainSummaryData: DataFrame, sampleId: Option[String]): DataFrame = {

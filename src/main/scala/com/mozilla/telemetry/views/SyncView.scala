@@ -2,7 +2,7 @@ package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.heka.Dataset
 import com.mozilla.telemetry.utils.{S3Store, SyncPingConversion, getOrCreateSparkSession}
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkContext
 import org.joda.time.{DateTime, Days, format}
 import org.json4s.jackson.JsonMethods.parse
 import org.json4s.string2JsonInput
@@ -38,11 +38,9 @@ object SyncView {
     }
 
     // Set up Spark
-    val sparkConf = new SparkConf().setAppName(jobName)
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
-    implicit val sc = new SparkContext(sparkConf)
-    val spark = getOrCreateSparkSession("SyncView")
-    val hadoopConf = sc.hadoopConfiguration
+    val spark = getOrCreateSparkSession(jobName)
+    implicit val sc: SparkContext = spark.sparkContext
+    val hadoopConf = spark.sparkContext.hadoopConfiguration
 
     // We want to end up with reasonably large parquet files on S3.
     val parquetSize = 256 * 1024 * 1024
@@ -58,9 +56,9 @@ object SyncView {
       println("=======================================================================================")
       println(s"BEGINNING JOB $jobName $schemaVersion FOR $currentDateString")
 
-      val ignoredCount = sc.longAccumulator("Number of Records Ignored")
-      val processedCount = sc.longAccumulator("Number of Records Processed")
-      val failedCount = sc.longAccumulator("Number of Records Failed")
+      val ignoredCount = spark.sparkContext.longAccumulator("Number of Records Ignored")
+      val processedCount = spark.sparkContext.longAccumulator("Number of Records Processed")
+      val failedCount = spark.sparkContext.longAccumulator("Number of Records Failed")
 
       val messages = Dataset("telemetry")
       .where("sourceName") {
@@ -130,7 +128,7 @@ object SyncView {
       println("=======================================================================================")
     }
 
-    sc.stop()
+    spark.stop()
   }
 
 }
