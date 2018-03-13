@@ -1,15 +1,16 @@
 package com.mozilla.telemetry.views
 
+import com.mozilla.telemetry.heka.Dataset
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Row, SQLContext, SaveMode}
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.util.LongAccumulator
 import org.joda.time._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.rogach.scallop._
-import com.mozilla.telemetry.heka.Dataset
 
 
 object CrashAggregateView {
@@ -34,10 +35,8 @@ object CrashAggregateView {
     }
 
     // set up Spark
-    val sparkConf = new SparkConf().setAppName("CrashAggregateVie")
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
-    implicit val sc = new SparkContext(sparkConf)
-    val sqlContext = new SQLContext(sc)
+    val spark = getOrCreateSparkSession("CrashAggregateVie")
+    implicit val sc = spark.sparkContext
     val hadoopConf = sc.hadoopConfiguration
     hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
 
@@ -72,7 +71,7 @@ object CrashAggregateView {
 
       // create a dataframe containing all the crash aggregates
       val schema = buildSchema()
-      val records = sqlContext.createDataFrame(rowRDD.coalesce(1), schema)
+      val records = spark.createDataFrame(rowRDD.coalesce(1), schema)
 
       // upload the resulting aggregate Spark records to S3
       records.write.mode(SaveMode.Overwrite).parquet(s"s3://${conf.outputBucket()}/crash_aggregates/v1/submission_date=$currentDateString")
@@ -84,7 +83,7 @@ object CrashAggregateView {
       println(s"${content_crash_ignored.value} content crash pings ignored")
       println("=======================================================================================")
 
-      sc.stop()
+      spark.stop()
     }
   }
 

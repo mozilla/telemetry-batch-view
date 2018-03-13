@@ -1,24 +1,18 @@
 package com.mozilla.telemetry.views
-import java.io.PrintWriter
 
+import com.mozilla.telemetry.metrics.{HistogramsClass, ScalarsClass}
 import com.mozilla.telemetry.parquet.ParquetFile
-import com.mozilla.telemetry.metrics.{ScalarsClass, HistogramsClass}
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
-import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.Row
 import org.json4s.JsonDSL._
-import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{FlatSpec, Matchers, PrivateMethodTester}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.WrappedArray
 import scala.io.Source
-
-import org.apache.avro.io.EncoderFactory
-import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, GenericRecord, GenericRecordBuilder}
-import java.io.ByteArrayOutputStream
 
 class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
   val ParentConstant = 42
@@ -245,13 +239,8 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       val payloads = for (i <- 1 to 10) yield createPayload(i)
       private val dupes = for (i <- 1 to 10) yield createPayload(1)
 
-      private val sparkConf = new SparkConf().setAppName("Longitudinal")
-      sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
-
-      private val sc = new SparkContext(sparkConf)
-      sc.setLogLevel("WARN")
-
-      private val sqlContext = new SQLContext(sc)
+      val spark = getOrCreateSparkSession("Longitudinal")
+      spark.sparkContext.setLogLevel("WARN")
 
       // Opt-out only schema
       val optoutHistogramDefs = histograms.definitions(includeOptin = false)
@@ -262,7 +251,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       private val optoutPath = ParquetFile.serialize(List(optoutRecord).toIterator, optoutSchema)
       private val optoutFilename = optoutPath.toString.replace("file:", "")
 
-      val optoutRows = sqlContext.read.load(optoutFilename).collect()
+      val optoutRows = spark.read.load(optoutFilename).collect()
       val optoutRow =  optoutRows(0)
 
       // Opt-out and Opt-in schema
@@ -274,7 +263,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       private val optinPath = ParquetFile.serialize(List(optinRecord).toIterator, optinSchema)
       private val optinFilename = optinPath.toString.replace("file:", "")
 
-      val optinRows = sqlContext.read.load(optinFilename).collect()
+      val optinRows = spark.read.load(optinFilename).collect()
       val optinRow =  optinRows(0)
 
       private val nonOsPayload = createPayload(1) - "os"
@@ -282,10 +271,10 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       private val missingOsPath = ParquetFile.serialize(List(missingOsRecord).toIterator, optinSchema)
       private val missingOsFilename = missingOsPath.toString.replace("file:", "")
 
-      val missingOsRows = sqlContext.read.load(missingOsFilename).collect()
+      val missingOsRows = spark.read.load(missingOsFilename).collect()
       val missingOsRow = missingOsRows(0)
 
-      sc.stop()
+      spark.stop()
     }
   }
 

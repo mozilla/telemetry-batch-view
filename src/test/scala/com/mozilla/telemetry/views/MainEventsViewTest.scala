@@ -3,7 +3,6 @@ package com.mozilla.telemetry
 import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import com.mozilla.telemetry.views.MainEventsView
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{FlatSpec, Matchers}
 
 case class Event(timestamp: Long,
@@ -38,12 +37,8 @@ case class TestMainSummary(document_id: String,
 
 class MainEventsViewTest extends FlatSpec with Matchers{
   "Event records" can "be extracted from MainSummary" in {
-    val sparkConf = new SparkConf().setAppName("MainEventsViewTest")
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
-    val sc = new SparkContext(sparkConf)
-    sc.setLogLevel("WARN")
-
     val spark = getOrCreateSparkSession("MainEventsViewTest")
+    spark.sparkContext.setLogLevel("WARN")
 
     import spark.implicits._
 
