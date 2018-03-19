@@ -461,6 +461,17 @@ object ClientsDailyViewTestPayloads {
         ))),
         // an empty row
         MainSummaryRow(),
+        // a row of null counts
+        MainSummaryRow(search_counts = Some(List(
+          SearchCount(None, Some("abouthome"), None),
+          SearchCount(None, Some("contextmenu"), None),
+          SearchCount(None, Some("newtab"), None),
+          SearchCount(None, Some("searchbar"), None),
+          SearchCount(None, Some("system"), None),
+          SearchCount(None, Some("urlbar"), None),
+          SearchCount(None, Some("invalid"), None),
+          SearchCount(None, None, None)
+        ))),
         // a row of 1s and a row of 0s for good measure
         MainSummaryRow(search_counts = Some(List(
           SearchCount(None, Some("abouthome"), Some(1)),
