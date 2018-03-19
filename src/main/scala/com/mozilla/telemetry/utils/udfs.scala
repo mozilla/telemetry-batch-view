@@ -217,12 +217,14 @@ class AggSearchCounts(validSources: List[String], prefix: String = "search_count
     if (!input.isNullAt(0)) {
       input.getSeq(0).foreach { search_struct: Row =>
         val source: String = search_struct.getString(1)
-        val count: Long = search_struct.getLong(2)
-        if (count > 0 && validSources.contains(source)) {
-          buffer(0) = buffer.getLong(0) + count
-          // index is offset by one because the first field in the buffer is "all"
-          val index = validSources.indexOf(source) + 1
-          buffer(index) = buffer.getLong(index) + count
+        if (!search_struct.isNullAt(2)) {
+          val count: Long = search_struct.getLong(2)
+          if (count > 0 && validSources.contains(source)) {
+            buffer(0) = buffer.getLong(0) + count
+            // index is offset by one because the first field in the buffer is "all"
+            val index = validSources.indexOf(source) + 1
+            buffer(index) = buffer.getLong(index) + count
+          }
         }
       }
     }
