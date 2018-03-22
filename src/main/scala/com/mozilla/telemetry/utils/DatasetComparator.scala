@@ -18,6 +18,7 @@ object DatasetComparator {
     val testBucket = opt[String]("test-bucket", descr = "Source bucket for test data", required = false, default = Some("telemetry-test-bucket"))
     val testViewname = opt[String]("test-viewname", descr = "View to pull test data from. Cannot be used with --test-bucket", required = false)
     val where = opt[String]("where", descr = "Filter statement for the data to compare; e.g. \"sample_id = '0'\"", required = false)
+    val resultPath = opt[String]("result-path", descr = "S3 location to write results to in json format", required = false)
 
     conflicts(originalViewname, List(originalBucket))
     conflicts(testViewname, List(testBucket))
@@ -46,6 +47,8 @@ object DatasetComparator {
     }
   }
 
+  def selectColumns(select: String, df: DataFrame): DataFrame = df.select(select.split(",").map{c=>df.col(c)}:_*)
+
   def validate(spark: SparkSession, conf: Conf): Boolean = {
     val dataPath = conf.dataPath()
     val date = conf.date()
@@ -63,9 +66,12 @@ object DatasetComparator {
     // compare row counts
     val originalCount = original.count
     val testCount = test.count
+    val countChange = testCount - originalCount
     if (originalCount != testCount) {
       println(s"Wrong number of rows. Expected $originalCount. Got $testCount")
       same = false
+    } else {
+      println(s"Same number of rows. Expected $originalCount. Got $testCount")
     }
 
     // compare null count in each column
@@ -75,42 +81,55 @@ object DatasetComparator {
     val originalNulls = original.selectExpr(query:_*).first()
     val testNulls = test.selectExpr(query:_*).first()
 
-    for ((col, (original, test)) <- intersectCols zip (originalNulls.toSeq zip testNulls.toSeq)) {
+    val nullsChange: scala.collection.mutable.Map[String, Long] = scala.collection.mutable.Map()
+    for ((col: String, (original: Long, test: Long)) <- intersectCols zip (originalNulls.toSeq zip testNulls.toSeq)) {
+      nullsChange += (col -> (test - original))
       if (original != test)  {
         println(s"Wrong number of null values in '$col'. Expected $original. Got $test")
         same = false
+      } else {
+        println(s"Same number of null values in '$col'. Expected $original. Got $test")
       }
     }
 
-    original.columns.foreach{ col =>
+    val missingColumns = original.columns.flatMap { col =>
       if (!(test.columns contains col)) {
         println(s"Missing column '$col'.")
         same = false
+        Some(col)
+      } else {
+        println(s"Found column '$col'.")
+        None
       }
     }
 
     // check for extra columns
-    test.columns.foreach { col =>
+    val extraColumns = test.columns.flatMap { col =>
       if (!(original.columns contains col)) {
         println(s"Extra column '$col'.")
         same = false
+        Some(col)
+      } else {
+        println(s"Found column '$col'.")
+        None
       }
     }
 
     // compare comparable columns
-    val originalColumns = original.select(select)
-    val testColumns = test.select(select)
+    val originalColumns = selectColumns(select, original)
+    val testColumns = selectColumns(select, test)
 
     val missing = originalColumns.except(testColumns).count
-    if (missing > 0) {
-      println(s"$missing missing value(s)")
-      same = false
-    }
+    println(s"$missing missing value(s)")
+    if (missing > 0) { same = false }
 
     val extra = testColumns.except(originalColumns).count
-    if (extra > 0) {
-      println(s"$extra extra value(s)")
-      same = false
+    println(s"$extra extra value(s)")
+    if (extra > 0) { same = false }
+
+    if (conf.resultPath.isDefined) {
+      import spark.sqlContext.implicits._
+      List(Result(countChange, nullsChange, missingColumns, extraColumns, missing, extra, same)).toDF.write.mode("overwrite").json(conf.resultPath())
     }
 
     val status = if (same) "SUCCESS" else "FAILURE"
@@ -120,4 +139,14 @@ object DatasetComparator {
 
     same
   }
+
+  case class Result(
+    countChange: Long,
+    nullsChange: scala.collection.mutable.Map[String, Long],
+    missingColumns: Array[String],
+    extraColumns: Array[String],
+    missingValueCount: Long,
+    extraValueCount: Long,
+    same: Boolean
+  )
 }
