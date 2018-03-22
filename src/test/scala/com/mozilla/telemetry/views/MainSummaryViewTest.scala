@@ -1,5 +1,7 @@
 package com.mozilla.telemetry
 
+import java.time.format.DateTimeFormatter
+
 import com.mozilla.telemetry.heka.{File, Message, RichMessage}
 import com.mozilla.telemetry.metrics._
 import com.mozilla.telemetry.utils._
@@ -37,8 +39,10 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
 
   val defaultSchema = MainSummaryView.buildSchema(userPrefs, scalarDefs, histogramDefs)
 
-  val defaultMessageToRow = (m: Message) =>
-    MainSummaryView.messageToRow(m, scalarDefs, histogramDefs)
+  val defaultMessageToRow = (m: Message) => {
+    val doc = m.toJValue.get
+    MainSummaryView.messageToRow(doc, scalarDefs, histogramDefs)
+  }
 
   // Apply the given schema to the given potentially-generic Row.
   def applySchema(row: Row, schema: StructType): Row = new GenericRowWithSchema(row.toSeq.toArray, schema)
@@ -61,8 +65,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
               histogramDefinitions: List[(String, HistogramDefinition)] = histogramDefs,
               testInvalidFields: List[String] = Nil
              ): Unit = {
-
-    val summary = MainSummaryView.messageToRow(message, scalarDefinitions, histogramDefinitions, userPreferences)
+    val doc = message.toJValue.get
+    val summary = MainSummaryView.messageToRow(doc, scalarDefinitions, histogramDefinitions, userPreferences)
     val applied = applySchema(summary.get, MainSummaryView.buildSchema(userPreferences, scalarDefinitions, histogramDefinitions))
     val actual = applied.getValuesMap(expected.keys.toList)
 
@@ -121,7 +125,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
       var count = 0
       for (message <- File.parse(input)) {
         message.timestamp should be(1460036116829920000l)
-        message.`type`.get should be("telemetry")
+        message.dtype.get should be("telemetry")
         message.logger.get should be("telemetry")
 
         for (summary <- defaultMessageToRow(message)) {
@@ -198,6 +202,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
             "default_search_engine" -> "google",
             "devtools_toolbox_opened_count" -> 3,
             "client_submission_date" -> null,
+            "client_clock_skew" -> null,
+            "client_submission_latency" -> 855143,
             "push_api_notify" -> null,
             "web_notification_shown" -> null,
             "places_pages_count" -> 104849,
@@ -522,20 +528,20 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
 
   it can "be built" in {
     val userPrefsSchema = MainSummaryView.buildUserPrefsSchema(testUserPrefs)
-    userPrefsSchema.fields.length should be (3)
+    userPrefsSchema.fields.length should be(3)
 
-    userPrefsSchema.fieldNames should be (List("user_pref_p1", "user_pref_p2", "user_pref_p3_messy"))
+    userPrefsSchema.fieldNames should be(List("user_pref_p1", "user_pref_p2", "user_pref_p3_messy"))
 
-    userPrefsSchema.fields(0).dataType should be (IntegerType)
-    userPrefsSchema.fields(1).dataType should be (BooleanType)
-    userPrefsSchema.fields(2).dataType should be (StringType)
+    userPrefsSchema.fields(0).dataType should be(IntegerType)
+    userPrefsSchema.fields(1).dataType should be(BooleanType)
+    userPrefsSchema.fields(2).dataType should be(StringType)
   }
 
   it can "be added to MainSummary schema" in {
     val schemaWithPrefs = MainSummaryView.buildSchema(testUserPrefs, List(), List())
 
-    schemaWithPrefs.fieldNames.contains("user_pref_p3_messy") should be (true)
-    schemaWithPrefs.fieldNames.contains("user_pref_p4") should be (false)
+    schemaWithPrefs.fieldNames.contains("user_pref_p3_messy") should be(true)
+    schemaWithPrefs.fieldNames.contains("user_pref_p4") should be(false)
   }
 
   it can "be added to the top-level" in {
@@ -1699,6 +1705,242 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
       "antispyware" -> Seq("asw_1", "asw_2"),
       "firewall" -> null
     )
+    compare(message, expected)
+  }
+
+  "Malformed message" should "be ignored" in {
+
+    var message = RichMessage("1234", Map("documentId" -> "foo", "submissionDate" -> "1234"), None)
+    defaultMessageToRow(message).isDefined should be(true)
+
+    message = RichMessage("1234", Map("submissionDate" -> "1234"), None)
+    defaultMessageToRow(message) should be(None)
+
+    // broken messages should not be parsed
+    message = RichMessage("1234", Map("documentId" -> "foo", "submissionDate" -> "1234", "submission" -> "{broken json}"), None)
+    message.toJValue should be(None)
+  }
+
+  "Profile" can "be properly shown" in {
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.profile" ->
+          """
+            |{
+            |  "creationDate": 16446,
+            |  "resetDate": 16446
+            |}""".stripMargin),
+      None)
+
+    val expected = Map(
+      "profile_creation_date" -> 16446,
+      "profile_reset_date" -> 16446
+    )
+
+    compare(message, expected)
+  }
+
+  "CPU" can "be properly shown" in {
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.system" ->
+          """
+            |{
+            |  "cpu": {
+            |    "count": 16,
+            |    "cores": 8,
+            |    "vendor": "AMD",
+            |    "family": 1,
+            |    "model": 2,
+            |    "stepping": 3,
+            |    "l2cacheKB": 256,
+            |    "l3cacheKB": 2048,
+            |    "speedMHz": 2333
+            |  }
+            |}""".stripMargin),
+      None)
+
+    val expected = Map(
+      "cpu_count" -> 16,
+      "cpu_cores" -> 8,
+      "cpu_vendor" -> "AMD",
+      "cpu_family" -> 1,
+      "cpu_model" -> 2,
+      "cpu_stepping" -> 3,
+      "cpu_l2_cache_kb" -> 256,
+      "cpu_l3_cache_kb" -> 2048,
+      "cpu_speed_mhz" -> 2333
+    )
+
+    compare(message, expected)
+  }
+
+  "Session info" can "be properly shown" in {
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.info" ->
+          """
+            |{
+            |  "previousBuildId": "aa",
+            |  "sessionId": "a",
+            |  "subsessionId": "b",
+            |  "previousSessionId": "cc",
+            |  "previousSubsessionId": "dd",
+            |  "subsessionCounter": 1,
+            |  "profileSubsessionCounter": 2,
+            |  "sessionStartDate": "2017-02-22",
+            |  "subsessionStartDate": "2017-02-23",
+            |  "sessionLength": 60,
+            |  "subsessionLength": 30
+            |}""".stripMargin),
+      None)
+
+    val expected = Map(
+      "previous_build_id" -> "aa",
+      "session_id" -> "a",
+      "subsession_id" -> "b",
+      "previous_session_id" -> "cc",
+      "previous_subsession_id" -> "dd",
+      "subsession_counter" -> 1,
+      "profile_subsession_counter" -> 2,
+      "session_start_date" -> "2017-02-22",
+      "subsession_start_date" -> "2017-02-23",
+      "session_length" -> 60,
+      "subsession_length" -> 30
+    )
+
+    compare(message, expected)
+  }
+
+  "Update settings" can "be properly shown" in {
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.settings" ->
+          """
+            |{
+            |  "update": {
+            |     "channel": "release",
+            |     "enabled": true,
+            |     "autoDownload": true
+            |  }
+            |}""".stripMargin),
+      None)
+
+    val expected = Map(
+      "update_channel" -> "release",
+      "update_enabled" -> true,
+      "update_auto_download" -> true
+    )
+
+    compare(message, expected)
+  }
+
+  "Sandbox settings" can "be properly shown" in {
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.settings" ->
+          """
+            |{
+            |  "sandbox": {
+            |     "effectiveContentProcessLevel": 7
+            |  }
+            |}""".stripMargin),
+      None)
+
+    val expected = Map(
+      "sandbox_effective_content_process_level" -> 7
+    )
+
+    compare(message, expected)
+  }
+
+  "Graphics status" can "be properly shown" in {
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.system" ->
+          """
+            |{
+            |  "gfx": {
+            |    "features": {
+            |      "d3d11": { "status": "disabled" },
+            |      "d2d": { "status": "available" },
+            |      "gpuProcess": { "status": "unavailable" },
+            |      "advancedLayers": { "status": "blocked" }
+            |    }
+            |  }
+            |}""".stripMargin),
+      None)
+
+    val expected = Map(
+      "gfx_features_d3d11_status" -> "disabled",
+      "gfx_features_d2d_status" -> "available",
+      "gfx_features_gpu_process_status" -> "unavailable",
+      "gfx_features_advanced_layers_status" -> "blocked"
+    )
+
+    compare(message, expected)
+  }
+
+  "Date diffs" can "be calculated" in {
+    val diff = (d: String, t: Long) =>
+      MainSummaryView.diffDateAndTimestamp(d, DateTimeFormatter.ISO_DATE_TIME, t * 1e9.toLong)
+    diff("1970-01-01T00:00:00.000Z", 100).get should be(100)
+    diff("1970-01-0T00:00:00.000Z", 100) should be(None)
+    diff("Nope", 100) should be(None)
+    diff(null, 100) should be(None)
+
+    // 1518898956 is 2018-02-17T20:22:36.000Z
+    val ts = 1518898956691800000l
+    MainSummaryView.getClockSkew(Some("Sat, 17 Feb 2018 20:22:33 GMT"), ts).get should be(3)
+    MainSummaryView.getClockSkew(Some("Sat, 17 Feb 2018 20:22:06 GMT"), ts).get should be(30)
+    MainSummaryView.getClockSkew(Some("Sat, 67 Feb 2018 20:22:33 GMT"), ts) should be(None)
+    MainSummaryView.getClockSkew(Some("6"), ts) should be(None)
+    MainSummaryView.getClockSkew(None, ts) should be(None)
+    MainSummaryView.getClockSkew(null, ts) should be(None)
+
+    MainSummaryView.getSubmissionLatency(Some("2018-02-17T20:22:33.000Z"), ts).get should be(3)
+    MainSummaryView.getSubmissionLatency(Some("2018-02-15T20:22:33.000Z"), ts).get should be(3 + (2 * 24 * 60 * 60))
+    MainSummaryView.getSubmissionLatency(Some("2018-02-67T20:22:33.000Z"), ts) should be(None)
+    MainSummaryView.getSubmissionLatency(Some("6"), ts) should be(None)
+    MainSummaryView.getSubmissionLatency(None, ts) should be(None)
+  }
+
+  "Normalized OS Version" can "be properly shown" in {
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "normalizedOSVersion" -> "14.5.0"),
+      None)
+
+    val expected = Map("normalized_os_version" -> "14.5.0")
+
     compare(message, expected)
   }
 }

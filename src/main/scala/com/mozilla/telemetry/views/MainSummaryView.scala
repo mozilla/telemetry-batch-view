@@ -1,16 +1,19 @@
 package com.mozilla.telemetry.views
 
+import java.time._
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
+
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.Row
 import org.joda.time.{DateTime, Days, format}
 import org.json4s.JsonAST._
-import org.json4s.jackson.JsonMethods.parse
 import org.rogach.scallop._
-import com.mozilla.telemetry.heka.{Dataset, Message}
+import com.mozilla.telemetry.heka.Dataset
 import com.mozilla.telemetry.utils.{Addon, Attribution, Events,
   Experiment, getOrCreateSparkSession, MainPing, S3Store}
 import com.mozilla.telemetry.utils.{BooleanUserPref, IntegerUserPref, StringUserPref, UserPref}
-import org.json4s.{JValue, DefaultFormats}
+import org.json4s.{DefaultFormats, JValue}
 import com.mozilla.telemetry.metrics._
 
 import scala.util.{Success, Try}
@@ -25,7 +28,10 @@ object MainSummaryView {
     "A11Y_CONSUMERS" ::
     "CERT_VALIDATION_SUCCESS_BY_CA" ::
     "CYCLE_COLLECTOR_MAX_PAUSE" ::
+    "FX_NEW_WINDOW_MS" ::
     "FX_SEARCHBAR_SELECTED_RESULT_METHOD" ::
+    "FX_TAB_CLOSE_TIME_ANIM_MS" ::
+    "FX_TAB_SWITCH_TOTAL_E10S_MS" ::
     "FX_URLBAR_SELECTED_RESULT_INDEX" ::
     "FX_URLBAR_SELECTED_RESULT_INDEX_BY_TYPE" ::
     "FX_URLBAR_SELECTED_RESULT_METHOD" ::
@@ -37,6 +43,13 @@ object MainSummaryView {
     "HTTP_PAGELOAD_IS_SSL" ::
     "HTTP_TRANSACTION_IS_SSL" ::
     "INPUT_EVENT_RESPONSE_COALESCED_MS" ::
+    "MEMORY_TOTAL" ::
+    "MEMORY_UNIQUE" ::
+    "MEMORY_RESIDENT_FAST" ::
+    "MEMORY_DISTRIBUTION_AMONG_CONTENT" ::
+    "MEMORY_VSIZE" ::
+    "MEMORY_VSIZE_MAX_CONTIGUOUS" ::
+    "MEMORY_HEAP_ALLOCATED" ::
     "SEARCH_RESET_RESULT" ::
     "SSL_HANDSHAKE_RESULT" ::
     "SSL_HANDSHAKE_VERSION" ::
@@ -167,11 +180,12 @@ object MainSummaryView {
 
       if(!messages.isEmpty()){
         val rowRDD = messages.flatMap(m => {
-          messageToRow(m, scalarDefinitions, histogramDefinitions) match {
+          val row = m.toJValue.map(doc => messageToRow(doc, scalarDefinitions, histogramDefinitions))
+          row match {
             case None =>
               ignoredCount += 1
               None
-            case x =>
+            case Some(x) =>
               processedCount += 1
               x
           }
@@ -388,63 +402,95 @@ object MainSummaryView {
     }
   }
 
-  def asInt(v: JValue): Integer = v match {
-    case JInt(x) => x.toInt
-    case _ => null
+  def diffDateAndTimestamp(dateString: String, dateFormat: DateTimeFormatter, timestamp: Long): Option[Long] = {
+    val diff = for {
+      client <- Try(ZonedDateTime.parse(dateString, dateFormat))
+      server <- Try(ZonedDateTime.ofInstant(Instant.ofEpochSecond(timestamp / 1e9.toLong), ZoneOffset.UTC))
+    } yield ChronoUnit.SECONDS.between(client, server)
+    diff match {
+      case Success(d) => Some(d)
+      case _ => None
+    }
+  }
+
+  // Parse clientDateHeader as a RFC1123 date, compute the difference between
+  // that and `timestamp` (in nanos), return the difference in seconds.
+  def getClockSkew(clientDateHeader: Option[String], timestamp: Long) = {
+    clientDateHeader match {
+      case Some(s) => diffDateAndTimestamp(s, DateTimeFormatter.RFC_1123_DATE_TIME, timestamp)
+      case _ => None
+    }
+  }
+
+  // Parse creationDate field as an ISO date, compute the difference between
+  // that and `timestamp` (in nanos), return the difference in seconds.
+  def getSubmissionLatency(clientCreationDate: Option[String], timestamp: Long) = {
+    clientCreationDate match {
+      case Some(s) => diffDateAndTimestamp(s, DateTimeFormatter.ISO_DATE_TIME, timestamp)
+      case _ => None
+    }
   }
 
   // Convert the given Heka message containing a "main" ping
   // to a map containing just the fields we're interested in.
-  def messageToRow(message: Message, scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String, HistogramDefinition)], userPrefs: List[UserPref] = userPrefsList): Option[Row] = {
+  def messageToRow(doc: JValue, scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String, HistogramDefinition)], userPrefs: List[UserPref] = userPrefsList): Option[Row] = {
     try {
       implicit val formats = DefaultFormats
-      val fields = message.fieldsAsMap
 
-      // Don't compute the expensive stuff until we need it. We may skip a record
-      // due to missing required fields.
-      lazy val addons = parse(fields.getOrElse("environment.addons", "{}").asInstanceOf[String])
-      lazy val addonDetails = parse(fields.getOrElse("payload.addonDetails", "{}").asInstanceOf[String])
-      lazy val payload = parse(message.payload.getOrElse(fields.getOrElse("submission", "{}")).asInstanceOf[String])
-      lazy val application = payload \ "application"
-      lazy val build = parse(fields.getOrElse("environment.build", "{}").asInstanceOf[String])
-      lazy val profile = parse(fields.getOrElse("environment.profile", "{}").asInstanceOf[String])
-      lazy val partner = parse(fields.getOrElse("environment.partner", "{}").asInstanceOf[String])
-      lazy val settings = parse(fields.getOrElse("environment.settings", "{}").asInstanceOf[String])
-      lazy val system = parse(fields.getOrElse("environment.system", "{}").asInstanceOf[String])
-      lazy val info = parse(fields.getOrElse("payload.info", "{}").asInstanceOf[String])
-      lazy val simpleMeasures = parse(fields.getOrElse("payload.simpleMeasurements", "{}").asInstanceOf[String])
+      val environment = doc \ "environment"
+      val payload = doc \ "payload"
+      val meta = doc \ "meta"
 
-      lazy val histograms = MainPing.ProcessTypes.map{
-        _ match {
-          case "parent" => "parent" -> parse(fields.getOrElse("payload.histograms", "{}").asInstanceOf[String])
-          case p => p -> payload \ "payload" \ "processes" \ p \ "histograms"
-        }
-      }.toMap
+      // required fields
+      val documentId = (meta \ "documentId").extractOpt[String]
+      val submissionDate = (meta \ "submissionDate").extractOpt[String]
+      val timestamp = (meta \ "Timestamp").extractOpt[Long]
 
-      lazy val keyedHistograms = MainPing.ProcessTypes.map{
-        _ match {
-          case "parent" => "parent" -> parse(fields.getOrElse("payload.keyedHistograms", "{}").asInstanceOf[String])
-          case p => p -> payload \ "payload" \ "processes" \ p \ "keyedHistograms"
-        }
-      }.toMap
-
-      lazy val scalars = MainPing.ProcessTypes.map{
-        p => p -> payload \ "payload" \ "processes" \ p \ "scalars"
-      }.toMap
-
-      lazy val keyedScalars = MainPing.ProcessTypes.map{
-        p => p -> payload \ "payload" \ "processes" \ p \ "keyedScalars"
-      }.toMap
-
-      lazy val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms("parent") \ "WEAVE_CONFIGURED")
-      lazy val weaveDesktop = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_DESKTOP")
-      lazy val weaveMobile = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_MOBILE")
-
-      lazy val events = ("dynamic" :: MainPing.ProcessTypes).map {
-        p => p -> payload \ "payload" \ "processes" \ p \ "events"
+      if (documentId.isEmpty || submissionDate.isEmpty || timestamp.isEmpty) {
+        return None
       }
 
-      lazy val experiments = parse(fields.getOrElse("environment.experiments", "{}").asInstanceOf[String])
+      val addons = environment \ "addons"
+      val addonDetails = payload \ "addonDetails"
+      val application = doc \ "application"
+      val build = environment \ "build"
+      val experiments = environment \ "experiments"
+      val profile = environment \ "profile"
+      val partner = environment \ "partner"
+      val settings = environment \ "settings"
+      val system = environment \ "system"
+      val info = payload \ "info"
+      val simpleMeasures = payload \ "simpleMeasurements"
+
+      val histograms = MainPing.ProcessTypes.map {
+        _ match {
+          case "parent" => "parent" -> payload \ "histograms"
+          case p => p -> payload \ "processes" \ p \ "histograms"
+        }
+      }.toMap
+
+      val keyedHistograms = MainPing.ProcessTypes.map {
+        _ match {
+          case "parent" => "parent" -> payload \ "keyedHistograms"
+          case p => p -> payload \ "processes" \ p \ "keyedHistograms"
+        }
+      }.toMap
+
+      val scalars = MainPing.ProcessTypes.map {
+        p => p -> payload \ "processes" \ p \ "scalars"
+      }.toMap
+
+      val keyedScalars = MainPing.ProcessTypes.map {
+        p => p -> payload \ "processes" \ p \ "keyedScalars"
+      }.toMap
+
+      val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms("parent") \ "WEAVE_CONFIGURED")
+      val weaveDesktop = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_DESKTOP")
+      val weaveMobile = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_MOBILE")
+
+      val events = ("dynamic" :: MainPing.ProcessTypes).map {
+        p => p -> payload \ "processes" \ p \ "events"
+      }
 
       val sslHandshakeResultKeys = (0 to 671).map(_.toString)
 
@@ -456,183 +502,83 @@ object MainSummaryView {
       // Get the "sum" field from histogram h as an Int. Consider a
       // wonky histogram (one for which the "sum" field is not a
       // valid number) as null.
-      val hsum = (h: JValue) => h \ "sum" match {
-        case JInt(x) => x.toInt
-        case _ => null
-      }
+      @inline def hsum(h: JValue): Any = (h \ "sum").extractOpt[Int]
 
-      val row = Row(
+      val row = Row.fromSeq(Seq(
         // Row fields must match the structure in 'buildSchema'
-        fields.getOrElse("documentId", None) match {
-          case x: String => x
-          // documentId is required, and must be a string. If either
-          // condition is not satisfied, we skip this record.
-          case _ => return None
-        },
-        fields.getOrElse("clientId", None) match {
-          case x: String => x
-          case _ => null
-        },
-        fields.getOrElse("sampleId", None) match {
-          case x: Long => x
-          case x: Double => x.toLong
-          case _ => null
-        },
-        fields.getOrElse("appUpdateChannel", None) match {
-          case x: String => x
-          case _ => ""
-        },
-        fields.getOrElse("normalizedChannel", None) match {
-          case x: String => x
-          case _ => ""
-        },
-        fields.getOrElse("geoCountry", None) match {
-          case x: String => x
-          case _ => ""
-        },
-        fields.getOrElse("geoCity", None) match {
-          case x: String => x
-          case _ => ""
-        },
-        system \ "os" \ "name" match {
-          case JString(x) => x
-          case _ => null
-        },
-        system \ "os" \ "version" match {
-          case JString(x) => x
-          case JInt(x) => x.toString()
-          case _ => null
-        },
-        system \ "os" \ "servicePackMajor" match {
-          case JInt(x) => x.toLong
-          case _ => null
-        },
-        system \ "os" \ "servicePackMinor" match {
-          case JInt(x) => x.toLong
-          case _ => null
-        },
-        system \ "os" \ "windowsBuildNumber" match {
-          case JInt(x) => x.toLong
-          case _ => null
-        },
-        system \ "os" \ "windowsUBR" match {
-          case JInt(x) => x.toLong
-          case _ => null
-        },
-        system \ "os" \ "installYear" match {
-          case JInt(x) => x.toLong
-          case _ => null
-        },
-        system \ "isWow64" match {
-          case JBool(x) => x
-          case _ => null
-        },
-        system \ "memoryMB" match {
-          case JInt(x) => x.toInt
-          case _ => null
-        },
-        system \ "appleModelId" match {
-          case JString(x) => x
-          case _ => null
-        },
-        // unfortunately, JNull.extractOpt[Seq[String]] -> List()
-        (system \ "sec" \ "antivirus").extract[Option[Seq[String]]].orNull,
-        (system \ "sec" \ "antispyware").extract[Option[Seq[String]]].orNull,
-        (system \ "sec" \ "firewall").extract[Option[Seq[String]]].orNull,
-        profile \ "creationDate" match {
-          case JInt(x) => x.toLong
-          case _ => null
-        },
-        profile \ "resetDate" match {
-          case JInt(x) => x.toLong
-          case _ => null
-        },
-        info \ "subsessionStartDate" match {
-          case JString(x) => x
-          case _ => null
-        },
-        info \ "subsessionLength" match {
-          case JInt(x) => x.toLong
-          case _ => null
-        },
-        info \ "subsessionCounter" match {
-          case JInt(x) => x.toInt
-          case _ => null
-        },
-        info \ "profileSubsessionCounter" match {
-          case JInt(x) => x.toInt
-          case _ => null
-        },
-        payload \ "creationDate" match {
-          case JString(x) => x
-          case _ => null
-        },
-        partner \ "distributionId" match {
-          case JString(x) => x
-          case _ => null
-        },
-        fields.getOrElse("submissionDate", None) match {
-          case x: String => x
-          case _ => return None // required
-        },
-        weaveConfigured.orNull,
-        weaveDesktop.orNull,
-        weaveMobile.orNull,
-        application \ "buildId" match {
-          case JString(x) => x
-          case _ => null
-        },
-        application \ "displayVersion" match {
-          case JString(x) => x
-          case _ => null
-        },
-        application \ "name" match {
-          case JString(x) => x
-          case _ => null
-        },
-        application \ "version" match {
-          case JString(x) => x
-          case _ => null
-        },
-        message.timestamp, // required
-        build \ "buildId" match {
-          case JString(x) => x
-          case _ => null
-        },
-        build \ "version" match {
-          case JString(x) => x
-          case _ => null
-        },
-        build \ "architecture" match {
-          case JString(x) => x
-          case _ => null
-        },
-        settings \ "e10sEnabled" match {
-          case JBool(x) => x
-          case _ => null
-        },
-        settings \ "e10sMultiProcesses" match {
-          case JInt(x) => x.toLong
-          case _ => null
-        },
-        settings \ "locale" match {
-          case JString(x) => x
-          case _ => null
-        },
-        getAttribution(settings \ "attribution").orNull,
-        addons \ "activeExperiment" \ "id" match {
-          case JString(x) => x
-          case _ => null
-        },
-        addons \ "activeExperiment" \ "branch" match {
-          case JString(x) => x
-          case _ => null
-        },
-        info \ "reason" match {
-          case JString(x) => x
-          case _ => null
-        },
-        asInt(info \ "timezoneOffset"),
+        documentId,
+        (meta \ "clientId").extractOpt[String],
+        (meta \ "sampleId").extractOpt[Long],
+        (meta \ "appUpdateChannel").extractOpt[String],
+        (meta \ "normalizedChannel").extractOpt[String],
+        (meta \ "normalizedOSVersion").extractOpt[String],
+        (meta \ "geoCountry").extractOpt[String],
+        (meta \ "geoCity").extractOpt[String],
+        (system \ "os" \ "name").extractOpt[String],
+        (system \ "os" \ "version").extractOpt[String],
+        (system \ "os" \ "servicePackMajor").extractOpt[Long],
+        (system \ "os" \ "servicePackMinor").extractOpt[Long],
+        (system \ "os" \ "windowsBuildNumber").extractOpt[Long],
+        (system \ "os" \ "windowsUBR").extractOpt[Long],
+        (system \ "os" \ "installYear").extractOpt[Long],
+        (system \ "isWow64").extractOpt[Boolean],
+        (system \ "memoryMB").extractOpt[Int],
+        (system \ "cpu" \ "count").extractOpt[Int],
+        (system \ "cpu" \ "cores").extractOpt[Int],
+        (system \ "cpu" \ "vendor").extractOpt[String],
+        (system \ "cpu" \ "family").extractOpt[Int],
+        (system \ "cpu" \ "model").extractOpt[Int],
+        (system \ "cpu" \ "stepping").extractOpt[Int],
+        (system \ "cpu" \ "l2cacheKB").extractOpt[Int],
+        (system \ "cpu" \ "l3cacheKB").extractOpt[Int],
+        (system \ "cpu" \ "speedMHz").extractOpt[Int],
+        (system \ "gfx" \ "features" \ "d3d11" \ "status").extractOpt[String],
+        (system \ "gfx" \ "features" \ "d2d" \ "status").extractOpt[String],
+        (system \ "gfx" \ "features" \ "gpuProcess" \ "status").extractOpt[String],
+        (system \ "gfx" \ "features" \ "advancedLayers" \ "status").extractOpt[String],
+        (system \ "appleModelId").extractOpt[String],
+        (system \ "sec" \ "antivirus").extract[Option[Seq[String]]],
+        (system \ "sec" \ "antispyware").extract[Option[Seq[String]]],
+        (system \ "sec" \ "firewall").extract[Option[Seq[String]]],
+        (profile \ "creationDate").extractOpt[Long],
+        (profile \ "resetDate").extractOpt[Long],
+        (info \ "previousBuildId").extractOpt[String],
+        (info \ "sessionId").extractOpt[String],
+        (info \ "subsessionId").extractOpt[String],
+        (info \ "previousSessionId").extractOpt[String],
+        (info \ "previousSubsessionId").extractOpt[String],
+        (info \ "sessionStartDate").extractOpt[String],
+        (info \ "subsessionStartDate").extractOpt[String],
+        (info \ "sessionLength").extractOpt[Long],
+        (info \ "subsessionLength").extractOpt[Long],
+        (info \ "subsessionCounter").extractOpt[Int],
+        (info \ "profileSubsessionCounter").extractOpt[Int],
+        (doc \ "creationDate").extractOpt[String],
+        (partner \ "distributionId").extractOpt[String],
+        submissionDate,
+        weaveConfigured,
+        weaveDesktop,
+        weaveMobile,
+        (application \ "buildId").extractOpt[String],
+        (application \ "displayVersion").extractOpt[String],
+        (application \ "name").extractOpt[String],
+        (application \ "version").extractOpt[String],
+        timestamp, // required
+        (build \ "buildId").extractOpt[String],
+        (build \ "version").extractOpt[String],
+        (build \ "architecture").extractOpt[String],
+        (settings \ "e10sEnabled").extractOpt[Boolean],
+        (settings \ "e10sMultiProcesses").extractOpt[Long],
+        (settings \ "locale").extractOpt[String],
+        (settings \ "update" \ "channel").extractOpt[String],
+        (settings \ "update" \ "enabled").extractOpt[Boolean],
+        (settings \ "update" \ "autoDownload").extractOpt[Boolean],
+        getAttribution(settings \ "attribution"),
+        (settings \ "sandbox" \ "effectiveContentProcessLevel").extractOpt[Int],
+        (addons \ "activeExperiment" \ "id").extractOpt[String],
+        (addons \ "activeExperiment" \ "branch").extractOpt[String],
+        (info \ "reason").extractOpt[String],
+        (info \ "timezoneOffset").extractOpt[Int],
         hsum(keyedHistograms("parent") \ "SUBPROCESS_CRASHES_WITH_DUMP" \ "pluginhang"),
         hsum(keyedHistograms("parent") \ "SUBPROCESS_ABNORMAL_ABORT" \ "plugin"),
         hsum(keyedHistograms("parent") \ "SUBPROCESS_ABNORMAL_ABORT" \ "content"),
@@ -647,99 +593,62 @@ object MainSummaryView {
         hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "content-crash"),
         hsum(keyedHistograms("parent") \ "PROCESS_CRASH_SUBMIT_SUCCESS" \ "plugin-crash"),
         hsum(keyedHistograms("parent") \ "SUBPROCESS_KILL_HARD" \ "ShutDownKill"),
-        MainPing.countKeys(addons \ "activeAddons") match {
-          case Some(x) => x
-          case _ => null
-        },
-        MainPing.getFlashVersion(addons) match {
-          case Some(x) => x
-          case _ => null
-        },
-        application \ "vendor" match {
-          case JString(x) => x
-          case _ => null
-        },
-        settings \ "isDefaultBrowser" match {
-          case JBool(x) => x
-          case _ => null
-        },
-        settings \ "defaultSearchEngineData" \ "name" match {
-          case JString(x) => x
-          case _ => null
-        },
-        settings \ "defaultSearchEngineData" \ "loadPath" match {
-          case JString(x) => x
-          case _ => null
-        },
-        settings \ "defaultSearchEngineData" \ "origin" match {
-          case JString(x) => x
-          case _ => null
-        },
-        settings \ "defaultSearchEngineData" \ "submissionURL" match {
-          case JString(x) => x
-          case _ => null
-        },
-        settings \ "defaultSearchEngine" match {
-          case JString(x) => x
-          case _ => null
-        },
+        MainPing.countKeys(addons \ "activeAddons"),
+        MainPing.getFlashVersion(addons),
+        (application \ "vendor").extractOpt[String],
+        (settings \ "isDefaultBrowser").extractOpt[Boolean],
+        (settings \ "defaultSearchEngineData" \ "name").extractOpt[String],
+        (settings \ "defaultSearchEngineData" \ "loadPath").extractOpt[String],
+        (settings \ "defaultSearchEngineData" \ "origin").extractOpt[String],
+        (settings \ "defaultSearchEngineData" \ "submissionURL").extractOpt[String],
+        (settings \ "defaultSearchEngine").extractOpt[String],
         hsum(histograms("parent") \ "DEVTOOLS_TOOLBOX_OPENED_COUNT"),
-        fields.getOrElse("Date", None) match {
-          case x: String => x
-          case _ => null
-        },
-        MainPing.histogramToMean(histograms("parent") \ "PLACES_BOOKMARKS_COUNT").orNull,
-        MainPing.histogramToMean(histograms("parent") \ "PLACES_PAGES_COUNT").orNull,
+        (meta \ "Date").extractOpt[String],
+        getClockSkew((meta \ "Date").extractOpt[String], timestamp.get),
+        getSubmissionLatency((doc \ "creationDate").extractOpt[String], timestamp.get),
+        MainPing.histogramToMean(histograms("parent") \ "PLACES_BOOKMARKS_COUNT"),
+        MainPing.histogramToMean(histograms("parent") \ "PLACES_PAGES_COUNT"),
         hsum(histograms("parent") \ "PUSH_API_NOTIFY"),
         hsum(histograms("parent") \ "WEB_NOTIFICATION_SHOWN"),
 
         MainPing.keyedEnumHistogramToMap(keyedHistograms("parent") \ "POPUP_NOTIFICATION_STATS",
-          popupNotificationStatsKeys).orNull,
+          popupNotificationStatsKeys),
 
-        MainPing.getSearchCounts(keyedHistograms("parent") \ "SEARCH_COUNTS").orNull,
+        MainPing.getSearchCounts(keyedHistograms("parent") \ "SEARCH_COUNTS"),
 
-        getActiveAddons(addons \ "activeAddons").orNull,
-        getDisabledAddons(addons \ "activeAddons", addonDetails \ "XPI").orNull,
-        getTheme(addons \ "theme").orNull,
-        settings \ "blocklistEnabled" match {
-          case JBool(x) => x
-          case _ => null
-        },
-        settings \ "addonCompatibilityCheckEnabled" match {
-          case JBool(x) => x
-          case _ => null
-        },
-        settings \ "telemetryEnabled" match {
-          case JBool(x) => x
-          case _ => null
-        },
-        getOldUserPrefs(settings \ "userPrefs").orNull,
+        getActiveAddons(addons \ "activeAddons"),
+        getDisabledAddons(addons \ "activeAddons", addonDetails \ "XPI"),
+        getTheme(addons \ "theme"),
+        (settings \ "blocklistEnabled").extractOpt[Boolean],
+        (settings \ "addonCompatibilityCheckEnabled").extractOpt[Boolean],
+        (settings \ "telemetryEnabled").extractOpt[Boolean],
+        getOldUserPrefs(settings \ "userPrefs"),
 
-        Option(events.flatMap {case (p, e) => Events.getEvents(e, p)}).filter(!_.isEmpty).orNull,
+        Option(events.flatMap { case (p, e) => Events.getEvents(e, p) }).filter(!_.isEmpty),
 
         // bug 1339655
-        MainPing.enumHistogramBucketCount(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.head).orNull,
+        MainPing.enumHistogramBucketCount(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.head),
         MainPing.enumHistogramSumCounts(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys.tail),
         MainPing.enumHistogramToMap(histograms("parent") \ "SSL_HANDSHAKE_RESULT", sslHandshakeResultKeys),
 
         // bug 1382002 - use scalar version when available.
         Try(MainPing.getScalarByName(scalars, scalarDefinitions, "scalar_parent_browser_engagement_active_ticks")) match {
           case Success(x: Integer) => x
-          case _ => asInt (simpleMeasures \ "activeTicks")
+          case _ => (simpleMeasures \ "activeTicks").extractOpt[Int]
         },
 
         // bug 1353114 - payload.simpleMeasurements.*
-        asInt(simpleMeasures \ "main"),
+        (simpleMeasures \ "main").extractOpt[Int],
 
         // Use scalar version when available.
         Try(MainPing.getScalarByName(scalars, scalarDefinitions, "scalar_parent_timestamps_first_paint")) match {
           case Success(x: Integer) => x
-          case _ => asInt (simpleMeasures \ "firstPaint")
+          case _ => (simpleMeasures \ "firstPaint").extractOpt[Int]
         },
 
         // bug 1353114 - payload.simpleMeasurements.*
-        asInt(simpleMeasures \ "sessionRestored"),
-        asInt(simpleMeasures \ "totalTime"),
+        (simpleMeasures \ "sessionRestored").extractOpt[Int],
+        (simpleMeasures \ "totalTime").extractOpt[Int],
 
         // bug 1362520 - plugin notifications
         hsum(histograms("parent") \ "PLUGINS_NOTIFICATION_SHOWN"),
@@ -750,24 +659,18 @@ object MainSummaryView {
         hsum(histograms("parent") \ "PLUGINS_INFOBAR_DISMISSED"),
 
         // bug 1366253 - active experiments
-        getExperiments(experiments).orNull,
+        getExperiments(experiments),
 
-        settings \ "searchCohort" match {
-          case JString(x) => x
-          case _ => null
-        },
+        (settings \ "searchCohort").extractOpt[String],
 
         // bug 1366838 - Quantum Release Criteria
-        system \ "gfx" \ "features" \ "compositor" match {
-          case JString(x) => x
-          case _ => null
-        },
+        (system \ "gfx" \ "features" \ "compositor").extractOpt[String],
 
         getQuantumReady(
           settings \ "e10sEnabled",
           addons \ "activeAddons",
           addons \ "theme"
-        ).orNull,
+        ),
 
         MainPing.histogramToThresholdCount(histograms("parent") \ "GC_MAX_PAUSE_MS_2", 150),
         MainPing.histogramToThresholdCount(histograms("parent") \ "GC_MAX_PAUSE_MS_2", 250),
@@ -795,17 +698,21 @@ object MainSummaryView {
 
         MainPing.histogramToThresholdCount(histograms("parent") \ "GHOST_WINDOWS", 1),
         MainPing.histogramToThresholdCount(histograms("content") \ "GHOST_WINDOWS", 1)
-      )
+      ).map {
+        _ match {
+          case e: Option[Any] => e.orNull
+          case o => o
+        }
+      })
 
       val userPrefsRow = getUserPrefs(settings \ "userPrefs", userPrefs)
 
       val scalarRow = MainPing.scalarsToRow(
-        MainPing.ProcessTypes.map{ p => p -> (scalars(p) merge keyedScalars(p)) }.toMap,
+        MainPing.ProcessTypes.map { p => p -> (scalars(p) merge keyedScalars(p)) }.toMap,
         scalarDefinitions
       )
-
       val histogramRow = MainPing.histogramsToRow(
-        MainPing.ProcessTypes.map{ p => p -> (histograms(p) merge keyedHistograms(p)) }.toMap,
+        MainPing.ProcessTypes.map { p => p -> (histograms(p) merge keyedHistograms(p)) }.toMap,
         histogramDefinitions
       )
 
@@ -951,6 +858,7 @@ object MainSummaryView {
       StructField("sample_id", LongType, nullable = true), // Fields[sampleId]
       StructField("channel", StringType, nullable = true), // appUpdateChannel
       StructField("normalized_channel", StringType, nullable = true), // normalizedChannel
+      StructField("normalized_os_version", StringType, nullable = true), // normalizedOSVersion
       StructField("country", StringType, nullable = true), // geoCountry
       StructField("city", StringType, nullable = true), // geoCity
       StructField("os", StringType, nullable = true), // environment/system/os/name
@@ -965,6 +873,22 @@ object MainSummaryView {
       StructField("is_wow64", BooleanType, nullable = true), // environment/system/isWow64
 
       StructField("memory_mb", IntegerType, nullable = true), // environment/system/memoryMB
+
+      StructField("cpu_count", IntegerType, nullable = true), // environment/system/cpu/count
+      StructField("cpu_cores", IntegerType, nullable = true), // environment/system/cpu/cores
+      StructField("cpu_vendor", StringType, nullable = true), // environment/system/cpu/vendor
+      StructField("cpu_family", IntegerType, nullable = true), // environment/system/cpu/family
+      StructField("cpu_model", IntegerType, nullable = true), // environment/system/cpu/model
+      StructField("cpu_stepping", IntegerType, nullable = true), // environment/system/cpu/stepping
+      StructField("cpu_l2_cache_kb", IntegerType, nullable = true), // environment/system/cpu/l2cacheKB
+      StructField("cpu_l3_cache_kb", IntegerType, nullable = true), // environment/system/cpu/l3cacheKB
+      StructField("cpu_speed_mhz", IntegerType, nullable = true), // environment/system/cpu/speedMHz
+
+      StructField("gfx_features_d3d11_status", StringType, nullable = true), // environment/system/gfx/features/d3d11/status
+      StructField("gfx_features_d2d_status", StringType, nullable = true), // environment/system/gfx/features/d2d/status
+      StructField("gfx_features_gpu_process_status", StringType, nullable = true), // environment/system/gfx/features/gpuProcess/status
+      StructField("gfx_features_advanced_layers_status", StringType, nullable = true), // environment/system/gfx/features/advancedLayers/status
+
       StructField("apple_model_id", StringType, nullable = true), // environment/system/appleModelId
 
       // Bug 1431198 - Windows 8 only
@@ -975,7 +899,14 @@ object MainSummaryView {
       // TODO: use proper 'date' type for date columns.
       StructField("profile_creation_date", LongType, nullable = true), // environment/profile/creationDate
       StructField("profile_reset_date", LongType, nullable = true), // environment/profile/resetDate
+      StructField("previous_build_id", StringType, nullable = true), // info/previousBuildId
+      StructField("session_id", StringType, nullable = true), // info/sessionId
+      StructField("subsession_id", StringType, nullable = true), // info/subsessionId
+      StructField("previous_session_id", StringType, nullable = true), // info/previousSessionId
+      StructField("previous_subsession_id", StringType, nullable = true), // info/previousSubsessionId
+      StructField("session_start_date", StringType, nullable = true), // info/sessionStartDate
       StructField("subsession_start_date", StringType, nullable = true), // info/subsessionStartDate
+      StructField("session_length", LongType, nullable = true), // info/sessionLength
       StructField("subsession_length", LongType, nullable = true), // info/subsessionLength
       StructField("subsession_counter", IntegerType, nullable = true), // info/subsessionCounter
       StructField("profile_subsession_counter", IntegerType, nullable = true), // info/profileSubsessionCounter
@@ -1004,9 +935,11 @@ object MainSummaryView {
       StructField("e10s_multi_processes", LongType, nullable = true), // environment/settings/e10sMultiProcesses
 
       StructField("locale", StringType, nullable = true), // environment/settings/locale
-      // See bug 1331082
+      StructField("update_channel", StringType, nullable = true), // environment/settings/update/channel
+      StructField("update_enabled", BooleanType, nullable = true), // environment/settings/update/enabled
+      StructField("update_auto_download", BooleanType, nullable = true), // environment/settings/update/autoDownload
       StructField("attribution", buildAttributionSchema, nullable = true), // environment/settings/attribution/
-
+      StructField("sandbox_effective_content_process_level", IntegerType, nullable = true), // environment/settings/sandbox/effectiveContentProcessLevel
       StructField("active_experiment_id", StringType, nullable = true), // environment/addons/activeExperiment/id
       StructField("active_experiment_branch", StringType, nullable = true), // environment/addons/activeExperiment/branch
       StructField("reason", StringType, nullable = true), // info/reason
@@ -1046,6 +979,10 @@ object MainSummaryView {
 
       // client date per bug 1270505
       StructField("client_submission_date", StringType, nullable = true), // Fields[Date], the HTTP Date header sent by the client
+
+      // clock skew per bug 1270183
+      StructField("client_clock_skew", LongType, nullable = true), // Difference between client_submission_date and timestamp, in seconds
+      StructField("client_submission_latency", LongType, nullable = true), // Difference between creation_date and timestamp, in seconds
 
       // We use the mean for bookmarks and pages because we do not expect them to be
       // heavily skewed during the lifetime of a subsession. Using the median for a
