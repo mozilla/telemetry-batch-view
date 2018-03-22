@@ -1,13 +1,10 @@
 package com.mozilla.telemetry.views
 
 import com.github.nscala_time.time.Imports._
-import com.mozilla.spark.sql.hyperloglog.aggregates._
-import com.mozilla.spark.sql.hyperloglog.functions._
 import com.mozilla.telemetry.utils.UDFs._
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.SQLContext
 import org.rogach.scallop._
 
 /** Quantum Release Criteria View
@@ -112,10 +109,7 @@ object QuantumRCView {
   def main(args: Array[String]) {
     val conf = new Conf(args)
 
-    val spark = SparkSession
-      .builder()
-      .appName(s"$DatasetPrefix $Version Job")
-      .getOrCreate()
+    val spark = getOrCreateSparkSession(s"$DatasetPrefix $Version Job")
 
     spark.registerUDFs
 

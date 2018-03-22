@@ -1,13 +1,9 @@
 package com.mozilla.telemetry.views
 
-import org.rogach.scallop._
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.sql.SQLContext
-import com.mozilla.telemetry.utils.S3Store
-import com.mozilla.telemetry.utils.aggregation
-import org.joda.time.{Days, LocalDate, Seconds}
+import com.mozilla.telemetry.utils.{S3Store, aggregation, getOrCreateSparkSession}
 import org.joda.time.DateTimeConstants._
+import org.joda.time.{Days, LocalDate}
+import org.rogach.scallop._
 
 class IfDefinedOption[A](val from: Option[A]) {
   // A simple alias for an Option's map function.  We have a lot of
@@ -32,7 +28,7 @@ object Implicits {
   implicit def seq2SafeIterable[A](from: Iterable[A]) = new SafeIterable(from)
 }
 
-import Implicits._
+import com.mozilla.telemetry.views.Implicits._
 
 case class ActiveAddon (
   val blocklisted: Option[Boolean],
@@ -440,13 +436,10 @@ object CrossSectionalView {
   }
 
   def main(args: Array[String]): Unit = {
-    // Setup spark contexts
-    val sparkConf = new SparkConf().setAppName(this.getClass.getName)
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
-    val sc = new SparkContext(sparkConf)
+    // Setup spark
+    val spark = getOrCreateSparkSession(this.getClass.getName, enableHiveSupport = true)
 
-    val hiveContext = new HiveContext(sc)
-    import hiveContext.implicits._
+    import spark.implicits._
 
     // Parse command line options
     val opts = new Opts(args)
@@ -454,12 +447,12 @@ object CrossSectionalView {
     // Read local parquet data, if supplied
     if(opts.localTable.isSupplied) {
       val localTable = opts.localTable()
-      val data = hiveContext.read.parquet(localTable)
-      data.registerTempTable("longitudinal")
+      val data = spark.read.parquet(localTable)
+      data.createOrReplaceTempView("longitudinal")
     }
 
     // Generate and save the view
-    val ds = hiveContext
+    val ds = spark
       .sql("SELECT * FROM longitudinal")
       .selectExpr(
         "client_id", "normalized_channel", "submission_date", "geo_country",
@@ -494,6 +487,6 @@ object CrossSectionalView {
       println("="*80 + "\n" + ex + "\n" + "="*80)
     }
 
-    sc.stop()
+    spark.stop()
   }
 }

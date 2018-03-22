@@ -1,14 +1,10 @@
 package com.mozilla.telemetry.views
 
-import com.mozilla.telemetry.utils.CollectList
-
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.{DataFrame, SQLContext}
-import org.apache.spark.sql.hive.HiveContext
+import com.github.nscala_time.time.Imports._
+import com.mozilla.telemetry.utils.{CollectList, getOrCreateSparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
-
-import com.github.nscala_time.time.Imports._
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.rogach.scallop._
 
 object GenericLongitudinalView {
@@ -96,16 +92,12 @@ object GenericLongitudinalView {
   }
 
   def main(args: Array[String]): Unit = {
-    val sparkConf = new SparkConf().setAppName(this.getClass.getName)
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
-
-    val sc = new SparkContext(sparkConf)
-    val sqlContext = new HiveContext(sc)
+    val spark = getOrCreateSparkSession(this.getClass.getName, enableHiveSupport = true)
     val opts = new Opts(args)
 
     val numParquetFiles = opts.numParquetFiles.get match {
       case Some(n) => n
-      case _ => getInputTable(sqlContext, opts).rdd.getNumPartitions
+      case _ => getInputTable(spark.sqlContext, opts).rdd.getNumPartitions
     }
 
     val from = getFrom(opts)
@@ -118,17 +110,16 @@ object GenericLongitudinalView {
 
     val outputPath = opts.outputPath()
 
-    run(sqlContext, opts)
+    run(spark.sqlContext, opts)
       .repartition(numParquetFiles)
       .write
       .mode(opts.writeMode())
       .parquet(s"s3://$outputPath/$version")
 
-    sc.stop()
+    spark.stop()
   }
 
   def run(sqlContext: SQLContext, opts: Opts): DataFrame = {
-    import sqlContext.implicits._
 
     val df = getInputTable(sqlContext, opts)
     val tempTableName = "genericLongitudinalTempTable"

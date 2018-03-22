@@ -1,8 +1,7 @@
 package com.mozilla.telemetry
 
-import com.mozilla.telemetry.utils.Events
-import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.{SparkConf, SparkContext}
+import com.mozilla.telemetry.utils.{Events, getOrCreateSparkSession}
+import org.apache.spark.sql.Row
 import org.json4s.jackson.JsonMethods.parse
 import org.scalatest.{FlatSpec, Matchers}
 
@@ -60,17 +59,11 @@ class EventsTest extends FlatSpec with Matchers{
 
     // Apply events schema to event rows
     val schema = Events.buildEventSchema
-    val sparkConf = new SparkConf().setAppName("MainSummary")
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
-    val sc = new SparkContext(sparkConf)
-    val spark = SparkSession
-      .builder()
-      .appName("MainSummary")
-      .getOrCreate()
+    val spark = getOrCreateSparkSession("MainSummary")
     try {
-      noException should be thrownBy spark.createDataFrame(sc.parallelize(eventRows), schema).count()
+      noException should be thrownBy spark.createDataFrame(spark.sparkContext.parallelize(eventRows), schema).count()
     } finally {
-      sc.stop
+      spark.stop
     }
   }
 }

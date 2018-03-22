@@ -1,10 +1,11 @@
 package com.mozilla.telemetry
 
-import com.mozilla.telemetry.views.ExperimentAnalysisView
 import com.mozilla.telemetry.experiments.analyzers.CrashAnalyzer
-import org.apache.spark.sql.{Row, SparkSession}
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
+import com.mozilla.telemetry.views.ExperimentAnalysisView
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.col
-import org.scalatest.{FlatSpec, Matchers, BeforeAndAfterAll}
+import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 case class ExperimentSummaryRow(
   client_id: String,
@@ -31,11 +32,7 @@ case class ErrorAggRow(
 case class PermutationsRow(client_id: String)
 
 class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
-  val spark: SparkSession =
-    SparkSession.builder()
-    .appName("Experiment Aggregate Test")
-    .master("local[*]")
-    .getOrCreate()
+  val spark: SparkSession = getOrCreateSparkSession("Experiment Aggregate Test")
 
   val predata = Seq(
     ExperimentSummaryRow("a", "id1", "control", 1, Map(1 -> 1)),

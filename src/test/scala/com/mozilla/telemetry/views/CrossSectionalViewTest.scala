@@ -1,11 +1,9 @@
 package com.mozilla.telemetry
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.SQLContext
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import com.mozilla.telemetry.views._
-import CrossSectionalView._
-import org.scalatest.FlatSpec
 import org.apache.spark.sql.Dataset
+import org.scalatest.FlatSpec
 
 class CrossSectionalViewTest extends FlatSpec {
 
@@ -204,12 +202,9 @@ class CrossSectionalViewTest extends FlatSpec {
   }
 
   "CrossSectional" must "be calculated correctly" in {
-    val sparkConf = new SparkConf().setAppName("CrossSectionalTest")
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[1]"))
-    val sc = new SparkContext(sparkConf)
-    sc.setLogLevel("WARN")
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
+    val spark = getOrCreateSparkSession("CrossSectionalTest")
+    spark.sparkContext.setLogLevel("WARN")
+    import spark.implicits._
 
     val longitudinalDataset = Seq(
       getExampleLongitudinal("a"), getExampleLongitudinal("b")
@@ -222,7 +217,7 @@ class CrossSectionalViewTest extends FlatSpec {
     ).toDS
 
     assert(compareDS(actual, expected))
-    sc.stop()
+    spark.stop()
   }
 
   it must "summarize active_addons properly" in {

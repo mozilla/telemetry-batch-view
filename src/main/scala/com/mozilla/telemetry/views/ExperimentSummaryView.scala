@@ -19,7 +19,7 @@ object ExperimentSummaryView {
   def experimentsUrl: String = "https://normandy.services.mozilla.com/api/v1/recipe/"
   def experimentsUrlParams = List(("format", "json"))
   def experimentsQualifyingAction = List("preference-experiment", "opt-out-study")
-  def excludedExperiments = List("pref-flip-screenshots-release-1369150")
+  def excludedExperiments = List("pref-flip-screenshots-release-1369150", "pref-flip-search-composition-57-release-1413565")
   private case class NormandyRecipeBranch(ratio: Int, slug: String, value: Any)
   private case class NormandyRecipeArguments(branches: List[NormandyRecipeBranch],
                                              slug: Option[String],
