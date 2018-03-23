@@ -94,7 +94,8 @@ object MainSummaryView {
     BooleanUserPref("extensions.allow-non-mpc-extensions") ::
     BooleanUserPref("extensions.legacy.enabled") ::
     BooleanUserPref("browser.search.widget.inNavBar") ::
-    StringUserPref("general.config.filename") :: Nil
+    StringUserPref("general.config.filename") ::
+    StringUserPref("browser.search.region") :: Nil
 
 
   // Configuration for command line arguments
