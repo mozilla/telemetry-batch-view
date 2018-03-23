@@ -70,11 +70,11 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
     val applied = applySchema(summary.get, MainSummaryView.buildSchema(userPreferences, scalarDefinitions, histogramDefinitions))
     val actual = applied.getValuesMap(expected.keys.toList)
 
-    if (!testInvalidFields.isEmpty) {
+    testInvalidFields.foreach(invalidField => {
       intercept[IllegalArgumentException] {
-        applied.fieldIndex("noncurrent_histogram")
+        applied.fieldIndex(invalidField)
       }
-    }
+    })
 
     for ((f, v) <- expected) {
       withClue(s"$f:") {
@@ -372,7 +372,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
     (versionPattern findAllIn MainSummaryView.schemaVersion).mkString("Oops") should be(MainSummaryView.schemaVersion)
   }
 
-  "User prefs" can "be extracted" in {
+  "Depreciated: old-styled user prefs" can "be extracted" in {
     // Build top-level list of user_pref_*
     val fieldNames = MainSummaryView.buildUserPrefsSchema(userPrefs).fieldNames
 
@@ -526,7 +526,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
     compare(message, expected)
   }
 
-  it can "be built" in {
+  "User prefs" can "be built" in {
     val userPrefsSchema = MainSummaryView.buildUserPrefsSchema(testUserPrefs)
     userPrefsSchema.fields.length should be(3)
 
@@ -544,7 +544,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
     schemaWithPrefs.fieldNames.contains("user_pref_p4") should be(false)
   }
 
-  it can "be added to the top-level" in {
+  it can "be added to top level" in {
     val message = RichMessage(
       "1234",
       Map(
@@ -568,6 +568,39 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
     )
 
     compare(message, expected, testUserPrefs, testInvalidFields = List("user_pref_4"))
+  }
+
+  it should "only includes prefs in the whitelist" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.settings" ->
+          """
+            |  {
+            |  "userPrefs": {
+            |   "dom.ipc.processCount": 10,
+            |   "extensions.allow-non-mpc-extensions": false,
+            |   "extensions.legacy.enabled": false,
+            |   "browser.search.widget.inNavBar": true,
+            |   "general.config.filename": "file",
+            |   "browser.search.region": "US",
+            |   "ignored.user.pref": "foo"
+            |  }
+            |}""".stripMargin),
+      None)
+
+    val expected = Map(
+      "user_pref_dom_ipc_processcount" -> 10,
+      "user_pref_extensions_allow_non_mpc_extensions" -> false,
+      "user_pref_extensions_legacy_enabled" -> false,
+      "user_pref_browser_search_widget_innavbar" -> true,
+      "user_pref_general_config_filename" -> "file",
+      "user_pref_browser_search_region" -> "US"
+    )
+
+    compare(message, expected, testInvalidFields = List("user_pref_ignored_user_pref"))
   }
 
   "Stub attribution" can "be extracted" in {
