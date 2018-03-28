@@ -494,6 +494,10 @@ object MainSummaryView {
           case x: String => x
           case _ => ""
         },
+        fields.getOrElse("geoCityGeonameId", None) match {
+          case x: Int => x
+          case _ => null
+        },
         system \ "os" \ "name" match {
           case JString(x) => x
           case _ => null
@@ -953,6 +957,7 @@ object MainSummaryView {
       StructField("normalized_channel", StringType, nullable = true), // normalizedChannel
       StructField("country", StringType, nullable = true), // geoCountry
       StructField("city", StringType, nullable = true), // geoCity
+      StructField("city_geoname_id", IntegerType, nullable = true), // geoCityGeonameId
       StructField("os", StringType, nullable = true), // environment/system/os/name
       StructField("os_version", StringType, nullable = true), // environment/system/os/version
       StructField("os_service_pack_major", LongType, nullable = true), // environment/system/os/servicePackMajor
