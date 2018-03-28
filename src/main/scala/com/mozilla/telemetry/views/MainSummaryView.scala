@@ -514,6 +514,8 @@ object MainSummaryView {
         (meta \ "normalizedOSVersion").extractOpt[String],
         (meta \ "geoCountry").extractOpt[String],
         (meta \ "geoCity").extractOpt[String],
+        (meta \ "geoSubdivision1").extractOpt[String],
+        (meta \ "geoSubdivision2").extractOpt[String],
         (system \ "os" \ "name").extractOpt[String],
         (system \ "os" \ "version").extractOpt[String],
         (system \ "os" \ "servicePackMajor").extractOpt[Long],
@@ -861,6 +863,8 @@ object MainSummaryView {
       StructField("normalized_os_version", StringType, nullable = true), // normalizedOSVersion
       StructField("country", StringType, nullable = true), // geoCountry
       StructField("city", StringType, nullable = true), // geoCity
+      StructField("geo_subdivision1", StringType, nullable = true), // geoSubdivision1
+      StructField("geo_subdivision2", StringType, nullable = true), // geoSubdivision2
       StructField("os", StringType, nullable = true), // environment/system/os/name
       StructField("os_version", StringType, nullable = true), // environment/system/os/version
       StructField("os_service_pack_major", LongType, nullable = true), // environment/system/os/servicePackMajor
