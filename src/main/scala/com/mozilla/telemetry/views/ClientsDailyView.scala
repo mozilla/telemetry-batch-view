@@ -75,7 +75,13 @@ object ClientsDailyView {
      */
     aggregates
       .selectExpr(
-        aggregates.schema.map{c => if (c.name == "search_counts") "search_counts.*" else c.name}:_*
+        aggregates.schema.map{c =>
+          // expand search_counts
+          if (c.name == "search_counts") "search_counts.*"
+          // remove placeholder nulls from city_geoname_id
+          else if (c.name == "city_geoname_id") "IF(city_geoname_id != -1, city_geoname_id, NULL) as city_geoname_id"
+          else c.name
+        }:_*
       )
   }
 
@@ -120,8 +126,9 @@ object ClientsDailyView {
     aggFirst("app_version"),
     aggFirst("blocklist_enabled"),
     aggFirst("channel"),
-    aggFirst("city"),
-    aggFirst("country"),
+    aggFirst(expr("IF(country IS NOT NULL AND country != '??', IF(city IS NOT NULL, city, '??'), NULL)"), "city"),
+    aggFirst(expr("IF(country IS NOT NULL AND country != '??', IF(city_geoname_id IS NOT NULL, city_geoname_id, -1), NULL)"), "city_geoname_id"),
+    aggFirst(expr("IF(country IS NOT NULL AND country != '??', country, NULL)"), "country"),
     aggFirst("cpu_cores"),
     aggFirst("cpu_count"),
     aggFirst("cpu_family"),

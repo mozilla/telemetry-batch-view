@@ -23,6 +23,7 @@ object ClientsDailyViewTestPayloads {
     blocklist_enabled: Option[Boolean] = None,
     channel: Option[String] = None,
     city: Option[String] = None,
+    city_geoname_id: Option[Int] = None,
     client_id: Option[String] = Some("test"),
     country: Option[String] = None,
     cpu_cores: Option[Int] = None,
@@ -145,8 +146,6 @@ object ClientsDailyViewTestPayloads {
     app_version = sValue,
     blocklist_enabled = bValue,
     channel = sValue,
-    city = sValue,
-    country = sValue,
     cpu_cores = iValue,
     cpu_count = iValue,
     cpu_family = iValue,
@@ -208,8 +207,6 @@ object ClientsDailyViewTestPayloads {
     "app_version" -> sValue,
     "blocklist_enabled" -> bValue,
     "channel" -> sValue,
-    "city" -> sValue,
-    "country" -> sValue,
     "cpu_cores" -> iValue,
     "cpu_count" -> iValue,
     "cpu_family" -> iValue,
@@ -476,6 +473,21 @@ object ClientsDailyViewTestPayloads {
         "experiments['B']" -> "2",
         "experiments['C']" -> "3",
         "experiments['D']" -> "4"
+      )
+    ),
+    // test geo aggregates as a set on presence of country
+    (
+      List(
+        MainSummaryRow(),
+        MainSummaryRow(country = Some("??"), city = Some("Tilehurst"), city_geoname_id = Some(2635833)),
+        MainSummaryRow(country = Some("CA")),
+        MainSummaryRow(country = Some("GB"), city = Some("Tilehurst"), city_geoname_id = Some(2635833)),
+        MainSummaryRow()
+      ),
+      Map(
+        "country" -> "CA",
+        "city" -> "??",
+        "city_geoname_id" -> null
       )
     ),
     // test subsessions_started_on_this_day counts 1s
