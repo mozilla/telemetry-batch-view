@@ -66,7 +66,19 @@ object ClientsDailyView {
   }
 
   def extractDayAggregates(df: DataFrame): DataFrame = {
-    val aggregates = df
+    // add geo_subdivision{1,2} columns if missing
+    val df1 = if (df.columns.contains("geo_subdivision1")) {
+      df
+    } else {
+      df.withColumn("geo_subdivision1", expr("STRING(NULL)"))
+    }
+    val df2 = if (df1.columns.contains("geo_subdivision2")) {
+      df1
+    } else {
+      df1.withColumn("geo_subdivision2", expr("STRING(NULL)"))
+    }
+
+    val aggregates = df2
       .groupBy("client_id")
       .agg(fieldAggregators.head, fieldAggregators.tail:_*)
 
@@ -120,8 +132,8 @@ object ClientsDailyView {
     aggFirst("app_version"),
     aggFirst("blocklist_enabled"),
     aggFirst("channel"),
-    aggFirst("city"),
-    aggFirst("country"),
+    aggFirst(expr("IF(country IS NOT NULL AND country != '??', IF(city IS NOT NULL, city, '??'), NULL)"), "city"),
+    aggFirst(expr("IF(country IS NOT NULL AND country != '??', country, NULL)"), "country"),
     aggFirst("cpu_cores"),
     aggFirst("cpu_count"),
     aggFirst("cpu_family"),
@@ -154,6 +166,8 @@ object ClientsDailyView {
     aggMapFirst("experiments"),
     aggMean("first_paint"),
     aggFirst("flash_version"),
+    aggFirst(expr("IF(country IS NOT NULL AND country != '??', IF(geo_subdivision1 IS NOT NULL, geo_subdivision1, '??'), NULL)"), "geo_subdivision1"),
+    aggFirst(expr("IF(country IS NOT NULL AND country != '??', IF(geo_subdivision2 IS NOT NULL, geo_subdivision2, '??'), NULL)"), "geo_subdivision2"),
     aggFirst("gfx_features_advanced_layers_status"),
     aggFirst("gfx_features_d2d_status"),
     aggFirst("gfx_features_d3d11_status"),

@@ -58,6 +58,8 @@ object ClientsDailyViewTestPayloads {
     experiments: Option[scala.collection.Map[String,Option[String]]] = None,
     first_paint: Option[Int] = None,
     flash_version: Option[String] = None,
+    geo_subdivision1: Option[String] = None,
+    geo_subdivision2: Option[String] = None,
     gfx_features_advanced_layers_status: Option[String] = None,
     gfx_features_d2d_status: Option[String] = None,
     gfx_features_d3d11_status: Option[String] = None,
@@ -145,8 +147,6 @@ object ClientsDailyViewTestPayloads {
     app_version = sValue,
     blocklist_enabled = bValue,
     channel = sValue,
-    city = sValue,
-    country = sValue,
     cpu_cores = iValue,
     cpu_count = iValue,
     cpu_family = iValue,
@@ -208,8 +208,6 @@ object ClientsDailyViewTestPayloads {
     "app_version" -> sValue,
     "blocklist_enabled" -> bValue,
     "channel" -> sValue,
-    "city" -> sValue,
-    "country" -> sValue,
     "cpu_cores" -> iValue,
     "cpu_count" -> iValue,
     "cpu_family" -> iValue,
@@ -476,6 +474,53 @@ object ClientsDailyViewTestPayloads {
         "experiments['B']" -> "2",
         "experiments['C']" -> "3",
         "experiments['D']" -> "4"
+      )
+    ),
+    // test geo aggregates as a set on presence of country
+    (
+      List(
+        MainSummaryRow(),
+        MainSummaryRow(country = Some("??"), city = Some("Tilehurst"), geo_subdivision1 = Some("ENG"), geo_subdivision2 = Some("WBK")),
+        MainSummaryRow(country = Some("CA")),
+        MainSummaryRow(country = Some("US"), geo_subdivision1 = Some("WA")),
+        MainSummaryRow(country = Some("US"), city = Some("Portland"), geo_subdivision1 = Some("OR")),
+        MainSummaryRow(country = Some("GB"), city = Some("Tilehurst"), geo_subdivision1 = Some("ENG"), geo_subdivision2 = Some("WBK")),
+        MainSummaryRow()
+      ),
+      Map(
+        "country" -> "CA",
+        "city" -> "??",
+        "geo_subdivision1" -> "??",
+        "geo_subdivision2" -> "??"
+      )
+    ),
+    (
+      List(
+        MainSummaryRow(),
+        MainSummaryRow(country = Some("US"), geo_subdivision1 = Some("WA")),
+        MainSummaryRow(country = Some("US"), city = Some("Portland"), geo_subdivision1 = Some("OR")),
+        MainSummaryRow(country = Some("GB"), city = Some("Tilehurst"), geo_subdivision1 = Some("ENG"), geo_subdivision2 = Some("WBK")),
+        MainSummaryRow()
+      ),
+      Map(
+        "country" -> "US",
+        "city" -> "??",
+        "geo_subdivision1" -> "WA",
+        "geo_subdivision2" -> "??"
+      )
+    ),
+    (
+      List(
+        MainSummaryRow(),
+        MainSummaryRow(country = Some("US"), city = Some("Portland"), geo_subdivision1 = Some("OR")),
+        MainSummaryRow(country = Some("GB"), city = Some("Tilehurst"), geo_subdivision1 = Some("ENG"), geo_subdivision2 = Some("WBK")),
+        MainSummaryRow()
+      ),
+      Map(
+        "country" -> "US",
+        "city" -> "Portland",
+        "geo_subdivision1" -> "OR",
+        "geo_subdivision2" -> "??"
       )
     ),
     // test subsessions_started_on_this_day counts 1s

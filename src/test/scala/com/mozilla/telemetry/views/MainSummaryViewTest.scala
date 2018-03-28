@@ -140,6 +140,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
             "normalized_channel" -> "nightly",
             "country" -> "??",
             "city" -> "??",
+            "geo_subdivision1" -> null,
+            "geo_subdivision2" -> null,
             "os" -> "Darwin",
             "os_version" -> "15.3.0",
             "os_service_pack_major" -> null,
