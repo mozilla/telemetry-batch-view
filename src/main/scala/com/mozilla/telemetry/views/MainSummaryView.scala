@@ -109,6 +109,7 @@ object MainSummaryView {
     val docType = opt[String]("doc-type", descr = "DocType of pings conforming to main ping schema", required=false, default=Some("main"))
     // 500,000 rows yields ~ 200MB files in snappy+parquet
     val maxRecordsPerFile = opt[Int]("max-records-per-file", descr = "Max number of rows to write to output files before splitting", required = false, default=Some(500000))
+    val alignment = opt[Int]("alignment", descr = "Number of input partitions as a multiple `defaultParallelism`", required = false, default=None)
     verify()
   }
 
@@ -161,6 +162,9 @@ object MainSummaryView {
         case _ => "telemetry"
       }
 
+      // if `None`, then data is unaligned at 268MB chunks
+      val numPartitions = conf.alignment.get.map(n => n*sc.defaultParallelism)
+
       val messages = Dataset(telemetrySource)
         .where("sourceName") {
           case "telemetry" => true
@@ -176,7 +180,7 @@ object MainSummaryView {
           case channel => filterChannel.isEmpty || channel == filterChannel.get
         }.where("appVersion") {
           case v => filterVersion.isEmpty || v == filterVersion.get
-        }.records(conf.limit.get)
+        }.records(conf.limit.get, numPartitions)
 
       if(!messages.isEmpty()){
         val rowRDD = messages.flatMap(m => {
