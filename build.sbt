@@ -29,7 +29,7 @@ lazy val root = (project in file(".")).
     libraryDependencies += "org.apache.hadoop" % "hadoop-client" % "2.7.1" excludeAll(ExclusionRule(organization = "javax.servlet")),
     libraryDependencies += "org.apache.hadoop" % "hadoop-aws" % "2.7.1" excludeAll(ExclusionRule(organization = "javax.servlet")),
     libraryDependencies += "com.github.nscala-time" %% "nscala-time" % "2.10.0",
-    libraryDependencies += "org.rogach" %% "scallop" % "1.0.2",
+    libraryDependencies += "org.rogach" %% "scallop" % "3.1.2",
     libraryDependencies += "org.apache.spark" %% "spark-core" % sparkVersion,
     libraryDependencies += "org.apache.spark" %% "spark-sql" % sparkVersion,
     libraryDependencies += "org.apache.spark" %% "spark-mllib" % sparkVersion,
