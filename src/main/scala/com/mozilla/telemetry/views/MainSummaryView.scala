@@ -109,7 +109,8 @@ object MainSummaryView {
     val docType = opt[String]("doc-type", descr = "DocType of pings conforming to main ping schema", required=false, default=Some("main"))
     // 500,000 rows yields ~ 200MB files in snappy+parquet
     val maxRecordsPerFile = opt[Int]("max-records-per-file", descr = "Max number of rows to write to output files before splitting", required = false, default=Some(500000))
-    val alignment = opt[Int]("alignment", descr = "Number of input partitions as a multiple `defaultParallelism`", required = false, default=None)
+    val readMode = choice(Seq("fixed", "aligned"), name="read-mode", descr="Read fixed-sized partitions or a multiple of defaultParallelism partitions", default=Some("fixed"))
+    val inputPartitionMultiplier = opt[Int]("input-partition-multiplier", descr="Partition multiplier for aligned read-mode", default=Some(4))
     verify()
   }
 
@@ -162,8 +163,11 @@ object MainSummaryView {
         case _ => "telemetry"
       }
 
-      // if `None`, then data is unaligned at 268MB chunks
-      val numPartitions = conf.alignment.get.map(n => n*sc.defaultParallelism)
+      // if `fixed`, then data is read in fixed 268MB blocks
+      val numPartitions = conf.readMode() match {
+        case "aligned" => Some(sc.defaultParallelism * conf.inputPartitionMultiplier())
+        case _ => None
+      }
 
       val messages = Dataset(telemetrySource)
         .where("sourceName") {
