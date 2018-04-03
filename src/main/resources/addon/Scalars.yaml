@@ -1,0 +1,9 @@
+telemetry.mock:
+  string_kind:
+    description: A test scalar, no soup for you!
+    expires: never
+    kind: string
+    notification_emails:
+      - frank@mozilla.com
+    record_in_processes:
+      - 'dynamic' # All addon scalars need this!

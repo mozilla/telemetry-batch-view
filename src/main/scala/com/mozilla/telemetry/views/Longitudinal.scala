@@ -820,7 +820,7 @@ object LongitudinalView {
     // Get a list of the scalars in the ping.
     val scalarsList = payloads.map{ case (x) =>
       val payload = parse(x.getOrElse("payload", return).asInstanceOf[String])
-      MainPing.ProcessTypes.map{ process =>
+      MainPing.DefaultProcessTypes.map{ process =>
         (payload \ "processes" \ process \ "scalars").toOption match {
           case Some(scalars) => process -> scalars.extract[Map[String, AnyVal]]
           case _ => process -> Map[String, AnyVal]()
@@ -830,7 +830,7 @@ object LongitudinalView {
 
     // this allows us to avoid iterating
     // through every payload on every scalar
-    val byProcessScalarList = MainPing.ProcessTypes.map{ process =>
+    val byProcessScalarList = MainPing.DefaultProcessTypes.map{ process =>
       process -> scalarsList.map(_(process))
     } toMap
 
@@ -848,7 +848,7 @@ object LongitudinalView {
 
     val scalarsList = payloads.map{ case (x) =>
       val payload = parse(x.getOrElse("payload", return).asInstanceOf[String])
-      MainPing.ProcessTypes.map{ process =>
+      MainPing.DefaultProcessTypes.map{ process =>
         (payload \ "processes" \ process \ "keyedScalars").toOption match {
           case Some(scalars) => process -> scalars.extract[Map[String, Map[String, AnyVal]]]
           case _ => process -> Map[String, Map[String, AnyVal]]()
@@ -858,7 +858,7 @@ object LongitudinalView {
 
     // this allows us to avoid iterating
     // through every payload on every scalar
-    val byProcessScalarList = MainPing.ProcessTypes.map{ process =>
+    val byProcessScalarList = MainPing.DefaultProcessTypes.map{ process =>
       process -> scalarsList.map(_(process))
     } toMap
 

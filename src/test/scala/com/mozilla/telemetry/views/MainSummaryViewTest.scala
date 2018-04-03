@@ -794,6 +794,36 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
     compare(message, expected)
   }
 
+  "Addon scalars" can "be properly shown 425" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "submission" ->
+          """
+            |{
+            | "payload": {
+            |   "processes": {
+            |     "dynamic": {
+            |       "scalars": {
+            |         "telemetry.mock.string_kind": "'We are just an advanced breed of monkeys on a minor planet of a very average star. But we can understand the universe.' -Stephen Hawking"
+            |       }
+            |     }
+            |   }
+            | }
+            |}""".stripMargin),
+      None)
+
+    val expected = Map(
+      "string_addon_scalars" -> Map(
+        "telemetry_mock_string_kind" ->
+          "'We are just an advanced breed of monkeys on a minor planet of a very average star. But we can understand the universe.' -Stephen Hawking"
+      )
+    )
+
+    compare(message, expected)
+  }
 
   "Search cohort" can "be properly shown" in {
     val message = RichMessage(
@@ -1052,7 +1082,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
       "keyedScalars": {$keyedScalarsData}
     }"""
 
-    val processJSON = MainPing.ProcessTypes.map { p => s""""$p": $processHistograms""" }.mkString(", ")
+    val processJSON = MainPing.DefaultProcessTypes.map { p => s""""$p": $processHistograms""" }.mkString(", ")
 
     val message = RichMessage(
       "1234",
@@ -1070,7 +1100,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
       ),
       None)
 
-    val expectedProcessHistos = MainPing.ProcessTypes.map { p =>
+    val expectedProcessHistos = MainPing.DefaultProcessTypes.map { p =>
       p -> (parse(s"{$histosData}") merge parse(s"{$keyedHistosData}"))
     }.toMap
 
@@ -1078,13 +1108,14 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
       .histogramsToRow(expectedProcessHistos, allHistogramDefs)
       .toSeq.zip(allHistogramDefs.map(_._1)).map(_.swap).toMap
 
-    val expectedProcessScalars = MainPing.ProcessTypes.map { p =>
+    val expectedProcessScalars = MainPing.DefaultProcessTypes.map { p =>
       p -> (parse(s"{$scalarsData}") merge parse(s"{$keyedScalarsData}"))
     }.toMap
 
+    val allowedScalarDefs = allScalarDefs.filter{ case(n, d) => d.process != Some(MainPing.DynamicProcess) }
     val expectedScalars = MainPing
-      .scalarsToRow(expectedProcessScalars, allScalarDefs)
-      .toSeq.zip(allScalarDefs.map(_._1)).map(_.swap).toMap
+      .scalarsToRow(expectedProcessScalars, allowedScalarDefs)
+      .toSeq.zip(allowedScalarDefs.map(_._1)).map(_.swap).toMap
 
     val expected = expectedHistos ++ expectedScalars
 

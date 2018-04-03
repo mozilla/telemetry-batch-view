@@ -74,7 +74,9 @@ case class StringUserPref(name: String) extends UserPref {
 }
 
 object MainPing{
-  val ProcessTypes = "parent" :: "content" :: "gpu" :: Nil
+  val DynamicProcess = "dynamic"
+  val DefaultProcessTypes = "parent" :: "content" :: "gpu" :: Nil
+  val AllowedProcessTypes = DynamicProcess :: DefaultProcessTypes
 
   // Count the number of keys inside a JSON Object
   def countKeys(o: JValue): Option[Long] = {
@@ -386,6 +388,22 @@ object MainPing{
 
   def scalarsToRow(scalars: Map[String, JValue], definitions: List[(String, ScalarDefinition)]): Row = {
     Row.fromSeq(scalarsToList(scalars, definitions))
+  }
+
+  def addonScalarsToList(schema: Seq[ScalarType], scalars: JValue, definitions: List[(String, ScalarDefinition)]): Seq[Map[String, Any]] = {
+    val defs = definitions.groupBy(_._2.scalarType)
+
+    schema.map{ st =>
+      val allowedDefs = defs.getOrElse(st, List.empty)
+      scalarsToList(Map(DynamicProcess -> scalars), allowedDefs)
+        .zip(allowedDefs.map(_._1))
+        .map{ case(v, k) => k -> v }
+        .toMap
+    }
+  }
+
+  def addonScalarsToRow(schema: Seq[ScalarType], scalars: JValue, definitions: List[(String, ScalarDefinition)]): Row = {
+    Row.fromSeq(addonScalarsToList(schema, scalars, definitions))
   }
 
   // Check if a json value contains a number greater than zero.

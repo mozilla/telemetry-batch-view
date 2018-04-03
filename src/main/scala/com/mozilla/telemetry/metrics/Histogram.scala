@@ -186,7 +186,7 @@ class HistogramsClass extends MetricsClass {
         val labels = v.getOrElse("labels", None).asInstanceOf[Option[Seq[Option[String]]]]
 
         val processes = getProcesses(
-          v.getOrElse("record_in_processes", Some(MainPing.ProcessTypes)).get
+          v.getOrElse("record_in_processes", Some(MainPing.DefaultProcessTypes)).get
           .asInstanceOf[List[String]]
         )
 
