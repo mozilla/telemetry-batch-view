@@ -14,9 +14,9 @@ class MetricsClass {
     definitionProcesses.flatMap{
       _ match {
         case "main" => "parent" :: Nil
-        case "all" => MainPing.ProcessTypes
+        case "all" => MainPing.DefaultProcessTypes
         case "all_child" | "all_childs" | "all_children" =>
-          MainPing.ProcessTypes.filter(_ != "parent")
+          MainPing.DefaultProcessTypes.filter(_ != "parent")
         case o => o :: Nil
       }
     }.distinct

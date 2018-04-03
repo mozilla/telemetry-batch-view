@@ -2,7 +2,7 @@ package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.metrics.{HistogramsClass, ScalarsClass}
 import com.mozilla.telemetry.parquet.ParquetFile
-import com.mozilla.telemetry.utils.getOrCreateSparkSession
+import com.mozilla.telemetry.utils.{getOrCreateSparkSession, MainPing}
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
 import org.apache.spark.sql.Row
@@ -244,7 +244,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
 
       // Opt-out only schema
       val optoutHistogramDefs = histograms.definitions(includeOptin = false)
-      val optoutScalarDefs = scalars.definitions(includeOptin = false)
+      val optoutScalarDefs = scalars.definitions(includeOptin = false).filter(_._2.process != Some(MainPing.DynamicProcess)) // Not fixing this in longitudinal
 
       private val optoutSchema = LongitudinalView invokePrivate buildSchema(optoutHistogramDefs, optoutScalarDefs)
       private val optoutRecord = (LongitudinalView  invokePrivate buildRecord(payloads ++ dupes, optoutSchema, optoutHistogramDefs, optoutScalarDefs)).get
@@ -256,7 +256,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
 
       // Opt-out and Opt-in schema
       private val optinHistogramDefs = histograms.definitions(includeOptin = true)
-      private val optinScalarDefs = scalars.definitions(includeOptin = true)
+      private val optinScalarDefs = scalars.definitions(includeOptin = true).filter(_._2.process != Some(MainPing.DynamicProcess))
 
       private val optinSchema = LongitudinalView invokePrivate buildSchema(optinHistogramDefs, optinScalarDefs)
       private val optinRecord = (LongitudinalView  invokePrivate buildRecord(payloads ++ dupes, optinSchema, optinHistogramDefs, optinScalarDefs)).get

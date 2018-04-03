@@ -73,4 +73,10 @@ class ScalarsTest extends FlatSpec with Matchers {
     val scalars = fixture.definitions(true)
     assert(scalars("scalar_parent_mock_uint_optin").originalName == "mock.uint.optin")
   }
+
+  "Addon scalars" must "be included" in {
+    val scalars = fixture.definitions(true)
+    assert(scalars("telemetry_mock_string_kind").originalName == "telemetry.mock.string_kind")
+    assert(scalars("telemetry_mock_string_kind").process.get == "dynamic")
+  }
 }

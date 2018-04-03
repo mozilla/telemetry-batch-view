@@ -6,25 +6,67 @@ import org.yaml.snakeyaml.Yaml
 import collection.JavaConversions._
 import scala.io.Source
 import com.mozilla.telemetry.utils.MainPing
+import org.apache.spark.sql.types._
 
-abstract class ScalarDefinition extends MetricDefinition
+import java.io.InputStream
+
+
+trait ScalarType {
+  val name: String
+  val keyed: Boolean
+  val dataType: DataType
+
+  def getName: String = keyed match {
+    case true => List("keyed", name).mkString("_")
+    case false => name
+  }
+
+  def getParquetType = keyed match {
+    case true => MapType(StringType, dataType, valueContainsNull = true)
+    case false => dataType
+  }
+}
+
+case class BooleanScalarType(keyed: Boolean = false) extends ScalarType {
+  val name = "boolean"
+  val dataType = BooleanType
+}
+
+case class UintScalarType(keyed: Boolean = false) extends ScalarType {
+  val name = "uint"
+  val dataType = IntegerType
+}
+
+case class StringScalarType(keyed: Boolean = false) extends ScalarType {
+  val name = "string"
+  val dataType = StringType
+}
+
+
+abstract class ScalarDefinition extends MetricDefinition {
+  val scalarType: ScalarType
+}
 
 case class UintScalar(keyed: Boolean, originalName: String, process: Option[String] = None)
   extends ScalarDefinition {
   val isCategoricalMetric = false
+  val scalarType = UintScalarType(keyed)
 }
 
 case class BooleanScalar(keyed: Boolean, originalName: String, process: Option[String] = None)
   extends ScalarDefinition {
   val isCategoricalMetric = true
+  val scalarType = BooleanScalarType(keyed)
 }
 
 case class StringScalar(keyed: Boolean, originalName: String, process: Option[String] = None)
   extends ScalarDefinition {
   val isCategoricalMetric = true
+  val scalarType = StringScalarType(keyed)
 }
 
 class ScalarsClass extends MetricsClass {
+  val DynamicScalarDefinitionsFile = "/addon/Scalars.yaml"
   val ScalarColumnNamePrefix = "scalar"
 
   // mock[io.Source] wasn't working with scalamock, so now we'll just use the function
@@ -35,7 +77,13 @@ class ScalarsClass extends MetricsClass {
     // want them to get into the Parquet column names, so replace them with
     // underscores ('_'). Additionally, to prevent name clashing, we prefix
     // all scalars.
-    ScalarColumnNamePrefix + '_' + (processName + '_' + scalarName).replace('.', '_')
+    //
+    // Dynamic scalars do not have the scalars_$PROCESS_ prefix,
+    // since they are already separated.
+    (processName match {
+      case MainPing.DynamicProcess => scalarName
+      case p => ScalarColumnNamePrefix + '_' + (p + '_' + scalarName)
+    }).replace(".", "_")
   }
 
   def definitions(includeOptin: Boolean = false, nameJoiner: (String, String) => String = getParquetFriendlyScalarName): Map[String, ScalarDefinition] = {
@@ -43,9 +91,15 @@ class ScalarsClass extends MetricsClass {
                    "beta" -> "https://hg.mozilla.org/releases/mozilla-beta/raw-file/tip/toolkit/components/telemetry/Scalars.yaml",
                    "nightly" -> "https://hg.mozilla.org/mozilla-central/raw-file/tip/toolkit/components/telemetry/Scalars.yaml")
 
+    // Addon scalars will show during the tests
+    val addonStream : InputStream = getClass.getResourceAsStream(DynamicScalarDefinitionsFile)
+
+    val sources = uris.map{ case(key, value) => key -> getURL(value, "UTF8") } +
+                  ("addon" -> Source.fromInputStream(addonStream))
+
     // Scalars are considered to be immutable so it's OK to merge their definitions.
-    uris.flatMap{ case (key, value) =>
-      val yaml = new Yaml().load(getURL(value, "UTF8").mkString)
+    sources.flatMap{ case (key, source) =>
+      val yaml = new Yaml().load(source.mkString)
       val result = yaml.asInstanceOf[util.LinkedHashMap[String, util.LinkedHashMap[String, Any]]]
 
       // The probes in the definition file are represented in a fixed-depth, two-level structure.
@@ -78,7 +132,7 @@ class ScalarsClass extends MetricsClass {
         val keyed = props.getOrElse("keyed", false).asInstanceOf[Boolean]
         val processes = getProcesses(
           props
-          .getOrElse("record_in_processes", new util.ArrayList(MainPing.ProcessTypes))
+          .getOrElse("record_in_processes", new util.ArrayList(MainPing.DefaultProcessTypes))
           .asInstanceOf[util.ArrayList[String]].toSet.toList
         )
 

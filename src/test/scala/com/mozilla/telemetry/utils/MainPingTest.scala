@@ -16,7 +16,7 @@ class MainPingTest extends FlatSpec with Matchers {
     override protected val getURL = scalarUrlMock
   }
 
-  val scalarDefs = scalars.definitions(true).toList.sortBy(_._1)
+  val scalarDefs = scalars.definitions(true).toList.sortBy(_._1).filter{ case(n, d) => d.process != Some("dynamic") || n.contains("mock") }
 
   val histogramUrlMock = (a: String, b: String) => Source.fromFile("src/test/resources/ShortHistograms.json")
 
@@ -562,22 +562,23 @@ class MainPingTest extends FlatSpec with Matchers {
 
   "Engagement measures" can "be extracted" in {
     def makeScalarsMap(v: JValue): Map[String, JValue] = {
-      MainPing.ProcessTypes.map{ p =>
+      MainPing.AllowedProcessTypes.map{ p =>
         p -> v
       } toMap
     }
 
-    val order = List("mock.all.children", "mock.keyed.scalar.bool", "mock.keyed.scalar.string", "mock.keyed.scalar.uint", "mock.scalar.bool", "mock.scalar.string", "mock.scalar.uint", "mock.uint.optin", "mock.uint.optout")
+    val order = List("mock.all.children", "mock.keyed.scalar.bool", "mock.keyed.scalar.string", "mock.keyed.scalar.uint", "mock.scalar.bool",
+                     "mock.scalar.string", "mock.scalar.uint", "mock.uint.optin", "mock.uint.optout", "telemetry.mock.string_kind")
     def makeExpected(expected: List[Any]): Row = {
       Row.fromSeq(
-        scalarDefs.map(d => expected(order.indexOf(d._2.originalName)))
+        scalarDefs.map{ case(n, d) => expected(order.indexOf(d.originalName)) }
       )
     }
 
     // Doesn't have scalars
     val jNoScalars = parse(
       """{}""")
-    MainPing.scalarsToRow(makeScalarsMap(jNoScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
+    MainPing.scalarsToRow(makeScalarsMap(jNoScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null, null)))
 
     // Has scalars, but none of the expected ones
     val jUnexpectedScalars = parse(
@@ -585,7 +586,7 @@ class MainPingTest extends FlatSpec with Matchers {
         |  "example1": 249,
         |  "example2": 2
         |}""".stripMargin)
-    MainPing.scalarsToRow(makeScalarsMap(jUnexpectedScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
+    MainPing.scalarsToRow(makeScalarsMap(jUnexpectedScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null, null)))
 
     // Has scalars, and some of the expected ones
     val jSomeExpectedScalars = parse(
@@ -593,7 +594,7 @@ class MainPingTest extends FlatSpec with Matchers {
         |  "mock.scalar.uint": 2,
         |  "mock.uint.optin": 97
         |}""".stripMargin)
-    MainPing.scalarsToRow(makeScalarsMap(jSomeExpectedScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, 2, 97, null)))
+    MainPing.scalarsToRow(makeScalarsMap(jSomeExpectedScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, 2, 97, null, null)))
 
     // Keyed scalars convert correctly
     val jKeyedScalar = parse(
@@ -601,7 +602,7 @@ class MainPingTest extends FlatSpec with Matchers {
         |  "mock.keyed.scalar.uint": {"a": 1, "b": 2}
         |}""".stripMargin)
     MainPing.scalarsToRow(makeScalarsMap(jKeyedScalar), scalarDefs) should be
-      (makeExpected(List(null, null, null, Map("a" -> 1, "b" -> 2), null, null, null, null, null)))
+      (makeExpected(List(null, null, null, Map("a" -> 1, "b" -> 2), null, null, null, null, null, null)))
 
     // Has scalars, all of the expected ones
     val jAllScalars = parse(
@@ -613,7 +614,8 @@ class MainPingTest extends FlatSpec with Matchers {
         |  "mock.scalar.string": "hello world",
         |  "mock.scalar.uint": 93,
         |  "mock.uint.optin": 1,
-        |  "mock.uint.optout": 42
+        |  "mock.uint.optout": 42,
+        |  "telemetry.mock.string_kind": "Be kind"
         |}""".stripMargin)
 
     val expectedRow = makeExpected(List(
@@ -625,7 +627,8 @@ class MainPingTest extends FlatSpec with Matchers {
         "hello world",
         93,
         1,
-        42
+        42,
+        "Be kind"
     ))
 
     MainPing.scalarsToRow(makeScalarsMap(jAllScalars), scalarDefs) should be (expectedRow)
@@ -638,16 +641,16 @@ class MainPingTest extends FlatSpec with Matchers {
         |  "mock.uint.optin": [9, 7],
         |  "mock.uint.optout": "hello, world"
         |}""".stripMargin)
-    MainPing.scalarsToRow(makeScalarsMap(jWeirdScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
+    MainPing.scalarsToRow(makeScalarsMap(jWeirdScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null, null)))
 
     // Has a scalars section containing unexpected data.
     val jBogusScalars = parse("""[10, "ten"]""")
-    MainPing.scalarsToRow(makeScalarsMap(jBogusScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null)))
+    MainPing.scalarsToRow(makeScalarsMap(jBogusScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null, null)))
   }
 
   "Scalars" can "be accessed by name" in {
     def makeScalarsMap(v: JValue): Map[String, JValue] = {
-      MainPing.ProcessTypes.map{ p =>
+      MainPing.DefaultProcessTypes.map{ p =>
         p -> v
       } toMap
     }

@@ -23,6 +23,27 @@ object MainSummaryView {
   def schemaVersion: String = "v4"
   def jobName: String = "main_summary"
 
+
+  // The following user prefs will be included as top-level
+  // fields, named according to UserPref.fieldName()
+  //
+  // Prefs where we only record whether a pref has been set should
+  // use StringUserPref as we observe a value of "<user-set>".
+  //
+  // Supported pref data types are:
+  //   nsIPrefBranch.PREF_STRING -> StringUserPref
+  //   nsIPrefBranch.PREF_BOOL -> BooleanUserPref
+  //   nsIPrefBranch.PREF_INT -> IntegerUserPref
+  // See the `_getPrefData()` function in TelemetryEnvironment.jsm
+  // for reference: https://mzl.la/2zo7kyK
+  val userPrefsList =
+    IntegerUserPref("dom.ipc.processCount") ::
+    BooleanUserPref("extensions.allow-non-mpc-extensions") ::
+    BooleanUserPref("extensions.legacy.enabled") ::
+    BooleanUserPref("browser.search.widget.inNavBar") ::
+    StringUserPref("general.config.filename") :: Nil
+
+
   val histogramsWhitelist =
     "A11Y_INSTANTIATED_FLAG" ::
     "A11Y_CONSUMERS" ::
@@ -77,24 +98,22 @@ object MainSummaryView {
     "WEBVR_TIME_SPENT_VIEWING_IN_OPENVR" ::
     "WEBVR_USERS_VIEW_IN" :: Nil
 
-  // The following user prefs will be included as top-level
-  // fields, named according to UserPref.fieldName()
-  //
-  // Prefs where we only record whether a pref has been set should
-  // use StringUserPref as we observe a value of "<user-set>".
-  //
-  // Supported pref data types are:
-  //   nsIPrefBranch.PREF_STRING -> StringUserPref
-  //   nsIPrefBranch.PREF_BOOL -> BooleanUserPref
-  //   nsIPrefBranch.PREF_INT -> IntegerUserPref
-  // See the `_getPrefData()` function in TelemetryEnvironment.jsm
-  // for reference: https://mzl.la/2zo7kyK
-  val userPrefsList =
-    IntegerUserPref("dom.ipc.processCount") ::
-    BooleanUserPref("extensions.allow-non-mpc-extensions") ::
-    BooleanUserPref("extensions.legacy.enabled") ::
-    BooleanUserPref("browser.search.widget.inNavBar") ::
-    StringUserPref("general.config.filename") :: Nil
+
+  /*
+   * Addon scalars are included as a key, value
+   * in a MAP type column. For example, the boolean
+   * and keyed scalarType becomes a column with name
+   * keyed_boolean_addon_scalars and type
+   * Map[String, Map[String, boolean]];
+   * where top-level keys are probe names.
+  **/
+  val addonScalarSchema =
+    BooleanScalarType() ::
+    BooleanScalarType(keyed = true) ::
+    StringScalarType() ::
+    StringScalarType(keyed = true) ::
+    UintScalarType() ::
+    UintScalarType(keyed = true) :: Nil
 
 
   // Configuration for command line arguments
@@ -148,7 +167,9 @@ object MainSummaryView {
       if (filterVersion.nonEmpty)
         println(s" Filtering for version = '${filterVersion.get}'")
 
-      val scalarDefinitions = Scalars.definitions(includeOptin = true).toList.sortBy(_._1)
+      val scalarDefinitions = Scalars.definitions(includeOptin = true)
+        .toList.sortBy(_._1)
+        .filter(!_._2.originalName.startsWith("telemetry.mock"))
 
       val histogramDefinitions = filterHistogramDefinitions(
         Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true),
@@ -470,33 +491,36 @@ object MainSummaryView {
       val info = payload \ "info"
       val simpleMeasures = payload \ "simpleMeasurements"
 
-      val histograms = MainPing.ProcessTypes.map {
+      val histograms = MainPing.DefaultProcessTypes.map {
         _ match {
           case "parent" => "parent" -> payload \ "histograms"
           case p => p -> payload \ "processes" \ p \ "histograms"
         }
       }.toMap
 
-      val keyedHistograms = MainPing.ProcessTypes.map {
+      val keyedHistograms = MainPing.DefaultProcessTypes.map {
         _ match {
           case "parent" => "parent" -> payload \ "keyedHistograms"
           case p => p -> payload \ "processes" \ p \ "keyedHistograms"
         }
       }.toMap
 
-      val scalars = MainPing.ProcessTypes.map {
+      val scalars = MainPing.DefaultProcessTypes.map {
         p => p -> payload \ "processes" \ p \ "scalars"
       }.toMap
 
-      val keyedScalars = MainPing.ProcessTypes.map {
+      val keyedScalars = MainPing.DefaultProcessTypes.map {
         p => p -> payload \ "processes" \ p \ "keyedScalars"
       }.toMap
+
+      val addonScalars = payload \ "processes" \ MainPing.DynamicProcess \ "scalars"
+      val addonKeyedScalars = payload \ "processes" \ MainPing.DynamicProcess \ "keyedScalars"
 
       val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms("parent") \ "WEAVE_CONFIGURED")
       val weaveDesktop = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_DESKTOP")
       val weaveMobile = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_MOBILE")
 
-      val events = ("dynamic" :: MainPing.ProcessTypes).map {
+      val events = MainPing.AllowedProcessTypes.map {
         p => p -> payload \ "processes" \ p \ "events"
       }
 
@@ -718,15 +742,22 @@ object MainSummaryView {
       val userPrefsRow = getUserPrefs(settings \ "userPrefs", userPrefs)
 
       val scalarRow = MainPing.scalarsToRow(
-        MainPing.ProcessTypes.map { p => p -> (scalars(p) merge keyedScalars(p)) }.toMap,
-        scalarDefinitions
+        MainPing.DefaultProcessTypes.map{ p => p -> (scalars(p) merge keyedScalars(p)) }.toMap,
+        scalarDefinitions.filter{ case(n, d) => d.process != Some(MainPing.DynamicProcess) }
       )
+
       val histogramRow = MainPing.histogramsToRow(
-        MainPing.ProcessTypes.map { p => p -> (histograms(p) merge keyedHistograms(p)) }.toMap,
+        MainPing.DefaultProcessTypes.map{ p => p -> (histograms(p) merge keyedHistograms(p)) }.toMap,
         histogramDefinitions
       )
 
-      Some(Row.merge(row, userPrefsRow, scalarRow, histogramRow))
+      val addonScalarsRow = MainPing.addonScalarsToRow(
+        addonScalarSchema,
+        addonScalars merge addonKeyedScalars,
+        scalarDefinitions.filter{ case(n, d) => d.process == Some(MainPing.DynamicProcess) }
+      )
+
+      Some(Row.merge(row, userPrefsRow, scalarRow, histogramRow, addonScalarsRow))
     } catch {
       case e: Exception =>
         None
@@ -806,7 +837,9 @@ object MainSummaryView {
   )
 
   def buildScalarSchema(scalarDefinitions: List[(String, ScalarDefinition)]): List[StructField] = {
-    scalarDefinitions.map{
+    scalarDefinitions.filter{
+      case (name, definition) => definition.process != Some("dynamic")
+    }.map{
       case (name, definition) =>
         definition match {
           case UintScalar(keyed, _, _) => (name, keyed, IntegerType)
@@ -820,6 +853,12 @@ object MainSummaryView {
           case false => StructField(name, parquetType, nullable = true)
         }
     }
+  }
+
+  def buildAddonScalarSchema: List[StructField] = {
+    addonScalarSchema.map(
+      st => StructField(s"${st.getName}_addon_scalars", MapType(StringType, st.getParquetType), nullable = true)
+    )
   }
 
   def filterHistogramDefinitions(definitions: Map[String, HistogramDefinition], useWhitelist: Boolean = false): List[(String, HistogramDefinition)] = {
@@ -1087,6 +1126,7 @@ object MainSummaryView {
       StructField("ghost_windows_content_above_1", LongType, nullable = true)
     ) ++ buildUserPrefsSchema(userPrefs)
       ++ buildScalarSchema(scalarDefinitions)
-      ++ buildHistogramSchema(histogramDefinitions))
+      ++ buildHistogramSchema(histogramDefinitions)
+      ++ buildAddonScalarSchema)
   }
 }
