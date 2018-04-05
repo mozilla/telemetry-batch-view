@@ -23,6 +23,8 @@ object ClientsDailyViewTestPayloads {
     blocklist_enabled: Option[Boolean] = None,
     channel: Option[String] = None,
     city: Option[String] = None,
+    client_clock_skew: Option[Long] = None,
+    client_submission_latency: Option[Long] = None,
     client_id: Option[String] = Some("test"),
     country: Option[String] = None,
     cpu_cores: Option[Int] = None,
@@ -131,6 +133,7 @@ object ClientsDailyViewTestPayloads {
     update_auto_download: Option[Boolean] = None,
     update_channel: Option[String] = None,
     update_enabled: Option[Boolean] = None,
+    user_pref_browser_search_region: Option[String] = None,
     vendor: Option[String] = None,
     web_notification_shown: Option[Int] = None,
     windows_build_number: Option[Long] = None,
@@ -193,6 +196,7 @@ object ClientsDailyViewTestPayloads {
     update_auto_download = bValue,
     update_channel = sValue,
     update_enabled = bValue,
+    user_pref_browser_search_region = sValue,
     vendor = sValue,
     windows_build_number = Some(iValue.get),
     windows_ubr = Some(iValue.get)
@@ -254,6 +258,7 @@ object ClientsDailyViewTestPayloads {
     "update_auto_download" -> bValue,
     "update_channel" -> sValue,
     "update_enabled" -> bValue,
+    "user_pref_browser_search_region" -> sValue,
     "vendor" -> sValue,
     "windows_build_number" -> iValue,
     "windows_ubr" -> iValue
@@ -273,6 +278,8 @@ object ClientsDailyViewTestPayloads {
 
   def getRowAggMean(value: Option[Int]) = MainSummaryRow(
     active_addons_count = Some(value.get),
+    client_clock_skew = Some(value.get),
+    client_submission_latency = Some(value.get),
     first_paint = value,
     places_bookmarks_count = value,
     places_pages_count = value,
@@ -282,6 +289,8 @@ object ClientsDailyViewTestPayloads {
 
   def getExpectAggMean(value: Int) = Map(
     "active_addons_count_mean" -> value,
+    "client_clock_skew_mean" -> value,
+    "client_submission_latency_mean" -> value,
     "first_paint_mean" -> value,
     "places_bookmarks_count_mean" -> value,
     "places_pages_count_mean" -> value,
