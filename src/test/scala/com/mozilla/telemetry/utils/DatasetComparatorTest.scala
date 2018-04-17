@@ -35,39 +35,39 @@ class DatasetComparatorTest extends FlatSpec with BeforeAndAfterAll {
   (1 to 11).map{e => if (e % 2 == 0) MSRow(0,date,Some("c")) else MSRow(0,date)}.toDF.createOrReplaceTempView("SixNulls")
 
   "Simple frame" must "equal itself" in {
-    assert(DatasetComparator.validate(spark, getConf("zeroToTen", "zeroToTen")))
+    assert(DatasetComparator.compare(spark, getConf("zeroToTen", "zeroToTen")).same)
   }
 
   it must "not equal one less row" in {
-    assert(!DatasetComparator.validate(spark, getConf("zeroToTen", "zeroToNine")))
+    assert(!DatasetComparator.compare(spark, getConf("zeroToTen", "zeroToNine")).same)
   }
 
   it must "equal one less row with where clause" in {
-    assert(DatasetComparator.validate(spark, getConf("zeroToTen", "zeroToNine", "document_id < 10")))
+    assert(DatasetComparator.compare(spark, getConf("zeroToTen", "zeroToNine", "document_id < 10")).same)
   }
 
   it must "not equal one more row" in {
-    assert(!DatasetComparator.validate(spark, getConf("zeroToTen", "zeroToEleven")))
+    assert(!DatasetComparator.compare(spark, getConf("zeroToTen", "zeroToEleven")).same)
   }
 
   it must "not equal one different row" in {
-    assert(!DatasetComparator.validate(spark, getConf("zeroToTen", "oneToEleven")))
+    assert(!DatasetComparator.compare(spark, getConf("zeroToTen", "oneToEleven")).same)
   }
 
   "Frame with nulls" must "equal itself" in {
-    assert(DatasetComparator.validate(spark, getConf("FiveNulls", "FiveNulls")))
+    assert(DatasetComparator.compare(spark, getConf("FiveNulls", "FiveNulls")).same)
   }
 
   it must "not equal extra null row" in {
-    assert(!DatasetComparator.validate(spark, getConf("FiveNulls", "SixNulls")))
+    assert(!DatasetComparator.compare(spark, getConf("FiveNulls", "SixNulls")).same)
   }
 
   it must "not equal missing column" in {
-    assert(!DatasetComparator.validate(spark, getConf("FiveNulls", "ZeroNulls")))
+    assert(!DatasetComparator.compare(spark, getConf("FiveNulls", "ZeroNulls")).same)
   }
 
   it must "not equal extra column" in {
-    assert(!DatasetComparator.validate(spark, getConf("ZeroNulls", "FiveNulls")))
+    assert(!DatasetComparator.compare(spark, getConf("ZeroNulls", "FiveNulls")).same)
   }
 
   override def afterAll() = {
