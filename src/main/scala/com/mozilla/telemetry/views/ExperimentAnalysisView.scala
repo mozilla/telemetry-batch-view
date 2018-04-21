@@ -46,7 +46,8 @@ object ExperimentAnalysisView {
     "histogram_content_time_to_first_mouse_move_ms",
     "histogram_content_time_to_first_scroll_ms",
     "histogram_content_time_to_non_blank_paint_ms",
-    "histogram_content_time_to_response_start_ms"
+    "histogram_content_time_to_response_start_ms",
+    "histogram_parent_fx_tab_switch_total_e10s_ms"
   )
 
   implicit class ExperimentDataFrame(df: DataFrame) {
@@ -131,7 +132,7 @@ object ExperimentAnalysisView {
    conf.date.get match {
       case Some(d) => d
       case _ => com.mozilla.telemetry.utils.yesterdayAsYYYYMMDD
-    }   
+    }
   }
 
   def getExperiments(conf: Conf, data: DataFrame): List[String] = {
