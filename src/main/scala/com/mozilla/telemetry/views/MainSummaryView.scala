@@ -37,6 +37,7 @@ object MainSummaryView {
   // See the `_getPrefData()` function in TelemetryEnvironment.jsm
   // for reference: https://mzl.la/2zo7kyK
   val userPrefsList =
+    IntegerUserPref("dom.ipc.plugins.sandbox-level.flash") ::
     IntegerUserPref("dom.ipc.processCount") ::
     BooleanUserPref("extensions.allow-non-mpc-extensions") ::
     BooleanUserPref("extensions.legacy.enabled") ::
