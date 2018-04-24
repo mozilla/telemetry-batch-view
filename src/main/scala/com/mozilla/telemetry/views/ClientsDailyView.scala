@@ -50,7 +50,7 @@ object ClientsDailyView {
 
     val spark = getOrCreateSparkSession(jobName)
 
-    val df = spark.read.parquet(inputPath)
+    val df = spark.read.option("mergeSchema", "true").parquet(inputPath)
     val input = conf.sampleId.get match {
       case Some(sampleId) => df.where(s"sample_id = '$sampleId'")
       case _ => df
@@ -66,19 +66,102 @@ object ClientsDailyView {
   }
 
   def extractDayAggregates(df: DataFrame): DataFrame = {
-    // add geo_subdivision{1,2} columns if missing
-    val df1 = if (df.columns.contains("geo_subdivision1")) {
-      df
-    } else {
-      df.withColumn("geo_subdivision1", expr("STRING(NULL)"))
-    }
-    val df2 = if (df1.columns.contains("geo_subdivision2")) {
-      df1
-    } else {
-      df1.withColumn("geo_subdivision2", expr("STRING(NULL)"))
-    }
-
-    val aggregates = df2
+    // map null expressions to potentially missing columns
+    val columns = Map(
+      "boolean(NULL)" -> List(
+        "addon_compatibility_check_enabled",
+        "blocklist_enabled",
+        "is_wow64",
+        "telemetry_enabled",
+        "update_auto_download",
+        "update_enabled"
+      ),
+      "int(NULL)" -> List(
+        "active_ticks",
+        "cpu_cores",
+        "cpu_count",
+        "cpu_family",
+        "cpu_l2_cache_kb",
+        "cpu_l3_cache_kb",
+        "cpu_model",
+        "cpu_speed_mhz",
+        "cpu_stepping",
+        "first_paint",
+        "memory_mb",
+        "plugins_infobar_allow",
+        "plugins_infobar_block",
+        "plugins_infobar_shown",
+        "plugins_notification_shown",
+        "push_api_notify",
+        "sandbox_effective_content_process_level",
+        "scalar_content_navigator_storage_estimate_count",
+        "scalar_content_navigator_storage_persist_count",
+        "scalar_content_webrtc_nicer_stun_retransmits",
+        "scalar_content_webrtc_nicer_turn_401s",
+        "scalar_content_webrtc_nicer_turn_403s",
+        "scalar_content_webrtc_nicer_turn_438s",
+        "scalar_parent_browser_engagement_max_concurrent_tab_count",
+        "scalar_parent_browser_engagement_max_concurrent_window_count",
+        "scalar_parent_browser_engagement_tab_open_event_count",
+        "scalar_parent_browser_engagement_total_uri_count",
+        "scalar_parent_browser_engagement_unfiltered_uri_count",
+        "scalar_parent_browser_engagement_unique_domains_count",
+        "scalar_parent_browser_engagement_unique_domains_count",
+        "scalar_parent_browser_engagement_window_open_event_count",
+        "scalar_parent_devtools_copy_full_css_selector_opened",
+        "scalar_parent_devtools_copy_unique_css_selector_opened",
+        "scalar_parent_devtools_toolbar_eyedropper_opened",
+        "scalar_parent_dom_contentprocess_troubled_due_to_memory",
+        "scalar_parent_navigator_storage_estimate_count",
+        "scalar_parent_navigator_storage_persist_count",
+        "scalar_parent_storage_sync_api_usage_extensions_using",
+        "scalar_parent_webrtc_nicer_stun_retransmits",
+        "scalar_parent_webrtc_nicer_turn_401s",
+        "scalar_parent_webrtc_nicer_turn_403s",
+        "scalar_parent_webrtc_nicer_turn_438s",
+        "session_restored",
+        "shutdown_kill",
+        "ssl_handshake_result_failure",
+        "ssl_handshake_result_success",
+        "subsession_counter",
+        "total_time"
+      ),
+      "cast(NULL AS long)" -> List(
+        "client_clock_skew",
+        "client_submission_latency"
+      ),
+      "string(NULL)" -> List(
+        "geo_subdivision1",
+        "geo_subdivision2",
+        "cpu_vendor",
+        "default_search_engine_data_load_path",
+        "default_search_engine_data_origin",
+        "default_search_engine_data_submission_url",
+        "gfx_features_advanced_layers_status",
+        "gfx_features_d2d_status",
+        "gfx_features_d3d11_status",
+        "gfx_features_gpu_process_status",
+        "normalized_os_version",
+        "previous_build_id",
+        "scalar_parent_aushelper_websense_reg_version",
+        "search_cohort",
+        "update_channel"
+      ),
+      "cast(NULL AS struct<source:string,medium:string,campain:string,content:string>)" -> List("attribution"),
+      "cast(NULL AS map<string,string>)" -> List("experiments")
+    )
+    val aggregates = columns
+      // add missing columns
+      .foldLeft(df) { (df, kv) =>
+        kv._2.foldLeft(df) { (df, col) =>
+          if (df.columns.contains(col)) {
+            df
+          } else {
+            df.withColumn(col, expr(kv._1))
+          }
+        }
+      }
+      // aggregate columns
       .groupBy("client_id")
       .agg(fieldAggregators.head, fieldAggregators.tail:_*)
 
