@@ -5,13 +5,16 @@ if [[ -z "$JAR" ]]; then
     exit 1
 fi
 
+if [ ! -f "$JAR" ]; then
+    echo "Artifact $JAR does not exist" 1>&2
+    exit 1
+fi
+
 TRAVIS_REPO_OWNER=${TRAVIS_REPO_SLUG%/*}
 SLUG=${TRAVIS_REPO_SLUG#*/}
 JAR_DIR="$TRAVIS_REPO_OWNER/$SLUG"
 JAR_NAME="$SLUG.jar"
 TXT_NAME="$SLUG.txt"
-
-sbt assembly
 
 if [[ -z "$TRAVIS_TAG" ]]; then
     BRANCH_OR_TAG=$TRAVIS_BRANCH

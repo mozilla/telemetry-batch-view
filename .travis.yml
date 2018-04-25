@@ -7,12 +7,14 @@ before_install:
   - env | grep TRAVIS > .travis-env
   - CI_ENV=`bash <(curl -s https://codecov.io/env)`
   - docker build -t telemetry-batch-view .
+  - alias docker-run='docker run -v $PWD:/telemetry-batch-view $CI_ENV --env-file .travis-env telemetry-batch-view'
 
 script:
-  - docker run -v $PWD:/telemetry-batch-view $CI_ENV --env-file .travis-env telemetry-batch-view ./runtests.sh coverage slow:test coverageReport
+  - docker-run ./run-sbt.sh coverage slow:test coverageReport
 
 before_deploy:
   - export JAR="target/scala-2.11/telemetry-batch-view-1.1.jar"
+  - docker-run ./run-sbt.sh assembly
 
 deploy:
   - provider: script
