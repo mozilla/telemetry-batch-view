@@ -11,11 +11,6 @@ before_install:
 script:
   - docker run -v $PWD:/telemetry-batch-view $CI_ENV --env-file .travis-env telemetry-batch-view ./runtests.sh coverage slow:test coverageReport
 
-branches:
-  only:
-    - master
-    - backfill
-
 before_deploy:
   - export JAR="target/scala-2.11/telemetry-batch-view-1.1.jar"
 
