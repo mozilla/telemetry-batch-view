@@ -21,10 +21,10 @@ For help finding the right dataset for your analysis, see
 ### Development
 There are two possible workflows for hacking on telemetry-batch-view: you can either create a docker container for building the package and running tests, or import the project into IntelliJ's IDEA.
 
-To run the docker tests, just use the provided `Dockerfile` to build a container, then use the `runtests.sh` script to run tests inside it:
+To run the docker tests, just use the provided `Dockerfile` to build a container, then use the `run-sbt.sh` script to run tests inside it:
 
     docker build -t telemetry-batch-view .
-    ./runtests.sh
+    ./run-sbt.sh
 
 You may need to increase the amount of memory allocated to Docker for this to work, as some of the tests are very memory hungry at present. At least 4 gigabytes is recommended.
 

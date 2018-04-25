@@ -8,7 +8,7 @@ mkdir -p ~/.ivy2/ ~/.sbt/
 # if we are not inside the docker container, run this command *inside* the
 # docker container
 if [ ! -f /.dockerenv ]; then
-    docker run -t -i -v ~/.ivy2:/root/.ivy2 -v ~/.sbt:/root/.sbt -v $PWD:/telemetry-batch-view telemetry-batch-view ./runtests.sh "$@"
+    docker run -t -i -v ~/.ivy2:/root/.ivy2 -v ~/.sbt:/root/.sbt -v $PWD:/telemetry-batch-view telemetry-batch-view ./run-sbt.sh "$@"
     exit $?
 fi
 
