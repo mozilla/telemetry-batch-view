@@ -4,6 +4,7 @@ services:
   - docker
 
 before_install:
+  - shopt -s expand_aliases
   - env | grep TRAVIS > .travis-env
   - CI_ENV=`bash <(curl -s https://codecov.io/env)`
   - docker build -t telemetry-batch-view .
