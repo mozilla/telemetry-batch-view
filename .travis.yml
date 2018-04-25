@@ -1,13 +1,28 @@
 sudo: required
+
 services:
   - docker
+
 before_install:
   - env | grep TRAVIS > .travis-env
   - CI_ENV=`bash <(curl -s https://codecov.io/env)`
   - docker build -t telemetry-batch-view .
+
 script:
   - docker run -v $PWD:/telemetry-batch-view $CI_ENV --env-file .travis-env telemetry-batch-view ./runtests.sh coverage slow:test coverageReport
+
 branches:
   only:
     - master
     - backfill
+
+before_deploy:
+  - export JAR="target/scala-2.11/telemetry-batch-view-1.1.jar"
+
+deploy:
+  - provider: script
+    script: bash deploy.sh
+    skip_cleanup: true
+    on:
+      repo: mozilla/telemetry-batch-view
+      all_branches: true
