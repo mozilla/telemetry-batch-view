@@ -12,7 +12,7 @@ case class ExperimentSummaryRow(
   experiment_id: String,
   experiment_branch: String,
   scalar_content_browser_usage_graphite: Int,
-  histogram_content_gc_max_pause_ms: Map[Int, Int])
+  histogram_content_gc_max_pause_ms_2: Map[Int, Int])
 
 case class ErrorAggRow(
   experiment_id: String,
@@ -51,7 +51,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
 
   val experimentMetrics = List(
     "scalar_content_browser_usage_graphite",
-    "histogram_content_gc_max_pause_ms"
+    "histogram_content_gc_max_pause_ms_2"
   )
 
   "Child Scalars" can "be counted" in {
@@ -80,7 +80,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
 
     val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, spark.emptyDataset[ErrorAggRow].toDF(), conf,
       experimentMetrics)
-    val agg = res.filter(_.metric_name == "histogram_content_gc_max_pause_ms").head
+    val agg = res.filter(_.metric_name == "histogram_content_gc_max_pause_ms_2").head
     agg.histogram(1).pdf should be (1.0)
   }
 
