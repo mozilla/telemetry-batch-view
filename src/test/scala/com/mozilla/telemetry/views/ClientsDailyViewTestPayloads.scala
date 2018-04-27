@@ -133,7 +133,6 @@ object ClientsDailyViewTestPayloads {
     update_auto_download: Option[Boolean] = None,
     update_channel: Option[String] = None,
     update_enabled: Option[Boolean] = None,
-    user_pref_browser_search_region: Option[String] = None,
     vendor: Option[String] = None,
     web_notification_shown: Option[Int] = None,
     windows_build_number: Option[Long] = None,
@@ -196,7 +195,6 @@ object ClientsDailyViewTestPayloads {
     update_auto_download = bValue,
     update_channel = sValue,
     update_enabled = bValue,
-    user_pref_browser_search_region = sValue,
     vendor = sValue,
     windows_build_number = Some(iValue.get),
     windows_ubr = Some(iValue.get)
@@ -258,7 +256,6 @@ object ClientsDailyViewTestPayloads {
     "update_auto_download" -> bValue,
     "update_channel" -> sValue,
     "update_enabled" -> bValue,
-    "user_pref_browser_search_region" -> sValue,
     "vendor" -> sValue,
     "windows_build_number" -> iValue,
     "windows_ubr" -> iValue
