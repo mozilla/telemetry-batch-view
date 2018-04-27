@@ -11,7 +11,13 @@ before_install:
   - alias docker-run='docker run -v $PWD:/telemetry-batch-view $CI_ENV --env-file .travis-env telemetry-batch-view'
 
 script:
-  - docker-run ./run-sbt.sh coverage slow:test coverageReport
+  - export TEST_SKIP_REGEX="\[skip-tests\]"
+  - echo $TRAVIS_COMMIT_RANGE
+  - echo $TRAVIS_COMMIT_MESSAGE
+  - echo $TEST_SKIP_REGEX
+  - echo $TRAVIS_BRANCH
+  - if [[ $TRAVIS_COMMIT_MESSAGE =~ $TEST_SKIP_REGEX && (-n $TRAVIS_TAG || $TRAVIS_BRANCH == "master") ]]; then echo "Cannot skip tests on master or on tagged release"; exit 1; fi
+  - if [[ ! $TRAVIS_COMMIT_MESSAGE =~ $TEST_SKIP_REGEX ]]; then docker-run ./run-sbt.sh coverage slow:test coverageReport; fi
 
 before_deploy:
   - export JAR="target/scala-2.11/telemetry-batch-view-1.1.jar"
