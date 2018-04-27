@@ -375,8 +375,13 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
   }
 
   "User prefs" can "be extracted" in {
-    // Build top-level list of user_pref_*
-    val fieldNames = MainSummaryView.buildUserPrefsSchema(userPrefs).fieldNames
+    // These are static field names now, so the tests
+    // don't have to change for each additional pref
+    val fieldNames = "user_pref_dom_ipc_processcount" ::
+                     "user_pref_extensions_allow_non_mpc_extensions" ::
+                     "user_pref_extensions_legacy_enabled" ::
+                     "user_pref_browser_search_widget_innavbar" ::
+                     "user_pref_general_config_filename" :: Nil
 
     def testUserPrefs(doc: JValue, oldUserPrefs: Any, userPrefs: Seq[Any]): Unit = {
       val message = RichMessage(
@@ -540,10 +545,46 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
   }
 
   it can "be added to MainSummary schema" in {
-    val schemaWithPrefs = MainSummaryView.buildSchema(testUserPrefs, List(), List())
+    val schemaWithPrefs = MainSummaryView.buildSchema(MainSummaryView.userPrefsList, List(), List())
 
-    schemaWithPrefs.fieldNames.contains("user_pref_p3_messy") should be(true)
-    schemaWithPrefs.fieldNames.contains("user_pref_p4") should be(false)
+    MainSummaryView.userPrefsList.foreach{ p =>
+      schemaWithPrefs.fieldNames.contains(p.fieldName()) should be(true)
+    }
+  }
+
+  it can "be included in the MainSummary output" in {
+    def testVal(pref: UserPref): Any = pref match {
+      case p: BooleanUserPref => false
+      case p: IntegerUserPref => 42
+      case p: StringUserPref  => "robits prevail"
+    }
+
+    def strTestVal(pref: UserPref): String = pref match {
+      case p: StringUserPref => s""""${testVal(p)}""""
+      case o => testVal(o).toString
+    }
+
+    val userPrefsString = MainSummaryView.userPrefsList.map{ p =>
+      s""""${p.name}": ${strTestVal(p)}"""
+    }.mkString(",")
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.settings" ->
+          s"""
+            |  {
+            |  "userPrefs": { $userPrefsString }
+            |}""".stripMargin),
+      None)
+
+    val expected = MainSummaryView.userPrefsList.map{ p =>
+      p.fieldName() -> testVal(p)
+    }.toMap
+
+    compare(message, expected, MainSummaryView.userPrefsList)
   }
 
   it can "be added to the top-level" in {
