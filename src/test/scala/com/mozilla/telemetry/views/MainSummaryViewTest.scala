@@ -375,8 +375,13 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
   }
 
   "User prefs" can "be extracted" in {
-    // Build top-level list of user_pref_*
-    val fieldNames = MainSummaryView.buildUserPrefsSchema(userPrefs).fieldNames
+    // These are static field names now, so the tests
+    // don't have to change for each additional pref
+    val fieldNames = "user_pref_dom_ipc_processcount" ::
+                     "user_pref_extensions_allow_non_mpc_extensions" ::
+                     "user_pref_extensions_legacy_enabled" ::
+                     "user_pref_browser_search_widget_innavbar" ::
+                     "user_pref_general_config_filename" :: Nil
 
     def testUserPrefs(doc: JValue, oldUserPrefs: Any, userPrefs: Seq[Any]): Unit = {
       val message = RichMessage(
