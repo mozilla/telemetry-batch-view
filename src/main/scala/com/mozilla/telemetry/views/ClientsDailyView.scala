@@ -244,7 +244,6 @@ object ClientsDailyView {
     aggFirst("update_auto_download"),
     aggFirst("update_channel"),
     aggFirst("update_enabled"),
-    aggFirst("user_pref_browser_search_region"),
     aggFirst("vendor"),
     aggSum("web_notification_shown"),
     aggFirst("windows_build_number"),
