@@ -18,7 +18,18 @@ See the [Firefox Data Documentation](https://mozilla.github.io/firefox-data-docs
 For help finding the right dataset for your analysis, see
 [Choosing a Dataset](https://mozilla.github.io/firefox-data-docs/concepts/choosing_a_dataset.html).
 
-### Development
+## Development and Deployment
+
+The general workflow for telemetry-batch-view is:
+1. Make some local changes on your branch
+2. Optional - Test locally in [Airflow](https://www.github.com/mozilla/telemetry-airflow)
+3. Optional - Include the `[auto-deploy]` tag in your commit message to skip staging
+4. Open PR, tag someone to review. Merge when approved
+5. Run the job in the [staging Airflow service](https://data-wtmo.stage.mozaws.net), and check the output manually
+6. When ready, create a Github release on your commit. This will push the changes to production automatically
+
+### Local Development
+
 There are two possible workflows for hacking on telemetry-batch-view: you can either create a docker container for building the package and running tests, or import the project into IntelliJ's IDEA.
 
 To run the docker tests, just use the provided `Dockerfile` to build a container, then use the `run-sbt.sh` script to run tests inside it:
@@ -30,7 +41,7 @@ You may need to increase the amount of memory allocated to Docker for this to wo
 
 You can also pass arguments to sbt (the scala build tool we use for running the tests) through the runtests.sh. For example, to run only the addon tests, try:
 
-    ./runtests.sh "test-only com.mozilla.telemetry.AddonsViewTest"
+    ./run-sbt.sh "test-only com.mozilla.telemetry.AddonsViewTest"
 
 If you wish to import the project into IntelliJ IDEA, apply the following changes to `Preferences` -> `Languages & Frameworks` -> `Scala Compile Server`:
 
@@ -54,11 +65,35 @@ sbt assembly
 spark-submit --master yarn --deploy-mode client --class com.mozilla.telemetry.views.LongitudinalView target/scala-2.11/telemetry-batch-view-*.jar --from 20160101 --to 20160701 --bucket telemetry-test-bucket
 ```
 
-In the future, we will modify airflow jobs to actually pull the jar from s3 rather than git checkout and sbt assembly
-Something like:
-```bash
-wget https://s3-us-west-2.amazonaws.com/net-mozaws-data-us-west-2-ops-mavenrepo/snapshots/telemetry-batch-view/telemetry-batch-view/1.1/telemetry-batch-view-1.1.jar
-```
+### Testing in Dev Airflow with `[skip-tests]`
+
+It is possible to launch the job locally exactly as it will in production. When doing this, we recommend
+including the string `[skip-tests]` in the `HEAD` commit message. This will cause that branch to only
+deploy the JAR, and skip the tests (which can delay the deploy for up to an hour).
+
+Note that to do this, you must have AWS credentials.
+
+First push to an upstream branch:
+
+    git remote set upstream https://www.github.com/mozilla/telemetry-batch-view
+    git push -u upstream $BRANCH_NAME
+
+Then follow the instructions for [testing dev changes in Airflow](https://github.com/mozilla/telemetry-airflow#testing-dev-changes)
+
+### Deploying Changes
+
+Changes in telemetry-batch-view will be reflected in the [staging Airflow service](https://data-wtmo.stage.mozaws.net) once the build is complete - note that this will take at least 30 minutes.
+
+From there, run the job and check the output, using either [ATMO](https://analysis.telemetry.mozilla.org) or [Databricks](https://dbc-caf9527b-e073.cloud.databricks.com).
+
+If the changes pass, tag a [new release in Github](https://help.github.com/articles/creating-releases/) pointing to your commit (if your commit is the `HEAD` on master, then just point at master).
+If you don't have write access to the repository, ask a member of the [telemetry team](https://github.com/orgs/mozilla/teams/telemetry/members).
+
+#### Auto-deploying Small Changes with `[auto-deploy]`
+
+In some cases, changes don't need to be run in stage. An example of this is adding a new histogram to `main_summary`. To skip
+the staging environment and immediately deploy the changes after merge, simply include the string `[auto-deploy]` in the commit
+message. The CI will tag a new release and deploy it to the production environment.
 
 ### Caveats
 If you run into memory issues during compilation time or running the test suite, issue the following command before running sbt:
