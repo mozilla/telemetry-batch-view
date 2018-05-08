@@ -20,6 +20,18 @@ if [[ -z "$TRAVIS_TAG" ]]; then
     BRANCH_OR_TAG=$TRAVIS_BRANCH
     ID=$TRAVIS_JOB_NUMBER
 else
+    # Only continue uploading jar if the tag was on master branch
+    pushd ${TRAVIS_BUILD_DIR}
+    output=$(git branch -r --contains `git rev-parse --verify ${TRAVIS_TAG}^{commit}`)
+
+    if [[ $output =~ .*origin\/master.* ]]; then
+        echo "Tag ${TRAVIS_TAG} is on master branch. Continuing upload..."
+    else
+        echo "Tag ${TRAVIS_TAG} is not on master branch. Skipping upload"
+        # Exit 0 so the travis build doesn't fail
+        exit 0
+    fi
+    popd
     BRANCH_OR_TAG=tags
     ID=$TRAVIS_TAG
 fi
