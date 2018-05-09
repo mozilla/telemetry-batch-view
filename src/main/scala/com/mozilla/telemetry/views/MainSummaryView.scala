@@ -15,6 +15,7 @@ import com.mozilla.telemetry.utils.{Addon, Attribution, Events,
 import com.mozilla.telemetry.utils.{BooleanUserPref, IntegerUserPref, StringUserPref, UserPref}
 import org.json4s.{DefaultFormats, JValue}
 import com.mozilla.telemetry.metrics._
+import com.mozilla.telemetry.utils.writeTextFile
 
 import scala.util.{Success, Try}
 
@@ -132,6 +133,7 @@ object MainSummaryView {
     val maxRecordsPerFile = opt[Int]("max-records-per-file", descr = "Max number of rows to write to output files before splitting", required = false, default=Some(500000))
     val readMode = choice(Seq("fixed", "aligned"), name="read-mode", descr="Read fixed-sized partitions or a multiple of defaultParallelism partitions", default=Some("fixed"))
     val inputPartitionMultiplier = opt[Int]("input-partition-multiplier", descr="Partition multiplier for aligned read-mode", default=Some(4))
+    val schemaReportLocation = opt[String]("schema-report-location", descr="Write schema.treeString to this file")
     verify()
   }
 
@@ -247,6 +249,10 @@ object MainSummaryView {
         // Then write to S3 using the given fields as path name partitions. Overwrites
         // existing data.
         partitioned.write.partitionBy("sample_id").mode("overwrite").option("maxRecordsPerFile", maxRecordsPerFile).parquet(s3path)
+
+        conf.schemaReportLocation.get match {
+          case Some(path) => writeTextFile(path, partitioned.schema.treeString)
+        }
 
         // Then remove the _SUCCESS file so we don't break Spark partition discovery.
         S3Store.deleteKey(conf.outputBucket(), s"$s3prefix/_SUCCESS")

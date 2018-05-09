@@ -1,9 +1,12 @@
 package com.mozilla.telemetry
 
+import java.net.URI
 import java.util.zip.CRC32
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
 
 package object utils{
   import java.rmi.dgc.VMID
@@ -139,5 +142,13 @@ package object utils{
     val crc = new CRC32
     crc.update(inString.getBytes)
     (crc.getValue % numBlocks).toInt
+  }
+
+  def writeTextFile(path: String, body: String): Unit = {
+    val file = FileSystem
+      .get(new URI(path), new Configuration())
+      .create(new Path(path))
+    file.write(body.getBytes)
+    file.close()
   }
 }
