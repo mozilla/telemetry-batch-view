@@ -1,4 +1,5 @@
 #!/bin/bash
+set -x
 
 if [[ -z "$JAR" ]]; then
     echo "Missing arguments!" 1>&2
