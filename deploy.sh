@@ -17,6 +17,9 @@ JAR_DIR="$TRAVIS_REPO_OWNER/$SLUG"
 JAR_NAME="$SLUG.jar"
 TXT_NAME="$SLUG.txt"
 
+# For testing that a tagged build shouldnt upload artifact, remove later
+TRAVIS_TAG="TestTagShouldntUpload"
+
 if [[ -z "$TRAVIS_TAG" ]]; then
     BRANCH_OR_TAG=$TRAVIS_BRANCH
     ID=$TRAVIS_JOB_NUMBER
