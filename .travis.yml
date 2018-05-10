@@ -34,7 +34,7 @@ deploy:
       repo: mozilla/telemetry-batch-view
 #      condition: $TRAVIS_COMMIT_MESSAGE == *"[auto-deploy]"*
 #      branch: master
-       all_branches: true
+      all_branches: true
   - provider: script
     script: bash deploy.sh
     skip_cleanup: true
