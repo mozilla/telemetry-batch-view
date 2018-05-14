@@ -252,6 +252,7 @@ object MainSummaryView {
 
         conf.schemaReportLocation.get match {
           case Some(path) => writeTextFile(path, partitioned.schema.treeString)
+          case None =>
         }
 
         // Then remove the _SUCCESS file so we don't break Spark partition discovery.
