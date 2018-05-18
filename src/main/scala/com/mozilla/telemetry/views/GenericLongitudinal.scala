@@ -4,7 +4,7 @@ import com.github.nscala_time.time.Imports._
 import com.mozilla.telemetry.utils.{CollectList, getOrCreateSparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 import org.rogach.scallop._
 
 object GenericLongitudinalView {
@@ -84,7 +84,7 @@ object GenericLongitudinalView {
     }
   }
 
-  def getInputTable(sqlContext: SQLContext, opts: Opts): DataFrame = {
+  def getInputTable(sqlContext: SparkSession, opts: Opts): DataFrame = {
     opts.inputTablename.get match {
       case Some(t) => sqlContext.sql(s"SELECT * FROM $t")
       case _ => sqlContext.read.load(opts.inputFiles())
@@ -97,7 +97,7 @@ object GenericLongitudinalView {
 
     val numParquetFiles = opts.numParquetFiles.get match {
       case Some(n) => n
-      case _ => getInputTable(spark.sqlContext, opts).rdd.getNumPartitions
+      case _ => getInputTable(spark, opts).rdd.getNumPartitions
     }
 
     val from = getFrom(opts)
@@ -110,7 +110,7 @@ object GenericLongitudinalView {
 
     val outputPath = opts.outputPath()
 
-    run(spark.sqlContext, opts)
+    run(spark, opts)
       .repartition(numParquetFiles)
       .write
       .mode(opts.writeMode())
@@ -119,9 +119,9 @@ object GenericLongitudinalView {
     spark.stop()
   }
 
-  def run(sqlContext: SQLContext, opts: Opts): DataFrame = {
+  def run(spark: SparkSession, opts: Opts): DataFrame = {
 
-    val df = getInputTable(sqlContext, opts)
+    val df = getInputTable(spark, opts)
     val tempTableName = "genericLongitudinalTempTable"
     df.registerTempTable(tempTableName)
 
@@ -143,7 +143,7 @@ object GenericLongitudinalView {
       case _ => ""
     }
 
-    val data = sqlContext.sql(s"""
+    val data = spark.sql(s"""
       SELECT $selection
       FROM $tempTableName
       WHERE $from <= $submissionDateCol

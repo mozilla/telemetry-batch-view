@@ -1,11 +1,11 @@
 package com.mozilla.telemetry
 
-import com.mozilla.telemetry.utils.getOrCreateSparkSession
+import com.holdenkarau.spark.testing.DatasetSuiteBase
 import com.mozilla.telemetry.views._
 import org.apache.spark.sql.Dataset
 import org.scalatest.FlatSpec
 
-class CrossSectionalViewTest extends FlatSpec {
+class CrossSectionalViewTest extends FlatSpec with DatasetSuiteBase {
 
   // Add compare method to classes extending the Product trait (including
   // case classes)
@@ -202,7 +202,6 @@ class CrossSectionalViewTest extends FlatSpec {
   }
 
   "CrossSectional" must "be calculated correctly" in {
-    val spark = getOrCreateSparkSession("CrossSectionalTest")
     spark.sparkContext.setLogLevel("WARN")
     import spark.implicits._
 
@@ -217,7 +216,6 @@ class CrossSectionalViewTest extends FlatSpec {
     ).toDS
 
     assert(compareDS(actual, expected))
-    spark.stop()
   }
 
   it must "summarize active_addons properly" in {

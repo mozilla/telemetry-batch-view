@@ -1,0 +1,9 @@
+// https://docs.oracle.com/javase/8/docs/technotes/guides/security/permissions.html
+// https://docs.oracle.com/javase/8/docs/technotes/guides/security/PolicyFiles.html
+
+grant {
+  // https://issues.apache.org/jira/browse/SPARK-22918
+  // Because sbt imposes a SecurityManager to trap exit statuses, derby throws exceptions;
+  // adding this permission is the recommended path forward if a SecurityManager is in effect.
+  permission org.apache.derby.security.SystemPermission "engine", "usederbyinternals";
+};
