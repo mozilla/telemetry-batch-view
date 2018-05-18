@@ -41,7 +41,7 @@ You may need to increase the amount of memory allocated to Docker for this to wo
 
 You can also pass arguments to sbt (the scala build tool we use for running the tests) through the runtests.sh. For example, to run only the addon tests, try:
 
-    ./run-sbt.sh "test-only com.mozilla.telemetry.AddonsViewTest"
+    ./run-sbt.sh "testOnly com.mozilla.telemetry.AddonsViewTest"
 
 If you wish to import the project into IntelliJ IDEA, apply the following changes to `Preferences` -> `Languages & Frameworks` -> `Scala Compile Server`:
 
@@ -56,7 +56,7 @@ See the [documentation for specific views](https://github.com/mozilla/telemetry-
 
 For example, to create a longitudinal view locally:
 ```bash
-sbt "run-main com.mozilla.telemetry.views.LongitudinalView --from 20160101 --to 20160701 --bucket telemetry-test-bucket"
+sbt "runMain com.mozilla.telemetry.views.LongitudinalView --from 20160101 --to 20160701 --bucket telemetry-test-bucket"
 ```
 
 For distributed execution we pack all of the classes together into a single JAR and submit it to the cluster:
