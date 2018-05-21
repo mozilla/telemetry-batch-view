@@ -148,7 +148,7 @@ object ExperimentAnalysisView {
     }
   }
 
-  def getMetrics(conf: Conf, data: DataFrame) = {
+  def getMetrics(conf: Conf) = {
     conf.metric.get match {
       case Some(m) => {
         List((m, (Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _) ++ Scalars.definitions())(m.toLowerCase)))
@@ -167,13 +167,15 @@ object ExperimentAnalysisView {
                            experimentsSummary: DataFrame,
                            errorAggregates: DataFrame, conf: Conf,
                            experimentMetrics: List[String] = List()): List[MetricAnalysis] = {
-    val pingCount = experimentsSummary.count()
+    // Bug 1463248
+    val experimentsFiltered = experimentsSummary.where("experiment_branch is not NULL")
+    val pingCount = experimentsFiltered.count()
     val numJackknifeBlocks = conf.jackknifeBlocks()
-    val persisted = repartitionAndPersist(experimentsSummary, pingCount, experiment, experimentMetrics, numJackknifeBlocks)
+    val persisted = repartitionAndPersist(experimentsFiltered, pingCount, experiment, experimentMetrics, numJackknifeBlocks)
 
-    val schemaFields = experimentsSummary.schema.map(_.name)
+    val schemaFields = persisted.schema.map(_.name)
 
-    val metricList = getMetrics(conf, experimentsSummary).filter {case (name, md) => schemaFields.contains(name)}
+    val metricList = getMetrics(conf).filter {case (name, md) => schemaFields.contains(name)}
 
     val metrics = metricList.flatMap {
       case (name: String, md: MetricDefinition) =>
