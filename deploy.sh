@@ -23,7 +23,13 @@ if [[ -z "$TRAVIS_TAG" ]]; then
 else
     # Only continue uploading jar if the tag was on master branch
     pushd ${TRAVIS_BUILD_DIR}
-    # Finds all branches that contain the commit sha of TRAVIS_TAG
+
+    # Travis workers on tagged builds are in detached head state with only tag references
+    git config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+    git fetch
+    git checkout remotes/origin/master
+
+    # Finds all branches that contain the commit sha of TRAVIS_TAG.  This only will work on master branch
     output=$(git branch -r --contains `git rev-parse --verify ${TRAVIS_TAG}^{commit}`)
 
     if [[ $output =~ .*origin\/master.* ]]; then
@@ -33,6 +39,8 @@ else
         # Exit 0 so the travis build doesn't fail
         exit 0
     fi
+    # Restore to previous checkout and directory
+    git checkout -
     popd
     BRANCH_OR_TAG=tags
     ID=$TRAVIS_TAG
