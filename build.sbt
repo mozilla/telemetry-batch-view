@@ -5,7 +5,7 @@ val localMaven = "s3://net-mozaws-data-us-west-2-ops-mavenrepo/"
 
 resolvers += "S3 local maven snapshots" at localMavenHttps + "snapshots"
 
-val sparkVersion = "2.3.0"
+val sparkVersion = "2.0.2"
 
 lazy val root = (project in file(".")).
   settings(
@@ -22,7 +22,7 @@ lazy val root = (project in file(".")).
     libraryDependencies += "org.apache.parquet" % "parquet-avro" % "1.7.0",
     libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.4",
     libraryDependencies += "net.sandrogrzicic" %% "scalabuff-runtime" % "1.4.0",
-    libraryDependencies += "com.holdenkarau" %% "spark-testing-base" % "2.3.0_0.9.0" % "test",
+    libraryDependencies += "com.holdenkarau" %% "spark-testing-base" % "2.0.0_0.4.7" % "test",
     libraryDependencies += "org.xerial.snappy" % "snappy-java" % "1.1.2",
     libraryDependencies += "org.json4s" %% "json4s-jackson" % "3.2.10",
     libraryDependencies += "joda-time" % "joda-time" % "2.9.2",
