@@ -2,6 +2,7 @@ package com.mozilla.telemetry.experiments.analyzers
 
 import com.holdenkarau.spark.testing.DatasetSuiteBase
 import com.mozilla.telemetry.metrics.{EnumeratedHistogram, LinearHistogram}
+import com.mozilla.telemetry.tags.ClientsDailyBuild
 import org.apache.spark.sql.DataFrame
 import org.scalatest.{FlatSpec, Matchers}
 
@@ -42,7 +43,7 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
     HistogramPoint(v.toDouble/total, v.toLong, label)
   }
 
-  "Non-keyed Histograms" can "be aggregated" in {
+  "Non-keyed Histograms" can "be aggregated" taggedAs (ClientsDailyBuild) in {
     val df = fixture
     val categoricalAnalyzer = new HistogramAnalyzer("histogram",
       EnumeratedHistogram(keyed = false, "name", 150),

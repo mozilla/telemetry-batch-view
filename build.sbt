@@ -60,16 +60,8 @@ assemblyMergeStrategy in assembly := {
 parallelExecution in Test := false
 logBuffered in Test := false
 
-lazy val Slow = config("slow").extend(Test)
-configs(Slow)
-inConfig(Slow)(Defaults.testTasks)
-
 testOptions in Test := Seq(
-  Tests.Argument("-l", "org.scalatest.tags.Slow"),
   // -oD add duration reporting; see http://www.scalatest.org/user_guide/using_scalatest_with_sbt
-  Tests.Argument("-oD")
-)
-testOptions in Slow := Seq(
   Tests.Argument("-oD")
 )
 
