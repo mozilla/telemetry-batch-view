@@ -3,7 +3,7 @@ The Crash Aggregate View
 
 To generate the dataset for April 10, 2016 to April 11, 2016:
 ```bash
-sbt "run-main com.mozilla.telemetry.views.CrashAggregateView --from 20160410 --to 20160411 --bucket telemetry-bucket"
+sbt "runMain com.mozilla.telemetry.views.CrashAggregateView --from 20160410 --to 20160411 --bucket telemetry-bucket"
 ```
 
 **Note:** Currently, due to [avro-parquet

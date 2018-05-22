@@ -42,6 +42,13 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
     ExperimentSummaryRow("e", "id3", "control", 1, Map(2 -> 1))
   )
 
+  val missingBranchData = Seq(
+    ExperimentSummaryRow("a", "id1", "control", 1, Map(1 -> 1)),
+    ExperimentSummaryRow("b", "id1", "control", 2, Map(2 -> 1)),
+    ExperimentSummaryRow("c", "id1", "branch1", 1, Map(2 -> 1)),
+    ExperimentSummaryRow("d", "id1", null, 1, Map(2 -> 1))
+  )
+
   val errorAgg = Seq(
     ErrorAggRow("id1", "control", 1, 1, 1, 0, 0, 0, 0, 0),
     ErrorAggRow("id1", "branch1", 1, 1, 2, 0, 0, 0, 0, 0),
@@ -147,6 +154,26 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
     val res = ExperimentAnalysisView.getExperimentMetrics("id1", spark.emptyDataset[ExperimentSummaryRow].toDF(), df,
       conf, experimentMetrics)
     res.size should be (0)
+  }
+
+  // Bug 1463248
+  "Experiment Analysis View" can "filter out pings with missing branches" in {
+    import spark.implicits._
+
+    val data = missingBranchData.toDS().toDF().where(col("experiment_id") === "id1")
+    val args =
+      "--input" :: "telemetry-mock-bucket" ::
+      "--output" :: "telemetry-mock-bucket" :: Nil
+    val conf = new ExperimentAnalysisView.Conf(args.toArray)
+
+    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, spark.emptyDataset[ErrorAggRow].toDF(), conf,
+      experimentMetrics)
+
+    val metadata = res.filter(_.metric_name == "Experiment Metadata")
+    metadata.length should be (2)
+
+    val totalClients = metadata.flatMap(_.statistics.get.filter(_.name == "Total Clients").map(_.value)).sum
+    totalClients should be (3.0)
   }
 
   override def afterAll() {
