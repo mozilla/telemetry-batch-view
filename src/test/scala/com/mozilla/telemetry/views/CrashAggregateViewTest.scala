@@ -30,12 +30,12 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
   )
 
   var spark: SparkSession = _
-  override def beforeAll(configMap: org.scalatest.ConfigMap) {
+  override def beforeAll() {
     spark = getOrCreateSparkSession("KPI")
     spark.sparkContext.setLogLevel("WARN")
   }
 
-  override def afterAll(configMap: org.scalatest.ConfigMap) {
+  override def afterAll() {
     spark.stop()
   }
 

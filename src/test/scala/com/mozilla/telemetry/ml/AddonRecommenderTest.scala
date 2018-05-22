@@ -3,8 +3,8 @@ package com.mozilla.telemetry.ml
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
+import com.holdenkarau.spark.testing.DatasetSuiteBase
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers, PrivateMethodTester}
-import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import org.apache.spark.sql.Dataset
 
 import scala.collection.Map
@@ -28,10 +28,8 @@ private case class TestLongitudinalRow(client_id: Option[String],
                                        active_addons: Option[Seq[Map[String, TestActiveAddonData]]],
                                        build: Option[Seq[TestBuildData]])
 
-class AddonRecommenderTest extends FlatSpec with BeforeAndAfterAll with Matchers with PrivateMethodTester{
+class AddonRecommenderTest extends FlatSpec with BeforeAndAfterAll with Matchers with PrivateMethodTester with DatasetSuiteBase {
   private var amoDB: Map[String, AMOAddonInfo] = Map[String, AMOAddonInfo]()
-  private val spark = getOrCreateSparkSession("AddonRecommenderTest", enableHiveSupport = true)
-  import spark.implicits._
 
   override def beforeAll() {
     // Generate a sample AMO database cache file and save it.
@@ -137,11 +135,13 @@ class AddonRecommenderTest extends FlatSpec with BeforeAndAfterAll with Matchers
 
     // Init the AMO Database.
     amoDB = AMODatabase.getAddonMap()
+
+    super.beforeAll()
   }
 
   override def afterAll(): Unit = {
     Files.deleteIfExists(AMODatabase.getLocalCachePath())
-    spark.stop()
+    super.afterAll()
   }
 
   "hash" must "return positive hash codes" in {
@@ -153,6 +153,9 @@ class AddonRecommenderTest extends FlatSpec with BeforeAndAfterAll with Matchers
   }
 
   "getAddonData" must "filter undesired addons" in {
+
+    import spark.implicits._
+
     val dataset = List(
       // This user has an add-on which is not on AMO and a webextension one.
       TestLongitudinalRow(Some("foo_id"),
