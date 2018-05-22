@@ -39,7 +39,7 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
     spark.stop()
   }
 
-  def fixture = {
+  lazy val fixture = {
     def cartesianProduct(dimensions: List[(String, List[Any])]): Iterable[Map[String, Any]] = {
       dimensions match {
         case Nil => List(Map[String, Any]())
