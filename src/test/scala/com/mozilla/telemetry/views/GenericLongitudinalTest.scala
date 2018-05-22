@@ -1,11 +1,12 @@
 package com.mozilla.telemetry.views
 
-import com.holdenkarau.spark.testing.DatasetSuiteBase
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.types._
 import org.scalatest.FlatSpec
 
-class GenericLongitudinalTest extends FlatSpec with DatasetSuiteBase {
+class GenericLongitudinalTest extends FlatSpec {
   val tablename = "test_table"
   val colNames = List("random_data", "client_id", "submission_date_s3", "os", "ordering")
   val data = List(
@@ -66,46 +67,51 @@ class GenericLongitudinalTest extends FlatSpec with DatasetSuiteBase {
     "--output-path" :: "missing-bucket" ::
     "--ordering-columns" :: "long_val" :: Nil
 
-  // We make this lazy so that it doesn't run until beforeAll() has
-  // had a chance to set up the spark context.
-  lazy val fixture = {
+  val fixture = {
     new {
+      private val spark = getOrCreateSparkSession("Generic Longitudinal Test")
+
+      private val sc = spark.sparkContext
+      private val hiveContext = new HiveContext(sc)
+
       import spark.implicits._
       data.toDF(colNames: _*).registerTempTable(tablename)
 
       private val opts = new GenericLongitudinalView.Opts(args.toArray)
-      private val groupedDf = GenericLongitudinalView.run(spark, opts)
+      private val groupedDf = GenericLongitudinalView.run(hiveContext, opts)
 
       val longitudinal = groupedDf.collect()
       val fieldIndex: String => Integer = longitudinal.head.fieldIndex
 
       val intOrdering = GenericLongitudinalView.run(
-        spark,
+        hiveContext,
         new GenericLongitudinalView.Opts(intOrderingArgs.toArray)
       ).collect()
 
       val secondaryOrdering = GenericLongitudinalView.run(
-        spark,
+        hiveContext,
         new GenericLongitudinalView.Opts(secondaryOrderingArgs.toArray)
       ).collect()
 
       val alternateGrouping = GenericLongitudinalView.run(
-        spark,
+        hiveContext,
         new GenericLongitudinalView.Opts(alternateGroupingArgs.toArray)
       ).collect()
 
       nestedData.toDF(nestedDataColNames: _*).registerTempTable(nestedDataTableName)
       val nestedGroup = GenericLongitudinalView.run(
-        spark,
+        hiveContext,
         new GenericLongitudinalView.Opts(nestedArgs.toArray)
       ).collect()
 
       // Test Long sorting - can't use List.toDF for nulled Long
       spark.createDataFrame(sc.parallelize(longData), longSchema).registerTempTable(longTempTableName)
       val groupedLongDF = GenericLongitudinalView.run(
-        spark,
+        hiveContext,
         new GenericLongitudinalView.Opts(longArgs.toArray)
       ).collect()
+
+      spark.stop()
     }
   }
 

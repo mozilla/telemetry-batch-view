@@ -12,18 +12,15 @@ if [ ! -f /.dockerenv ]; then
     exit $?
 fi
 
-# Set options that sbt will pass to the JVM
-export SBT_OPTS="-Xss2M -Djava.security.policy=java.policy"
-
 # Run tests
 if [ $TRAVIS_BRANCH ]; then
    # under travis, submit code coverage data
-   sbt "$@"
+   sbt -J-Xss2M "$@"
    bash <(curl -s https://codecov.io/bash)
 elif [ $# -gt 0 ]; then
    # if args specified, run the tests with those
-   sbt "$@"
+   sbt -J-Xss2M "$@"
 else
    # default: just run the tests
-   sbt test
+   sbt -J-Xss2M test
 fi
