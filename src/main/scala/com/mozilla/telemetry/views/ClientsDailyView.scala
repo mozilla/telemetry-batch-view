@@ -130,6 +130,7 @@ object ClientsDailyView {
     aggFirst("app_display_version"),
     aggFirst("app_name"),
     aggFirst("app_version"),
+    aggFirst("attribution"),
     aggFirst("blocklist_enabled"),
     aggFirst("channel"),
     aggFirst(expr("IF(country IS NOT NULL AND country != '??', IF(city IS NOT NULL, city, '??'), NULL)"), "city"),

@@ -7,6 +7,13 @@ object ClientsDailyViewTestPayloads {
     count: Option[Long] = None
   )
 
+  case class Attribution(
+    source: Option[String] = None,
+    medium: Option[String] = None,
+    campaign: Option[String] = None,
+    content: Option[String] = None
+  )
+
   case class MainSummaryRow(
     aborts_content: Option[Int] = None,
     aborts_gmplugin: Option[Int] = None,
@@ -20,6 +27,7 @@ object ClientsDailyViewTestPayloads {
     app_display_version: Option[String] = None,
     app_name: Option[String] = None,
     app_version: Option[String] = None,
+    attribution: Option[Attribution] = None,
     blocklist_enabled: Option[Boolean] = None,
     channel: Option[String] = None,
     city: Option[String] = None,
@@ -147,6 +155,12 @@ object ClientsDailyViewTestPayloads {
     app_display_version = sValue,
     app_name = sValue,
     app_version = sValue,
+    attribution = Some(Attribution(
+      source = sValue,
+      medium = sValue,
+      campaign = sValue,
+      content = sValue
+    )),
     blocklist_enabled = bValue,
     channel = sValue,
     cpu_cores = iValue,
@@ -208,6 +222,10 @@ object ClientsDailyViewTestPayloads {
     "app_display_version" -> sValue,
     "app_name" -> sValue,
     "app_version" -> sValue,
+    "attribution.source" -> sValue,
+    "attribution.medium" -> sValue,
+    "attribution.campaign" -> sValue,
+    "attribution.content" -> sValue,
     "blocklist_enabled" -> bValue,
     "channel" -> sValue,
     "cpu_cores" -> iValue,
