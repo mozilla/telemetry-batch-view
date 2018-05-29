@@ -1,5 +1,6 @@
 package com.mozilla.telemetry
 
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import com.mozilla.telemetry.views.AddonsView
 import org.scalatest.{FlatSpec, Matchers}
@@ -28,43 +29,37 @@ case class PartialMain(document_id: String,
                        normalized_channel: String,
                        active_addons: Seq[Addon])
 
-class AddonsViewTest extends FlatSpec with Matchers{
+class AddonsViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
   "Addon records" can "be extracted from MainSummary" in {
-    val spark = getOrCreateSparkSession("AddonsViewTest")
-
     import spark.implicits._
 
-    try {
-      val mains = Seq(
-        PartialMain("doc1", "client1", 1l, "2016-10-01T00:00:00", "release", Seq(
-          Addon("addon1", true, "addon1name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, true, false, true),
-          Addon("addon2", true, "addon2name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false, true, true))),
-        PartialMain("doc2", "client2", 2l, "2016-10-01T00:00:00", "release", null),
-        PartialMain("doc3", "client2", 2l, "2016-10-01T00:00:00", "release", Seq()),
-        PartialMain("doc4", "client3", 3l, "2016-10-01T00:00:00", "release", Seq(
-          Addon("addon1", true, "addon1name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, true, false, true),
-          Addon("addon3", true, "addon3name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false, true, false),
-          Addon("addon4", true, "addon4name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false, false, false)))
-      ).toDS().toDF()
+    val mains = Seq(
+      PartialMain("doc1", "client1", 1l, "2016-10-01T00:00:00", "release", Seq(
+        Addon("addon1", true, "addon1name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, true, false, true),
+        Addon("addon2", true, "addon2name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false, true, true))),
+      PartialMain("doc2", "client2", 2l, "2016-10-01T00:00:00", "release", null),
+      PartialMain("doc3", "client2", 2l, "2016-10-01T00:00:00", "release", Seq()),
+      PartialMain("doc4", "client3", 3l, "2016-10-01T00:00:00", "release", Seq(
+        Addon("addon1", true, "addon1name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, true, false, true),
+        Addon("addon3", true, "addon3name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false, true, false),
+        Addon("addon4", true, "addon4name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false, false, false)))
+    ).toDS().toDF()
 
-      mains.count() should be(4)
-      val addons = AddonsView.addonsFromMain(mains)
+    mains.count() should be(4)
+    val addons = AddonsView.addonsFromMain(mains)
 
-      addons.count() should be(7)
+    addons.count() should be(7)
 
-      addons.where("addon_id is null").count() should be (2)
-      addons.where("addon_id is not null").count() should be (5)
+    addons.where("addon_id is null").count() should be(2)
+    addons.where("addon_id is not null").count() should be(5)
 
-      addons.select("client_id").distinct().count() should be(3)
+    addons.select("client_id").distinct().count() should be(3)
 
-      // Null plus the 4 actual ids.
-      addons.select("addon_id").distinct().count() should be(5)
+    // Null plus the 4 actual ids.
+    addons.select("addon_id").distinct().count() should be(5)
 
-      addons.where("addon_id == 'addon1'").select("client_id").distinct().count() should be(2)
+    addons.where("addon_id == 'addon1'").select("client_id").distinct().count() should be(2)
 
-      addons.where("multiprocess_compatible").count() should be (3)
-    } finally {
-      spark.stop()
-    }
+    addons.where("multiprocess_compatible").count() should be(3)
   }
 }

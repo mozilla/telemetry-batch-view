@@ -1,11 +1,12 @@
 package com.mozilla.telemetry
 
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.utils.{Events, getOrCreateSparkSession}
 import org.apache.spark.sql.Row
 import org.json4s.jackson.JsonMethods.parse
 import org.scalatest.{FlatSpec, Matchers}
 
-class EventsTest extends FlatSpec with Matchers{
+class EventsTest extends FlatSpec with Matchers with DataFrameSuiteBase {
   "Events" can "be extracted" in {
     val events = parse(
       """[
@@ -59,11 +60,6 @@ class EventsTest extends FlatSpec with Matchers{
 
     // Apply events schema to event rows
     val schema = Events.buildEventSchema
-    val spark = getOrCreateSparkSession("MainSummary")
-    try {
-      noException should be thrownBy spark.createDataFrame(spark.sparkContext.parallelize(eventRows), schema).count()
-    } finally {
-      spark.stop
-    }
+    noException should be thrownBy spark.createDataFrame(sc.parallelize(eventRows), schema).count()
   }
 }

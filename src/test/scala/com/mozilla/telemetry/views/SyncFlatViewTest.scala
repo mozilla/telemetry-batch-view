@@ -1,5 +1,6 @@
 package com.mozilla.telemetry
 
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.utils.{SyncPingConversion, getOrCreateSparkSession}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
@@ -10,41 +11,31 @@ import org.scalatest.{FlatSpec, Matchers}
 
 import scala.collection.mutable
 
-class SyncFlatViewTest extends FlatSpec with Matchers {
+class SyncFlatViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
 
   "New Style SyncPing payload" can "be flattened" in {
-    val spark = getOrCreateSparkSession("TestSyncPing")
-    spark.sparkContext.setLogLevel("WARN")
-    try {
-      val row = SyncPingConversion.pingToFlatRows(SyncViewTestPayloads.multiSyncPing)
-      val rdd = spark.sparkContext.parallelize(row.toSeq)
-      val dataframe = spark.createDataFrame(rdd, SyncPingConversion.singleEngineFlatSyncType)
+    sc.setLogLevel("WARN")
+    val row = SyncPingConversion.pingToFlatRows(SyncViewTestPayloads.multiSyncPing)
+    val rdd = sc.parallelize(row.toSeq)
+    val dataframe = spark.createDataFrame(rdd, SyncPingConversion.singleEngineFlatSyncType)
 
-      // verify the contents
-      validateSyncPing(dataframe.collect(), SyncViewTestPayloads.multiSyncPing)
-    } finally {
-      spark.stop()
-    }
+    // verify the contents
+    validateSyncPing(dataframe.collect(), SyncViewTestPayloads.multiSyncPing)
   }
 
   "SyncPing records" can "be round-tripped to parquet as flat data" in {
-    val spark = getOrCreateSparkSession("TestSyncPing")
-    spark.sparkContext.setLogLevel("WARN")
-    try {
-      val row = SyncPingConversion.pingToFlatRows(SyncViewTestPayloads.multiSyncPing)
-      // Write a parquet file with the rows.
-      val rdd = spark.sparkContext.parallelize(row.toSeq)
-      val dataframe = spark.createDataFrame(rdd, SyncPingConversion.singleEngineFlatSyncType)
-      val tempFile = com.mozilla.telemetry.utils.temporaryFileName()
-      dataframe.write.parquet(tempFile.toString)
-      // read it back in and verify it.
-      val localDataset = spark.read.load(tempFile.toString)
-      localDataset.createOrReplaceTempView("sync")
-      val localDataframe = spark.sql("SELECT * FROM sync")
-      validateSyncPing(localDataframe.collect(), SyncViewTestPayloads.multiSyncPing)
-    } finally {
-      spark.stop()
-    }
+    sc.setLogLevel("WARN")
+    val row = SyncPingConversion.pingToFlatRows(SyncViewTestPayloads.multiSyncPing)
+    // Write a parquet file with the rows.
+    val rdd = sc.parallelize(row.toSeq)
+    val dataframe = spark.createDataFrame(rdd, SyncPingConversion.singleEngineFlatSyncType)
+    val tempFile = com.mozilla.telemetry.utils.temporaryFileName()
+    dataframe.write.parquet(tempFile.toString)
+    // read it back in and verify it.
+    val localDataset = spark.read.load(tempFile.toString)
+    localDataset.createOrReplaceTempView("sync")
+    val localDataframe = spark.sql("SELECT * FROM sync")
+    validateSyncPing(localDataframe.collect(), SyncViewTestPayloads.multiSyncPing)
   }
 
   private def validateSyncPing(rows: Array[Row], ping: JValue) {

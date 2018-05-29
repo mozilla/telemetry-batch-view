@@ -1,12 +1,13 @@
 package com.mozilla.telemetry
 
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import com.mozilla.telemetry.views.SyncEventConverter
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods.parse
 import org.scalatest.{FlatSpec, Matchers}
 
-class SyncEventViewTest extends FlatSpec with Matchers{
+class SyncEventViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
   def sync_payload = parse(
     """
       |{
@@ -189,77 +190,67 @@ class SyncEventViewTest extends FlatSpec with Matchers{
 
   "Sync Events" can "be serialized" in {
     implicit val formats = DefaultFormats
-    val spark = getOrCreateSparkSession("SyncEventsViewTest")
-    spark.sparkContext.setLogLevel("WARN")
-    try {
-      val row = SyncEventConverter.pingToRows(sync_payload)
-      val rdd = spark.sparkContext.parallelize(row)
+    sc.setLogLevel("WARN")
+    val row = SyncEventConverter.pingToRows(sync_payload)
+    val rdd = sc.parallelize(row)
 
-      val dataframe = spark.createDataFrame(rdd, SyncEventConverter.syncEventSchema)
+    val dataframe = spark.createDataFrame(rdd, SyncEventConverter.syncEventSchema)
 
-      // verify the contents.
-      dataframe.count() should be (2)
-      val checkRow = dataframe.first()
+    // verify the contents.
+    dataframe.count() should be(2)
+    val checkRow = dataframe.first()
 
-      checkRow.getAs[String]("document_id") should be ((sync_payload \ "id").extract[String])
-      checkRow.getAs[String]("app_build_id") should be ((sync_payload \ "application" \ "buildId").extract[String])
-      checkRow.getAs[String]("app_display_version") should be ((sync_payload \ "application" \ "displayVersion").extract[String])
-      checkRow.getAs[String]("app_name") should be ((sync_payload \ "application" \ "name").extract[String])
-      checkRow.getAs[String]("app_version") should be ((sync_payload \ "application" \ "version").extract[String])
-      checkRow.getAs[String]("app_channel") should be ((sync_payload \ "application" \ "channel").extract[String])
+    checkRow.getAs[String]("document_id") should be((sync_payload \ "id").extract[String])
+    checkRow.getAs[String]("app_build_id") should be((sync_payload \ "application" \ "buildId").extract[String])
+    checkRow.getAs[String]("app_display_version") should be((sync_payload \ "application" \ "displayVersion").extract[String])
+    checkRow.getAs[String]("app_name") should be((sync_payload \ "application" \ "name").extract[String])
+    checkRow.getAs[String]("app_version") should be((sync_payload \ "application" \ "version").extract[String])
+    checkRow.getAs[String]("app_channel") should be((sync_payload \ "application" \ "channel").extract[String])
 
-      val payload = sync_payload \ "payload"
-      checkRow.getAs[String]("why") should be ((payload \ "why").extract[String])
-      checkRow.getAs[String]("uid") should be ((payload \ "uid").extract[String])
-      checkRow.getAs[String]("device_id") should be ((payload \ "deviceID").extract[String])
-      // not present in this ping (common, need to make sure this works)
-      checkRow.getAs[String]("device_os_name") should be (null)
-      checkRow.getAs[String]("device_os_version") should be (null)
-      checkRow.getAs[String]("device_os_locale") should be (null)
+    val payload = sync_payload \ "payload"
+    checkRow.getAs[String]("why") should be((payload \ "why").extract[String])
+    checkRow.getAs[String]("uid") should be((payload \ "uid").extract[String])
+    checkRow.getAs[String]("device_id") should be((payload \ "deviceID").extract[String])
+    // not present in this ping (common, need to make sure this works)
+    checkRow.getAs[String]("device_os_name") should be(null)
+    checkRow.getAs[String]("device_os_version") should be(null)
+    checkRow.getAs[String]("device_os_locale") should be(null)
 
-      val event = (payload \ "events")(0)
-      checkRow.getAs[Long]("event_timestamp") should be (event(0).extract[Long])
-      checkRow.getAs[String]("event_category") should be (event(1).extract[String])
-      checkRow.getAs[String]("event_method") should be (event(2).extract[String])
-      checkRow.getAs[String]("event_object") should be (event(3).extract[String])
-      checkRow.getAs[String]("event_string_value") should be (null)
-      checkRow.getAs[Map[String, String]]("event_map_values") should be (event(5).extract[Map[String, String]])
-      checkRow.getAs[String]("event_device_id") should be ((event(5) \ "deviceID").extract[String])
-      checkRow.getAs[String]("event_flow_id") should be ((event(5) \ "flowID").extract[String])
-      checkRow.getAs[String]("event_device_version") should be ("55.0a1")
-      checkRow.getAs[String]("event_device_os") should be ("WINNT")
-    } finally {
-      spark.stop()
-    }
+    val event = (payload \ "events") (0)
+    checkRow.getAs[Long]("event_timestamp") should be(event(0).extract[Long])
+    checkRow.getAs[String]("event_category") should be(event(1).extract[String])
+    checkRow.getAs[String]("event_method") should be(event(2).extract[String])
+    checkRow.getAs[String]("event_object") should be(event(3).extract[String])
+    checkRow.getAs[String]("event_string_value") should be(null)
+    checkRow.getAs[Map[String, String]]("event_map_values") should be(event(5).extract[Map[String, String]])
+    checkRow.getAs[String]("event_device_id") should be((event(5) \ "deviceID").extract[String])
+    checkRow.getAs[String]("event_flow_id") should be((event(5) \ "flowID").extract[String])
+    checkRow.getAs[String]("event_device_version") should be("55.0a1")
+    checkRow.getAs[String]("event_device_os") should be("WINNT")
   }
 
   "Sync Events" can "contain os information for sending device" in {
-    val spark = getOrCreateSparkSession("SyncEventsViewTest")
-    spark.sparkContext.setLogLevel("WARN")
+    sc.setLogLevel("WARN")
     implicit val formats = DefaultFormats
-    try {
-      val row = SyncEventConverter.pingToRows(sync_payload_with_os)
-      val rdd = spark.sparkContext.parallelize(row)
+    val row = SyncEventConverter.pingToRows(sync_payload_with_os)
+    val rdd = sc.parallelize(row)
 
-      val dataframe = spark.createDataFrame(rdd, SyncEventConverter.syncEventSchema)
+    val dataframe = spark.createDataFrame(rdd, SyncEventConverter.syncEventSchema)
 
-      // verify the contents.
-      dataframe.count() should be (1)
-      val checkRow = dataframe.first()
+    // verify the contents.
+    dataframe.count() should be(1)
+    val checkRow = dataframe.first()
 
-      val payload = sync_payload \ "payload"
+    val payload = sync_payload \ "payload"
 
-      checkRow.getAs[String]("device_os_name") should be ("iOS")
-      checkRow.getAs[String]("device_os_version") should be ("10.0")
-      checkRow.getAs[String]("device_os_locale") should be ("en_US")
-      // Check that we handle the case where the target device isn't in the ping since
-      // it's convenient, somewhat common, and not tested by the previous test.
-      val event = (payload \ "events")(0)
-      checkRow.getAs[String]("event_device_id") should be ((event(5) \ "deviceID").extract[String])
-      checkRow.getAs[String]("event_device_version") should be (null)
-      checkRow.getAs[String]("event_device_os") should be (null)
-    } finally {
-      spark.stop()
-    }
+    checkRow.getAs[String]("device_os_name") should be("iOS")
+    checkRow.getAs[String]("device_os_version") should be("10.0")
+    checkRow.getAs[String]("device_os_locale") should be("en_US")
+    // Check that we handle the case where the target device isn't in the ping since
+    // it's convenient, somewhat common, and not tested by the previous test.
+    val event = (payload \ "events") (0)
+    checkRow.getAs[String]("event_device_id") should be((event(5) \ "deviceID").extract[String])
+    checkRow.getAs[String]("event_device_version") should be(null)
+    checkRow.getAs[String]("event_device_os") should be(null)
   }
 }

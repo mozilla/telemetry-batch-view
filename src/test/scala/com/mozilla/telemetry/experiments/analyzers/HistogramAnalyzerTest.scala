@@ -20,7 +20,7 @@ class HistogramAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase
   val m3 = Map(0 -> 1, 1 -> 2, 2 -> 3, 100 -> 1)
   val m4 = Map(0 -> 1, 1 -> 2, 2 -> 3, 5 -> 0)
 
-  def fixture: DataFrame = {
+  lazy val fixture: DataFrame = {
     import spark.implicits._
     Seq(
       HistogramExperimentDataset(1, "experiment1", "control", Some(m1), Some(Map("key1" -> m1, "key2" -> m2))),

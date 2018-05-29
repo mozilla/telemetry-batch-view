@@ -1,16 +1,15 @@
 package com.mozilla.telemetry
 
-import com.mozilla.telemetry.utils.getOrCreateSparkSession
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.views.CrashAggregateView
-import org.apache.spark.sql.SparkSession
 import org.json4s.JsonDSL._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+import org.scalatest.{FlatSpec, Matchers}
 
 import scala.collection.JavaConversions._
 
-class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
+class CrashAggregateViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
   val pingDimensions = List(
     ("submission_date",   List("20160305", "20160607")),
     ("activity_date",     List("2016-03-02T00:00:00.0-03:00", "2016-06-01T00:00:00.0-03:00")),
@@ -29,14 +28,9 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
     ("gfx_compositor",    List("simple", "none", null))
   )
 
-  var spark: SparkSession = _
-  override def beforeAll(configMap: org.scalatest.ConfigMap) {
-    spark = getOrCreateSparkSession("KPI")
-    spark.sparkContext.setLogLevel("WARN")
-  }
-
-  override def afterAll(configMap: org.scalatest.ConfigMap) {
-    spark.stop()
+  override def beforeAll() {
+    super.beforeAll()
+    sc.setLogLevel("WARN")
   }
 
   lazy val fixture = {
@@ -153,7 +147,7 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
         rowRDD,
         mainProcessedAccumulator, mainIgnoredAccumulator,
         crashProcessedAccumulator, crashIgnoredAccumulator, contentCrashIgnoredAccumulator
-        ) = CrashAggregateView.compareCrashes(spark.sparkContext, spark.sparkContext.parallelize(pings))
+        ) = CrashAggregateView.compareCrashes(sc, sc.parallelize(pings))
       val schema = CrashAggregateView.buildSchema()
       val records = spark.createDataFrame(rowRDD, schema)
       records.count() // Spark is pretty lazy; kick it so it'll update our accumulators properly
@@ -266,7 +260,7 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
       rowRDD,
       mainProcessedAccumulator, mainIgnoredAccumulator,
       crashProcessedAccumulator, crashIgnoredAccumulator, contentCrashIgnoredAccumulator
-      ) = CrashAggregateView.compareCrashes(spark.sparkContext, spark.sparkContext.parallelize(contentCrashPings))
+      ) = CrashAggregateView.compareCrashes(sc, sc.parallelize(contentCrashPings))
     rowRDD.collect()
     assert(crashProcessedAccumulator.value == 0)
     assert(contentCrashIgnoredAccumulator.value == contentCrashPings.length)
@@ -280,7 +274,7 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
       rowRDD,
       mainProcessedAccumulator, mainIgnoredAccumulator,
       crashProcessedAccumulator, crashIgnoredAccumulator, contentCrashIgnoredAccumulator
-      ) = CrashAggregateView.compareCrashes(spark.sparkContext, spark.sparkContext.parallelize(browserCrashPings))
+      ) = CrashAggregateView.compareCrashes(sc, sc.parallelize(browserCrashPings))
     rowRDD.collect()
     assert(crashProcessedAccumulator.value == 10)
     assert(contentCrashIgnoredAccumulator.value == 0)
@@ -292,7 +286,7 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with BeforeAndAfterA
       rowRDD,
       mainProcessedAccumulator, mainIgnoredAccumulator,
       crashProcessedAccumulator, crashIgnoredAccumulator, contentCrashIgnoredAccumulator
-      ) = CrashAggregateView.compareCrashes(spark.sparkContext, spark.sparkContext.parallelize(oldPings))
+      ) = CrashAggregateView.compareCrashes(sc, sc.parallelize(oldPings))
     rowRDD.collect()
     assert(crashProcessedAccumulator.value == 10)
     assert(contentCrashIgnoredAccumulator.value == 0)

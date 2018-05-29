@@ -1,10 +1,10 @@
 package com.mozilla.telemetry
 
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.utils.UDFs._
-import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import com.mozilla.telemetry.views.GenericCountView
 import org.apache.spark.sql.functions._
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+import org.scalatest.{FlatSpec, Matchers}
 
 case class Submission(client_id: String,
                       app_name: String,
@@ -73,16 +73,18 @@ object Submission{
   }
 }
 
-class GenericCountTest extends FlatSpec with Matchers with BeforeAndAfterAll {
-  private val spark = getOrCreateSparkSession("ClientCountViewTest")
 
-  import spark.implicits._
+class GenericCountViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
 
-  spark.registerUDFs
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.registerUDFs
+    import spark.implicits._
+    sc.parallelize(Submission.randomList).toDF.registerTempTable(tableName)
+  }
 
   //setup data table
   private val tableName = "randomtablename"
-  spark.sparkContext.parallelize(Submission.randomList).toDF.registerTempTable(tableName)
 
   //setup options
   private val base =
@@ -123,8 +125,8 @@ class GenericCountTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     "--output" :: "telemetry-test-bucket/client_count" :: Nil
 
   // make client count dataset
-  val conf = new GenericCountView.Conf(args.toArray)
-  private val aggregates = GenericCountView.aggregate(spark, conf)
+  val viewConf = new GenericCountView.Conf(args.toArray)
+  private lazy val aggregates = GenericCountView.aggregate(spark, viewConf)
 
   "Input data" can "be aggregated" in {
     val dims = Set(dimensions: _*) -- Set("client_id")
@@ -145,6 +147,8 @@ class GenericCountTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   }
 
   "Only top distributions" should "be considered" in {
+    import spark.implicits._
+
     val distributionIdCount = aggregates
       .groupBy("top_distribution_id")
       .agg(countDistinct($"top_distribution_id"))
@@ -154,6 +158,8 @@ class GenericCountTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   }
 
   "Correct bucketed values" should "be in bucketed_uri_count" in {
+    import spark.implicits._
+
     val expect: Map[Any, Int] = Map(0 -> 1, 5 -> 1, 20 -> 2, 50 -> 2, 100 -> 2, 250 -> 3, 251 -> 2)
 
     // aggregates will contain a lot more than one row per
@@ -175,7 +181,4 @@ class GenericCountTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     distinctUriCount.size should be (expect.size)
   }
 
-  override def afterAll() = {
-    spark.stop()
-  }
 }
