@@ -1,23 +1,22 @@
 package com.mozilla.telemetry
 
-import com.mozilla.telemetry.utils.{SyncPingConversion, getOrCreateSparkSession}
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
+import com.mozilla.telemetry.utils.SyncPingConversion
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.{Row, SparkSession}
 import org.json4s.JsonAST.JNothing
 import org.json4s.{DefaultFormats, JObject, JValue}
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+import org.scalatest.{FlatSpec, Matchers}
 
 import scala.collection.mutable
 
-class SyncViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
-
-  var spark: SparkSession = _
+class SyncViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
 
   "Old Style SyncPing payload" can "be serialized" in {
     val ping = SyncViewTestPayloads.singleSyncPing
     implicit val formats = DefaultFormats
     val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.singleSyncPing)
-    val rdd = spark.sparkContext.parallelize(row.toSeq)
+    val rdd = sc.parallelize(row.toSeq)
 
     val dataframe = spark.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
 
@@ -46,7 +45,7 @@ class SyncViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
   "New Style SyncPing payload" can "be serialized" in {
     val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.multiSyncPing)
-    val rdd = spark.sparkContext.parallelize(row.toSeq)
+    val rdd = sc.parallelize(row.toSeq)
     val dataframe = spark.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
 
     // verify the contents
@@ -56,7 +55,7 @@ class SyncViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   "SyncPing records" can "be round-tripped to parquet" in {
     val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.multiSyncPing)
     // Write a parquet file with the rows.
-    val rdd = spark.sparkContext.parallelize(row.toSeq)
+    val rdd = sc.parallelize(row.toSeq)
     val dataframe = spark.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
     val tempFile = com.mozilla.telemetry.utils.temporaryFileName()
     dataframe.write.parquet(tempFile.toString)
@@ -70,7 +69,7 @@ class SyncViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   "SyncPing records with validation and device data" can "be round-tripped to parquet" in {
     val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.complexSyncPing)
     // Write a parquet file with the rows.
-    val rdd = spark.sparkContext.parallelize(row.toSeq)
+    val rdd = sc.parallelize(row.toSeq)
     val dataframe = spark.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
     val tempFile = com.mozilla.telemetry.utils.temporaryFileName()
     dataframe.write.parquet(tempFile.toString)
@@ -84,20 +83,15 @@ class SyncViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   "SyncPing records with top level ids" can "come through as if they were not at the top level" in {
     val row = SyncPingConversion.pingToNestedRows(SyncViewTestPayloads.multiSyncPingWithTopLevelIds)
     // Write a parquet file with the rows.
-    val rdd = spark.sparkContext.parallelize(row.toSeq)
+    val rdd = sc.parallelize(row.toSeq)
     val dataframe = spark.createDataFrame(rdd, SyncPingConversion.nestedSyncType)
     // Note: We intentionally validate with a *different* json object from the one we parsed.
     validateMultiSyncPing(dataframe.collect(), SyncViewTestPayloads.multiSyncPing)
   }
 
-  override protected def beforeAll(): Unit = {
-    spark = getOrCreateSparkSession("SyncPing")
-    spark.sparkContext.setLogLevel("WARN")
-  }
-
-
-  override protected def afterAll(): Unit = {
-    spark.stop()
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    sc.setLogLevel("WARN")
   }
 
   // A helper to validate rows created for engines against the source JSON payload

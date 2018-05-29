@@ -1,19 +1,13 @@
 package com.mozilla.telemetry.views
 
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import org.apache.spark.sql.SparkSession
 import org.scalatest.{FlatSpec, Matchers}
 
-class ClientsDailyViewTest extends FlatSpec with Matchers {
-  private val spark = SparkSession
-    .builder()
-    .appName("ClientsDailyViewTest")
-    .master("local[*]")
-    .config("spark.ui.showConsoleProgress", "false")
-    .getOrCreate()
-
-  import spark.implicits._
+class ClientsDailyViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
 
   "aggregates" must "aggregate properly" in {
+    import spark.implicits._
     ClientsDailyViewTestPayloads.genericTests.foreach { pair =>
       val (table, expect) = pair
       val aggregated = ClientsDailyView.extractDayAggregates(table.toDF)

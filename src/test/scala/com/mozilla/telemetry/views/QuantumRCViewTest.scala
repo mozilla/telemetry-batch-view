@@ -1,10 +1,10 @@
 package com.mozilla.telemetry
 
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.utils.UDFs._
-import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import com.mozilla.telemetry.views.QuantumRCView
 import org.apache.spark.sql.functions._
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+import org.scalatest.{FlatSpec, Matchers}
 
 case class MainSummarySubmission(client_id: String,
                       app_name: String,
@@ -113,20 +113,19 @@ object MainSummarySubmissions {
   }
 }
 
-class QuantumReleaseCriteriaViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
-  private val spark = getOrCreateSparkSession("QuantumRCViewTest")
-
-  import spark.implicits._
-  spark.registerUDFs
-
-  private val sc = spark.sparkContext
+class QuantumReleaseCriteriaViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
 
   //setup data table
   private val tableName = "randomtablename"
-  val df = sc.parallelize(MainSummarySubmissions.randomList).toDF
+
+  lazy val df = {
+    import spark.implicits._
+    spark.registerUDFs
+    sc.parallelize(MainSummarySubmissions.randomList).toDF
+  }
 
   // make client count dataset
-  private val aggregates = QuantumRCView.aggregate(df)
+  private lazy val aggregates = QuantumRCView.aggregate(df)
 
   // aggregates need to have correct count of RC
   "Aggregates" can "have the correct schema" in {
@@ -211,9 +210,5 @@ class QuantumReleaseCriteriaViewTest extends FlatSpec with Matchers with BeforeA
         val totalSum = aggregates.select(sum(outCol)).collect()
         totalSum(0)(0) should be (expected * numDimensions * numCountDimensions * expectedClientCount * (numSumDimensions / sumColDims))
     }
-  }
-
-  override def afterAll() = {
-    spark.stop()
   }
 }

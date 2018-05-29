@@ -1,6 +1,7 @@
 package com.mozilla.telemetry.utils
 
-import org.scalatest.{BeforeAndAfterAll, FlatSpec}
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
+import org.scalatest.FlatSpec
 
 case class MSRow(
   document_id:Int,
@@ -8,10 +9,7 @@ case class MSRow(
   client_id:Option[String] = None
 )
 
-class DatasetComparatorTest extends FlatSpec with BeforeAndAfterAll {
-  private val spark = getOrCreateSparkSession("DatasetComparatorTest")
-
-  import spark.implicits._
+class DatasetComparatorTest extends FlatSpec with DataFrameSuiteBase {
 
   private val date = "test"
 
@@ -26,13 +24,19 @@ class DatasetComparatorTest extends FlatSpec with BeforeAndAfterAll {
     new DatasetComparator.Conf(args.toArray)
   }
 
-  (0 to 10).map{e => MSRow(e,date)}.toDF.createOrReplaceTempView("zeroToTen")
-  (0 to 9).map{e => MSRow(e,date)}.toDF.createOrReplaceTempView("zeroToNine")
-  (0 to 11).map{e => MSRow(e,date)}.toDF.createOrReplaceTempView("zeroToEleven")
-  (1 to 11).map{e => MSRow(e,date)}.toDF.createOrReplaceTempView("oneToEleven")
-  (0 to 10).map{e => (0,date)}.toDF("document_id", "submission_date_s3").createOrReplaceTempView("ZeroNulls")
-  (0 to 10).map{e => if (e % 2 == 0) MSRow(0,date,Some("c")) else MSRow(0,date)}.toDF.createOrReplaceTempView("FiveNulls")
-  (1 to 11).map{e => if (e % 2 == 0) MSRow(0,date,Some("c")) else MSRow(0,date)}.toDF.createOrReplaceTempView("SixNulls")
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+
+    import spark.implicits._
+
+    (0 to 10).map{e => MSRow(e,date)}.toDF.createOrReplaceTempView("zeroToTen")
+    (0 to 9).map{e => MSRow(e,date)}.toDF.createOrReplaceTempView("zeroToNine")
+    (0 to 11).map{e => MSRow(e,date)}.toDF.createOrReplaceTempView("zeroToEleven")
+    (1 to 11).map{e => MSRow(e,date)}.toDF.createOrReplaceTempView("oneToEleven")
+    (0 to 10).map{e => (0,date)}.toDF("document_id", "submission_date_s3").createOrReplaceTempView("ZeroNulls")
+    (0 to 10).map{e => if (e % 2 == 0) MSRow(0,date,Some("c")) else MSRow(0,date)}.toDF.createOrReplaceTempView("FiveNulls")
+    (1 to 11).map{e => if (e % 2 == 0) MSRow(0,date,Some("c")) else MSRow(0,date)}.toDF.createOrReplaceTempView("SixNulls")
+  }
 
   "Simple frame" must "equal itself" in {
     assert(DatasetComparator.compare(spark, getConf("zeroToTen", "zeroToTen")).same)
@@ -68,9 +72,5 @@ class DatasetComparatorTest extends FlatSpec with BeforeAndAfterAll {
 
   it must "not equal extra column" in {
     assert(!DatasetComparator.compare(spark, getConf("ZeroNulls", "FiveNulls")).same)
-  }
-
-  override def afterAll() = {
-    spark.stop()
   }
 }

@@ -1,39 +1,37 @@
 package com.mozilla.telemetry
 
 import com.github.nscala_time.time.Imports._
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.views.HeavyUsersView
-import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import org.apache.spark.sql.Dataset
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
-import org.scalatest.Assertions._
+import org.scalatest.{FlatSpec, Matchers}
 
-import scala.io.Source
-
-class HeavyUsersViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
-  val spark = getOrCreateSparkSession(HeavyUsersView.DatasetPrefix)
+class HeavyUsersViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
   private val fmt = DateTimeFormat.forPattern("yyyyMMdd")
 
-  import spark.implicits._
-
-  val mainSummary = List(
-    HeavyUsersView.MainSummaryRow("20170801", "client1", "42", 1, 1),
-    HeavyUsersView.MainSummaryRow("20170801", "client2", "84", 2, 1),
-    HeavyUsersView.MainSummaryRow("20170801", "client3", "21", 3, 2)).toDS
+  lazy val mainSummary = {
+    import spark.implicits._
+    List(
+      HeavyUsersView.MainSummaryRow("20170801", "client1", "42", 1L, 1L),
+      HeavyUsersView.MainSummaryRow("20170801", "client2", "84", 2L, 1L),
+      HeavyUsersView.MainSummaryRow("20170801", "client3", "21", 3L, 2L)).toDS
+  }
 
   val cutoffs = Map(
     "20160801" -> 0.9
   )
 
   def makeTestHeavyUsers(clientId: String, sampleId: Int, pcd: Long, date: String): Dataset[HeavyUsersView.HeavyUsersRow] = {
+    import spark.implicits._
     val firstDay = fmt.parseDateTime(date)
     val hus = (i: Int) => if(i == 27) Some(true) else None
     (0 until 28)
       .map(d => (d, fmt.print(firstDay.plusDays(d))))
-      .map{ case (i, date) => HeavyUsersView.HeavyUsersRow(date, clientId, sampleId, pcd, 1, i + 1, hus(i), hus(i)) }
+      .map{ case (i, date) => HeavyUsersView.HeavyUsersRow(date, clientId, sampleId, pcd, 1L, 1L + i, hus(i), hus(i)) }
       .toDS
   }
 
-  def dummyRow(d: String) = HeavyUsersView.HeavyUsersRow(d, "client1", 42, 1, 2, 2, Some(false), Some(false))
+  def dummyRow(d: String) = HeavyUsersView.HeavyUsersRow(d, "client1", 42, 1L, 2L, 2L, Some(false), Some(false))
 
   // case regular history
   "Heavy Users View" can "run with enough data" in {
@@ -41,13 +39,14 @@ class HeavyUsersViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     val heavyUsers = makeTestHeavyUsers(clientId, sampleId, pcd, date)
 
     val (aggregate, cutoff) = HeavyUsersView.aggregate(mainSummary, heavyUsers, cutoffs, "20170801")
-    aggregate.collect() should contain (HeavyUsersView.HeavyUsersRow("20170801", clientId, sampleId, pcd, 1, 28, HeavyUsersView.cmpCutoff(cutoff, 28), Some(true)))
+    aggregate.collect() should contain (HeavyUsersView.HeavyUsersRow("20170801", clientId, sampleId, pcd, 1L, 28L, HeavyUsersView.cmpCutoff(cutoff, 28), Some(true)))
   }
 
   it can "remove users who aren't active in past 28 days" in {
+    import spark.implicits._
     val heavyUsers = List(
-      HeavyUsersView.HeavyUsersRow("20170704", "missingclient", 42, 10, 2, 2, Some(false), Some(false)),
-      HeavyUsersView.HeavyUsersRow("20170731", "missingclient", 42, 10, 0, 2, Some(false), Some(false))).toDS
+      HeavyUsersView.HeavyUsersRow("20170704", "missingclient", 42, 10L, 2L, 2L, Some(false), Some(false)),
+      HeavyUsersView.HeavyUsersRow("20170731", "missingclient", 42, 10L, 0L, 2L, Some(false), Some(false))).toDS
 
     val (aggregate, cutoff) = HeavyUsersView.aggregate(mainSummary, heavyUsers, cutoffs, "20170801")
     aggregate.collect().map(_.client_id) should not contain ("missingclient")
@@ -55,6 +54,8 @@ class HeavyUsersViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
   //case no current data
   it can "bootstrap initial history" in {
+    import spark.implicits._
+
     val heavyUsers = (Nil: List[HeavyUsersView.HeavyUsersRow]).toDS
 
     val (aggregate, cutoff) = HeavyUsersView.aggregate(mainSummary, heavyUsers, cutoffs, "20170801")
@@ -69,10 +70,11 @@ class HeavyUsersViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
   //case some current data (not full history)
   it can "boostrap on partial history" in {
-    val heavyUsers = List(HeavyUsersView.HeavyUsersRow("20170731", "client1", 42, 1, 1, 2, Some(false), Some(false))).toDS
+    import spark.implicits._
+    val heavyUsers = List(HeavyUsersView.HeavyUsersRow("20170731", "client1", 42, 1L, 1L, 2L, Some(false), Some(false))).toDS
 
     val (aggregate, cutoff) = HeavyUsersView.aggregate(mainSummary, heavyUsers, cutoffs, "20170801")
-    aggregate.collect() should contain (HeavyUsersView.HeavyUsersRow("20170801", "client3", 21, 3, 2, 2, None, None))
+    aggregate.collect() should contain (HeavyUsersView.HeavyUsersRow("20170801", "client3", 21, 3L, 2L, 2L, None, None))
   }
 
   //case user not active on current day - still contain
@@ -81,7 +83,7 @@ class HeavyUsersViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     val heavyUsers = makeTestHeavyUsers(clientId, sampleId, pcd, date)
 
     val (aggregate, cutoff) = HeavyUsersView.aggregate(mainSummary, heavyUsers, cutoffs, "20170801")
-    aggregate.collect() should contain (HeavyUsersView.HeavyUsersRow("20170801", clientId, sampleId, pcd, 0, 27, HeavyUsersView.cmpCutoff(cutoff, 27), Some(true)))
+    aggregate.collect() should contain (HeavyUsersView.HeavyUsersRow("20170801", clientId, sampleId, pcd, 0L, 27L, HeavyUsersView.cmpCutoff(cutoff, 27), Some(true)))
   }
 
   //case user only active on current day
@@ -90,7 +92,7 @@ class HeavyUsersViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     val heavyUsers = makeTestHeavyUsers(clientId, sampleId, pcd, date)
 
     val (aggregate, cutoff) = HeavyUsersView.aggregate(mainSummary, heavyUsers, cutoffs, "20170801")
-    aggregate.collect() should contain (HeavyUsersView.HeavyUsersRow("20170801", "client3", 21, 3, 2, 2, HeavyUsersView.cmpCutoff(cutoff, 2), Some(true)))
+    aggregate.collect() should contain (HeavyUsersView.HeavyUsersRow("20170801", "client3", 21, 3L, 2L, 2L, HeavyUsersView.cmpCutoff(cutoff, 2), Some(true)))
   }
 
   //case normal - full history, user active on current day
@@ -104,6 +106,7 @@ class HeavyUsersViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   }
 
   it can "set heavy_user to NULL if no comparison" in {
+    import spark.implicits._
     val heavyUsers = List(
       HeavyUsersView.HeavyUsersRow("20170704", "client1", 42, 1, 2, 2, Some(false), Some(false)),
       HeavyUsersView.HeavyUsersRow("20170731", "client1", 42, 1, 0, 2, Some(false), Some(false))).toDS
@@ -113,6 +116,7 @@ class HeavyUsersViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   }
 
   it can "use the nearest date for comparison" in {
+    import spark.implicits._
     val heavyUsers = List(
       HeavyUsersView.HeavyUsersRow("20170704", "client1", 42, 1, 2, 2, Some(false), Some(false)),
       HeavyUsersView.HeavyUsersRow("20170731", "client1", 42, 1, 0, 2, Some(false), Some(false))).toDS
@@ -122,11 +126,14 @@ class HeavyUsersViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   }
 
   it can "correctly calculate a cutoff" in {
+    import spark.implicits._
     val ds = (1 until 100).map(HeavyUsersView.UserActiveTicks("someclient", 42, 1, 1, _)).toDS
     HeavyUsersView.getCutoff(ds, false).get should be (90)
   }
 
   it can "sense that previous data exists" in {
+    import spark.implicits._
+
     val ds = List(dummyRow("20170901")).toDS
 
     // will fail if this throws IllegalStateException
@@ -134,6 +141,8 @@ class HeavyUsersViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   }
 
   it can "sense that previous data is missing" in {
+    import spark.implicits._
+
     val ds = List(dummyRow("20170901")).toDS
 
     intercept[java.lang.IllegalStateException] {
@@ -142,6 +151,8 @@ class HeavyUsersViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   }
 
   it can "sense that previous data exists in the middle" in {
+    import spark.implicits._
+
     val ds = List(dummyRow("20170901"),
                   dummyRow("20170902"),
                   dummyRow("20170904")).toDS
@@ -150,6 +161,8 @@ class HeavyUsersViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   }
 
   it can "sense that previous data is missing in the middle" in {
+    import spark.implicits._
+
     val ds = List(dummyRow("20170901"),
                   dummyRow("20170903"),
                   dummyRow("20170904")).toDS
@@ -160,10 +173,9 @@ class HeavyUsersViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   }
 
   it can "ignore missing data on first run" in {
+    import spark.implicits._
+
     HeavyUsersView.senseExistingData(spark.emptyDataset[HeavyUsersView.HeavyUsersRow], "20170903", true)
   }
 
-  override def afterAll() = {
-    spark.stop()
-  }
 }

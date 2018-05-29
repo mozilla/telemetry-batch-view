@@ -1,22 +1,22 @@
 package com.mozilla.telemetry.experiments.statistics
 
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
+
 import scala.util.Random
-import scala.math.{round, floor, ceil}
+import scala.math.{ceil, floor, round}
 import org.scalatest.{FlatSpec, Matchers}
 import com.mozilla.telemetry.experiments.analyzers._
 import com.mozilla.telemetry.metrics.UintScalar
-import com.mozilla.telemetry.utils.getOrCreateSparkSession
-import org.apache.spark.sql.{Dataset, Row, SparkSession}
-import org.apache.spark.sql.functions.{mean, stddev_samp, count}
+import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.functions.{count, mean, stddev_samp}
 
-class DescriptiveStatisticsTest extends FlatSpec with Matchers {
+class DescriptiveStatisticsTest extends FlatSpec with Matchers with DataFrameSuiteBase {
   val NumSamples = 10000
   val NumBlocks = 100
-  val spark: SparkSession = getOrCreateSparkSession("Experiment Aggregate Test")
   val logger = org.apache.log4j.Logger.getLogger(this.getClass.getSimpleName)
 
-  def fixtures(ss: SparkSession): (Dataset[Int], scala.collection.Map[Long, HistogramPoint], Dataset[MetricAnalysis]) = {
-    import ss.implicits._
+  lazy val fixtures: (Dataset[Int], scala.collection.Map[Long, HistogramPoint], Dataset[MetricAnalysis]) = {
+    import spark.implicits._
     val rand = new Random(42)
 
     // Generate normally distributed uint scalar values and a jackknife block assignment for each value
@@ -38,7 +38,7 @@ class DescriptiveStatisticsTest extends FlatSpec with Matchers {
   }
 
   "Mean statistic" should "compute correctly" in {
-    val (asInts, histo, jackknifeAggs) = fixtures(spark)
+    val (asInts, histo, jackknifeAggs) = fixtures
     val actual = Mean(histo, Some(jackknifeAggs)).asStatistic
     val (m, stdDev, n) = asInts.agg(mean("value"), stddev_samp("value"), count("*")).first match {
       case Row(m: Double, s: Double, n: Long) => (m, s, n)
@@ -54,7 +54,7 @@ class DescriptiveStatisticsTest extends FlatSpec with Matchers {
   }
 
   "Percentile statistics" should "compute correctly" in {
-    val (asInts, histo, jackknifeAggs) = fixtures(spark)
+    val (asInts, histo, jackknifeAggs) = fixtures
     val sortedIntArray = asInts.sort("value").collect()
     val actualMedian = Percentile(histo, 0.5, "Median", Some(jackknifeAggs)).asStatistic
     // Change this if we tune NumSamples to an odd number
@@ -83,7 +83,7 @@ class DescriptiveStatisticsTest extends FlatSpec with Matchers {
   }
 
   "Descriptive statistics" can "be added" in {
-    val (asInts, histo, jackknifeAggs) = fixtures(spark)
+    val (asInts, histo, jackknifeAggs) = fixtures
 
     val metric = MetricAnalysis(
       "test_experiment", "control", MetricAnalyzer.topLevelLabel, 3L, "Test Metric", "LinearHistogram", histo,

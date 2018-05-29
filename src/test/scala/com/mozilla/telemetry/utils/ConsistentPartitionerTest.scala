@@ -1,20 +1,19 @@
 package com.mozilla.telemetry
 
-import com.github.nscala_time.time.Imports._
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.utils.CustomPartitioners._
-import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import org.apache.spark.sql.DataFrame
-import org.scalatest.{FlatSpec, Matchers, BeforeAndAfterAll}
-
-import scala.io.Source
+import org.scalatest.{FlatSpec, Matchers}
 
 case class row(id: String, sample_id: String)
 
-class ConsistentPartitionerTest extends FlatSpec with Matchers with BeforeAndAfterAll {
-  val spark = getOrCreateSparkSession("Partitioner Test")
-  import spark.implicits._
+class ConsistentPartitionerTest extends FlatSpec with Matchers with DataFrameSuiteBase {
 
-  val df = List(row("a", "24"), row("b", "49"), row("c", "74"), row("d", "99")).toDS.toDF
+  lazy val df: DataFrame = {
+    import spark.implicits._
+    List(row("a", "24"), row("b", "49"), row("c", "74"), row("d", "99")).toDS.toDF
+  }
+
   val toDouble = (v: String) => v.toInt / 100.0
 
   def getPartitionIds(df: DataFrame): Set[Set[String]] = {
@@ -37,22 +36,21 @@ class ConsistentPartitionerTest extends FlatSpec with Matchers with BeforeAndAft
   }
 
   it can "properly handle values outside the range [0, 1]" in {
+    import spark.implicits._
     val res = List(row("e", "110")).toDS.toDF.consistentRepartition(4, "sample_id", toDouble)
     getPartitionIds(res) should be (Set(Set("e"), Set(), Set(), Set()))
   }
 
   it can "properly handle negative values outside the range [0, 1]" in {
+    import spark.implicits._
     val res = List(row("e", "-110")).toDS.toDF.consistentRepartition(4, "sample_id", toDouble)
     getPartitionIds(res) should be (Set(Set("e"), Set(), Set(), Set()))
   }
 
   it can "properly handle null values" in {
+    import spark.implicits._
     val res = List(row("f", null)).toDS.toDF.consistentRepartition(2, "sample_id", toDouble)
     getPartitionIds(res) should be (Set(Set("f"), Set()))
-  }
-
-  override def afterAll() = {
-    spark.stop()
   }
 }
 

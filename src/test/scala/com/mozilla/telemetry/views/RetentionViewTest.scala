@@ -1,11 +1,11 @@
 package com.mozilla.telemetry
 
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.utils.UDFs._
-import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import com.mozilla.telemetry.views.RetentionView
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.{col, expr}
-import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+import org.scalatest.{FlatSpec, Matchers}
 
 case class ProcessedRetentionRow(
                                   client_id: String,
@@ -30,10 +30,7 @@ case class ProcessedRetentionRow(
                                 )
 
 
-class RetentionViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
-  val spark: SparkSession = getOrCreateSparkSession("Retention Aggregate Test")
-  spark.registerUDFs
-
+class RetentionViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
   val sample = ProcessedRetentionRow(
     client_id = "1",
     subsession_start = "2017-01-15",
@@ -96,7 +93,8 @@ class RetentionViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     grouped.where(col("channel") === "beta").head.getLong(0) should be(2)
   }
 
-  override def afterAll() {
-    spark.stop()
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.registerUDFs
   }
 }

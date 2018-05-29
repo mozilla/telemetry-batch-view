@@ -1,8 +1,9 @@
 package com.mozilla.telemetry.views
 
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.metrics.{HistogramsClass, ScalarsClass}
 import com.mozilla.telemetry.parquet.ParquetFile
-import com.mozilla.telemetry.utils.{getOrCreateSparkSession, MainPing}
+import com.mozilla.telemetry.utils.MainPing
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
 import org.apache.spark.sql.Row
@@ -14,12 +15,12 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.WrappedArray
 import scala.io.Source
 
-class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
+class LongitudinalViewTest extends FlatSpec with Matchers with PrivateMethodTester with DataFrameSuiteBase {
   val ParentConstant = 42
   val ContentConstant = 24
   val GpuConstant = 17
 
-  val fixture = {
+  lazy val fixture = {
     def createPayload(idx: Int): Map[String, Any] = {
       val histograms = (constant: Int) => {
         ("FIPS_ENABLED" ->
@@ -239,8 +240,7 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       val payloads = for (i <- 1 to 10) yield createPayload(i)
       private val dupes = for (i <- 1 to 10) yield createPayload(1)
 
-      val spark = getOrCreateSparkSession("Longitudinal")
-      spark.sparkContext.setLogLevel("WARN")
+      sc.setLogLevel("WARN")
 
       // Opt-out only schema
       val optoutHistogramDefs = histograms.definitions(includeOptin = false)
@@ -274,7 +274,6 @@ class LongitudinalTest extends FlatSpec with Matchers with PrivateMethodTester {
       val missingOsRows = spark.read.load(missingOsFilename).collect()
       val missingOsRow = missingOsRows(0)
 
-      spark.stop()
     }
   }
 

@@ -1,11 +1,10 @@
 package com.mozilla.telemetry
 
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.experiments.analyzers.CrashAnalyzer
-import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import com.mozilla.telemetry.views.ExperimentAnalysisView
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.col
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+import org.scalatest.{FlatSpec, Matchers}
 
 case class ExperimentSummaryRow(
   client_id: String,
@@ -31,8 +30,7 @@ case class ErrorAggRow(
 // is created in or implicit conversions won't work
 case class PermutationsRow(client_id: String)
 
-class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAfterAll {
-  val spark: SparkSession = getOrCreateSparkSession("Experiment Aggregate Test")
+class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
 
   val predata = Seq(
     ExperimentSummaryRow("a", "id1", "control", 1, Map(1 -> 1)),
@@ -174,9 +172,5 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with BeforeAndAf
 
     val totalClients = metadata.flatMap(_.statistics.get.filter(_.name == "Total Clients").map(_.value)).sum
     totalClients should be (3.0)
-  }
-
-  override def afterAll() {
-    spark.stop()
   }
 }

@@ -2,6 +2,7 @@ package com.mozilla.telemetry
 
 import java.time.format.DateTimeFormatter
 
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.heka.{File, Message, RichMessage}
 import com.mozilla.telemetry.metrics._
 import com.mozilla.telemetry.utils._
@@ -16,7 +17,7 @@ import org.scalatest.{FlatSpec, Matchers}
 
 import scala.io.Source
 
-class MainSummaryViewTest extends FlatSpec with Matchers {
+class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
   val scalarUrlMock = (a: String, b: String) => Source.fromFile("src/test/resources/Scalars.yaml")
 
   val scalars = new ScalarsClass {
@@ -86,31 +87,26 @@ class MainSummaryViewTest extends FlatSpec with Matchers {
   }
 
   "MainSummary records" can "be serialized" in {
-    val spark = getOrCreateSparkSession("MainSummaryViewTest")
-    spark.sparkContext.setLogLevel("WARN")
+    sc.setLogLevel("WARN")
 
-    try {
-      // Use an example framed-heka message. It is based on test_main.json.gz,
-      // submitted with a URL of
-      //    /submit/telemetry/foo/main/Firefox/48.0a1/nightly/20160315030230
-      for (hekaFileName <- List("/test_main_hindsight.heka", "/test_main.snappy.heka")) {
-        val hekaURL = getClass.getResource(hekaFileName)
-        val input = hekaURL.openStream()
-        val rows = File.parse(input).flatMap(i => defaultMessageToRow(i))
+    // Use an example framed-heka message. It is based on test_main.json.gz,
+    // submitted with a URL of
+    //    /submit/telemetry/foo/main/Firefox/48.0a1/nightly/20160315030230
+    for (hekaFileName <- List("/test_main_hindsight.heka", "/test_main.snappy.heka")) {
+      val hekaURL = getClass.getResource(hekaFileName)
+      val input = hekaURL.openStream()
+      val rows = File.parse(input).flatMap(i => defaultMessageToRow(i))
 
-        // Serialize this one row as Parquet
-        val dataframe = spark.sqlContext.createDataFrame(spark.sparkContext.parallelize(rows.toSeq), defaultSchema)
-        val tempFile = com.mozilla.telemetry.utils.temporaryFileName()
-        dataframe.write.parquet(tempFile.toString)
+      // Serialize this one row as Parquet
+      val dataframe = spark.sqlContext.createDataFrame(sc.parallelize(rows.toSeq), defaultSchema)
+      val tempFile = com.mozilla.telemetry.utils.temporaryFileName()
+      dataframe.write.parquet(tempFile.toString)
 
-        // Then read it back
-        val data = spark.read.parquet(tempFile.toString)
+      // Then read it back
+      val data = spark.read.parquet(tempFile.toString)
 
-        data.count() should be(1)
-        data.filter(data("document_id") === "foo").count() should be(1)
-      }
-    } finally {
-      spark.stop()
+      data.count() should be(1)
+      data.filter(data("document_id") === "foo").count() should be(1)
     }
   }
 
