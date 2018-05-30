@@ -6,11 +6,11 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.json4s.JsonAST.JNothing
 import org.json4s.{DefaultFormats, JObject, JValue}
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 import scala.collection.mutable
 
-class SyncViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
+class SyncViewTest extends FlatSpec with Matchers with DataFrameSuiteBase with BeforeAndAfterAll {
 
   "Old Style SyncPing payload" can "be serialized" in {
     val ping = SyncViewTestPayloads.singleSyncPing

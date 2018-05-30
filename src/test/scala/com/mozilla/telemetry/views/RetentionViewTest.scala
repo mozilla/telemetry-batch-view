@@ -5,7 +5,7 @@ import com.mozilla.telemetry.utils.UDFs._
 import com.mozilla.telemetry.views.RetentionView
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.{col, expr}
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 case class ProcessedRetentionRow(
                                   client_id: String,
@@ -30,7 +30,7 @@ case class ProcessedRetentionRow(
                                 )
 
 
-class RetentionViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
+class RetentionViewTest extends FlatSpec with Matchers with DataFrameSuiteBase with BeforeAndAfterAll {
   val sample = ProcessedRetentionRow(
     client_id = "1",
     subsession_start = "2017-01-15",
