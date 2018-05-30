@@ -5,11 +5,11 @@ import com.mozilla.telemetry.views.CrashAggregateView
 import org.json4s.JsonDSL._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 import scala.collection.JavaConversions._
 
-class CrashAggregateViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
+class CrashAggregateViewTest extends FlatSpec with Matchers with DataFrameSuiteBase with BeforeAndAfterAll {
   val pingDimensions = List(
     ("submission_date",   List("20160305", "20160607")),
     ("activity_date",     List("2016-03-02T00:00:00.0-03:00", "2016-06-01T00:00:00.0-03:00")),

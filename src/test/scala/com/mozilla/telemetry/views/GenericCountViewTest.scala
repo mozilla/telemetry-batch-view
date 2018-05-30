@@ -4,7 +4,7 @@ import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.utils.UDFs._
 import com.mozilla.telemetry.views.GenericCountView
 import org.apache.spark.sql.functions._
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 case class Submission(client_id: String,
                       app_name: String,
@@ -74,7 +74,7 @@ object Submission{
 }
 
 
-class GenericCountViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
+class GenericCountViewTest extends FlatSpec with Matchers with DataFrameSuiteBase with BeforeAndAfterAll {
 
   override def beforeAll(): Unit = {
     super.beforeAll()

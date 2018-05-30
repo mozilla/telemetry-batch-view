@@ -1,7 +1,7 @@
 package com.mozilla.telemetry.utils
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
-import org.scalatest.FlatSpec
+import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
 case class MSRow(
   document_id:Int,
@@ -9,7 +9,7 @@ case class MSRow(
   client_id:Option[String] = None
 )
 
-class DatasetComparatorTest extends FlatSpec with DataFrameSuiteBase {
+class DatasetComparatorTest extends FlatSpec with DataFrameSuiteBase with BeforeAndAfterAll {
 
   private val date = "test"
 

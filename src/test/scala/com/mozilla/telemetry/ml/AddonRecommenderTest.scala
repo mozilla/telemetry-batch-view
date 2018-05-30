@@ -4,7 +4,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
-import org.scalatest.{FlatSpec, Matchers, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers, PrivateMethodTester}
 import org.apache.spark.sql.Dataset
 
 import scala.collection.Map
@@ -28,7 +28,7 @@ private case class TestLongitudinalRow(client_id: Option[String],
                                        active_addons: Option[Seq[Map[String, TestActiveAddonData]]],
                                        build: Option[Seq[TestBuildData]])
 
-class AddonRecommenderTest extends FlatSpec with Matchers with DataFrameSuiteBase with PrivateMethodTester {
+class AddonRecommenderTest extends FlatSpec with Matchers with DataFrameSuiteBase with BeforeAndAfterAll with PrivateMethodTester {
   private var amoDB: Map[String, AMOAddonInfo] = Map[String, AMOAddonInfo]()
 
   override def beforeAll() {
