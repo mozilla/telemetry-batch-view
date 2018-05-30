@@ -99,8 +99,7 @@ class ScalarsClass extends MetricsClass {
 
     // Scalars are considered to be immutable so it's OK to merge their definitions.
     sources.flatMap{ case (key, source) =>
-      val yaml = new Yaml().load(source.mkString)
-      val result = yaml.asInstanceOf[util.LinkedHashMap[String, util.LinkedHashMap[String, Any]]]
+      val result = new Yaml().load[util.LinkedHashMap[String, util.LinkedHashMap[String, Any]]](source.mkString)
 
       // The probes in the definition file are represented in a fixed-depth, two-level structure.
       // Flatten the structure and build the full scalar names.

@@ -35,7 +35,7 @@ lazy val root = (project in file(".")).
     libraryDependencies += "org.apache.spark" %% "spark-mllib" % sparkVersion,
     libraryDependencies += "org.apache.spark" %% "spark-hive" % sparkVersion,
     libraryDependencies += "org.scalaj" %% "scalaj-http" % "2.3.0",
-    libraryDependencies += "org.yaml" % "snakeyaml" % "1.17",
+    libraryDependencies += "org.yaml" % "snakeyaml" % "1.21",
     libraryDependencies += "com.google.protobuf" % "protobuf-java" % "2.5.0",
     libraryDependencies += "com.github.tomakehurst" % "wiremock-standalone" % "2.8.0"
   )
