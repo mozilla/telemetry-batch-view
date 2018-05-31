@@ -5,7 +5,9 @@ val localMaven = "s3://net-mozaws-data-us-west-2-ops-mavenrepo/"
 
 resolvers += "S3 local maven snapshots" at localMavenHttps + "snapshots"
 
-val sparkVersion = "2.0.2"
+val sparkVersion = "2.3.0"
+// Should keep hadoop version in sync with the dependency defined by Spark.
+val hadoopVersion = "2.6.5"
 
 lazy val root = (project in file(".")).
   settings(
@@ -16,30 +18,38 @@ lazy val root = (project in file(".")).
     // Hack to get releases to not fail to upload when the same jar name already exists. Later we will need auto versioning
     isSnapshot := true,
     scalaModuleInfo := scalaModuleInfo.value.map(_.withOverrideScalaVersion(true)),
+
+    // Snapshot dependencies; keep in mind that changes to the master branch of these projects will get pulled in
+    // automatically on next build and could cause unexpected problems while working on unrelated changes.
     libraryDependencies += "com.mozilla.telemetry" %% "moztelemetry" % "1.1-SNAPSHOT",
     libraryDependencies += "com.mozilla.telemetry" %% "spark-hyperloglog" % "2.0.0-SNAPSHOT",
-    libraryDependencies += "org.apache.avro" % "avro" % "1.7.7",
-    libraryDependencies += "org.apache.parquet" % "parquet-avro" % "1.7.0",
-    libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.4",
-    libraryDependencies += "net.sandrogrzicic" %% "scalabuff-runtime" % "1.4.0",
-    libraryDependencies += "com.holdenkarau" %% "spark-testing-base" % "2.0.0_0.4.7" % "test",
-    libraryDependencies += "org.xerial.snappy" % "snappy-java" % "1.1.2",
-    libraryDependencies += "org.json4s" %% "json4s-jackson" % "3.2.10",
-    libraryDependencies += "joda-time" % "joda-time" % "2.9.2",
-    libraryDependencies += "org.apache.hadoop" % "hadoop-client" % "2.7.1" excludeAll(ExclusionRule(organization = "javax.servlet")),
-    libraryDependencies += "org.apache.hadoop" % "hadoop-aws" % "2.7.1" excludeAll(ExclusionRule(organization = "javax.servlet")),
-    libraryDependencies += "com.github.nscala-time" %% "nscala-time" % "2.10.0",
-    libraryDependencies += "org.rogach" %% "scallop" % "3.1.2",
+
+    // Spark libs
     libraryDependencies += "org.apache.spark" %% "spark-core" % sparkVersion,
     libraryDependencies += "org.apache.spark" %% "spark-sql" % sparkVersion,
     libraryDependencies += "org.apache.spark" %% "spark-mllib" % sparkVersion,
     libraryDependencies += "org.apache.spark" %% "spark-hive" % sparkVersion,
-    libraryDependencies += "org.scalaj" %% "scalaj-http" % "2.3.0",
+
+    // Other dependencies
+    libraryDependencies += "org.apache.avro" % "avro" % "1.8.2",
+    libraryDependencies += "org.apache.parquet" % "parquet-avro" % "1.8.3",
+    libraryDependencies += "net.sandrogrzicic" %% "scalabuff-runtime" % "1.4.0",
+    libraryDependencies += "org.xerial.snappy" % "snappy-java" % "1.1.7.2",
+    libraryDependencies += "joda-time" % "joda-time" % "2.10",
+    libraryDependencies += "org.apache.hadoop" % "hadoop-client" % hadoopVersion excludeAll(ExclusionRule(organization = "javax.servlet")),
+    libraryDependencies += "org.apache.hadoop" % "hadoop-aws" % hadoopVersion excludeAll(ExclusionRule(organization = "javax.servlet")),
+    libraryDependencies += "org.rogach" %% "scallop" % "3.1.2",
+    libraryDependencies += "org.scalaj" %% "scalaj-http" % "2.4.0",
     libraryDependencies += "org.yaml" % "snakeyaml" % "1.21",
-    libraryDependencies += "com.google.protobuf" % "protobuf-java" % "2.5.0",
-    libraryDependencies += "com.github.tomakehurst" % "wiremock-standalone" % "2.8.0"
+
+    // Test dependencies
+    libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.5" % Test,
+    libraryDependencies += "com.github.tomakehurst" % "wiremock-standalone" % "2.18.0" % Test,
+    libraryDependencies += "com.holdenkarau" %% "spark-testing-base" % "2.3.0_0.9.0" % Test
   )
 
+dependencyOverrides += "com.google.guava" % "guava" % "25.1-jre"
+dependencyOverrides += "com.google.code.findbugs" % "jsr305" % "3.0.2"
 /*
  The HBase client requires protobuf-java 2.5.0 but scalapb uses protobuf-java 3.x
  so we have to force the dependency here. This should be fine as we are using only
@@ -53,7 +63,7 @@ test in assembly := {}
 
 assemblyMergeStrategy in assembly := {
   case PathList("META-INF", xs @ _*) => MergeStrategy.discard
-  case x => MergeStrategy.first
+  case _ => MergeStrategy.first
 }
 
 // Disable parallel execution to avoid multiple SparkContexts
