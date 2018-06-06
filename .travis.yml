@@ -44,7 +44,8 @@ jobs:
       script:
         - pip install --user awscli
         - docker build -t telemetry-batch-view .
-        - docker-run ./run-sbt.sh "set test in assembly := {}" assembly && aws s3 cp $LOCAL_JAR $STAGED_JAR_URL
+        - docker-run ./run-sbt.sh assembly
+        - aws s3 cp $LOCAL_JAR $STAGED_JAR_URL
     # The deploy stage jobs only run once all jobs from the previous phase succeed.
     - stage: deploy
       env:
