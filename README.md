@@ -65,6 +65,32 @@ sbt assembly
 spark-submit --master yarn --deploy-mode client --class com.mozilla.telemetry.views.LongitudinalView target/scala-2.11/telemetry-batch-view-*.jar --from 20160101 --to 20160701 --bucket telemetry-test-bucket
 ```
 
+### Maintaining Tests
+
+Running the full suite of test cases can take more than 30 minutes, so we have configured
+our CI system to run tests in parallel across multiple jobs. These jobs are defined in `.travis.yml`
+and rely on Scalatest tags to determine which test cases run in which jobs.
+
+Any new test cases that run faster than 10 seconds can remain in the catch-all job for untagged tests,
+but please consider tagging any longer-running test cases. If you're introducing several new
+long-running tasks, please define a new tag (see checklist below).
+
+We may need to periodically rebalance test cases across tags. If you notice one of the test jobs
+in TravisCI becoming the bottleneck, read through the logs for that job to see runtimes for each test
+case and consider moving some expensive tests to a different job or splitting them out to a new tag.
+At the time of writing, setup for each job (building the Docker container, compiling the code, etc.)
+takes about 5 minutes and we target keeping the total run time for each test job to 10 minutes.
+We could benefit from more parallelism if we reduced the setup time.
+
+#### Defining a new tag
+
+Whenever you introduce a new Scalatest tag, you'll need to make the following changes:
+
+- Define the new tag in `Tags.scala`
+- Tag some long-running test cases with the new tag
+- Update `.travis.yml` to add an a new `env` case to run the new tag
+- Update `.travis.yml` to add the new tag to the list of exclusions for the catch-all test job (last line in the `env` list)
+
 ### Testing in Dev Airflow with `[skip-tests]`
 
 It is possible to launch the job locally exactly as it will in production. When doing this, we recommend
@@ -100,9 +126,6 @@ If you run into memory issues during compilation time or running the test suite,
 ```bash
 export _JAVA_OPTIONS="-Xms4G -Xmx4G -Xss4M -XX:MaxMetaspaceSize=256M"
 ```
-
-**Slow tests**
-By default slow tests are not run when using `sbt test`. To run slow tests use `./runtests.sh slow:test` (or just `sbt slow:test` outside of the Docker environment).
 
 **Running on Windows**
 
