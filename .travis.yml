@@ -13,6 +13,8 @@ before_install:
   - alias docker-run='docker run -v $PWD:/telemetry-batch-view $CI_ENV --env-file .travis-env telemetry-batch-view'
 
 env:
+  # There should be one job defined for each Scalatest tag defined in
+  # src/test/scala/com/mozilla/telemetry/tags/Tags.scala
   - SCALATEST_ARGS='-n ScalarAnalyzerBuild'
   - SCALATEST_ARGS='-n ExperimentsBuild'
   - SCALATEST_ARGS='-n ClientsDailyBuild'
