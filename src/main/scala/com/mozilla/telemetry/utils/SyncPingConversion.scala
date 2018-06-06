@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.utils
 
 import org.apache.spark.sql.Row
@@ -7,6 +10,7 @@ import org.json4s.{DefaultFormats, JValue}
 import org.json4s.JsonAST._
 import java.util.UUID
 
+// scalastyle:off return methodLength
 // Common conversion code for SyncView and SyncFlatView. Schema for sync pings described here:
 // https://dxr.mozilla.org/mozilla-central/source/services/sync/tests/unit/sync_ping_schema.json
 object SyncPingConversion {
@@ -77,7 +81,7 @@ object SyncPingConversion {
   ))
 
   // The record of a single sync event.
-  def nestedSyncType = StructType(List(
+  def nestedSyncType: StructType = StructType(List(
     // These field names are the same as used by MainSummaryView
     StructField("app_build_id", StringType, nullable = true), // application/buildId
     StructField("app_display_version", StringType, nullable = true), // application/displayVersion
@@ -102,7 +106,7 @@ object SyncPingConversion {
     StructField("devices", ArrayType(deviceType, containsNull = false), nullable = true)
   ))
 
-  def singleEngineFlatSyncType = StructType(List(
+  def singleEngineFlatSyncType: StructType = StructType(List(
     // These field names are the same as used by MainSummaryView
     StructField("app_build_id", StringType, nullable = true), // application/buildId
     StructField("app_display_version", StringType, nullable = true), // application/displayVersion
@@ -199,8 +203,7 @@ object SyncPingConversion {
   private def toDeviceRows(devices: JValue): List[Row] = devices match {
     case JArray(x) =>
       val rows = x.flatMap(d => deviceToRow(d))
-      if (rows.isEmpty) null
-      else rows
+      if (rows.isEmpty) null else rows
     case _ => null
   }
 
@@ -351,8 +354,7 @@ object SyncPingConversion {
       for (e <- x) {
         buf.append(engineToRow(e))
       }
-      if (buf.isEmpty) null
-      else buf.toList
+      if (buf.isEmpty) null else buf.toList
     case _ => null
   }
 
@@ -613,3 +615,4 @@ object SyncPingConversion {
   }
 
 }
+// scalastyle:on return methodLength

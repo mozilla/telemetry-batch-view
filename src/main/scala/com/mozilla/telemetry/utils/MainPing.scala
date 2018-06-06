@@ -1,10 +1,13 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.utils
 
 import com.mozilla.telemetry.metrics._
-import org.json4s.DefaultFormats
-import org.json4s.JsonAST._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
+import org.json4s.DefaultFormats
+import org.json4s.JsonAST._
 
 import scala.util.{Success, Try}
 
@@ -50,24 +53,24 @@ abstract class UserPref {
 }
 
 case class IntegerUserPref(name: String) extends UserPref {
-  override def dataType = IntegerType
-  override def getValue(v: JValue) = v match {
+  override def dataType: IntegerType = IntegerType
+  override def getValue(v: JValue): Any = v match {
     case JInt(x) => x.toInt
     case _ => null
   }
 }
 
 case class BooleanUserPref(name: String) extends UserPref {
-  override def dataType = BooleanType
-  override def getValue(v: JValue) = v match {
+  override def dataType: BooleanType = BooleanType
+  override def getValue(v: JValue): Any = v match {
     case JBool(x) => x
     case _ => null
   }
 }
 
 case class StringUserPref(name: String) extends UserPref {
-  override def dataType = StringType
-  override def getValue(v: JValue) = v match {
+  override def dataType: StringType = StringType
+  override def getValue(v: JValue): Any = v match {
     case JString(x) => x
     case _ => null
   }
@@ -85,7 +88,7 @@ object MainPing{
       case _ => None
     }
   }
-
+  // scalastyle:off return
   def compareFlashVersions(x: Option[String], y: Option[String]): Option[Int] = {
     (x, y) match {
       case (Some(a), None) => Some(1)
@@ -135,13 +138,11 @@ object MainPing{
       case _ => None
     }
   }
+  // scalastyle:on return
 
   private def maxFlashVersion(a: String, b: String): String = {
     val c = compareFlashVersions(Some(a), Some(b)).getOrElse(1)
-    if (c < 0)
-      b
-    else
-      a
+    if (c < 0) b else a
   }
 
   // See also:
@@ -154,10 +155,7 @@ object MainPing{
       if addonName == "Shockwave Flash"
     } yield addonVersion
 
-    if (flashVersions.nonEmpty)
-      Some(flashVersions.reduceLeft(maxFlashVersion(_, _)))
-    else
-      None
+    if (flashVersions.nonEmpty) Some(flashVersions.reduceLeft(maxFlashVersion(_, _))) else None
   }
 
   private val searchKeyPattern = "^(.+)\\.(.+)$".r
@@ -184,8 +182,7 @@ object MainPing{
       for ((k, v) <- x) {
         buf.append(searchHistogramToRow(k, v))
       }
-      if (buf.isEmpty) None
-      else Some(buf.toList)
+      if (buf.isEmpty) None else Some(buf.toList)
     case _ => None
   }
 
@@ -248,10 +245,7 @@ object MainPing{
       if enumRow != null
     } yield (enumKey, enumRow))
 
-    if (enums.isEmpty)
-      None
-    else
-      Some(enums)
+    if (enums.isEmpty) None else Some(enums)
   }
 
   // Find the largest numeric bucket that contains a value greater than zero.
@@ -304,8 +298,7 @@ object MainPing{
           JObject(values) <- h \ "values"
           JField(bucket, JInt(count)) <- values
         } yield count).sum
-        if (totalCount == 0) None
-        else Some((sum / totalCount).toInt)
+        if (totalCount == 0) None else Some((sum / totalCount).toInt)
       }
       case _ => None
     }
@@ -345,10 +338,7 @@ object MainPing{
       if scalarVal != null
     } yield (key, scalarVal))
 
-    if (keys.isEmpty)
-      None
-    else
-      Some(keys)
+    if (keys.isEmpty) None else Some(keys)
   }
 
   def getScalarByName(scalars: Map[String, JValue], definitions: List[(String, ScalarDefinition)],

@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.utils.{S3Store, aggregation, getOrCreateSparkSession}
@@ -9,7 +12,7 @@ class IfDefinedOption[A](val from: Option[A]) {
   // A simple alias for an Option's map function.  We have a lot of
   // Option[Seq[A]] in this dataset, and calling _.map(_.map(...)) obfuscates
   // the code. This alias allows us to instead write: _.ifDefined(_.map(...))
-  def ifDefined[B](f: (A) => B) = from.map(f) 
+  def ifDefined[B](f: (A) => B): Option[B] = from.map(f)
 }
 
 class SafeIterable[A](val from: Iterable[A]) {
@@ -17,15 +20,15 @@ class SafeIterable[A](val from: Iterable[A]) {
     if (from.nonEmpty) Some(f(from)) else None
   }
 
-  def optMin[B >: A](implicit cmp: Ordering[B]) = ifNonEmpty(_.min(cmp))
-  def optMax[B >: A](implicit cmp: Ordering[B]) = ifNonEmpty(_.max(cmp))
-  def optMinBy[B](f: (A) => B)(implicit cmp: Ordering[B]) = ifNonEmpty(_.minBy(f)(cmp))
-  def optMaxBy[B](f: (A) => B)(implicit cmp: Ordering[B]) = ifNonEmpty(_.maxBy(f)(cmp))
+  def optMin[B >: A](implicit cmp: Ordering[B]): Option[A] = ifNonEmpty(_.min(cmp))
+  def optMax[B >: A](implicit cmp: Ordering[B]): Option[A] = ifNonEmpty(_.max(cmp))
+  def optMinBy[B](f: (A) => B)(implicit cmp: Ordering[B]): Option[A] = ifNonEmpty(_.minBy(f)(cmp))
+  def optMaxBy[B](f: (A) => B)(implicit cmp: Ordering[B]): Option[A] = ifNonEmpty(_.maxBy(f)(cmp))
 }
 
 object Implicits {
-  implicit def opt2ifDefinedOpt[A](from: Option[A]) = new IfDefinedOption(from)
-  implicit def seq2SafeIterable[A](from: Iterable[A]) = new SafeIterable(from)
+  implicit def opt2ifDefinedOpt[A](from: Option[A]): IfDefinedOption[A] = new IfDefinedOption(from)
+  implicit def seq2SafeIterable[A](from: Iterable[A]): SafeIterable[A] = new SafeIterable(from)
 }
 
 import com.mozilla.telemetry.views.Implicits._
@@ -99,7 +102,7 @@ case class Longitudinal (
 
   private def collate[A, B](seqPair: (Seq[A], Seq[B])): Option[Seq[(A, B)]] = {
     val (first, second) = seqPair
-    if (first.size == second.size) Some(first zip second) else None 
+    if (first.size == second.size) Some(first zip second) else None
   }
 
   def weightedMean(values: Option[Seq[Option[Long]]]): Option[Double] = {
@@ -209,7 +212,7 @@ case class Longitudinal (
       ssd <- this.subsession_start_date
       sd <- this.submission_date
       pairs <- collate(ssd, sd)
-    } yield { 
+    } yield {
       pairs.map(pair => getDateDiff(pair._1, pair._2))
     }
   }
@@ -368,7 +371,7 @@ case class CrossSectional (
       days_possible_4_fri = base.daysPossibleByDOW(FRIDAY),
       days_possible_5_sat = base.daysPossibleByDOW(SATURDAY),
       days_possible_6_sun = base.daysPossibleByDOW(SUNDAY),
-      default_pct = base.weightedMean(base.is_default_browser.ifDefined(_.map(_.ifDefined(x => if(x) 1l else 0l)))),
+      default_pct = base.weightedMean(base.is_default_browser.ifDefined(_.map(_.ifDefined(x => if(x) 1L else 0L)))),
       locale_configs = base.locale.ifDefined(_.distinct.length),
       locale_mode = base.weightedMode(base.locale).flatten,
       version_configs = base.version.ifDefined(_.distinct.length),
@@ -400,7 +403,7 @@ case class CrossSectional (
       profile_subsession_counter_min = base.profile_subsession_counter.ifDefined(_.optMin).flatten,
       profile_subsession_counter_max = base.profile_subsession_counter.ifDefined(_.optMax).flatten,
       profile_subsession_counter_configs = base.profile_subsession_counter.ifDefined(_.distinct.length),
-      search_counts_total = base.search_counts.ifDefined(_.values.foldLeft(0l)(_ + _.sum)),
+      search_counts_total = base.search_counts.ifDefined(_.values.foldLeft(0L)(_ + _.sum)),
       search_default_configs = base.default_search_engine.ifDefined(_.distinct.length),
       search_default_mode = base.weightedMode(base.default_search_engine).flatten,
       session_num_total = base.session_id.ifDefined(_.distinct.length),
@@ -413,6 +416,8 @@ case class CrossSectional (
 }
 
 object CrossSectionalView {
+  private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
+
   private class Opts(args: Array[String]) extends ScallopConf(args) {
     val outputBucket = opt[String](
       "outputBucket",
@@ -482,9 +487,9 @@ object CrossSectionalView {
       output.toDF().write.parquet(path)
     } else {
       // Count to ensure the entire dataset is created in a dry-run.
-      println(s"Resulting rows: ${output.count}")
+      logger.info(s"Resulting rows: ${output.count}")
       val ex = output.take(1)
-      println("="*80 + "\n" + ex + "\n" + "="*80)
+      logger.info("="*80 + "\n" + ex + "\n" + "="*80)
     }
 
     spark.stop()

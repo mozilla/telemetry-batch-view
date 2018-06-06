@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry
 
 import java.time.format.DateTimeFormatter
@@ -13,7 +16,7 @@ import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType, StructT
 import org.json4s.JsonDSL._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.{Assertion, FlatSpec, Matchers}
 
 import scala.io.Source
 
@@ -32,7 +35,8 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
     override protected val getURL = histogramUrlMock
   }
 
-  val histogramDefs = MainSummaryView.filterHistogramDefinitions(histograms.definitions(true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true))
+  val histogramDefs = MainSummaryView.filterHistogramDefinitions(
+    histograms.definitions(true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true))
 
   val userPrefs = MainSummaryView.userPrefsList
 
@@ -48,7 +52,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
   // Apply the given schema to the given potentially-generic Row.
   def applySchema(row: Row, schema: StructType): Row = new GenericRowWithSchema(row.toSeq.toArray, schema)
 
-  def checkAddonValues(row: Row, schema: StructType, expected: Map[String, Any]) = {
+  def checkAddonValues(row: Row, schema: StructType, expected: Map[String, Any]): Assertion = {
     val actual = applySchema(row, schema).getValuesMap(expected.keys.toList)
     val aid = expected("addon_id")
     for ((f, v) <- expected) {
@@ -120,7 +124,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
 
       var count = 0
       for (message <- File.parse(input)) {
-        message.timestamp should be(1460036116829920000l)
+        message.timestamp should be(1460036116829920000L)
         message.dtype.get should be("telemetry")
         message.logger.get should be("telemetry")
 
@@ -131,7 +135,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
           val expected = Map(
             "document_id" -> "foo",
             "client_id" -> "c4582ba1-79fc-1f47-ae2a-671118dccd8b",
-            "sample_id" -> 4l,
+            "sample_id" -> 4L,
             "channel" -> "nightly",
             "normalized_channel" -> "nightly",
             "country" -> "??",
@@ -148,10 +152,10 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
             "is_wow64" -> null,
             "memory_mb" -> 16384,
             "apple_model_id" -> null,
-            "profile_creation_date" -> 16861l,
+            "profile_creation_date" -> 16861L,
             "profile_reset_date" -> null,
             "subsession_start_date" -> "2016-03-28T00:00:00.0-03:00",
-            "subsession_length" -> 14557l,
+            "subsession_length" -> 14557L,
             "subsession_counter" -> 12,
             "profile_subsession_counter" -> 43,
             "creation_date" -> "2016-03-28T16:02:52.676Z",
@@ -164,7 +168,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
             "app_display_version" -> "48.0a1",
             "app_name" -> "Firefox",
             "app_version" -> "48.0a1",
-            "timestamp" -> 1460036116829920000l,
+            "timestamp" -> 1460036116829920000L,
             "env_build_id" -> "20160315030230",
             "env_build_version" -> "48.0a1",
             "env_build_arch" -> "x86-64",
@@ -189,7 +193,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
             "crash_submit_success_content" -> null,
             "crash_submit_success_plugin" -> null,
             "shutdown_kill" -> null,
-            "active_addons_count" -> 3l,
+            "active_addons_count" -> 3L,
             "flash_version" -> null,
             "vendor" -> "Mozilla",
             "is_default_browser" -> true,
@@ -262,7 +266,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
             val sW = applySchema(search, searchSchema)
             sW.getLong(sW.fieldIndex("count"))
           }).sum
-          searchCounter should be(65l)
+          searchCounter should be(65L)
 
           val popup = r.getMap[String, Row](r.fieldIndex("popup_notification_stats"))
           val expectedPopup = Map[String, Row](
@@ -831,31 +835,34 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
     compare(message, expected)
   }
 
+
   "Addon scalars" can "be properly shown 425" in {
+    val scalarValue =
+      """'We are just an advanced breed of monkeys on a minor planet of a very average star.
+        | But we can understand the universe.' -Stephen Hawking""".stripMargin.replace("\n", "")
     val message = RichMessage(
       "1234",
       Map(
         "documentId" -> "foo",
         "submissionDate" -> "1234",
         "submission" ->
-          """
-            |{
-            | "payload": {
-            |   "processes": {
-            |     "dynamic": {
-            |       "scalars": {
-            |         "telemetry.mock.string_kind": "'We are just an advanced breed of monkeys on a minor planet of a very average star. But we can understand the universe.' -Stephen Hawking"
-            |       }
-            |     }
-            |   }
-            | }
-            |}""".stripMargin),
+          s"""
+             |{
+             | "payload": {
+             |   "processes": {
+             |     "dynamic": {
+             |       "scalars": {
+             |         "telemetry.mock.string_kind": "$scalarValue"
+             |       }
+             |     }
+             |   }
+             | }
+             |}""".stripMargin),
       None)
 
     val expected = Map(
       "string_addon_scalars" -> Map(
-        "telemetry_mock_string_kind" ->
-          "'We are just an advanced breed of monkeys on a minor planet of a very average star. But we can understand the universe.' -Stephen Hawking"
+        "telemetry_mock_string_kind" -> scalarValue
       )
     )
 
@@ -1061,7 +1068,9 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
   }
 
   "All possible histograms and scalars" can "be included" in {
-    val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(Histograms.definitions(includeOptin = false, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true), useWhitelist = true)
+    val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(
+      Histograms.definitions(includeOptin = false, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true),
+      useWhitelist = true)
     val allScalarDefs = Scalars.definitions(includeOptin = true).toList.sortBy(_._1)
 
     val fakeHisto =
@@ -1984,7 +1993,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
     diff(null, 100) should be(None)
 
     // 1518898956 is 2018-02-17T20:22:36.000Z
-    val ts = 1518898956691800000l
+    val ts = 1518898956691800000L
     MainSummaryView.getClockSkew(Some("Sat, 17 Feb 2018 20:22:33 GMT"), ts).get should be(3)
     MainSummaryView.getClockSkew(Some("Sat, 17 Feb 2018 20:22:06 GMT"), ts).get should be(30)
     MainSummaryView.getClockSkew(Some("Sat, 67 Feb 2018 20:22:33 GMT"), ts) should be(None)

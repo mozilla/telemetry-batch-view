@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
@@ -267,7 +270,8 @@ class LongitudinalViewTest extends FlatSpec with Matchers with PrivateMethodTest
       val optinRow =  optinRows(0)
 
       private val nonOsPayload = createPayload(1) - "os"
-      private val missingOsRecord = (LongitudinalView  invokePrivate buildRecord((nonOsPayload +: payloads) ++ dupes, optinSchema, optinHistogramDefs, optinScalarDefs)).get
+      private val missingOsRecord = (LongitudinalView  invokePrivate buildRecord((nonOsPayload +: payloads) ++
+        dupes, optinSchema, optinHistogramDefs, optinScalarDefs)).get
       private val missingOsPath = ParquetFile.serialize(List(missingOsRecord).toIterator, optinSchema)
       private val missingOsFilename = missingOsPath.toString.replace("file:", "")
 
@@ -471,10 +475,11 @@ class LongitudinalViewTest extends FlatSpec with Matchers with PrivateMethodTest
       assert(h.length == 101)
 
       for ((value, key) <- h.zipWithIndex) {
-        if (key == 1)
+        if (key == 1) {
           assert(value == ParentConstant)
-        else
+        } else {
           assert(value == 0)
+        }
       }
     }
   }
@@ -509,10 +514,11 @@ class LongitudinalViewTest extends FlatSpec with Matchers with PrivateMethodTest
       assert(h.length == 13)
 
       for ((value, key) <- h.zipWithIndex) {
-        if (key == 1)
+        if (key == 1) {
           assert(value == ParentConstant)
-        else
+        } else {
           assert(value == 0)
+        }
       }
     }
   }

@@ -1,14 +1,16 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
-import com.mozilla.telemetry.utils.getOrCreateSparkSession
-import com.mozilla.telemetry.utils.{AggSearchCounts, AggMapFirst}
-import org.apache.spark.sql.{Column, DataFrame}
+import com.mozilla.telemetry.utils.{AggMapFirst, AggSearchCounts, getOrCreateSparkSession}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.{Column, DataFrame}
 import org.rogach.scallop._
 
 object ClientsDailyView {
-  val jobName: String = "clients_daily"
-  val schemaVersion: String = "v6"
+  private val jobName: String = "clients_daily"
+  private val schemaVersion: String = "v6"
 
   class Conf(args: Array[String]) extends ScallopConf(args) {
     val date = opt[String](
@@ -91,18 +93,18 @@ object ClientsDailyView {
       )
   }
 
-  def aggFirst(field: String): Column = first(field, ignoreNulls = true).alias(field)
+  private def aggFirst(field: String): Column = first(field, ignoreNulls = true).alias(field)
 
-  def aggFirst(expression: Column, alias: String): Column = first(expression, ignoreNulls = true).alias(alias)
+  private def aggFirst(expression: Column, alias: String): Column = first(expression, ignoreNulls = true).alias(alias)
 
-  val mapFirst = new AggMapFirst()
-  def aggMapFirst(field: String): Column = mapFirst(col(field)).alias(field)
+  private val mapFirst = new AggMapFirst()
+  private def aggMapFirst(field: String): Column = mapFirst(col(field)).alias(field)
 
-  def aggMax(field: String): Column = max(field).alias(s"${field}_max")
+  private def aggMax(field: String): Column = max(field).alias(s"${field}_max")
 
-  def aggMean(field: String): Column = mean(field).alias(s"${field}_mean")
+  private def aggMean(field: String): Column = mean(field).alias(s"${field}_mean")
 
-  val searchSources = List(
+  private val searchSources = List(
     "abouthome",
     "contextmenu",
     "newtab",
@@ -110,14 +112,14 @@ object ClientsDailyView {
     "system",
     "urlbar"
   )
-  val searchCounts = new AggSearchCounts(searchSources)
-  def aggSearchCounts(field: String): Column = searchCounts(col(field)).alias(field)
+  private val searchCounts = new AggSearchCounts(searchSources)
+  private def aggSearchCounts(field: String): Column = searchCounts(col(field)).alias(field)
 
-  def aggSum(field: String): Column = sum(field).alias(s"${field}_sum")
+  private def aggSum(field: String): Column = sum(field).alias(s"${field}_sum")
 
-  def aggSum(expression: Column, alias: String): Column = sum(expression).alias(alias)
+  private def aggSum(expression: Column, alias: String): Column = sum(expression).alias(alias)
 
-  def fieldAggregators = List(
+  private val fieldAggregators = List(
     aggSum("aborts_content"),
     aggSum("aborts_gmplugin"),
     aggSum("aborts_plugin"),
@@ -206,7 +208,10 @@ object ClientsDailyView {
     aggSum("push_api_notify"),
     aggFirst("sample_id"),
     aggFirst("sandbox_effective_content_process_level"),
-    aggSum(col("scalar_parent_webrtc_nicer_stun_retransmits") + col("scalar_content_webrtc_nicer_stun_retransmits"), "scalar_combined_webrtc_nicer_stun_retransmits_sum"),
+    aggSum(
+      col("scalar_parent_webrtc_nicer_stun_retransmits") + col("scalar_content_webrtc_nicer_stun_retransmits"),
+      "scalar_combined_webrtc_nicer_stun_retransmits_sum"
+    ),
     aggSum(col("scalar_parent_webrtc_nicer_turn_401s") + col("scalar_content_webrtc_nicer_turn_401s"), "scalar_combined_webrtc_nicer_turn_401s_sum"),
     aggSum(col("scalar_parent_webrtc_nicer_turn_403s") + col("scalar_content_webrtc_nicer_turn_403s"), "scalar_combined_webrtc_nicer_turn_403s_sum"),
     aggSum(col("scalar_parent_webrtc_nicer_turn_438s") + col("scalar_content_webrtc_nicer_turn_438s"), "scalar_combined_webrtc_nicer_turn_438s_sum"),

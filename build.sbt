@@ -87,3 +87,7 @@ publishTo := {
 // Speeds up finding snapshot releases:
 // https://www.scala-sbt.org/1.x/docs/Combined+Pages.html#Latest+SNAPSHOTs
 updateOptions := updateOptions.value.withLatestSnapshots(false)
+
+val scalaStyleConfigUrl = Some(url("https://raw.githubusercontent.com/mozilla/moztelemetry/master/scalastyle-config.xml"))
+(scalastyleConfigUrl in Compile) := scalaStyleConfigUrl
+(scalastyleConfigUrl in Test) := scalaStyleConfigUrl

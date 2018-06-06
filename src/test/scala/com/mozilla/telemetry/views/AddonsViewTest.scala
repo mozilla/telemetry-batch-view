@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
@@ -34,12 +37,12 @@ class AddonsViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
     import spark.implicits._
 
     val mains = Seq(
-      PartialMain("doc1", "client1", 1l, "2016-10-01T00:00:00", "release", Seq(
+      PartialMain("doc1", "client1", 1L, "2016-10-01T00:00:00", "release", Seq(
         Addon("addon1", true, "addon1name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, true, false, true),
         Addon("addon2", true, "addon2name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false, true, true))),
-      PartialMain("doc2", "client2", 2l, "2016-10-01T00:00:00", "release", null),
-      PartialMain("doc3", "client2", 2l, "2016-10-01T00:00:00", "release", Seq()),
-      PartialMain("doc4", "client3", 3l, "2016-10-01T00:00:00", "release", Seq(
+      PartialMain("doc2", "client2", 2L, "2016-10-01T00:00:00", "release", null),
+      PartialMain("doc3", "client2", 2L, "2016-10-01T00:00:00", "release", Seq()),
+      PartialMain("doc4", "client3", 3L, "2016-10-01T00:00:00", "release", Seq(
         Addon("addon1", true, "addon1name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, true, false, true),
         Addon("addon3", true, "addon3name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false, true, false),
         Addon("addon4", true, "addon4name", false, false, "1.0", 1, "plugin", true, false, 10, 11, 0, false, false, false)))

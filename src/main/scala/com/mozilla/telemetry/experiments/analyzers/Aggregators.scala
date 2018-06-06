@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.experiments.analyzers
 
 import org.apache.spark.sql.Encoder
@@ -25,21 +28,25 @@ abstract class GroupAggregator[T]
 
 object GroupBooleanAggregator extends GroupAggregator[Boolean] {
   def bufferEncoder: Encoder[Map[Boolean, Long]] = ExpressionEncoder()
+
   def outputEncoder: Encoder[Map[Boolean, Long]] = ExpressionEncoder()
 }
 
 object GroupUintAggregator extends GroupAggregator[Int] {
   def bufferEncoder: Encoder[Map[Int, Long]] = ExpressionEncoder()
+
   def outputEncoder: Encoder[Map[Int, Long]] = ExpressionEncoder()
 }
 
 object GroupLongAggregator extends GroupAggregator[Long] {
   def bufferEncoder: Encoder[Map[Long, Long]] = ExpressionEncoder()
+
   def outputEncoder: Encoder[Map[Long, Long]] = ExpressionEncoder()
 }
 
 object GroupStringAggregator extends GroupAggregator[String] {
   def bufferEncoder: Encoder[Map[String, Long]] = ExpressionEncoder()
+
   def outputEncoder: Encoder[Map[String, Long]] = ExpressionEncoder()
 }
 
@@ -59,11 +66,14 @@ abstract class MapAggregator[T]
 object BooleanAggregator extends MapAggregator[Boolean] {
   def finish(b: Map[Boolean, Long]): Map[Long, HistogramPoint] = {
     val sum = b.values.sum.toDouble
-    if (sum == 0) return Map.empty[Long, HistogramPoint]
-    val f = b.getOrElse(false, 0L).toDouble
-    val t = b.getOrElse(true, 0L).toDouble
+    if (sum == 0) {
+      Map.empty[Long, HistogramPoint]
+    } else {
+      val f = b.getOrElse(false, 0L).toDouble
+      val t = b.getOrElse(true, 0L).toDouble
 
-    Map(0L -> HistogramPoint(f/sum, f, Some("False")), 1L -> HistogramPoint(t/sum, t, Some("True")))
+      Map(0L -> HistogramPoint(f / sum, f, Some("False")), 1L -> HistogramPoint(t / sum, t, Some("True")))
+    }
   }
 
   def bufferEncoder: Encoder[Map[Boolean, Long]] = ExpressionEncoder()
@@ -72,8 +82,11 @@ object BooleanAggregator extends MapAggregator[Boolean] {
 object UintAggregator extends MapAggregator[Int] {
   def finish(b: Map[Int, Long]): Map[Long, HistogramPoint] = {
     val sum = b.values.sum.toDouble
-    if (sum == 0) return Map.empty[Long, HistogramPoint]
-    b.map { case (k: Int, v) => k.toLong -> HistogramPoint(v.toDouble / sum, v.toDouble, None) }
+    if (sum == 0) {
+      Map.empty[Long, HistogramPoint]
+    } else {
+      b.map { case (k: Int, v) => k.toLong -> HistogramPoint(v.toDouble / sum, v.toDouble, None) }
+    }
   }
 
   def bufferEncoder: Encoder[Map[Int, Long]] = ExpressionEncoder()
@@ -82,8 +95,11 @@ object UintAggregator extends MapAggregator[Int] {
 object LongAggregator extends MapAggregator[Long] {
   def finish(b: Map[Long, Long]): Map[Long, HistogramPoint] = {
     val sum = b.values.sum.toDouble
-    if (sum == 0) return Map.empty[Long, HistogramPoint]
-    b.map { case (k: Long, v) => k -> HistogramPoint(v.toDouble / sum, v.toDouble, None) }
+    if (sum == 0) {
+      Map.empty[Long, HistogramPoint]
+    } else {
+      b.map { case (k: Long, v) => k -> HistogramPoint(v.toDouble / sum, v.toDouble, None) }
+    }
   }
 
   def bufferEncoder: Encoder[Map[Long, Long]] = ExpressionEncoder()
@@ -92,11 +108,14 @@ object LongAggregator extends MapAggregator[Long] {
 object StringAggregator extends MapAggregator[String] {
   def finish(b: Map[String, Long]): Map[Long, HistogramPoint] = {
     val sum = b.values.sum.toDouble
-    if (sum == 0) return Map.empty[Long, HistogramPoint]
-    // We can't assign real numeric indexes until we combine all the histograms across all branches
-    // so just assign any number for now
-    b.zipWithIndex.map {
-      case ((l: String, v), i) => i.toLong -> HistogramPoint(v.toDouble / sum, v.toDouble, Some(l))
+    if (sum == 0) {
+      Map.empty[Long, HistogramPoint]
+    } else {
+      // We can't assign real numeric indexes until we combine all the histograms across all branches
+      // so just assign any number for now
+      b.zipWithIndex.map {
+        case ((l: String, v), i) => i.toLong -> HistogramPoint(v.toDouble / sum, v.toDouble, Some(l))
+      }
     }
   }
 

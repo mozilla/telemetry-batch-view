@@ -1,10 +1,14 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.metrics
 
+import com.mozilla.telemetry.utils.MainPing
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
+
 import scala.collection.mutable.{Map => MMap}
 import scala.io.Source
-import com.mozilla.telemetry.utils.MainPing
 
 case class RawHistogram(values: Map[String, Int], sum: Long)
 
@@ -27,11 +31,13 @@ case class EnumeratedHistogram(keyed: Boolean, originalName: String, nValues: In
   def getBuckets: Array[Int] = (0 to nValues).toArray
   val isCategoricalMetric = true
 }
-case class LinearHistogram(keyed: Boolean, originalName: String, low: Int, high: Int, nBuckets: Int, process: Option[String] = None) extends HistogramDefinition {
+case class LinearHistogram(keyed: Boolean, originalName: String, low: Int, high: Int, nBuckets: Int, process: Option[String] = None)
+  extends HistogramDefinition {
   def getBuckets: Array[Int] = Histograms.linearBuckets(low, high, nBuckets)
   val isCategoricalMetric = false
 }
-case class ExponentialHistogram(keyed: Boolean, originalName: String, low: Int, high: Int, nBuckets: Int, process: Option[String] = None) extends HistogramDefinition {
+case class ExponentialHistogram(keyed: Boolean, originalName: String, low: Int, high: Int, nBuckets: Int, process: Option[String] = None)
+  extends HistogramDefinition {
   def getBuckets: Array[Int] = Histograms.exponentialBuckets(low, high, nBuckets)
   val isCategoricalMetric = false
 }
@@ -45,10 +51,15 @@ case class CategoricalHistogram(keyed: Boolean, originalName: String, labels: Se
   def getBuckets: Array[Int] = (0 to labels.length).toArray
   val isCategoricalMetric = true
 }
-object CategoricalHistogram{ val SpillBucketName = "spill" }
+
+object CategoricalHistogram {
+  val SpillBucketName = "spill"
+}
 
 class HistogramsClass extends MetricsClass {
+  // scalastyle:off
   def HistogramPrefix = "histogram"
+  // scalastyle:on
 
   private val processTypes = List("content", "gpu")
   private case class HistogramLocation(path: List[String], suffix: String)
@@ -101,11 +112,13 @@ class HistogramsClass extends MetricsClass {
   // mock[io.Source] wasn't working with scalamock, so we'll just use the function
   protected val getURL: (String, String) => scala.io.BufferedSource = Source.fromURL
 
-  def prefixProcessJoiner(name: String, process: String) = s"${HistogramPrefix}_${process}_${name.toLowerCase}"
+  def prefixProcessJoiner(name: String, process: String): String = s"${HistogramPrefix}_${process}_${name.toLowerCase}"
 
-  def suffixProcessJoiner(name: String, process: String) = (name + ( if(process != "parent") "_" + process else "" )).toUpperCase
+  def suffixProcessJoiner(name: String, process: String): String = (name + ( if(process != "parent") "_" + process else "" )).toUpperCase
 
-  def definitions(includeOptin: Boolean = false, nameJoiner: (String, String) => String = suffixProcessJoiner, includeCategorical: Boolean = false): Map[String, HistogramDefinition] = {
+  // scalastyle:off methodLength
+  def definitions(includeOptin: Boolean = false, nameJoiner: (String, String) => String = suffixProcessJoiner,
+                  includeCategorical: Boolean = false): Map[String, HistogramDefinition] = {
     implicit val formats = DefaultFormats
 
     val uris = Map("release" -> "https://hg.mozilla.org/releases/mozilla-release/raw-file/tip/toolkit/components/telemetry/Histograms.json",
@@ -142,22 +155,18 @@ class HistogramsClass extends MetricsClass {
               case _ => Some(false)
             }
             case ("releaseChannelCollection", JString(x)) => Some(x)
-            case ("record_in_processes", JArray(x)) => Some(x.map{ p =>
-              p match {
-                case JString(p) => Some(p)
-                case _ => None
-              }
+            case ("record_in_processes", JArray(x)) => Some(x.map {
+              case JString(p) => Some(p)
+              case _ => None
             }.toList.flatten)
-            case ("labels", JArray(x)) => Some(x.map{ l =>
-              l match {
-                case JString(l) => Some(l)
-                case _ => None
-              }
+            case ("labels", JArray(x)) => Some(x.map {
+              case JString(l) => Some(l)
+              case _ => None
             })
             case _ => None
           }
         } catch {
-          case e: NumberFormatException =>
+          case _: NumberFormatException =>
             None
         }
 
@@ -228,6 +237,7 @@ class HistogramsClass extends MetricsClass {
     // Histograms are considered to be immutable so it's OK to merge their definitions
     parsed.flatMap(_._2)
   }
+  // scalastyle:on methodLength
 
   def linearBuckets(min: Float, max: Float, nBuckets: Int): Array[Int] = {
     lazy val buckets = {
@@ -257,10 +267,7 @@ class HistogramsClass extends MetricsClass {
         val logNext = logCurrent + logRatio
         val nextValue = math.floor(math.exp(logNext) + 0.5).toInt
 
-        if (nextValue > current)
-          current = nextValue
-        else
-          current = current + 1
+        current = if (nextValue > current) nextValue else current + 1
         retArray(bucketIndex) = current
       }
 

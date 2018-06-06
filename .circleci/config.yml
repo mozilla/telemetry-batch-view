@@ -147,10 +147,10 @@ workflows:
   build:
     jobs:
       - test
+      - lint
       - assembly
-      # - lint  # enable once https://github.com/mozilla/telemetry-batch-view/pull/442 is merged
       - deploy:
           requires:
             - test
+            - lint
             - assembly
-            # - lint  # enable once https://github.com/mozilla/telemetry-batch-view/pull/442 is merged

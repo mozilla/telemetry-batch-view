@@ -1,14 +1,16 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
-import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import com.mozilla.telemetry.views.SyncEventConverter
-import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods.parse
+import org.json4s.{DefaultFormats, JValue}
 import org.scalatest.{FlatSpec, Matchers}
 
 class SyncEventViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
-  def sync_payload = parse(
+  def syncPayload: JValue = parse(
     """
       |{
       |  "type": "sync",
@@ -147,7 +149,7 @@ class SyncEventViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
       |}
     """.stripMargin)
 
-  def sync_payload_with_os = parse(
+  def syncPayloadWithOs: JValue = parse(
     """
       |{
       |  "type": "sync",
@@ -191,7 +193,7 @@ class SyncEventViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
   "Sync Events" can "be serialized" in {
     implicit val formats = DefaultFormats
     sc.setLogLevel("WARN")
-    val row = SyncEventConverter.pingToRows(sync_payload)
+    val row = SyncEventConverter.pingToRows(syncPayload)
     val rdd = sc.parallelize(row)
 
     val dataframe = spark.createDataFrame(rdd, SyncEventConverter.syncEventSchema)
@@ -200,14 +202,14 @@ class SyncEventViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
     dataframe.count() should be(2)
     val checkRow = dataframe.first()
 
-    checkRow.getAs[String]("document_id") should be((sync_payload \ "id").extract[String])
-    checkRow.getAs[String]("app_build_id") should be((sync_payload \ "application" \ "buildId").extract[String])
-    checkRow.getAs[String]("app_display_version") should be((sync_payload \ "application" \ "displayVersion").extract[String])
-    checkRow.getAs[String]("app_name") should be((sync_payload \ "application" \ "name").extract[String])
-    checkRow.getAs[String]("app_version") should be((sync_payload \ "application" \ "version").extract[String])
-    checkRow.getAs[String]("app_channel") should be((sync_payload \ "application" \ "channel").extract[String])
+    checkRow.getAs[String]("document_id") should be((syncPayload \ "id").extract[String])
+    checkRow.getAs[String]("app_build_id") should be((syncPayload \ "application" \ "buildId").extract[String])
+    checkRow.getAs[String]("app_display_version") should be((syncPayload \ "application" \ "displayVersion").extract[String])
+    checkRow.getAs[String]("app_name") should be((syncPayload \ "application" \ "name").extract[String])
+    checkRow.getAs[String]("app_version") should be((syncPayload \ "application" \ "version").extract[String])
+    checkRow.getAs[String]("app_channel") should be((syncPayload \ "application" \ "channel").extract[String])
 
-    val payload = sync_payload \ "payload"
+    val payload = syncPayload \ "payload"
     checkRow.getAs[String]("why") should be((payload \ "why").extract[String])
     checkRow.getAs[String]("uid") should be((payload \ "uid").extract[String])
     checkRow.getAs[String]("device_id") should be((payload \ "deviceID").extract[String])
@@ -232,7 +234,7 @@ class SyncEventViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
   "Sync Events" can "contain os information for sending device" in {
     sc.setLogLevel("WARN")
     implicit val formats = DefaultFormats
-    val row = SyncEventConverter.pingToRows(sync_payload_with_os)
+    val row = SyncEventConverter.pingToRows(syncPayloadWithOs)
     val rdd = sc.parallelize(row)
 
     val dataframe = spark.createDataFrame(rdd, SyncEventConverter.syncEventSchema)
@@ -241,7 +243,7 @@ class SyncEventViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
     dataframe.count() should be(1)
     val checkRow = dataframe.first()
 
-    val payload = sync_payload \ "payload"
+    val payload = syncPayload \ "payload"
 
     checkRow.getAs[String]("device_os_name") should be("iOS")
     checkRow.getAs[String]("device_os_version") should be("10.0")

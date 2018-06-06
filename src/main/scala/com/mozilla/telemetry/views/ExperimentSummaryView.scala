@@ -1,25 +1,28 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
 import java.util.Date
 
 import com.mozilla.telemetry.utils.{deletePrefix, getOrCreateSparkSession}
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions._
 import org.joda.time.{DateTime, Days, format}
-import org.rogach.scallop._
-import org.json4s.jackson.JsonMethods._
 import org.json4s._
-
+import org.json4s.jackson.JsonMethods._
+import org.rogach.scallop._
 import scalaj.http.Http
+
 import scala.util.{Success, Try}
 
 object ExperimentSummaryView {
   def schemaVersion: String = "v1"
   def jobName: String = "experiments"
   def experimentsUrl: String = "https://normandy.services.mozilla.com/api/v1/recipe/"
-  def experimentsUrlParams = List(("format", "json"))
-  def experimentsQualifyingAction = List("preference-experiment", "opt-out-study")
-  def excludedExperiments = List("pref-flip-screenshots-release-1369150", "pref-flip-search-composition-57-release-1413565")
+  def experimentsUrlParams: List[(String, String)] = List(("format", "json"))
+  def experimentsQualifyingAction: List[String] = List("preference-experiment", "opt-out-study")
+  def excludedExperiments: List[String] = List("pref-flip-screenshots-release-1369150", "pref-flip-search-composition-57-release-1413565")
   private case class NormandyRecipeBranch(ratio: Int, slug: String, value: Any)
   private case class NormandyRecipeArguments(branches: List[NormandyRecipeBranch],
                                              slug: Option[String],
@@ -115,23 +118,20 @@ object ExperimentSummaryView {
     parse(Http(experimentsUrl).params(experimentsUrlParams).asString.body)
   }
 
-  def getExperimentList(json: JValue, date: Date): List[String] = {
-    json match {
-      case JArray(x) => x.flatMap(v =>
-        getNormalizedRecipe(v) match {
-          case Some(r) =>
-            if (shouldProcessExperiment(r, date))
-              List(r.arguments.slug.get)
-            else
-              List()
-          case _ => List()
-        }
-      )
-      case _ => throw NormandyException("Unexpected response format from experiment recipe server")
-    }
+  def getExperimentList(json: JValue, date: Date): List[String] = json match {
+    case JArray(x) => x.flatMap(v =>
+      getNormalizedRecipe(v) match {
+        case Some(r) if shouldProcessExperiment(r, date) =>
+          List(r.arguments.slug.get)
+        case _ =>
+          List()
+      }
+    )
+    case _ => throw NormandyException("Unexpected response format from experiment recipe server")
   }
 
-  def shouldProcessExperiment(r: NormandyRecipe, date: Date) = {
+
+  def shouldProcessExperiment(r: NormandyRecipe, date: Date): Boolean = {
     experimentsQualifyingAction.contains(r.action) &&
     !excludedExperiments.contains(r.arguments.slug.get) &&
     ((r.enabled == true) || r.last_updated.after(date)) // is this experiment enabled for this date?
