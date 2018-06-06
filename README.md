@@ -65,6 +65,21 @@ sbt assembly
 spark-submit --master yarn --deploy-mode client --class com.mozilla.telemetry.views.LongitudinalView target/scala-2.11/telemetry-batch-view-*.jar --from 20160101 --to 20160701 --bucket telemetry-test-bucket
 ```
 
+### Maintaining Tests
+
+Running the full suite of test cases can take more than 30 minutes, so we have configured
+our CI system to run tests in parallel across multiple jobs. These jobs are defined in `.travis.yml`
+and rely on Scalatest tags to determine which test cases run in which jobs.
+
+Any new test cases that run faster than 10 seconds can remain in the catch-all job for untagged tests,
+but please consider tagging any longer-running test cases. If you're introducing several new
+long-running tasks, please define a new tag in Tags.scala, tag your tests, and update the `.travis.yml`
+to define an additional test job for that tag.
+
+We may need to periodically rebalance test cases across tags. If you notice one of the test jobs
+in TravisCI becoming the bottleneck, read through the logs for that job to see runtimes for each test
+case and consider moving some expensive tests to a different job or splitting them out to a new tag.
+
 ### Testing in Dev Airflow with `[skip-tests]`
 
 It is possible to launch the job locally exactly as it will in production. When doing this, we recommend
