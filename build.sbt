@@ -15,7 +15,6 @@ lazy val root = (project in file(".")).
     name := "telemetry-batch-view",
     version := "1.1",
     scalaVersion := "2.11.8",
-    retrieveManaged := true,
     // Hack to get releases to not fail to upload when the same jar name already exists. Later we will need auto versioning
     isSnapshot := true,
     scalaModuleInfo := scalaModuleInfo.value.map(_.withOverrideScalaVersion(true)),
