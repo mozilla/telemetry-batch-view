@@ -73,12 +73,23 @@ and rely on Scalatest tags to determine which test cases run in which jobs.
 
 Any new test cases that run faster than 10 seconds can remain in the catch-all job for untagged tests,
 but please consider tagging any longer-running test cases. If you're introducing several new
-long-running tasks, please define a new tag in Tags.scala, tag your tests, and update the `.travis.yml`
-to define an additional test job for that tag.
+long-running tasks, please define a new tag (see checklist below).
 
 We may need to periodically rebalance test cases across tags. If you notice one of the test jobs
 in TravisCI becoming the bottleneck, read through the logs for that job to see runtimes for each test
 case and consider moving some expensive tests to a different job or splitting them out to a new tag.
+At the time of writing, setup for each job (building the Docker container, compiling the code, etc.)
+takes about 5 minutes and we target keeping the total run time for each test job to 10 minutes.
+We could benefit from more parallelism if we reduced the setup time.
+
+#### Defining a new tag
+
+Whenever you introduce a new Scalatest tag, you'll need to make the following changes:
+
+- Define the new tag in `Tags.scala`
+- Tag some long-running test cases with the new tag
+- Update `.travis.yml` to add an a new `env` case to run the new tag
+- Update `.travis.yml` to add the new tag to the list of exclusions for the catch-all test job (last line in the `env` list)
 
 ### Testing in Dev Airflow with `[skip-tests]`
 
