@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.experiments.analyzers._
@@ -11,13 +14,13 @@ import org.rogach.scallop.ScallopConf
 import scala.util.{Failure, Success, Try}
 
 object ExperimentAnalysisView {
-  def defaultErrorAggregatesBucket = "net-mozaws-prod-us-west-2-pipeline-data"
-  def errorAggregatesPath = "experiment_error_aggregates/v1"
-  def jobName = "experiment_analysis"
-  def schemaVersion = "v1"
+  private val defaultErrorAggregatesBucket = "net-mozaws-prod-us-west-2-pipeline-data"
+  private val errorAggregatesPath = "experiment_error_aggregates/v1"
+  private val jobName = "experiment_analysis"
+  private val schemaVersion = "v1"
   // This gives us ~120MB partitions with the columns we have now. We should tune this as we add more columns.
-  def rowsPerPartition = 25000
-  val defaultJackknifeBlocks = 100
+  private val rowsPerPartition = 25000
+  private val defaultJackknifeBlocks = 100
 
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getSimpleName)
 
@@ -148,7 +151,7 @@ object ExperimentAnalysisView {
     }
   }
 
-  def getMetrics(conf: Conf) = {
+  def getMetrics(conf: Conf): List[(String, MetricDefinition)] = {
     conf.metric.get match {
       case Some(m) => {
         List((m, (Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _) ++ Scalars.definitions())(m.toLowerCase)))

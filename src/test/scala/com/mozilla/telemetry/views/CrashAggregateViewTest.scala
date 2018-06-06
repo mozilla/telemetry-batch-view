@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
@@ -90,10 +93,12 @@ class CrashAggregateViewTest extends FlatSpec with Matchers with DataFrameSuiteB
         )
 
       val isMain = dimensions("doc_type") == "main"
-      val info = if (isMain)
+      val info = if (isMain) {
         ("subsessionLength" -> JInt(SCALAR_VALUE)) ~
-        ("subsessionStartDate" -> JString(dimensions("activity_date").asInstanceOf[String]))
-      else JObject()
+          ("subsessionStartDate" -> JString(dimensions("activity_date").asInstanceOf[String]))
+      } else {
+        JObject()
+      }
       val system =
         ("os" ->
           ("name" -> dimensions("os_name").asInstanceOf[String]) ~

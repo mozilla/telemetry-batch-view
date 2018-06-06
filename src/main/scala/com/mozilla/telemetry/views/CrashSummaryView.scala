@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.heka.Dataset
@@ -160,6 +163,8 @@ case class CrashSummary (
 }
 
 object CrashSummaryView {
+  private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
+
   private class Opts(args: Array[String]) extends ScallopConf(args) {
     val outputBucket = opt[String](
       "outputBucket",
@@ -255,11 +260,11 @@ object CrashSummaryView {
         val path = s"s3://${outputBucket}/${prefix}/submission_date=${currentDateString}"
         dataset.write.mode(SaveMode.Overwrite).parquet(path)
       }
-      println("************************************")
-      println(s"Total pings: ${dataset.count()}")
-      println(s"Processed pings: ${processedPings.value}")
-      println(s"Discarded pings: ${discardedPings.value}")
-      println("************************************")
+      logger.info("************************************")
+      logger.info(s"Total pings: ${dataset.count()}")
+      logger.info(s"Processed pings: ${processedPings.value}")
+      logger.info(s"Discarded pings: ${discardedPings.value}")
+      logger.info("************************************")
     }
     sc.stop()
   }

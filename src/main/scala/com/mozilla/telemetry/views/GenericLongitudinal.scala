@@ -1,10 +1,13 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
 import com.github.nscala_time.time.Imports._
 import com.mozilla.telemetry.utils.{CollectList, getOrCreateSparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{Column, DataFrame, SQLContext}
 import org.rogach.scallop._
 
 object GenericLongitudinalView {
@@ -166,7 +169,8 @@ object GenericLongitudinalView {
     group(data, groupingColumn, orderingColumns, maxArrayLength)
   }
 
-  def group(df: DataFrame, groupColumn: String = "client_id", orderColumns: List[String] = List("submission_date_s3"), maxLength: Option[Int] = None): DataFrame = {
+  def group(df: DataFrame, groupColumn: String = "client_id", orderColumns: List[String] = List("submission_date_s3"),
+            maxLength: Option[Int] = None): DataFrame = {
     // We can't order on the grouping column
     assert(!orderColumns.contains(groupColumn))
 
@@ -190,7 +194,7 @@ object GenericLongitudinalView {
     aggregated.select(col(groupColumn) :: getChildren(aggregateColName, aggregated): _*)
   }
 
-  def getChildren(colname: String, df: DataFrame) = {
+  def getChildren(colname: String, df: DataFrame): List[Column] = {
     df.schema(colname)
       .dataType
       .asInstanceOf[StructType]

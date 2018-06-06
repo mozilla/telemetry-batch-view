@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.utils
 
 package object aggregation {
@@ -10,7 +13,7 @@ package object aggregation {
   }
 
   def weightedMean(pairs: Seq[(Long, Long)]): Option[Double] = {
-    val ttl_weight = pairs.foldLeft(0l)((acc, pair) => acc + pair._2)
+    val ttl_weight = pairs.foldLeft(0L)((acc, pair) => acc + pair._2)
     val sum_prod = pairs.foldLeft(0.0)((acc, pair) => acc + (pair._1 * pair._2))
 
     if (ttl_weight > 0) {

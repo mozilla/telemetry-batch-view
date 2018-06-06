@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.heka.Dataset
@@ -10,6 +13,8 @@ import org.rogach.scallop._ // Just for my attempted mocks below.....
 
 
 object SyncView {
+  private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
+
   def schemaVersion: String = "v2"
   def jobName: String = "sync_summary"
 
@@ -25,8 +30,9 @@ object SyncView {
 
   def main(args: Array[String]) {
     val conf = new Conf(args) // parse command line arguments
-    if (!conf.outputBucket.supplied && !conf.outputFilename.supplied)
+    if (!conf.outputBucket.supplied && !conf.outputFilename.supplied) {
       conf.errorMessageHandler("One of outputBucket or outputFilename must be specified")
+    }
     val fmt = format.DateTimeFormat.forPattern("yyyyMMdd")
     val to = conf.to.get match {
       case Some(t) => fmt.parseDateTime(t)
@@ -53,8 +59,8 @@ object SyncView {
       val currentDate = from.plusDays(offset)
       val currentDateString = currentDate.toString("yyyyMMdd")
 
-      println("=======================================================================================")
-      println(s"BEGINNING JOB $jobName $schemaVersion FOR $currentDateString")
+      logger.info("=======================================================================================")
+      logger.info(s"BEGINNING JOB $jobName $schemaVersion FOR $currentDateString")
 
       val ignoredCount = spark.sparkContext.longAccumulator("Number of Records Ignored")
       val processedCount = spark.sparkContext.longAccumulator("Number of Records Processed")
@@ -114,18 +120,18 @@ object SyncView {
 
         // Then remove the _SUCCESS file so we don't break Spark partition discovery.
         S3Store.deleteKey(conf.outputBucket(), s"$s3prefix/_SUCCESS")
-        println(s"Wrote data to s3 path $s3path")
+        logger.info(s"Wrote data to s3 path $s3path")
       } else {
         // Write the data to a local file.
         records.write.parquet(conf.outputFilename())
-        println(s"Wrote data to local file ${conf.outputFilename()}")
+        logger.info(s"Wrote data to local file ${conf.outputFilename()}")
       }
 
-      println(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
-      println(s"     RECORDS SEEN:    ${ignoredCount.value + processedCount.value + failedCount.value}")
-      println(s"     RECORDS IGNORED: ${ignoredCount.value}")
-      println(s"     RECORDS FAILED:  ${failedCount.value}")
-      println("=======================================================================================")
+      logger.info(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
+      logger.info(s"     RECORDS SEEN:    ${ignoredCount.value + processedCount.value + failedCount.value}")
+      logger.info(s"     RECORDS IGNORED: ${ignoredCount.value}")
+      logger.info(s"     RECORDS FAILED:  ${failedCount.value}")
+      logger.info("=======================================================================================")
     }
 
     spark.stop()

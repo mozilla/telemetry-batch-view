@@ -47,6 +47,12 @@ If you wish to import the project into IntelliJ IDEA, apply the following change
 
 Note that the first time the project is opened it takes some time to download all the dependencies.
 
+### Scala style checker
+[Scalastyle](http://www.scalastyle.org/) is used on the CI for enforcing style rules. In order to run it locally, use:
+```bash
+sbt scalastyle test:scalastyle
+```
+
 ### Generating Datasets
 
 See the [documentation for specific views](https://github.com/mozilla/telemetry-batch-view/tree/master/docs) for details about running/generating them.

@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.metrics
 
 import java.util
@@ -21,7 +24,7 @@ trait ScalarType {
     case false => name
   }
 
-  def getParquetType = keyed match {
+  def getParquetType: DataType = keyed match {
     case true => MapType(StringType, dataType, valueContainsNull = true)
     case false => dataType
   }
@@ -160,4 +163,4 @@ class ScalarsClass extends MetricsClass {
   }
 }
 
-package object Scalars extends ScalarsClass
+object Scalars extends ScalarsClass

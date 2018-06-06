@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views.pioneer
 
 import java.time.format.DateTimeFormatter
@@ -35,7 +38,7 @@ object PioneerOnlineNewsDedupeView {
   case class ExplodedEntry(ping_timestamp: Long, document_id: String, pioneer_id: String, study_name: String,
                            geo_city: String, geo_country: String, submission_date_s3: String, entry_timestamp: Long,
                            branch: String, details: String, url: String) {
-    def toKey = EntryKey(pioneer_id, entry_timestamp, branch, details, url)
+    def toKey: EntryKey = EntryKey(pioneer_id, entry_timestamp, branch, details, url)
   }
 
   val jobName = "PioneerOnlineNewsDedupe"
@@ -133,11 +136,9 @@ object PioneerOnlineNewsDedupeView {
     val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
     val outputPath = new Path(conf.outputLocation())
     val tempPath = new Path(conf.tempLocation())
-    if (fs.exists(tempPath))
-      fs.delete(tempPath, true)
+    if (fs.exists(tempPath)) fs.delete(tempPath, true)
 
-    if (!fs.exists(outputPath))
-      fs.mkdirs(outputPath)
+    if (!fs.exists(outputPath)) fs.mkdirs(outputPath)
 
     dedupeByDay(startDate, endDate, conf)
     fs.delete(tempPath, true)

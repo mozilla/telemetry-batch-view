@@ -1,13 +1,16 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.utils
-
-import org.scalatest.{FlatSpec, Matchers}
-import org.json4s.JsonAST._
-import org.json4s.jackson.JsonMethods._
-import org.apache.spark.sql.Row
-import scala.io.Source
 
 import com.mozilla.telemetry.metrics._
 import com.mozilla.telemetry.views.MainSummaryView
+import org.apache.spark.sql.Row
+import org.json4s.JsonAST._
+import org.json4s.jackson.JsonMethods._
+import org.scalatest.{FlatSpec, Matchers}
+
+import scala.io.Source
 
 class MainPingTest extends FlatSpec with Matchers {
  val scalarUrlMock = (a: String, b: String) => Source.fromFile("src/test/resources/Scalars.yaml")
@@ -327,13 +330,13 @@ class MainPingTest extends FlatSpec with Matchers {
     """.stripMargin)
 
   "Search counts" can "be converted" in {
-    var expected = 0l
+    var expected = 0L
     for ((k, e, s, c) <- List(
-      ("google.abouthome", "google", "abouthome", 1l),
-      ("google.urlbar",    "google", "urlbar",    67l),
-      ("yahoo.urlbar",     "yahoo",  "urlbar",    78l),
+      ("google.abouthome", "google", "abouthome", 1L),
+      ("google.urlbar",    "google", "urlbar",    67L),
+      ("yahoo.urlbar",     "yahoo",  "urlbar",    78L),
       ("toast1",           null,     null,        null),
-      ("toast2",           null,     null,        10l),
+      ("toast2",           null,     null,        10L),
       ("toast3.badcount",  "toast3", "badcount",  null))) {
       val m = MainPing.searchHistogramToRow(k, exampleSearches \ k)
       m(0) shouldBe e
@@ -347,7 +350,7 @@ class MainPingTest extends FlatSpec with Matchers {
 
     MainPing.searchHistogramToRow("toast1", exampleSearches \ "toast1") should be (Row(null, null, null))
 
-    var actual = 0l
+    var actual = 0L
     for (search <- MainPing.getSearchCounts(exampleSearches).get) {
 
       actual = actual + (search.get(2) match {
@@ -358,11 +361,11 @@ class MainPingTest extends FlatSpec with Matchers {
     actual should be (expected)
 
     val json = parse(testPayload)
-    var payloadCount = 0l
+    var payloadCount = 0L
     for (search <- MainPing.getSearchCounts(json \ "payload" \ "keyedHistograms" \ "SEARCH_COUNTS").get) {
       payloadCount = payloadCount + search.getLong(2)
     }
-    payloadCount should be (88l)
+    payloadCount should be (88L)
   }
 
   "Histogram means" can "be computed" in {
@@ -578,7 +581,8 @@ class MainPingTest extends FlatSpec with Matchers {
     // Doesn't have scalars
     val jNoScalars = parse(
       """{}""")
-    MainPing.scalarsToRow(makeScalarsMap(jNoScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null, null)))
+    MainPing.scalarsToRow(makeScalarsMap(jNoScalars), scalarDefs) should be
+    (makeExpected(List(null, null, null, null, null, null, null, null, null, null)))
 
     // Has scalars, but none of the expected ones
     val jUnexpectedScalars = parse(
@@ -586,7 +590,8 @@ class MainPingTest extends FlatSpec with Matchers {
         |  "example1": 249,
         |  "example2": 2
         |}""".stripMargin)
-    MainPing.scalarsToRow(makeScalarsMap(jUnexpectedScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, null, null, null, null)))
+    MainPing.scalarsToRow(makeScalarsMap(jUnexpectedScalars), scalarDefs) should be
+    (makeExpected(List(null, null, null, null, null, null, null, null, null, null)))
 
     // Has scalars, and some of the expected ones
     val jSomeExpectedScalars = parse(
@@ -594,7 +599,8 @@ class MainPingTest extends FlatSpec with Matchers {
         |  "mock.scalar.uint": 2,
         |  "mock.uint.optin": 97
         |}""".stripMargin)
-    MainPing.scalarsToRow(makeScalarsMap(jSomeExpectedScalars), scalarDefs) should be (makeExpected(List(null, null, null, null, null, null, 2, 97, null, null)))
+    MainPing.scalarsToRow(makeScalarsMap(jSomeExpectedScalars), scalarDefs) should be
+    (makeExpected(List(null, null, null, null, null, null, 2, 97, null, null)))
 
     // Keyed scalars convert correctly
     val jKeyedScalar = parse(
@@ -602,7 +608,7 @@ class MainPingTest extends FlatSpec with Matchers {
         |  "mock.keyed.scalar.uint": {"a": 1, "b": 2}
         |}""".stripMargin)
     MainPing.scalarsToRow(makeScalarsMap(jKeyedScalar), scalarDefs) should be
-      (makeExpected(List(null, null, null, Map("a" -> 1, "b" -> 2), null, null, null, null, null, null)))
+    (makeExpected(List(null, null, null, Map("a" -> 1, "b" -> 2), null, null, null, null, null, null)))
 
     // Has scalars, all of the expected ones
     val jAllScalars = parse(
@@ -677,9 +683,9 @@ class MainPingTest extends FlatSpec with Matchers {
     MainPing.getScalarByName(makeScalarsMap(jUnexpectedScalars), scalarDefs, "scalar_content_mock_scalar_uint") should === (null)
     MainPing.getScalarByName(makeScalarsMap(jUnexpectedScalars), scalarDefs, "scalar_content_mock_uint_optin") should === (null)
     MainPing.getScalarByName(makeScalarsMap(jUnexpectedScalars), scalarDefs, "scalar_content_mock_uint_optout") should === (null)
-    an [IllegalArgumentException] should be thrownBy
+    an[IllegalArgumentException] should be thrownBy
       MainPing.getScalarByName(makeScalarsMap(jUnexpectedScalars), scalarDefs, "example1")
-    an [IllegalArgumentException] should be thrownBy
+    an[IllegalArgumentException] should be thrownBy
       MainPing.getScalarByName(makeScalarsMap(jUnexpectedScalars), scalarDefs, "example2")
 
     // Has scalars, and some of the expected ones
@@ -710,10 +716,10 @@ class MainPingTest extends FlatSpec with Matchers {
     MainPing.getScalarByName(makeScalarsMap(jAllScalars), scalarDefs, "scalar_content_mock_uint_optin") should be (1)
     MainPing.getScalarByName(makeScalarsMap(jAllScalars), scalarDefs, "scalar_content_mock_uint_optout") should be (42)
     //Expect exception when scalarDefs has duplicates.
-    an [IllegalArgumentException] should be thrownBy
+    an[IllegalArgumentException] should be thrownBy
       MainPing.getScalarByName(makeScalarsMap(jAllScalars), scalarDefs ++ scalarDefs, "scalar_parent_mock_scalar_uint")
     // Expect an exception because the scalar does not exist in the definition.
-    an [IllegalArgumentException] should be thrownBy
+    an[IllegalArgumentException] should be thrownBy
       MainPing.getScalarByName(makeScalarsMap(jAllScalars), scalarDefs, "scalar_content_mock_random_scalar")
 
     // Has scalars with weird data

@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
 object ClientsDailyViewTestPayloads {
@@ -147,7 +150,7 @@ object ClientsDailyViewTestPayloads {
     windows_ubr: Option[Long] = None
   )
 
-  def getRowAggFirst(sValue: Option[String], bValue: Option[Boolean], iValue: Option[Int]) = MainSummaryRow(
+  def getRowAggFirst(sValue: Option[String], bValue: Option[Boolean], iValue: Option[Int]): MainSummaryRow = MainSummaryRow(
     active_experiment_branch = sValue,
     active_experiment_id = sValue,
     addon_compatibility_check_enabled = bValue,
@@ -214,7 +217,7 @@ object ClientsDailyViewTestPayloads {
     windows_ubr = Some(iValue.get)
   )
 
-  def getExpectAggFirst(sValue: String, bValue: Boolean, iValue: Int) = Map(
+  def getExpectAggFirst(sValue: String, bValue: Boolean, iValue: Int): Map[String, Any] = Map(
     "active_experiment_branch" -> sValue,
     "active_experiment_id" -> sValue,
     "addon_compatibility_check_enabled" -> bValue,
@@ -279,19 +282,19 @@ object ClientsDailyViewTestPayloads {
     "windows_ubr" -> iValue
   )
 
-  def getRowAggMax(value: Option[Int]) = MainSummaryRow(
+  def getRowAggMax(value: Option[Int]): MainSummaryRow = MainSummaryRow(
     scalar_parent_browser_engagement_max_concurrent_tab_count = value,
     scalar_parent_browser_engagement_max_concurrent_window_count = value,
     scalar_parent_browser_engagement_unique_domains_count = value
   )
 
-  def getExpectAggMax(value: Int) = Map(
+  def getExpectAggMax(value: Int): Map[String, Int] = Map(
     "scalar_parent_browser_engagement_max_concurrent_tab_count_max" -> value,
     "scalar_parent_browser_engagement_max_concurrent_window_count_max" -> value,
     "scalar_parent_browser_engagement_unique_domains_count_max" -> value
   )
 
-  def getRowAggMean(value: Option[Int]) = MainSummaryRow(
+  def getRowAggMean(value: Option[Int]): MainSummaryRow = MainSummaryRow(
     active_addons_count = Some(value.get),
     client_clock_skew = Some(value.get),
     client_submission_latency = Some(value.get),
@@ -302,7 +305,7 @@ object ClientsDailyViewTestPayloads {
     session_restored = value
   )
 
-  def getExpectAggMean(value: Int) = Map(
+  def getExpectAggMean(value: Int): Map[String, Int] = Map(
     "active_addons_count_mean" -> value,
     "client_clock_skew_mean" -> value,
     "client_submission_latency_mean" -> value,
@@ -313,7 +316,7 @@ object ClientsDailyViewTestPayloads {
     "session_restored_mean" -> value
   )
 
-  def getRowAggSum(value: Option[Int]) = MainSummaryRow(
+  def getRowAggSum(value: Option[Int]): MainSummaryRow = MainSummaryRow(
     aborts_content = value,
     aborts_gmplugin = value,
     aborts_plugin = value,
@@ -365,7 +368,7 @@ object ClientsDailyViewTestPayloads {
     web_notification_shown = value
   )
 
-  def getExpectAggSum(value: Int) = Map(
+  def getExpectAggSum(value: Int): Map[String, Int] = Map(
     "aborts_content_sum" -> value,
     "aborts_gmplugin_sum" -> value,
     "aborts_plugin_sum" -> value,

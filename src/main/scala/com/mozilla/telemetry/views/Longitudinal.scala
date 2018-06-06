@@ -1,23 +1,26 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
 import com.github.nscala_time.time.Imports._
-import org.apache.avro.{Schema, SchemaBuilder}
+import com.mozilla.telemetry.avro
+import com.mozilla.telemetry.heka.{Dataset, Message}
+import com.mozilla.telemetry.metrics._
+import com.mozilla.telemetry.parquet.ParquetFile
+import com.mozilla.telemetry.utils.{deletePrefix, _}
 import org.apache.avro.generic.{GenericData, GenericRecord, GenericRecordBuilder}
+import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.spark.Partitioner
 import org.apache.spark.rdd.RDD
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.rogach.scallop._
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scala.math.abs
 import scala.reflect.ClassTag
-import com.mozilla.telemetry.parquet.ParquetFile
-import com.mozilla.telemetry.avro
-import com.mozilla.telemetry.heka.{Dataset, Message}
-import com.mozilla.telemetry.metrics._
-import com.mozilla.telemetry.utils._
-import com.mozilla.telemetry.utils.deletePrefix
 
 protected class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHistorySize: Int = 1000) extends Iterator[List[Map[String, Any]]] {
   // Less than 1% of clients in a sampled dataset over a 3 months period has more than 1000 fragments.
@@ -31,8 +34,9 @@ protected class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHist
       null
     }
 
-  override def hasNext() = buffer.nonEmpty
+  override def hasNext(): Boolean = buffer.nonEmpty
 
+  // scalastyle:off return
   override def next(): List[Map[String, Any]] = {
     while (it.hasNext) {
       val (key, value) = it.next()
@@ -68,9 +72,12 @@ protected class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHist
     buffer.clear
     result
   }
+  // scalastyle:on return
 }
 
 object LongitudinalView {
+  private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
+
   val jobName = "longitudinal"
 
   // Column name prefix used to prevent name clashing between scalars and other
@@ -234,8 +241,8 @@ object LongitudinalView {
         }
 
       val counts = partitionCounts.reduce((x, y) => (x._1 + y._1, x._2 + y._2))
-      println("Clients seen: %d".format(counts._1))
-      println("Clients ignored: %d".format(counts._2))
+      logger.info("Clients seen: %d".format(counts._1))
+      logger.info("Clients ignored: %d".format(counts._2))
     } catch {
       // Delete incomplete data
       case e: Exception =>
@@ -579,6 +586,7 @@ object LongitudinalView {
     builder.endRecord()
   }
 
+  // scalastyle:off methodName
   private def vectorizeHistogram_[T:ClassTag](name: String,
                                               payloads: List[Map[String, RawHistogram]],
                                               flatten: RawHistogram => T,
@@ -594,6 +602,7 @@ object LongitudinalView {
     }
     buffer.asJava
   }
+  // scalastyle:on methodName
 
   private def vectorizeHistogram[T:ClassTag](name: String,
                                              definition: HistogramDefinition,
@@ -680,7 +689,8 @@ object LongitudinalView {
         vectorizeHistogram_(name, payloads, flatten, empty)
     }
 
-  private def JSON2Avro(jsonField: String, jsonPath: List[String], avroField: String,
+  // scalastyle:off return
+  private def json2Avro(jsonField: String, jsonPath: List[String], avroField: String,
                         payloads: List[Map[String, Any]],
                         root: GenericRecordBuilder,
                         schema: Schema) {
@@ -706,6 +716,7 @@ object LongitudinalView {
     assert(payloads.length == fieldValues.length)
     root.set(avroField, fieldValues.asJava)
   }
+  // scalastyle:on return
 
   def getStandardHistogramSchema(schema: Schema): Schema = {
     getElemType(schema, "fx_tab_switch_total_ms")
@@ -715,7 +726,8 @@ object LongitudinalView {
     schema.getField(field).schema.getTypes.get(1).getElementType
   }
 
-  private def keyedHistograms2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema, histogramDefinitions: Map[String, HistogramDefinition]) {
+  private def keyedHistograms2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema,
+                                   histogramDefinitions: Map[String, HistogramDefinition]) {
     val histogramsList = payloads.map(Histograms.stripKeyedHistograms)
 
     val uniqueKeys = histogramsList.flatMap(x => x.keys).distinct.toSet
@@ -745,7 +757,8 @@ object LongitudinalView {
     }
   }
 
-  private def histograms2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema, histogramDefinitions: Map[String, HistogramDefinition]) {
+  private def histograms2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema,
+                              histogramDefinitions: Map[String, HistogramDefinition]) {
     val histogramsList = payloads.map(Histograms.stripHistograms)
 
     val uniqueKeys = histogramsList.flatMap(x => x.keys).distinct.toSet
@@ -762,6 +775,7 @@ object LongitudinalView {
     }
   }
 
+  // scalastyle:off methodName
   private def vectorizeScalar_[T:ClassTag](name: String,
                                            payloads: List[Map[String, AnyVal]],
                                            flatten: AnyVal => T,
@@ -777,6 +791,7 @@ object LongitudinalView {
     }
     buffer.asJava
   }
+  // scalastyle:on methodName
 
   private def vectorizeScalar[T:ClassTag](name: String,
                                           definition: ScalarDefinition,
@@ -814,6 +829,7 @@ object LongitudinalView {
     }
   }
 
+  // scalastyle:off return
   private def scalars2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, scalarDefinitions: Map[String, ScalarDefinition]) {
     implicit val formats = DefaultFormats
 
@@ -885,6 +901,7 @@ object LongitudinalView {
       root.set(key, vectorized.toMap.asJava)
     }
   }
+  // scalastyle:on return
 
   private def sessionStartDates2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
     implicit val formats = DefaultFormats
@@ -904,6 +921,7 @@ object LongitudinalView {
     root.set("session_start_date", extractTimestamps("sessionStartDate"))
   }
 
+  // scalastyle:off return
   private def profileDates2Avro(payloads: List[Map[String, Any]], root: GenericRecordBuilder, schema: Schema) {
     implicit val formats = DefaultFormats
 
@@ -923,6 +941,7 @@ object LongitudinalView {
     }
     root.set("profile_reset_date", resetValues.asJavaCollection)
   }
+  // scalastyle:on return
 
   private def value2Avro[T:ClassTag](field: String, avroField: String, default: T,
                                      mapFunction: Any => Any,
@@ -949,16 +968,18 @@ object LongitudinalView {
       .map(_.asInstanceOf[T])
   }
 
-  private def buildRecord(history: Iterable[Map[String, Any]], schema: Schema, histogramDefinitions: Map[String, HistogramDefinition], scalarDefinitions: Map[String, ScalarDefinition]): Option[GenericRecord] = {
+  private def buildRecord(history: Iterable[Map[String, Any]], schema: Schema, histogramDefinitions: Map[String, HistogramDefinition],
+                          scalarDefinitions: Map[String, ScalarDefinition]): Option[GenericRecord] = {
     // De-dupe records
     val sorted = history.foldLeft((List[Map[String, Any]](), Set[String]()))(
       { case ((submissions, seen), current) =>
         current.get("documentId") match {
           case Some(docId) =>
-            if (seen.contains(docId.asInstanceOf[String]))
+            if (seen.contains(docId.asInstanceOf[String])) {
               (submissions, seen) // Duplicate documentId, ignore it
-            else
+            } else {
               (current :: submissions, seen + docId.asInstanceOf[String]) // new documentId, add it to the list
+            }
           case None =>
             (submissions, seen) // Ignore clients with records that have a missing documentId
         }
@@ -970,53 +991,53 @@ object LongitudinalView {
       .set("normalized_channel", getFirst[String]("normalizedChannel", sorted).orNull)
 
     try {
-      value2Avro("sampleId",       "sample_id",       0.0, x => x, sorted, root, schema)
-      value2Avro("Size",           "size",            0.0, x => x, sorted, root, schema)
-      value2Avro("geoCountry",     "geo_country",     "", x => x, sorted, root, schema)
-      value2Avro("geoCity",        "geo_city",        "", x => x, sorted, root, schema)
-      value2Avro("DNT",            "dnt_header",      "", x => x, sorted, root, schema)
+      value2Avro("sampleId", "sample_id", 0.0, x => x, sorted, root, schema)
+      value2Avro("Size", "size", 0.0, x => x, sorted, root, schema)
+      value2Avro("geoCountry", "geo_country", "", x => x, sorted, root, schema)
+      value2Avro("geoCity", "geo_city", "", x => x, sorted, root, schema)
+      value2Avro("DNT", "dnt_header", "", x => x, sorted, root, schema)
       value2Avro("submissionDate", "submission_date", "", x => normalizeYYYYMMDDTimestamp(x.asInstanceOf[String]), sorted, root, schema)
-      JSON2Avro("environment.build",          List[String](),                   "build", sorted, root, schema)
-      JSON2Avro("environment.partner",        List[String](),                   "partner", sorted, root, schema)
-      JSON2Avro("environment.settings",       List[String](),                   "settings", sorted, root, schema)
-      JSON2Avro("environment.system",         List[String](),                   "system", sorted, root, schema)
-      JSON2Avro("environment.system",         List("cpu"),                      "system_cpu", sorted, root, schema)
-      JSON2Avro("environment.system",         List("device"),                   "system_device", sorted, root, schema)
-      JSON2Avro("environment.system",         List("os"),                       "system_os", sorted, root, schema)
-      JSON2Avro("environment.system",         List("hdd"),                      "system_hdd", sorted, root, schema)
-      JSON2Avro("environment.system",         List("gfx"),                      "system_gfx", sorted, root, schema)
-      JSON2Avro("environment.addons",         List("activeAddons"),             "active_addons", sorted, root, schema)
-      JSON2Avro("environment.addons",         List("theme"),                    "theme", sorted, root, schema)
-      JSON2Avro("environment.addons",         List("activePlugins"),            "active_plugins", sorted, root, schema)
-      JSON2Avro("environment.addons",         List("activeGMPlugins"),          "active_gmp_plugins", sorted, root, schema)
-      JSON2Avro("environment.addons",         List("activeExperiment"),         "active_experiment", sorted, root, schema)
-      JSON2Avro("environment.addons",         List("persona"),                  "persona", sorted, root, schema)
-      JSON2Avro("payload.simpleMeasurements", List[String](),                   "simple_measurements", sorted, root, schema)
-      JSON2Avro("payload.info",               List("asyncPluginInit"),          "async_plugin_init", sorted, root, schema)
-      JSON2Avro("payload.info",               List("previousBuildId"),          "previous_build_id", sorted, root, schema)
-      JSON2Avro("payload.info",               List("previousSessionId"),        "previous_session_id", sorted, root, schema)
-      JSON2Avro("payload.info",               List("previousSubsessionId"),     "previous_subsession_id", sorted, root, schema)
-      JSON2Avro("payload.info",               List("profileSubsessionCounter"), "profile_subsession_counter", sorted, root, schema)
-      JSON2Avro("payload.info",               List("reason"),                   "reason", sorted, root, schema)
-      JSON2Avro("payload.info",               List("revision"),                 "revision", sorted, root, schema)
-      JSON2Avro("payload.info",               List("sessionId"),                "session_id", sorted, root, schema)
-      JSON2Avro("payload.info",               List("sessionLength"),            "session_length", sorted, root, schema)
-      JSON2Avro("payload.info",               List("subsessionCounter"),        "subsession_counter", sorted, root, schema)
-      JSON2Avro("payload.info",               List("subsessionId"),             "subsession_id", sorted, root, schema)
-      JSON2Avro("payload.info",               List("subsessionLength"),         "subsession_length", sorted, root, schema)
-      JSON2Avro("payload.info",               List("timezoneOffset"),           "timezone_offset", sorted, root, schema)
+      json2Avro("environment.build", List[String](), "build", sorted, root, schema)
+      json2Avro("environment.partner", List[String](), "partner", sorted, root, schema)
+      json2Avro("environment.settings", List[String](), "settings", sorted, root, schema)
+      json2Avro("environment.system", List[String](), "system", sorted, root, schema)
+      json2Avro("environment.system", List("cpu"), "system_cpu", sorted, root, schema)
+      json2Avro("environment.system", List("device"), "system_device", sorted, root, schema)
+      json2Avro("environment.system", List("os"), "system_os", sorted, root, schema)
+      json2Avro("environment.system", List("hdd"), "system_hdd", sorted, root, schema)
+      json2Avro("environment.system", List("gfx"), "system_gfx", sorted, root, schema)
+      json2Avro("environment.addons", List("activeAddons"), "active_addons", sorted, root, schema)
+      json2Avro("environment.addons", List("theme"), "theme", sorted, root, schema)
+      json2Avro("environment.addons", List("activePlugins"), "active_plugins", sorted, root, schema)
+      json2Avro("environment.addons", List("activeGMPlugins"), "active_gmp_plugins", sorted, root, schema)
+      json2Avro("environment.addons", List("activeExperiment"), "active_experiment", sorted, root, schema)
+      json2Avro("environment.addons", List("persona"), "persona", sorted, root, schema)
+      json2Avro("payload.simpleMeasurements", List[String](), "simple_measurements", sorted, root, schema)
+      json2Avro("payload.info", List("asyncPluginInit"), "async_plugin_init", sorted, root, schema)
+      json2Avro("payload.info", List("previousBuildId"), "previous_build_id", sorted, root, schema)
+      json2Avro("payload.info", List("previousSessionId"), "previous_session_id", sorted, root, schema)
+      json2Avro("payload.info", List("previousSubsessionId"), "previous_subsession_id", sorted, root, schema)
+      json2Avro("payload.info", List("profileSubsessionCounter"), "profile_subsession_counter", sorted, root, schema)
+      json2Avro("payload.info", List("reason"), "reason", sorted, root, schema)
+      json2Avro("payload.info", List("revision"), "revision", sorted, root, schema)
+      json2Avro("payload.info", List("sessionId"), "session_id", sorted, root, schema)
+      json2Avro("payload.info", List("sessionLength"), "session_length", sorted, root, schema)
+      json2Avro("payload.info", List("subsessionCounter"), "subsession_counter", sorted, root, schema)
+      json2Avro("payload.info", List("subsessionId"), "subsession_id", sorted, root, schema)
+      json2Avro("payload.info", List("subsessionLength"), "subsession_length", sorted, root, schema)
+      json2Avro("payload.info", List("timezoneOffset"), "timezone_offset", sorted, root, schema)
       histograms2Avro(sorted, root, schema, histogramDefinitions)
       keyedHistograms2Avro(sorted, root, schema, histogramDefinitions)
       scalars2Avro(sorted, root, scalarDefinitions)
       keyedScalars2Avro(sorted, root, scalarDefinitions)
       sessionStartDates2Avro(sorted, root, schema)
       profileDates2Avro(sorted, root, schema)
-    } catch {
-      case e : Throwable =>
-        // Ignore buggy clients
-        return None
-    }
 
-    Some(root.build)
+      Option(root.build)
+    } catch {
+      case e: Throwable =>
+        // Ignore buggy clients
+        None
+    }
   }
 }

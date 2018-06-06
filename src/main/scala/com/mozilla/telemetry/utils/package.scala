@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry
 
 import java.net.URI
@@ -12,6 +15,8 @@ package object utils{
   import java.rmi.dgc.VMID
   import org.apache.hadoop.fs.Path
   import org.joda.time._
+
+  private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
 
   private val specialCases = Map(
     "submission_url" -> "submissionURL",
@@ -36,7 +41,7 @@ package object utils{
   private val dateFormatter = org.joda.time.format.ISODateTimeFormat.dateTime()
   private val uncamelPattern = java.util.regex.Pattern.compile("(^[^A-Z]+|[A-Z][^A-Z]+)")
 
-  def camelize(name: String) = {
+  def camelize(name: String): String = {
     specialCases.getOrElse(name, {
       val split = name.split("_")
       val rest = split.drop(1).map(_.capitalize).mkString
@@ -44,7 +49,7 @@ package object utils{
     })
   }
 
-  def uncamelize(name: String) = {
+  def uncamelize(name: String): String = {
     val matcher = uncamelPattern.matcher(name)
     val output = new StringBuilder
 
@@ -83,7 +88,7 @@ package object utils{
     spark
   }
 
-  def normalizeISOTimestamp(timestamp: String) = {
+  def normalizeISOTimestamp(timestamp: String): String = {
     // certain date parsers, notably Presto's, have a hard time with certain date edge cases,
     // especially time zone offsets that are not between -12 and 14 hours inclusive (see bug 1250894)
     // for these time zones, we're going to use some hacky arithmetic to bring them into range;
@@ -91,7 +96,8 @@ package object utils{
     // we're going to use the relatively lenient joda-time parser and output it in standard ISO format
     val date = dateFormatter.withOffsetParsed().parseDateTime(timestamp)
     val timezoneOffsetHours = date.getZone.getOffset(date).toDouble / millisPerHour
-    def fixTimezone(i: Int) = org.joda.time.DateTimeZone.forOffsetMillis(((timezoneOffsetHours + (i * 12) * Math.floor(timezoneOffsetHours / (-i * 12)).toInt) * millisPerHour).toInt)
+    def fixTimezone(i: Int) = org.joda.time.DateTimeZone.forOffsetMillis(
+      ((timezoneOffsetHours + (i * 12) * Math.floor(timezoneOffsetHours / (-i * 12)).toInt) * millisPerHour).toInt)
     val timezone = if (timezoneOffsetHours < -12.0) {
       fixTimezone(1)
     } else if (timezoneOffsetHours > 14.0) {
@@ -102,14 +108,14 @@ package object utils{
     dateFormatter.withZone(timezone).print(date)
   }
 
-  def normalizeYYYYMMDDTimestamp(YYYYMMDD: String) = {
+  def normalizeYYYYMMDDTimestamp(YYYYMMDD: String): String = {
     dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(
       format.DateTimeFormat.forPattern("yyyyMMdd")
         .withZone(org.joda.time.DateTimeZone.UTC)
         .parseDateTime(YYYYMMDD.asInstanceOf[String]))
   }
 
-  def normalizeEpochTimestamp(timestamp: BigInt) = {
+  def normalizeEpochTimestamp(timestamp: BigInt): String = {
     dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(new DateTime(timestamp.toLong * millisPerDay))
   }
 
@@ -123,7 +129,7 @@ package object utils{
     val t0 = System.nanoTime()
     val result = block  // call-by-name
     val t1 = System.nanoTime()
-    println(s"Elapsed time: ${(t1 - t0)/1000000000.0} s")
+    logger.info(s"Elapsed time: ${(t1 - t0)/1000000000.0} s")
     result
   }
 
