@@ -41,6 +41,7 @@ jobs:
   include:
     # Add an additional job to the 'test' stage for assembling the uberjar and staging in S3.
     - stage: test
+      if: fork = false
       env:
         - PURPOSE='stage the uberjar to S3'
       script:
@@ -63,7 +64,7 @@ jobs:
           condition: $TRAVIS_COMMIT_MESSAGE == *"[auto-deploy]"*
           branch: master
     - stage: deploy
-      if: repo = mozilla/telemetry-batch-view
+      if: fork = false
       env:
         - PURPOSE='deploy the staged uberjar to S3'
       script:
