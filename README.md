@@ -22,26 +22,23 @@ For help finding the right dataset for your analysis, see
 
 The general workflow for telemetry-batch-view is:
 1. Make some local changes on your branch
-2. Optional - Test locally in [Airflow](https://www.github.com/mozilla/telemetry-airflow)
-3. Optional - Include the `[auto-deploy]` tag in your commit message to skip staging
-4. Open PR, tag someone to review. Merge when approved
-5. Run the job in the [staging Airflow service](https://data-wtmo.stage.mozaws.net), and check the output manually
-6. When ready, create a Github release on your commit. This will push the changes to production automatically
+2. Test locally in [Airflow](https://www.github.com/mozilla/telemetry-airflow), testing just the jobs that your code change touches.
+3. Open PR, tag someone to review. Merge when approved, which will deploy the jar to production.
 
 ### Local Development
 
 There are two possible workflows for hacking on telemetry-batch-view: you can either create a docker container for building the package and running tests, or import the project into IntelliJ's IDEA.
 
-To run the docker tests, just use the provided `Dockerfile` to build a container, then use the `run-sbt.sh` script to run tests inside it:
+To run sbt tests inside Docker, run:
 
-    docker build -t telemetry-batch-view .
-    ./run-sbt.sh
+    # This will take 30+ minutes to run.
+    ./run-sbt.sh test
+
+For more efficient iteration, just invoke `./run-sbt.sh` without arguments to open up a shell and then test only the class you're working on without invoking sbt startup time on each iteration:
+
+    sbt> testOnly *AddonsViewTest
 
 You may need to increase the amount of memory allocated to Docker for this to work, as some of the tests are very memory hungry at present. At least 4 gigabytes is recommended.
-
-You can also pass arguments to sbt (the scala build tool we use for running the tests) through the runtests.sh. For example, to run only the addon tests, try:
-
-    ./run-sbt.sh "testOnly com.mozilla.telemetry.AddonsViewTest"
 
 If you wish to import the project into IntelliJ IDEA, apply the following changes to `Preferences` -> `Languages & Frameworks` -> `Scala Compile Server`:
 
@@ -68,7 +65,7 @@ spark-submit --master yarn --deploy-mode client --class com.mozilla.telemetry.vi
 ### Maintaining Tests
 
 Running the full suite of test cases can take more than 30 minutes, so we have configured
-our CI system to run tests in parallel across multiple jobs. These jobs are defined in `.travis.yml`
+our CI system to run tests in parallel across multiple jobs. These jobs are defined in `.circleci/config.yml`
 and rely on Scalatest tags to determine which test cases run in which jobs.
 
 Any new test cases that run faster than 10 seconds can remain in the catch-all job for untagged tests,
@@ -76,7 +73,7 @@ but please consider tagging any longer-running test cases. If you're introducing
 long-running tasks, please define a new tag (see checklist below).
 
 We may need to periodically rebalance test cases across tags. If you notice one of the test jobs
-in TravisCI becoming the bottleneck, read through the logs for that job to see runtimes for each test
+in CircleCI becoming the bottleneck, read through the logs for that job to see runtimes for each test
 case and consider moving some expensive tests to a different job or splitting them out to a new tag.
 At the time of writing, setup for each job (building the Docker container, compiling the code, etc.)
 takes about 5 minutes and we target keeping the total run time for each test job to 10 minutes.
@@ -88,38 +85,10 @@ Whenever you introduce a new Scalatest tag, you'll need to make the following ch
 
 - Define the new tag in `Tags.scala`
 - Tag some long-running test cases with the new tag
-- Update `.travis.yml` to add an a new `env` case to run the new tag
-- Update `.travis.yml` to add the new tag to the list of exclusions for the catch-all test job (last line in the `env` list)
-
-### Testing in Dev Airflow with `[skip-tests]`
-
-It is possible to launch the job locally exactly as it will in production. When doing this, we recommend
-including the string `[skip-tests]` in the `HEAD` commit message. This will cause that branch to only
-deploy the JAR, and skip the tests (which can delay the deploy for up to an hour).
-
-Note that to do this, you must have AWS credentials.
-
-First push to an upstream branch:
-
-    git remote set upstream https://www.github.com/mozilla/telemetry-batch-view
-    git push -u upstream $BRANCH_NAME
-
-Then follow the instructions for [testing dev changes in Airflow](https://github.com/mozilla/telemetry-airflow#testing-dev-changes)
-
-### Deploying Changes
-
-Changes in telemetry-batch-view will be reflected in the [staging Airflow service](https://data-wtmo.stage.mozaws.net) once the build is complete - note that this will take at least 30 minutes.
-
-From there, run the job and check the output, using either [ATMO](https://analysis.telemetry.mozilla.org) or [Databricks](https://dbc-caf9527b-e073.cloud.databricks.com).
-
-If the changes pass, tag a [new release in Github](https://help.github.com/articles/creating-releases/) pointing to your commit (if your commit is the `HEAD` on master, then just point at master).
-If you don't have write access to the repository, ask a member of the [telemetry team](https://github.com/orgs/mozilla/teams/telemetry/members).
-
-#### Auto-deploying Small Changes with `[auto-deploy]`
-
-In some cases, changes don't need to be run in stage. An example of this is adding a new histogram to `main_summary`. To skip
-the staging environment and immediately deploy the changes after merge, simply include the string `[auto-deploy]` in the commit
-message. The CI will tag a new release and deploy it to the production environment.
+- Update `.circleci/config.yml`:
+  - add a new test job to run the new tag
+  - add the new tag to the list of exclusions for the catch-all `test0` job
+  - Update the workflow to run the new test job and make it a dependency for `upload_jar`
 
 ### Caveats
 If you run into memory issues during compilation time or running the test suite, issue the following command before running sbt:

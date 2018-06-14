@@ -1,4 +1,5 @@
 javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint")
+scalacOptions ++= Seq("-Xmax-classfile-name", "242")
 
 val localMavenHttps = "https://s3-us-west-2.amazonaws.com/net-mozaws-data-us-west-2-ops-mavenrepo/"
 val localMaven = "s3://net-mozaws-data-us-west-2-ops-mavenrepo/"
@@ -31,8 +32,8 @@ lazy val root = (project in file(".")).
     libraryDependencies += "org.apache.spark" %% "spark-hive" % sparkVersion,
 
     // Other dependencies
-    libraryDependencies += "org.apache.avro" % "avro" % "1.8.2",
-    libraryDependencies += "org.apache.parquet" % "parquet-avro" % "1.8.3",
+    libraryDependencies += "org.apache.avro" % "avro" % "1.7.7",
+    libraryDependencies += "org.apache.parquet" % "parquet-avro" % "1.7.0",
     libraryDependencies += "net.sandrogrzicic" %% "scalabuff-runtime" % "1.4.0",
     libraryDependencies += "org.xerial.snappy" % "snappy-java" % "1.1.7.2",
     libraryDependencies += "joda-time" % "joda-time" % "2.10",
@@ -83,3 +84,7 @@ publishTo := {
   else
     Some("releases"  at localMaven + "releases")
 }
+
+// Speeds up finding snapshot releases:
+// https://www.scala-sbt.org/1.x/docs/Combined+Pages.html#Latest+SNAPSHOTs
+updateOptions := updateOptions.value.withLatestSnapshots(false)
