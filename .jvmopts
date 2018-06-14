@@ -1,0 +1,6 @@
+# See 'sbt -help' for docs on how .jvmopts and .sbtopts are used.
+-Xms3G
+-Xmx3G
+-Xss4M
+-XX:MaxMetaspaceSize=256M
+-XX:ReservedCodeCacheSize=128m

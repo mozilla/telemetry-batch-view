@@ -3,7 +3,6 @@ package com.mozilla.telemetry.experiments.statistics
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.experiments.analyzers._
 import com.mozilla.telemetry.metrics.UintScalar
-import com.mozilla.telemetry.tags.ClientsDailyBuild
 import org.apache.spark.sql.functions.{count, mean, stddev_samp}
 import org.apache.spark.sql.{Dataset, Row}
 import org.scalatest.{FlatSpec, Matchers}
@@ -38,7 +37,7 @@ class DescriptiveStatisticsTest extends FlatSpec with Matchers with DataFrameSui
     (bareNormal.map(_._1), analyzer.aggregateAll(grouped).head.histogram, analyzer.aggregatePseudosamples(grouped))
   }
 
-  "Mean statistic" should "compute correctly" taggedAs (ClientsDailyBuild) in {
+  "Mean statistic" should "compute correctly" in {
     val (asInts, histo, jackknifeAggs) = fixtures
     val actual = Mean(histo, Some(jackknifeAggs)).asStatistic
     val (m, stdDev, n) = asInts.agg(mean("value"), stddev_samp("value"), count("*")).first match {
@@ -54,7 +53,7 @@ class DescriptiveStatisticsTest extends FlatSpec with Matchers with DataFrameSui
     actual.confidence_high.get should equal(m + expectedInterval +- (m * 0.005))
   }
 
-  "Percentile statistics" should "compute correctly" taggedAs (ClientsDailyBuild) in {
+  "Percentile statistics" should "compute correctly" in {
     val (asInts, histo, jackknifeAggs) = fixtures
     val sortedIntArray = asInts.sort("value").collect()
     val actualMedian = Percentile(histo, 0.5, "Median", Some(jackknifeAggs)).asStatistic
@@ -83,7 +82,7 @@ class DescriptiveStatisticsTest extends FlatSpec with Matchers with DataFrameSui
     actual25th.confidence_high.get should equal (expectedUpper25th.toDouble +- 1)
   }
 
-  "Descriptive statistics" can "be added" taggedAs (ClientsDailyBuild) in {
+  "Descriptive statistics" can "be added" in {
     val (asInts, histo, jackknifeAggs) = fixtures
 
     val metric = MetricAnalysis(
