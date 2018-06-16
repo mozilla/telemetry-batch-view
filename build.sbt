@@ -1,4 +1,5 @@
 javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint")
+scalacOptions ++= Seq("-Xmax-classfile-name", "242")
 
 val localMavenHttps = "https://s3-us-west-2.amazonaws.com/net-mozaws-data-us-west-2-ops-mavenrepo/"
 val localMaven = "s3://net-mozaws-data-us-west-2-ops-mavenrepo/"
@@ -83,3 +84,7 @@ publishTo := {
   else
     Some("releases"  at localMaven + "releases")
 }
+
+// Speeds up finding snapshot releases:
+// https://www.scala-sbt.org/1.x/docs/Combined+Pages.html#Latest+SNAPSHOTs
+updateOptions := updateOptions.value.withLatestSnapshots(false)

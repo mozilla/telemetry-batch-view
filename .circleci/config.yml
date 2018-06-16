@@ -1,0 +1,138 @@
+####################
+# Templates
+####################
+
+sbt_image: &sbt_image mozilla/sbt:8u171_1.1.6
+
+restore_cache_settings: &restore_cache_settings
+  keys:
+    - telemetry-batch-view-{{ .Environment.CIRCLE_WORKFLOW_ID }}
+    - telemetry-batch-view-
+
+save_cache_settings: &save_cache_settings
+  key: telemetry-batch-view-{{ .Environment.CIRCLE_WORKFLOW_ID }}
+  paths:
+    - ~/.ivy2
+    - ~/.sbt
+
+test_settings: &test_settings
+  docker:
+    - image: *sbt_image
+      environment:
+        _JAVA_OPTIONS: "-Xms3G -Xmx3G -Xss4M -XX:MaxMetaspaceSize=512M"
+  # # Choosing container size is not yet enabled on our account
+  # resource_class: xlarge
+  steps:
+    - checkout
+    - run:
+        name: Clean directories to restore
+        command: |
+          rm -r ~/.ivy2 ~/.sbt
+    - restore_cache: *restore_cache_settings
+    - run:
+        name: Run tests
+        command: |
+          sbt coverage "testOnly * -- $SCALATEST_ARGS" coverageReport
+    - run:
+        name: Submit code coverage data
+        command: |
+          bash <(curl -s https://codecov.io/bash)
+
+
+####################
+# Jobs
+####################
+
+version: 2
+jobs:
+
+  # This "zero" test job is intended to pick up any untagged tests so we get
+  # full coverage across parallel builds. We must exclude (-l) just the tags
+  # used in the other test jobs.
+  test0:
+    <<: *test_settings
+    environment:
+      SCALATEST_ARGS: '-l "ScalarAnalyzerBuild ExperimentsBuild ClientsDailyBuild"'
+
+  # There should be one job defined below for each Scalatest tag defined in
+  # src/test/scala/com/mozilla/telemetry/tags/Tags.scala
+  test1:
+    <<: *test_settings
+    environment:
+      SCALATEST_ARGS: '-n ScalarAnalyzerBuild'
+  test2:
+    <<: *test_settings
+    environment:
+      SCALATEST_ARGS: '-n ExperimentsBuild'
+  test3:
+    <<: *test_settings
+    environment:
+      SCALATEST_ARGS: '-n ClientsDailyBuild'
+
+  # Publish to Maven in S3 and assemble an uberjar for the upload_jar step.
+  assembly:
+    <<: *test_settings
+    steps:
+      - checkout
+      - run: |
+          sbt publish assembly
+      - save_cache: *save_cache_settings
+      - save_cache:
+          key: telemetry-batch-view-jar-{{ .Environment.CIRCLE_WORKFLOW_ID }}
+          paths:
+            - target/scala-2.11/telemetry-batch-view-1.1.jar
+
+  upload_jar:
+    docker:
+      - image: *sbt_image
+    steps:
+      - restore_cache:
+          keys:
+            - telemetry-batch-view-jar-{{ .Environment.CIRCLE_WORKFLOW_ID }}
+            - telemetry-batch-view-jar-
+      - run:
+          name: Upload
+          command: |
+            [ -n "$CIRCLE_PR_NUMBER" ] && echo "Nothing to upload for forked PRs" && exit 0
+
+            JAR=target/scala-2.11/telemetry-batch-view-1.1.jar
+            JAR_DIR="$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME"
+            JAR_NAME="$CIRCLE_PROJECT_REPONAME.jar"
+            TXT_NAME="$CIRCLE_PROJECT_REPONAME.txt"
+
+            CANONICAL_JAR="$JAR_DIR/$CIRCLE_BRANCH/$CIRCLE_JOB/$JAR_NAME"
+            echo $CANONICAL_JAR > $TXT_NAME
+
+            mkdir -p $JAR_DIR/$CIRCLE_BRANCH/$CIRCLE_JOB
+            cp $JAR $CANONICAL_JAR
+            cp $JAR "$JAR_DIR/$CIRCLE_BRANCH/$JAR_NAME"
+            cp $TXT_NAME "$JAR_DIR/$CIRCLE_BRANCH/$TXT_NAME"
+
+            export ARTIFACTS_DEST="$HOME/bin/artifacts"
+            export ARTIFACTS_PERMISSIONS="public-read"
+            export ARTIFACTS_PATHS="$CIRCLE_PROJECT_USERNAME/"
+            export ARTIFACTS_TARGET_PATHS="/$CIRCLE_PROJECT_USERNAME/"
+            curl -sL https://raw.githubusercontent.com/travis-ci/artifacts/master/install | bash
+            $ARTIFACTS_DEST upload
+
+
+####################
+# Workflows
+####################
+
+workflows:
+  version: 2
+  build:
+    jobs:
+      - test0
+      - test1
+      - test2
+      - test3
+      - assembly
+      - upload_jar:
+          requires:
+            - test0
+            - test1
+            - test2
+            - test3
+            - assembly
