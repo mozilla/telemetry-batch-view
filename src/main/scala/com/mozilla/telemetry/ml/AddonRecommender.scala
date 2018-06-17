@@ -24,6 +24,7 @@ import org.rogach.scallop._
 import scala.collection.Map
 import scala.io.Source
 import scala.sys.process._
+import scala.language.reflectiveCalls
 
 private case class Rating(clientId: Int, addonId: Int, rating: Float)
 private case class Addons(client_id: Option[String], active_addons: Option[Map[String, Addon]])
