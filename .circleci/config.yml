@@ -83,7 +83,7 @@ jobs:
             TEST_FILES=$(find src/test/ -name "*.scala")
             sed -n 's/class \(.*\)  *extends  *FlatSpec.*/*\1/p' $TEST_FILES | sort | uniq > test_patterns.txt
             # Use the circleci cli to choose a subset of test patterns to run;
-            # the output here will be different for each of the parallel jobs.
+            # the output here will be different for each of the parallel jobs (based on CIRCLE_NODE_* vars).
             TEST_PATTERNS=$(circleci tests split test_patterns.txt | tr -d '\r')
             # Now, run just the selected tests.
             echo "Test patterns..."
@@ -128,12 +128,13 @@ jobs:
             TXT_NAME="$CIRCLE_PROJECT_REPONAME.txt"
 
             # The "canonical jar" goes in a subdirectory with the job number so it won't be overwritten.
-            mkdir -p $JAR_DIR/$CIRCLE_BRANCH/$CIRCLE_JOB
-            CANONICAL_JAR="$JAR_DIR/$CIRCLE_BRANCH/$CIRCLE_JOB/$JAR_NAME"
+            mkdir -p $JAR_DIR/$CIRCLE_BRANCH/$CIRCLE_BUILD_NUM
+            CANONICAL_JAR="$JAR_DIR/$CIRCLE_BRANCH/$CIRCLE_BUILD_NUM/$JAR_NAME"
             cp $JAR $CANONICAL_JAR
 
             # We also overwrite the current jar for the branch.
             echo $CANONICAL_JAR > $TXT_NAME
+            echo $CIRCLE_BUILD_URL > $TXT_NAME
             cp $JAR "$JAR_DIR/$CIRCLE_BRANCH/$JAR_NAME"
             cp $TXT_NAME "$JAR_DIR/$CIRCLE_BRANCH/$TXT_NAME"
 
