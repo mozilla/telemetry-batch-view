@@ -41,8 +41,6 @@ restore_cache_settings: &restore_cache_settings
 test_settings: &test_settings
   docker:
     - image: *sbt_image
-      environment:
-        _JAVA_OPTIONS: "-Xms3G -Xmx3G -Xss4M -XX:MaxMetaspaceSize=512M"
   working_directory: /telemetry-batch-view
   # resource_class: xlarge
 
