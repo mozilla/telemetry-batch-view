@@ -62,89 +62,11 @@ jobs:
 
   test:
     <<: *test_settings
-    parallelism: 8  # See https://circleci.com/docs/2.0/parallelism-faster-jobs/
     steps:
       - checkout
-      - run:
-          name: Early return if the git commit message contains [skip-tests]
-          command: |
-            COMMIT_MESSAGE=$(git log --format=%B --no-merges -n 1)
-            if [[ "$COMMIT_MESSAGE" =~ "[skip-tests]" ]]; then
-              echo "Skipping tests due to [skip-tests] flag; marking this step successful"
-              circleci step halt
-            fi
-      - run: *prep_cache_settings
-      - restore_cache: *restore_cache_settings
-      - run:
-          name: Scalatest
-          command: |
-            # Find the names of all classes extending FlatSpec and collect them into a file
-            # listing them as patterns like '*ScalarsTest' suitable for passing to 'sbt testOnly'.
-            TEST_FILES=$(find src/test/ -name "*.scala")
-            sed -n 's/class \(.*\)  *extends  *FlatSpec.*/*\1/p' $TEST_FILES | sort | uniq > test_patterns.txt
-            # Use the circleci cli to choose a subset of test patterns to run;
-            # the output here will be different for each of the parallel jobs (based on CIRCLE_NODE_* vars).
-            TEST_PATTERNS=$(circleci tests split test_patterns.txt | tr -d '\r')
-            # Now, run just the selected tests.
-            echo "Test patterns..."
-            echo "$TEST_PATTERNS"
-            sbt coverage "testOnly $TEST_PATTERNS" coverageReport
-      - run:
-          name: Submit code coverage data
-          command: |
-            bash <(curl -s https://codecov.io/bash)
+      - run: |
+          env | grep CIRCLE_
 
-  # Publish to Maven in S3 and assemble an uberjar for the upload_jar step.
-  assembly:
-    <<: *test_settings
-    steps:
-      - run: *early_return_for_forks
-      - checkout
-      - run:
-          name: Publish and Assemble
-          command: |
-            sbt publish assembly
-      - save_cache: *save_cache_settings
-      - persist_to_workspace:
-          root: target
-          paths:
-            - scala-2.11/telemetry-batch-view-1.1.jar
-
-  # Uses a "workspace" to get access to the assembled uberjar from the previous stage.
-  upload_jar:
-    docker:
-      - image: *sbt_image
-    working_directory: /telemetry-batch-view
-    steps:
-      - run: *early_return_for_forks
-      - attach_workspace:
-          at: /telemetry-batch-view/target
-      - run:
-          name: Upload
-          command: |
-            JAR=target/scala-2.11/telemetry-batch-view-1.1.jar
-            JAR_DIR="$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME"
-            JAR_NAME="$CIRCLE_PROJECT_REPONAME.jar"
-            TXT_NAME="$CIRCLE_PROJECT_REPONAME.txt"
-
-            # The "canonical jar" goes in a subdirectory with the job number so it won't be overwritten.
-            mkdir -p $JAR_DIR/$CIRCLE_BRANCH/$CIRCLE_BUILD_NUM
-            CANONICAL_JAR="$JAR_DIR/$CIRCLE_BRANCH/$CIRCLE_BUILD_NUM/$JAR_NAME"
-            cp $JAR $CANONICAL_JAR
-
-            # We also overwrite the current jar for the branch.
-            echo $CANONICAL_JAR > $TXT_NAME
-            echo $CIRCLE_BUILD_URL > $TXT_NAME
-            cp $JAR "$JAR_DIR/$CIRCLE_BRANCH/$JAR_NAME"
-            cp $TXT_NAME "$JAR_DIR/$CIRCLE_BRANCH/$TXT_NAME"
-
-            # Now upload to S3; see docs for artifact upload tool at https://github.com/travis-ci/artifacts
-            export ARTIFACTS_DEST="$HOME/bin/artifacts"
-            export ARTIFACTS_PERMISSIONS="public-read"
-            export ARTIFACTS_PATHS="$CIRCLE_PROJECT_USERNAME/"
-            export ARTIFACTS_TARGET_PATHS="/$CIRCLE_PROJECT_USERNAME/"
-            curl -sL https://raw.githubusercontent.com/travis-ci/artifacts/master/install | bash
-            $ARTIFACTS_DEST upload
 
 
 ####################
@@ -156,8 +78,3 @@ workflows:
   build:
     jobs:
       - test
-      - assembly
-      - upload_jar:
-          requires:
-            - test
-            - assembly
