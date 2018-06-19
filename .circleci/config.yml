@@ -65,6 +65,7 @@ jobs:
     steps:
       - checkout
       - run: |
+          echo "hi, jeff!"
           env | grep CIRCLE_
 
 
