@@ -1,4 +1,0 @@
--J-Xms4G
--J-Xmx4G
--J-Xss4M
--J-XX:MaxMetaspaceSize=256M

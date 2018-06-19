@@ -2,7 +2,6 @@ package com.mozilla.telemetry
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.experiments.analyzers.CrashAnalyzer
-import com.mozilla.telemetry.tags.ExperimentsBuild
 import com.mozilla.telemetry.views.ExperimentAnalysisView
 import org.apache.spark.sql.functions.col
 import org.scalatest.{FlatSpec, Matchers}
@@ -65,7 +64,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
     predata.toDS().toDF().where(col("experiment_id") === "id1")
   }
 
-  "Child Scalars" can "be counted" taggedAs (ExperimentsBuild) in {
+  "Child Scalars" can "be counted" in {
     import spark.implicits._
 
     val data = id1Data
@@ -80,7 +79,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
     agg.histogram(1).pdf should be (1.0)
   }
 
-  "Child Histograms" can "be counted" taggedAs (ExperimentsBuild) in {
+  "Child Histograms" can "be counted" in {
     import spark.implicits._
 
     val data = id1Data
@@ -95,7 +94,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
     agg.histogram(1).pdf should be (1.0)
   }
 
-  "Total client ids and pings" can "be counted" taggedAs (ExperimentsBuild) in {
+  "Total client ids and pings" can "be counted" in {
     import spark.implicits._
 
     val data = id1Data
@@ -114,7 +113,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
     first.filter(_.name == "Total Clients").head.value should be (1.0)
   }
 
-  "Crashes" can "be crash counted correctly" taggedAs (ExperimentsBuild) in {
+  "Crashes" can "be crash counted correctly" in {
     import spark.implicits._
 
     val multiplier = 3
@@ -146,7 +145,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
     }
   }
 
-  "Experiment Analysis View" can "handle missing error_aggregates data" taggedAs (ExperimentsBuild) in {
+  "Experiment Analysis View" can "handle missing error_aggregates data" in {
     import spark.implicits._
 
     val df = spark.emptyDataFrame
