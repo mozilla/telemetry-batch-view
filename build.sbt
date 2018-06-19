@@ -1,5 +1,10 @@
 javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint")
-scalacOptions ++= Seq("-Xmax-classfile-name", "242")
+scalacOptions ++= Seq(
+    "-Xmax-classfile-name", "242",
+    "-feature",
+    "-Ywarn-unused",
+    "-Ywarn-unused-import"
+)
 
 val localMavenHttps = "https://s3-us-west-2.amazonaws.com/net-mozaws-data-us-west-2-ops-mavenrepo/"
 val localMaven = "s3://net-mozaws-data-us-west-2-ops-mavenrepo/"
