@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.experiments.statistics
 
 import com.mozilla.telemetry.experiments.analyzers.{HistogramPoint, MetricAnalysis, Statistic}
@@ -82,12 +85,12 @@ object Percentile {
   }
 
   protected def getNthValue(n: Long, h: Map[Long, HistogramPoint]): Long = {
-    @tailrec def _getNthValue(n: Long, l: List[(Long, Long)], cumulative: Long): Long = {
+    @tailrec def getNthValue(n: Long, l: List[(Long, Long)], cumulative: Long): Long = {
       val (bucket, count) = l.head
-      if (cumulative + count >= n) bucket else _getNthValue(n, l.tail, cumulative + count)
+      if (cumulative + count >= n) bucket else getNthValue(n, l.tail, cumulative + count)
     }
 
-    _getNthValue(n, h.toList.sortBy(_._1).map { case (bucket, point) => (bucket, point.count.toLong) }, 0L)
+    getNthValue(n, h.toList.sortBy(_._1).map { case (bucket, point) => (bucket, point.count.toLong) }, 0L)
   }
 }
 

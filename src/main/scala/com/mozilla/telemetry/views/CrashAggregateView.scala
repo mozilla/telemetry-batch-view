@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.heka.Dataset
@@ -14,6 +17,8 @@ import org.rogach.scallop._
 
 
 object CrashAggregateView {
+  private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
+
   private class Conf(args: Array[String]) extends ScallopConf(args) {
     val from = opt[String]("from", descr = "From submission date", required = false)
     val to = opt[String]("to", descr = "To submission date", required = false)
@@ -76,12 +81,12 @@ object CrashAggregateView {
       // upload the resulting aggregate Spark records to S3
       records.write.mode(SaveMode.Overwrite).parquet(s"s3://${conf.outputBucket()}/crash_aggregates/v1/submission_date=$currentDateString")
 
-      println("=======================================================================================")
-      println(s"JOB COMPLETED SUCCESSFULLY FOR $currentDate")
-      println(s"${main_processed.value} main pings processed, ${main_ignored.value} pings ignored")
-      println(s"${browser_crash_processed.value} browser crash pings processed, ${browser_crash_ignored.value} pings ignored")
-      println(s"${content_crash_ignored.value} content crash pings ignored")
-      println("=======================================================================================")
+      logger.info("=======================================================================================")
+      logger.info(s"JOB COMPLETED SUCCESSFULLY FOR $currentDate")
+      logger.info(s"${main_processed.value} main pings processed, ${main_ignored.value} pings ignored")
+      logger.info(s"${browser_crash_processed.value} browser crash pings processed, ${browser_crash_ignored.value} pings ignored")
+      logger.info(s"${content_crash_ignored.value} content crash pings ignored")
+      logger.info("=======================================================================================")
 
       spark.stop()
     }
@@ -214,6 +219,7 @@ object CrashAggregateView {
     )
   }
 
+  // scalastyle:off return
   private def getCrashPair(pingFields: Map[String, Any]): Option[(List[java.io.Serializable], List[Double])] = {
     val build = pingFields.get("environment.build") match {
       case Some(value: String) => parse(value)
@@ -344,6 +350,7 @@ object CrashAggregateView {
     // return a pair so we can use PairRDD operations on this data later
     Some((uniqueKey, stats))
   }
+  // scalastyle:on return
 
   def buildSchema(): StructType = {
     StructType(

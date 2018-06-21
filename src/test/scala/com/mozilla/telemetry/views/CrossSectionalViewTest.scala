@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
@@ -12,7 +15,7 @@ class CrossSectionalViewTest extends FlatSpec with DataFrameSuiteBase {
   // case classes)
   // TODO(harterrt):Consider moving to triple equals: http://www.scalatest.org/user_guide/using_assertions
   implicit class ComparableProduct(p: Product) {
-    def compare(that: Product, epsilon: Double = 1E-7) = {
+    def compare(that: Product, epsilon: Double = 1E-7): Boolean = {
       // Performs fuzzy comparison of two datasets containing Products (usually
       // case classes)
       //
@@ -29,12 +32,12 @@ class CrossSectionalViewTest extends FlatSpec with DataFrameSuiteBase {
       }
 
       def productToSeq(prod: Product): Seq[Any] = {
-        // Creates a Seq containing the fields of an object extending the 
+        // Creates a Seq containing the fields of an object extending the
         // Product trait
         (0 until prod.productArity).map(prod.productElement(_))
       }
 
-      p.productArity == that.productArity && 
+      p.productArity == that.productArity &&
         (productToSeq(p) zip productToSeq(that))
           .foldLeft(true)((acc, pair) => acc && compareElement(pair)
       )
@@ -46,7 +49,7 @@ class CrossSectionalViewTest extends FlatSpec with DataFrameSuiteBase {
       .foldLeft(true)((acc, pair) => acc && (pair._1 compare  pair._2))
   }
 
-  def getExampleActiveAddon(foreign: Boolean = false, name: String = "Name") = {
+  def getExampleActiveAddon(foreign: Boolean = false, name: String = "Name"): ActiveAddon = {
     new ActiveAddon(
       Some(false), Some("Description"), Some(name), Some(false),
       Some(false), Some("Version"), Some(1), Some("Type"), Some(foreign),
@@ -54,7 +57,7 @@ class CrossSectionalViewTest extends FlatSpec with DataFrameSuiteBase {
     )
   }
 
-  def getExampleActivePlugin() = {
+  def getExampleActivePlugin(): ActivePlugin = {
     new ActivePlugin(
       Some("Name"), Some("Version"), Some("Description"), Some(true),
       Some(false), Some(false), Some(Seq("mime1", "mime2")), Some(123)
@@ -64,7 +67,7 @@ class CrossSectionalViewTest extends FlatSpec with DataFrameSuiteBase {
   def getExampleLongitudinal(
     client_id: String,
     active_addons: Option[Seq[Map[String, ActiveAddon]]] = None
-  ) = {
+  ): Longitudinal = {
     new Longitudinal(
       client_id = client_id,
       normalized_channel = "release",
@@ -87,7 +90,7 @@ class CrossSectionalViewTest extends FlatSpec with DataFrameSuiteBase {
       memory_mb = Some(Seq(Some(1023), Some(1023), Some(1023))),
       os_name = Some(Seq(Some("Windows_NT"), Some("Windows_NT"), Some("Windows_NT"))),
       os_version = Some(Seq(Some("5.1"), Some("5.1"), Some("5.1"))),
-      pages_count = Some(Seq(Some(100l), Some(200l), Some(400l))),
+      pages_count = Some(Seq(Some(100L), Some(200L), Some(400L))),
       active_plugins = Some(Seq(
         Seq(getExampleActivePlugin(), getExampleActivePlugin()),
         Seq(getExampleActivePlugin()),
@@ -97,9 +100,9 @@ class CrossSectionalViewTest extends FlatSpec with DataFrameSuiteBase {
       profile_creation_date = Some(Seq("2016-04-21T00:00:00.000Z",
         "2016-04-21T00:00:00.000Z", "2016-04-21T00:00:00.000Z")),
       profile_subsession_counter = Some(Seq(3,2,1)),
-      search_counts = Some(Map("dogpile" -> Seq(1l, 0l, 2l, 10l),
-                               "ask_jeeves" -> Seq(20l, 0l, 0l, 0l),
-                               "hooli" -> Seq(5l, 4l, 0l, 0l))),
+      search_counts = Some(Map("dogpile" -> Seq(1L, 0L, 2L, 10L),
+                               "ask_jeeves" -> Seq(20L, 0L, 0L, 0L),
+                               "hooli" -> Seq(5L, 4L, 0L, 0L))),
       session_id = Some(Seq("A", "B", "C")),
       application_name = Some(Seq(Some("firefox"), Some("firefox"), Some("firefox")))
     )
@@ -114,7 +117,7 @@ class CrossSectionalViewTest extends FlatSpec with DataFrameSuiteBase {
     addon_count_configs: Option[Long] = None,
     addon_count_mode: Option[Long] = None,
     addon_names_list: Option[Seq[Option[String]]] = None
-  ) = {
+  ): CrossSectional = {
     new CrossSectional(
       client_id = client_id,
       normalized_channel = "release",
@@ -220,7 +223,7 @@ class CrossSectionalViewTest extends FlatSpec with DataFrameSuiteBase {
   }
 
   it must "summarize active_addons properly" in {
-    def getExampleActiveAddon(foreign: Boolean = false, name: String = "Name") = {
+    def getExampleActiveAddon(foreign: Boolean = false, name: String = "Name"): ActiveAddon = {
       new ActiveAddon(
         Some(false), Some("Description"), Some(name), Some(false),
         Some(false), Some("Version"), Some(1), Some("Type"), Some(foreign),

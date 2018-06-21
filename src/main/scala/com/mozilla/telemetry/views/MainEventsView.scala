@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.utils.{Events, S3Store, getOrCreateSparkSession}
@@ -7,6 +10,8 @@ import org.joda.time.{DateTime, Days, format}
 import org.rogach.scallop._
 
 object MainEventsView {
+  private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
+
   def schemaVersion: String = "v1"
   def jobName: String = "events"
 
@@ -56,8 +61,8 @@ object MainEventsView {
       val currentDate = from.plusDays(offset)
       val currentDateString = currentDate.toString("yyyyMMdd")
 
-      println("=======================================================================================")
-      println(s"BEGINNING JOB $jobName $schemaVersion FOR $currentDateString")
+      logger.info("=======================================================================================")
+      logger.info(s"BEGINNING JOB $jobName $schemaVersion FOR $currentDateString")
 
       val mainSummary = spark.read.parquet(s"s3://$inputBucket/main_summary/${MainSummaryView.schemaVersion}/submission_date_s3=$currentDateString")
       val events = eventsFromMain(mainSummary, conf.sampleId.get)
@@ -75,8 +80,8 @@ object MainEventsView {
       // Then remove the _SUCCESS file so we don't break Spark partition discovery.
       S3Store.deleteKey(conf.outputBucket(), s"$s3prefix/_SUCCESS")
 
-      println(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
-      println("=======================================================================================")
+      logger.info(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
+      logger.info("=======================================================================================")
     }
     spark.stop()
   }

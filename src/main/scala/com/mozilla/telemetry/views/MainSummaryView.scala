@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
 import java.time._
@@ -20,6 +23,7 @@ import com.mozilla.telemetry.utils.writeTextFile
 import scala.util.{Success, Try}
 
 object MainSummaryView {
+  private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
 
   def schemaVersion: String = "v4"
   def jobName: String = "main_summary"
@@ -138,8 +142,10 @@ object MainSummaryView {
     val allHistograms = opt[Boolean]("all-histograms", descr = "Flag to use all histograms", required = false)
     val docType = opt[String]("doc-type", descr = "DocType of pings conforming to main ping schema", required=false, default=Some("main"))
     // 500,000 rows yields ~ 200MB files in snappy+parquet
-    val maxRecordsPerFile = opt[Int]("max-records-per-file", descr = "Max number of rows to write to output files before splitting", required = false, default=Some(500000))
-    val readMode = choice(Seq("fixed", "aligned"), name="read-mode", descr="Read fixed-sized partitions or a multiple of defaultParallelism partitions", default=Some("fixed"))
+    val maxRecordsPerFile = opt[Int]("max-records-per-file", descr = "Max number of rows to write to output files before splitting",
+      required = false, default=Some(500000))
+    val readMode = choice(Seq("fixed", "aligned"), name="read-mode", descr="Read fixed-sized partitions or a multiple of defaultParallelism partitions",
+      default=Some("fixed"))
     val inputPartitionMultiplier = opt[Int]("input-partition-multiplier", descr="Partition multiplier for aligned read-mode", default=Some(4))
     val schemaReportLocation = opt[String]("schema-report-location", descr="Write schema.treeString to this file")
     verify()
@@ -171,13 +177,11 @@ object MainSummaryView {
       val filterVersion = conf.appVersion.get
       val filterDocType = conf.docType()
 
-      println("=======================================================================================")
-      println(s"BEGINNING JOB $jobName FOR $currentDateString")
-      println(s" Filtering for docType = '${filterDocType}'")
-      if (filterChannel.nonEmpty)
-        println(s" Filtering for channel = '${filterChannel.get}'")
-      if (filterVersion.nonEmpty)
-        println(s" Filtering for version = '${filterVersion.get}'")
+      logger.info("=======================================================================================")
+      logger.info(s"BEGINNING JOB $jobName FOR $currentDateString")
+      logger.info(s" Filtering for docType = '${filterDocType}'")
+      if (filterChannel.nonEmpty) logger.info(s" Filtering for channel = '${filterChannel.get}'")
+      if (filterVersion.nonEmpty) logger.info(s" Filtering for version = '${filterVersion.get}'")
 
       val scalarDefinitions = Scalars.definitions(includeOptin = true)
         .toList.sortBy(_._1)
@@ -267,10 +271,10 @@ object MainSummaryView {
         S3Store.deleteKey(conf.outputBucket(), s"$s3prefix/_SUCCESS")
       }
 
-      println(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
-      println("     RECORDS SEEN:    %d".format(ignoredCount.value + processedCount.value))
-      println("     RECORDS IGNORED: %d".format(ignoredCount.value))
-      println("=======================================================================================")
+      logger.info(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
+      logger.info("     RECORDS SEEN:    %d".format(ignoredCount.value + processedCount.value))
+      logger.info("     RECORDS IGNORED: %d".format(ignoredCount.value))
+      logger.info("=======================================================================================")
 
       sc.stop()
     }
@@ -461,7 +465,7 @@ object MainSummaryView {
 
   // Parse clientDateHeader as a RFC1123 date, compute the difference between
   // that and `timestamp` (in nanos), return the difference in seconds.
-  def getClockSkew(clientDateHeader: Option[String], timestamp: Long) = {
+  def getClockSkew(clientDateHeader: Option[String], timestamp: Long): Option[Long] = {
     clientDateHeader match {
       case Some(s) => diffDateAndTimestamp(s, DateTimeFormatter.RFC_1123_DATE_TIME, timestamp)
       case _ => None
@@ -470,7 +474,7 @@ object MainSummaryView {
 
   // Parse creationDate field as an ISO date, compute the difference between
   // that and `timestamp` (in nanos), return the difference in seconds.
-  def getSubmissionLatency(clientCreationDate: Option[String], timestamp: Long) = {
+  def getSubmissionLatency(clientCreationDate: Option[String], timestamp: Long): Option[Long] = {
     clientCreationDate match {
       case Some(s) => diffDateAndTimestamp(s, DateTimeFormatter.ISO_DATE_TIME, timestamp)
       case _ => None
@@ -479,7 +483,8 @@ object MainSummaryView {
 
   // Convert the given Heka message containing a "main" ping
   // to a map containing just the fields we're interested in.
-  def messageToRow(doc: JValue, scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String, HistogramDefinition)], userPrefs: List[UserPref] = userPrefsList): Option[Row] = {
+  def messageToRow(doc: JValue, scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String,
+    HistogramDefinition)], userPrefs: List[UserPref] = userPrefsList): Option[Row] = {
     try {
       implicit val formats = DefaultFormats
 
@@ -493,7 +498,9 @@ object MainSummaryView {
       val timestamp = (meta \ "Timestamp").extractOpt[Long]
 
       if (documentId.isEmpty || submissionDate.isEmpty || timestamp.isEmpty) {
+        //scalastyle:off return
         return None
+        //scalastyle:on return
       }
 
       val addons = environment \ "addons"
@@ -509,17 +516,13 @@ object MainSummaryView {
       val simpleMeasures = payload \ "simpleMeasurements"
 
       val histograms = MainPing.DefaultProcessTypes.map {
-        _ match {
-          case "parent" => "parent" -> payload \ "histograms"
-          case p => p -> payload \ "processes" \ p \ "histograms"
-        }
+        case "parent" => "parent" -> payload \ "histograms"
+        case p => p -> payload \ "processes" \ p \ "histograms"
       }.toMap
 
       val keyedHistograms = MainPing.DefaultProcessTypes.map {
-        _ match {
-          case "parent" => "parent" -> payload \ "keyedHistograms"
-          case p => p -> payload \ "processes" \ p \ "keyedHistograms"
-        }
+        case "parent" => "parent" -> payload \ "keyedHistograms"
+        case p => p -> payload \ "processes" \ p \ "keyedHistograms"
       }.toMap
 
       val scalars = MainPing.DefaultProcessTypes.map {
@@ -782,7 +785,7 @@ object MainSummaryView {
   }
 
   // Type for encapsulating search counts
-  def buildSearchSchema = StructType(List(
+  def buildSearchSchema: StructType = StructType(List(
     StructField("engine", StringType, nullable = true), // Name of the search engine
     StructField("source", StringType, nullable = true), // Source of the search (urlbar, etc)
     StructField("count",  LongType,   nullable = true)  // Number of searches
@@ -790,7 +793,7 @@ object MainSummaryView {
 
   // Enumerated buckets from POPUP_NOTIFICATION_STATS keyed histogram
   // Field names based on toolkit/modules/PopupNotifications.jsm
-  def buildPopupSchema = StructType(List(
+  def buildPopupSchema: StructType = StructType(List(
     StructField("offered",                          IntegerType, nullable = true), // bucket 0
     StructField("action_1",                         IntegerType, nullable = true), // bucket 1
     StructField("action_2",                         IntegerType, nullable = true), // bucket 2
@@ -816,7 +819,7 @@ object MainSummaryView {
   ))
 
   // Data for a single addon per Bug 1290181
-  def buildAddonSchema = StructType(List(
+  def buildAddonSchema: StructType = StructType(List(
       StructField("addon_id",              StringType,  nullable = false),
       StructField("blocklisted",           BooleanType, nullable = true),
       // Note: Skip "description" field - if needed, look it up from AMO.
@@ -836,20 +839,20 @@ object MainSummaryView {
       StructField("multiprocess_compatible", BooleanType, nullable = true)
     ))
 
-  def buildAttributionSchema = StructType(List(
+  def buildAttributionSchema: StructType = StructType(List(
     StructField("source",   StringType, nullable = true),
     StructField("medium",   StringType, nullable = true),
     StructField("campaign", StringType, nullable = true),
     StructField("content",  StringType, nullable = true)
   ))
 
-  def buildOldUserPrefsSchema = StructType(List(
+  def buildOldUserPrefsSchema: StructType = StructType(List(
     StructField("dom_ipc_process_count", IntegerType, nullable = true), // dom.ipc.processCount
     StructField("extensions_allow_non_mpc_extensions", BooleanType, nullable = true) // extensions.allow-non-mpc-extensions
   ))
 
   // Bug 1390707 - Include pref fields as top-level fields to support schema evolution.
-  def buildUserPrefsSchema(userPrefs: List[UserPref]) = StructType(
+  def buildUserPrefsSchema(userPrefs: List[UserPref]): StructType = StructType(
     userPrefs.map(p => p.asField())
   )
 
@@ -911,13 +914,14 @@ object MainSummaryView {
     }
   }
 
-  def buildPluginNotificationUserActionSchema = StructType(List(
+  def buildPluginNotificationUserActionSchema: StructType = StructType(List(
     StructField("allow_now", IntegerType, nullable = true),
     StructField("allow_always", IntegerType, nullable = true),
     StructField("block", IntegerType, nullable = true)
   ))
 
-  def buildSchema(userPrefs: List[UserPref], scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String, HistogramDefinition)]): StructType = {
+  def buildSchema(userPrefs: List[UserPref], scalarDefinitions: List[(String, ScalarDefinition)],
+                  histogramDefinitions: List[(String, HistogramDefinition)]): StructType = {
     StructType(List(
       StructField("document_id", StringType, nullable = false), // id
       StructField("client_id", StringType, nullable = true), // clientId
@@ -1068,7 +1072,8 @@ object MainSummaryView {
       StructField("popup_notification_stats", MapType(StringType, buildPopupSchema), nullable = true),
 
       // Search counts
-      StructField("search_counts", ArrayType(buildSearchSchema, containsNull = false), nullable = true), // split up and organize the SEARCH_COUNTS keyed histogram
+      // split up and organize the SEARCH_COUNTS keyed histogram
+      StructField("search_counts", ArrayType(buildSearchSchema, containsNull = false), nullable = true),
 
       // Addon and configuration settings per Bug 1290181
       StructField("active_addons", ArrayType(buildAddonSchema, containsNull = false), nullable = true), // One per item in environment.addons.activeAddons

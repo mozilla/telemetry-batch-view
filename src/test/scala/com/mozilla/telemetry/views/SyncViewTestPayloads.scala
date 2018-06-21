@@ -1,12 +1,16 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry
 
+import org.json4s.JValue
 import org.json4s.jackson.JsonMethods._
 
 object SyncViewTestPayloads {
   // Test payloads, typically taken directly from about:telemetry.
 
   // An "old style" payload where each "ping" recorded exactly 1 sync.
-  def singleSyncPing = parse("""{
+  def singleSyncPing: JValue = parse("""{
     |  "type": "sync",
     |  "id": "824bb059-d22f-4930-b915-45580ecf463e",
     |  "creationDate": "2016-09-02T04:35:18.787Z",
@@ -85,7 +89,7 @@ object SyncViewTestPayloads {
     |}""".stripMargin)
 
   // A "new style" payload where there may be any number of syncs in a single ping.
-  def multiSyncPing = parse(
+  def multiSyncPing: JValue = parse(
     """
     |{
     |  "type": "sync",
@@ -204,7 +208,7 @@ object SyncViewTestPayloads {
     """.stripMargin)
 
   // Sync ping payload with devices and validation data.
-  def complexSyncPing = parse(
+  def complexSyncPing: JValue = parse(
     """
       |{
       |  "type": "sync",
@@ -299,7 +303,7 @@ object SyncViewTestPayloads {
     """.stripMargin)
 
   // This also stores the os at the top level for compatibility with android (bug 1409860)
-  def multiSyncPingWithTopLevelIds = parse(
+  def multiSyncPingWithTopLevelIds: JValue = parse(
     """
       |{
       |  "type": "sync",

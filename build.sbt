@@ -1,4 +1,10 @@
 javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint")
+scalacOptions ++= Seq(
+    "-Xmax-classfile-name", "242",
+    "-feature",
+    "-Ywarn-unused",
+    "-Ywarn-unused-import"
+)
 
 val localMavenHttps = "https://s3-us-west-2.amazonaws.com/net-mozaws-data-us-west-2-ops-mavenrepo/"
 val localMaven = "s3://net-mozaws-data-us-west-2-ops-mavenrepo/"
@@ -14,7 +20,6 @@ lazy val root = (project in file(".")).
     name := "telemetry-batch-view",
     version := "1.1",
     scalaVersion := "2.11.8",
-    retrieveManaged := true,
     // Hack to get releases to not fail to upload when the same jar name already exists. Later we will need auto versioning
     isSnapshot := true,
     scalaModuleInfo := scalaModuleInfo.value.map(_.withOverrideScalaVersion(true)),
@@ -83,3 +88,11 @@ publishTo := {
   else
     Some("releases"  at localMaven + "releases")
 }
+
+// Speeds up finding snapshot releases:
+// https://www.scala-sbt.org/1.x/docs/Combined+Pages.html#Latest+SNAPSHOTs
+updateOptions := updateOptions.value.withLatestSnapshots(false)
+
+val scalaStyleConfigUrl = Some(url("https://raw.githubusercontent.com/mozilla/moztelemetry/master/scalastyle-config.xml"))
+(scalastyleConfigUrl in Compile) := scalaStyleConfigUrl
+(scalastyleConfigUrl in Test) := scalaStyleConfigUrl

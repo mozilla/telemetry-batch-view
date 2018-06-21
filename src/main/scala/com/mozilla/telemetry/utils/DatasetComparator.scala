@@ -1,9 +1,14 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.utils
 
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.rogach.scallop._
 
 object DatasetComparator {
+  private val logger = org.apache.log4j.Logger.getLogger(this.getClass)
+
   def jobName: String = "dataset_comparator"
 
   case class Columns(originalOnly: Seq[String], testOnly: Seq[String], both: Seq[String])
@@ -19,7 +24,8 @@ object DatasetComparator {
     val failWithoutMatch = opt[Boolean]("fail-without-match", descr = "If true, exit 1 if data does not match", required = false, default = Some(true))
     val originalBucket = opt[String]("original-bucket", descr = "Source bucket for original data", required = false, default = Some("telemetry-parquet"))
     val originalViewname = opt[String]("original-viewname", descr = "View to pull original data from. Cannot be used with --original-bucket", required = false)
-    val select = opt[String]("select", descr = "Comma separated list of columns that will be directly compared with DataFrame.except", required = false, default = Some("document_id"))
+    val select = opt[String]("select", descr = "Comma separated list of columns that will be directly compared with DataFrame.except",
+      required = false, default = Some("document_id"))
     val testBucket = opt[String]("test-bucket", descr = "Source bucket for test data", required = false, default = Some("telemetry-test-bucket"))
     val testViewname = opt[String]("test-viewname", descr = "View to pull test data from. Cannot be used with --test-bucket", required = false)
     val where = opt[String]("where", descr = "Filter statement for the data to compare; e.g. \"sample_id = '0'\"", required = false)
@@ -50,17 +56,17 @@ object DatasetComparator {
     }
 
     if (conf.printResult()) {
-      println(s"Common columns: ${result.columns.both.mkString(",")}")
-      println(s"Added columns: ${result.columns.testOnly.mkString(",")}")
-      println(s"Dropped columns: ${result.columns.originalOnly.mkString(",")}")
-      println(s"Row count went from ${result.rows.original} to ${result.rows.test}")
-      println(s"Added ${result.values.testOnly} row values")
-      println(s"Dropped ${result.values.originalOnly} row values")
+      logger.info(s"Common columns: ${result.columns.both.mkString(",")}")
+      logger.info(s"Added columns: ${result.columns.testOnly.mkString(",")}")
+      logger.info(s"Dropped columns: ${result.columns.originalOnly.mkString(",")}")
+      logger.info(s"Row count went from ${result.rows.original} to ${result.rows.test}")
+      logger.info(s"Added ${result.values.testOnly} row values")
+      logger.info(s"Dropped ${result.values.originalOnly} row values")
       result.nulls.foreach { pair =>
         val (col, count) = pair
-        println(s"Null values in '$col' went from ${count.original} to ${count.test}")
+        logger.info(s"Null values in '$col' went from ${count.original} to ${count.test}")
       }
-      println(s"Datasets are${if (result.same) "" else " not"} the same")
+      logger.info(s"Datasets are${if (result.same) "" else " not"} the same")
     }
   }
 
@@ -79,7 +85,8 @@ object DatasetComparator {
     result.copy(same = same)
   }
 
-  def getDataFrame(spark: SparkSession, view: ScallopOption[String], bucket: ScallopOption[String], dataPath: String, dateField: String, date: String, where: ScallopOption[String]): DataFrame = {
+  def getDataFrame(spark: SparkSession, view: ScallopOption[String], bucket: ScallopOption[String], dataPath: String,
+                   dateField: String, date: String, where: ScallopOption[String]): DataFrame = {
     val df = view.get match {
       case Some(t) => spark.sql(s"SELECT * FROM $t").where(s"$dateField = '$date'")
       case _ => spark.read.option("mergeSchema", "true").parquet(s"s3://${bucket()}/$dataPath/$dateField=$date")

@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.ml
 
 import java.nio.charset.StandardCharsets
@@ -160,6 +163,7 @@ object AddonRecommender {
     }.sortWith((x, y) => x._2 > y._2)
   }
 
+  // scalastyle:off methodLength
   private def train(localOutputDir: String, runDate: String, privateBucket: String, publicBucket: String) = {
     // The AMODatabase init needs to happen before we get the SparkContext,
     // otherwise the job will fail due to all the workers being idle.
@@ -267,6 +271,7 @@ object AddonRecommender {
 
     sc.stop()
   }
+  // scalastyle:on methodLength
 
   def main(args: Array[String]) {
     val conf = new Conf(args)
@@ -276,7 +281,9 @@ object AddonRecommender {
         val addons = conf.recommend.addons().split(",")
         val top = conf.recommend.top()
         val input = conf.recommend.input()
+        // scalastyle:off print-ln
         recommend(input, addons.toSet).take(top).foreach(println)
+        // scalastyle:on print-ln
 
       case Some(command) if command == conf.train =>
         val output = conf.train.output()

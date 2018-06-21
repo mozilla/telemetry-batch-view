@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 import com.mozilla.telemetry.metrics.ScalarsClass
 
 import scala.io.Source
@@ -15,9 +18,9 @@ class ScalarsTest extends FlatSpec with Matchers {
       private val optStatuses = List(true, false)
 
       val names = optStatuses map {
-        optStatus => 
+        optStatus =>
             optStatus -> scalars.definitions(optStatus).map{
-              case (k, value) => 
+              case (k, value) =>
                 k.toLowerCase
             }
       } toMap

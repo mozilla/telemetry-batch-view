@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.utils
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
@@ -13,7 +16,8 @@ class DatasetComparatorTest extends FlatSpec with DataFrameSuiteBase with Before
 
   private val date = "test"
 
-  def getConf(original: String, test: String, where: String = "", select: String = "document_id", dateField: String = "submission_date_s3"): DatasetComparator.Conf = {
+  def getConf(original: String, test: String, where: String = "", select: String = "document_id",
+              dateField: String = "submission_date_s3"): DatasetComparator.Conf = {
     val args =
       "--date" :: date ::
       "--date-field" :: dateField ::

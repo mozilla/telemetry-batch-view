@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.experiments.analyzers
 
 import com.mozilla.telemetry.metrics._
@@ -167,9 +170,9 @@ class StringScalarAnalyzer(name: String, md: ScalarDefinition, df: DataFrame, nu
       a.histogram.values.map {p: HistogramPoint => p.label.get -> p.count.toLong}.toMap[String, Long]
     }
 
-    if (counts.isEmpty)
+    if (counts.isEmpty) {
       aggregates
-    else {
+    } else {
       val indexes = counts.reduce(addHistograms[String]).toSeq.sortWith(_._2 > _._2).zipWithIndex.map {
         case ((key, _), index) => key -> index.toLong
       }.toMap

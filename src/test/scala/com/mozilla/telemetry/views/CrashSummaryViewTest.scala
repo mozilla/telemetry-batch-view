@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry
 
 import scala.io.Source
@@ -9,7 +12,7 @@ import com.mozilla.telemetry.views.{CrashSummaryView, CrashSummary, CrashPing}
 
 class CrashSummaryViewTest extends FlatSpec with Matchers {
 
-  def fixture = {
+  private def fixture = {
     val crashPingsPath = getClass.getResource("/crash_ping_indented.json").getPath()
     val crashPingsJson = Source.fromFile(crashPingsPath).mkString
     implicit val formats = DefaultFormats

@@ -1,8 +1,10 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.experiments.analyzers
 
 import com.holdenkarau.spark.testing.DatasetSuiteBase
 import com.mozilla.telemetry.metrics._
-import com.mozilla.telemetry.tags.ScalarAnalyzerBuild
 import org.apache.spark.sql.DataFrame
 import org.scalatest.{FlatSpec, Matchers}
 
@@ -70,7 +72,7 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
     }.toMap
   }
 
-  "Uint Scalars" can "be aggregated" taggedAs (ScalarAnalyzerBuild) in {
+  "Uint Scalars" can "be aggregated" in {
     val df = fixture
     val analyzer = ScalarAnalyzer.getAnalyzer("uint_scalar",
       UintScalar(false, "name"),
@@ -110,7 +112,7 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
     actual.map(_.statistics.get.map(_.name).toSet).foreach(s => assert(s == expectedStats))
   }
 
-  "Keyed Uint Scalars" can "be aggregated" taggedAs (ScalarAnalyzerBuild) in {
+  "Keyed Uint Scalars" can "be aggregated" in {
     val df = fixture
     val analyzer = ScalarAnalyzer.getAnalyzer("keyed_uint_scalar",
       UintScalar(true, "name"),
@@ -273,7 +275,7 @@ class ScalarAnalyzerTest extends FlatSpec with Matchers with DatasetSuiteBase {
     assert(actual == expected)
   }
 
-  "Invalid scalars" should "be filtered out" taggedAs (ScalarAnalyzerBuild) in {
+  "Invalid scalars" should "be filtered out" in {
     val df = fixture
     val analyzer = ScalarAnalyzer.getAnalyzer("uint_scalar",
       UintScalar(false, "name"),
