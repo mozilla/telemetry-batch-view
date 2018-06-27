@@ -126,7 +126,8 @@ object ClientsDailyView {
     aggMean("active_addons_count"),
     aggFirst("active_experiment_branch"),
     aggFirst("active_experiment_id"),
-    aggSum(expr("active_ticks/(3600.0/5)"), "active_hours_sum"),
+    // active_hours_sum has to be coerced from decimal to double for backwards compatibility
+    aggSum(expr("DOUBLE(active_ticks/(3600.0/5))"), "active_hours_sum"),
     aggFirst("addon_compatibility_check_enabled"),
     aggFirst("app_build_id"),
     aggFirst("app_display_version"),
