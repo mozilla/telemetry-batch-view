@@ -4,7 +4,6 @@
 package com.mozilla.telemetry
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
-import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import com.mozilla.telemetry.views.MainEventsView
 import org.apache.spark.sql.{DataFrame, Row}
 import org.scalatest.{FlatSpec, Matchers}
@@ -25,16 +24,11 @@ case class TestMainSummary(document_id: String,
                            app_version: String,
                            os: String,
                            os_version: String,
-                           e10s_enabled: Boolean,
-                           subsession_start_date: String,
-                           subsession_length: Long,
-                           sync_configured: Boolean,
-                           sync_count_desktop: Int,
-                           sync_count_mobile: Int,
+                           session_id: String,
+                           subsession_id: String,
+                           session_start_date: String,
                            timestamp: Long,
                            sample_id: Long,
-                           active_experiment_id: String,
-                           active_experiment_branch: String,
                            experiments: Map[String, String],
                            events: Option[Seq[Event]])
 
@@ -48,8 +42,8 @@ class MainEventsViewTest extends FlatSpec with Matchers with DataFrameSuiteBase 
     val e = Event(0, "navigation", "search", "urlbar", "enter", Map("engine" -> "google"))
     val m = TestMainSummary("6609b4d8-94d4-4e87-9f6f-80183079ff1b",
       "25a00eb7-2fd8-47fd-8d3f-223af3e5c68f", "release", "US", "en-US", "Firefox", "50.1.0", "Windows_NT", "10.0",
-      true, "2017-01-23T20:54:10.123Z", 1000, false, 0, 0, 1485205018000000000L, 42, "test_experiment",
-      "test_branch", Map("experiment1" -> "branch1"), Some(Seq(e)))
+      "a2d045be-6b97-488a-8d74-a9c09427fc92", "3340d4e5-9618-4512-b612-da8ac1578d95", "2018-06-08T00:00:00.0+06:00",
+      1485205018000000000L, 42, Map("experiment1" -> "branch1"), Some(Seq(e)))
 
     val pings: DataFrame = Seq(
       m,
@@ -84,5 +78,7 @@ class MainEventsViewTest extends FlatSpec with Matchers with DataFrameSuiteBase 
     sampledEvents
       .where("document_id = '72062950-3daf-450e-adfd-58eda3151a97'")
       .count should be(1)
+
+    events.select("session_start_time").collect.head.getLong(0) should be(1528394400000L)
   }
 }

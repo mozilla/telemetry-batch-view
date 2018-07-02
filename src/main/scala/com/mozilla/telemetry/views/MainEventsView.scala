@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
-import com.mozilla.telemetry.utils.{Events, S3Store, getOrCreateSparkSession}
+import com.mozilla.telemetry.utils.{S3Store, getOrCreateSparkSession}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.joda.time.{DateTime, Days, format}
@@ -13,6 +13,7 @@ object MainEventsView {
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
 
   def schemaVersion: String = "v1"
+
   def jobName: String = "events"
 
   // Configuration for command line arguments
@@ -87,12 +88,7 @@ object MainEventsView {
   }
 
   def eventsFromMain(mainSummaryData: DataFrame, sampleId: Option[String]): DataFrame = {
-    val eventsSchema = Events.buildEventSchema
     val partialDataFrame = mainSummaryData
-      .select("document_id", "client_id", "normalized_channel", "country", "locale", "app_name", "app_version", "os",
-        "os_version", "e10s_enabled", "subsession_start_date", "subsession_length", "sync_configured",
-        "sync_count_desktop", "sync_count_mobile", "timestamp", "sample_id", "active_experiment_id",
-        "active_experiment_branch", "experiments", "events")
       .where("client_id is not null")
       .where("events is not null")
 
@@ -102,12 +98,13 @@ object MainEventsView {
     }
 
     // Explode the events entries
-    val exploded = records.withColumn("events", explode(when(size(col("events")).gt(0), col("events"))))
+    val exploded = records
+      .withColumn("events", explode(when(size(col("events")).gt(0), col("events"))))
+      .withColumn("session_start_time", unix_timestamp(col("session_start_date"), "yyy-MM-dd'T'HH:mm:ss.0XXX") * 1000)
 
     exploded.selectExpr("document_id", "client_id", "normalized_channel", "country", "locale", "app_name",
-      "app_version", "os", "os_version", "e10s_enabled", "subsession_start_date", "subsession_length",
-      "sync_configured", "sync_count_desktop", "sync_count_mobile", "timestamp", "sample_id", "active_experiment_id",
-      "active_experiment_branch", "experiments",
+      "app_version", "os", "os_version", "session_id", "subsession_id", "session_start_time", "timestamp", "sample_id",
+      "experiments",
       // Flatten nested event fields.
       "events.timestamp as event_timestamp",
       "events.category as event_category",
