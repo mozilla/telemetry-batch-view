@@ -47,6 +47,7 @@ lazy val root = (project in file(".")).
     libraryDependencies += "org.scalaj" %% "scalaj-http" % "2.4.0",
     libraryDependencies += "org.yaml" % "snakeyaml" % "1.21",
     libraryDependencies += "com.github.nscala-time" %% "nscala-time" % "2.10.0",
+    libraryDependencies += "org.scalanlp" %% "breeze" % "0.13.2",
 
     // Test dependencies
     libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.5" % Test,

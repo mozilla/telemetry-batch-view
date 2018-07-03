@@ -4,7 +4,7 @@
 package com.mozilla.telemetry
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
-import com.mozilla.telemetry.experiments.analyzers.CrashAnalyzer
+import com.mozilla.telemetry.experiments.analyzers.{CrashAnalyzer, ExperimentEngagementAnalyzer, MetricAnalysis}
 import com.mozilla.telemetry.views.ExperimentAnalysisView
 import org.apache.spark.sql.functions.col
 import org.scalatest.{FlatSpec, Matchers}
@@ -28,6 +28,15 @@ case class ErrorAggRow(
   gmplugin_crashes: Int,
   content_shutdown_crashes: Int
 )
+
+case class ExperimentSummaryEngagementRow(
+  client_id: String,
+  experiment_id: String,
+  experiment_branch: String,
+  submission_date_s3: String,
+  total_time: Int,
+  active_ticks: Int,
+  scalar_parent_browser_engagement_total_uri_count: Int)
 
 // It appears a case class has to be accessible in the scope the spark session
 // is created in or implicit conversions won't work
@@ -64,50 +73,45 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
     ErrorAggRow("id2", "branch1", 4, 4, 3, 3, 0, 0, 0, 0)
   )
 
+  val engagementData = Seq(
+    ExperimentSummaryEngagementRow("a", "id1", "control", "20180601", 100, 350, 13),
+    ExperimentSummaryEngagementRow("a", "id1", "control", "20180602", 110, 310, 14),
+    ExperimentSummaryEngagementRow("a", "id1", "control", "20180602", 108, 332, 17),
+    ExperimentSummaryEngagementRow("a", "id1", "control", "20180602",  95, 392, 14),
+    ExperimentSummaryEngagementRow("a", "id1", "control", "20180603", 120, 370, 15),
+    ExperimentSummaryEngagementRow("a", "id1", "control", "20180604", 130, 380, 16)
+  )
+
   val experimentMetrics = List(
     "scalar_content_browser_usage_graphite",
     "histogram_content_gc_max_pause_ms_2"
   )
 
   val viewConf = new ExperimentAnalysisView.Conf(
-    ("--input" :: "telemetry-mock-bucket" ::
-     "--output" :: "telemetry-mock-bucket" :: Nil).toArray
+    Array(
+      "--input", "telemetry-mock-bucket",
+      "--output", "telemetry-mock-bucket",
+      "--bootstrapIterations", "0"
+    )
   )
 
-  lazy val id1Data = {
+  lazy val id1ExperimentMetrics: Seq[MetricAnalysis] = {
     import spark.implicits._
-    predata.toDS().toDF().where(col("experiment_id") === "id1").persist()
+    val data = predata.toDS().toDF().where(col("experiment_id") === "id1")
+
+    ExperimentAnalysisView.getExperimentMetrics("id1", data, spark.emptyDataset[ErrorAggRow].toDF(),
+      viewConf, experimentMetrics)
   }
 
   "Child Scalars" can "be counted" in {
-    import spark.implicits._
-
-    val data = id1Data
-
-    val res = ExperimentAnalysisView.getExperimentMetrics("id1",data, spark.emptyDataset[ErrorAggRow].toDF(), viewConf,
-      experimentMetrics)
+    val res = id1ExperimentMetrics
     val agg = res.filter(_.metric_name == "scalar_content_browser_usage_graphite").head
     agg.histogram(1).pdf should be (1.0)
   }
 
-  "Child Histograms" can "be counted" in {
-    import spark.implicits._
-
-    val data = id1Data
-
-    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, spark.emptyDataset[ErrorAggRow].toDF(), viewConf,
-      experimentMetrics)
-    val agg = res.filter(_.metric_name == "histogram_content_gc_max_pause_ms_2").head
-    agg.histogram(1).pdf should be (1.0)
-  }
 
   "Total client ids and pings" can "be counted" in {
-    import spark.implicits._
-
-    val data = id1Data
-
-    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, spark.emptyDataset[ErrorAggRow].toDF(), viewConf,
-      experimentMetrics)
+    val res = id1ExperimentMetrics
     val metadata = res.filter(_.metric_name == "Experiment Metadata")
     metadata.length should be (1)
 
@@ -183,5 +187,18 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
 
     val totalClients = metadata.flatMap(_.statistics.get.filter(_.name == "Total Clients").map(_.value)).sum
     totalClients should be (3.0)
+  }
+
+  "Engagement metrics" can "be calculated" in {
+    import spark.implicits._
+
+    val data = engagementData.toDS().toDF()
+    val metrics = ExperimentEngagementAnalyzer.getMetrics(data, iterations = 10)
+    metrics.length should be (4)
+
+    val filtered = metrics.filter(_.metric_name == "engagement_daily_hours")
+    filtered.length should be (1)
+    val mth = filtered.head
+    mth.statistics.get.length should be (9)
   }
 }
