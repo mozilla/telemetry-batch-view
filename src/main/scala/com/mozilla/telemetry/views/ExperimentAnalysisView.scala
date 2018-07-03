@@ -17,10 +17,10 @@ object ExperimentAnalysisView {
   private val defaultErrorAggregatesBucket = "net-mozaws-prod-us-west-2-pipeline-data"
   private val errorAggregatesPath = "experiment_error_aggregates/v1"
   private val jobName = "experiment_analysis"
-  private val schemaVersion = "v1"
   // This gives us ~120MB partitions with the columns we have now. We should tune this as we add more columns.
   private val rowsPerPartition = 25000
   private val defaultJackknifeBlocks = 100
+  private val defaultBootstrapIterations = 1000
 
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getSimpleName)
 
@@ -73,6 +73,10 @@ object ExperimentAnalysisView {
     val date = opt[String]("date", descr = "Run date for this job (defaults to yesterday)", required = false)
     val jackknifeBlocks = opt[Int]("jackknifeBlocks", descr = "Number of jackknife blocks to use", required = false,
       default = Some(defaultJackknifeBlocks))
+    val bootstrapIterations = opt[Int]("bootstrapIterations",
+      descr = "Number of bootstrap iterations to use for engagement metrics; set to 0 to disable engagement metrics",
+      required = false,
+      default = Some(defaultBootstrapIterations))
     verify()
   }
 
@@ -132,14 +136,14 @@ object ExperimentAnalysisView {
   }
 
   def getDate(conf: Conf): String =  {
-   conf.date.get match {
+   conf.date.toOption match {
       case Some(d) => d
       case _ => com.mozilla.telemetry.utils.yesterdayAsYYYYMMDD
     }
   }
 
   def getExperiments(conf: Conf, data: DataFrame): List[String] = {
-    conf.experiment.get match {
+    conf.experiment.toOption match {
       case Some(e) => List(e)
       case _ => data // get all experiments
         .where(col("submission_date_s3") === getDate(conf))
@@ -152,7 +156,7 @@ object ExperimentAnalysisView {
   }
 
   def getMetrics(conf: Conf): List[(String, MetricDefinition)] = {
-    conf.metric.get match {
+    conf.metric.toOption match {
       case Some(m) => {
         List((m, (Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _) ++ Scalars.definitions())(m.toLowerCase)))
       }
@@ -175,6 +179,7 @@ object ExperimentAnalysisView {
       .where("client_id is not NULL")
     val pingCount = experimentsFiltered.count()
     val numJackknifeBlocks = conf.jackknifeBlocks()
+    val bootstrapIterations = conf.bootstrapIterations()
     val persisted = repartitionAndPersist(experimentsFiltered, pingCount, experiment, experimentMetrics, numJackknifeBlocks)
 
     val schemaFields = persisted.schema.map(_.name)
@@ -193,11 +198,16 @@ object ExperimentAnalysisView {
     }
 
     val crashes = CrashAnalyzer.getExperimentCrashes(errorAggregates)
-
     val metadata = ExperimentAnalyzer.getExperimentMetadata(persisted).collect()
-    (metadata ++ metrics ++ crashes).toList
-  }
 
+    val engagement = if (bootstrapIterations > 0) {
+      ExperimentEngagementAnalyzer.getMetrics(experimentsFiltered, bootstrapIterations)
+    } else {
+      Seq.empty[MetricAnalysis]
+    }
+
+    (metadata ++ metrics ++ engagement ++ crashes).toList
+  }
 
   // Repartitions dataset if warranted, adds a jackknife block id, and persists the result for quicker access
   def repartitionAndPersist(experimentsSummary: DataFrame,
