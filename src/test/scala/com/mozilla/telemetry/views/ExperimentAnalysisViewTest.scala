@@ -50,6 +50,13 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
     ExperimentSummaryRow("d", "id1", null, 1, Map(2 -> 1))
   )
 
+  val missingClientId = Seq(
+    ExperimentSummaryRow("a", "id1", "control", 1, Map(1 -> 1)),
+    ExperimentSummaryRow("b", "id1", "control", 2, Map(2 -> 1)),
+    ExperimentSummaryRow("c", "id1", "branch1", 1, Map(2 -> 1)),
+    ExperimentSummaryRow(null, "id1", "branch1", 1, Map(2 -> 1))
+  )
+
   val errorAgg = Seq(
     ErrorAggRow("id1", "control", 1, 1, 1, 0, 0, 0, 0, 0),
     ErrorAggRow("id1", "branch1", 1, 1, 2, 0, 0, 0, 0, 0),
@@ -62,21 +69,22 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
     "histogram_content_gc_max_pause_ms_2"
   )
 
+  val viewConf = new ExperimentAnalysisView.Conf(
+    ("--input" :: "telemetry-mock-bucket" ::
+     "--output" :: "telemetry-mock-bucket" :: Nil).toArray
+  )
+
   lazy val id1Data = {
     import spark.implicits._
-    predata.toDS().toDF().where(col("experiment_id") === "id1")
+    predata.toDS().toDF().where(col("experiment_id") === "id1").persist()
   }
 
   "Child Scalars" can "be counted" in {
     import spark.implicits._
 
     val data = id1Data
-    val args =
-      "--input" :: "telemetry-mock-bucket" ::
-      "--output" :: "telemetry-mock-bucket" :: Nil
-    val conf = new ExperimentAnalysisView.Conf(args.toArray)
 
-    val res = ExperimentAnalysisView.getExperimentMetrics("id1",data, spark.emptyDataset[ErrorAggRow].toDF(), conf,
+    val res = ExperimentAnalysisView.getExperimentMetrics("id1",data, spark.emptyDataset[ErrorAggRow].toDF(), viewConf,
       experimentMetrics)
     val agg = res.filter(_.metric_name == "scalar_content_browser_usage_graphite").head
     agg.histogram(1).pdf should be (1.0)
@@ -86,12 +94,8 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
     import spark.implicits._
 
     val data = id1Data
-    val args =
-      "--input" :: "telemetry-mock-bucket" ::
-      "--output" :: "telemetry-mock-bucket" :: Nil
-    val conf = new ExperimentAnalysisView.Conf(args.toArray)
 
-    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, spark.emptyDataset[ErrorAggRow].toDF(), conf,
+    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, spark.emptyDataset[ErrorAggRow].toDF(), viewConf,
       experimentMetrics)
     val agg = res.filter(_.metric_name == "histogram_content_gc_max_pause_ms_2").head
     agg.histogram(1).pdf should be (1.0)
@@ -101,12 +105,8 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
     import spark.implicits._
 
     val data = id1Data
-    val args =
-      "--input" :: "telemetry-mock-bucket" ::
-      "--output" :: "telemetry-mock-bucket" :: Nil
-    val conf = new ExperimentAnalysisView.Conf(args.toArray)
 
-    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, spark.emptyDataset[ErrorAggRow].toDF(), conf,
+    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, spark.emptyDataset[ErrorAggRow].toDF(), viewConf,
       experimentMetrics)
     val metadata = res.filter(_.metric_name == "Experiment Metadata")
     metadata.length should be (1)
@@ -121,14 +121,10 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
 
     val multiplier = 3
     val data = List.fill(multiplier)(errorAgg).flatten.toDS().toDF()
-    val args =
-      "--input" :: "telemetry-mock-bucket" ::
-      "--output" :: "telemetry-mock-bucket" :: Nil
-    val conf = new ExperimentAnalysisView.Conf(args.toArray)
 
     val results = errorAgg.map(_.experiment_id).distinct.map{ id =>
       id -> ExperimentAnalysisView.getExperimentMetrics(id, spark.emptyDataset[ExperimentSummaryRow].toDF(),
-        data.filter(col("experiment_id") === id), conf, experimentMetrics)
+        data.filter(col("experiment_id") === id), viewConf, experimentMetrics)
     }.toMap
 
     errorAgg.foreach{ e =>
@@ -152,13 +148,9 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
     import spark.implicits._
 
     val df = spark.emptyDataFrame
-    val args =
-      "--input" :: "telemetry-mock-bucket" ::
-      "--output" :: "telemetry-mock-bucket" :: Nil
-    val conf = new ExperimentAnalysisView.Conf(args.toArray)
 
     val res = ExperimentAnalysisView.getExperimentMetrics("id1", spark.emptyDataset[ExperimentSummaryRow].toDF(), df,
-      conf, experimentMetrics)
+      viewConf, experimentMetrics)
     res.size should be (0)
   }
 
@@ -167,12 +159,23 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
     import spark.implicits._
 
     val data = missingBranchData.toDS().toDF().where(col("experiment_id") === "id1")
-    val args =
-      "--input" :: "telemetry-mock-bucket" ::
-      "--output" :: "telemetry-mock-bucket" :: Nil
-    val conf = new ExperimentAnalysisView.Conf(args.toArray)
 
-    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, spark.emptyDataset[ErrorAggRow].toDF(), conf,
+    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, spark.emptyDataset[ErrorAggRow].toDF(), viewConf,
+      experimentMetrics)
+
+    val metadata = res.filter(_.metric_name == "Experiment Metadata")
+    metadata.length should be (2)
+
+    val totalClients = metadata.flatMap(_.statistics.get.filter(_.name == "Total Clients").map(_.value)).sum
+    totalClients should be (3.0)
+  }
+
+  "Experiment Analysis View" can "filter out pings with missing client IDs" in {
+    import spark.implicits._
+
+    val data = missingClientId.toDS().toDF().where(col("experiment_id") === "id1")
+
+    val res = ExperimentAnalysisView.getExperimentMetrics("id1", data, spark.emptyDataset[ErrorAggRow].toDF(), viewConf,
       experimentMetrics)
 
     val metadata = res.filter(_.metric_name == "Experiment Metadata")
