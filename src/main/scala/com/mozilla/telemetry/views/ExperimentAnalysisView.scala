@@ -170,8 +170,9 @@ object ExperimentAnalysisView {
                            experimentsSummary: DataFrame,
                            errorAggregates: DataFrame, conf: Conf,
                            experimentMetrics: List[String] = List()): List[MetricAnalysis] = {
-    // Bug 1463248
-    val experimentsFiltered = experimentsSummary.where("experiment_branch is not NULL")
+    val experimentsFiltered = experimentsSummary
+      .where("experiment_branch is not NULL") // Bug 1463248
+      .where("client_id is not NULL")
     val pingCount = experimentsFiltered.count()
     val numJackknifeBlocks = conf.jackknifeBlocks()
     val persisted = repartitionAndPersist(experimentsFiltered, pingCount, experiment, experimentMetrics, numJackknifeBlocks)
