@@ -55,7 +55,7 @@ class ExperimentSummaryViewTest extends FlatSpec with Matchers with DataFrameSui
     val testExperimentsLocation = com.mozilla.telemetry.utils.temporaryFileName().toString.replace("file:", "")
     val testExperimentsList = List("experiment1")
 
-    ExperimentSummaryView.writeExperiments(testMainLocation, testExperimentsLocation, "20170101", testExperimentsList, spark)
+    ExperimentSummaryView.writeExperiments(testMainLocation, testExperimentsLocation, "20170101", testExperimentsList, spark, 500000)
 
     val actual = spark.read.parquet(testExperimentsLocation)
       .orderBy(col("document_id"), col("experiment_id"))
