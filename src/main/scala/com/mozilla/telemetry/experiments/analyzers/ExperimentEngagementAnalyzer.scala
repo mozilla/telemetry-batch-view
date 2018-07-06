@@ -151,10 +151,12 @@ object ExperimentEngagementAnalyzer {
       .select(measure)
       .limit(limit)
 
-    // As of July 2018, the largest enrollment for a single experiment branch was ~2 billion, which is a bit ridiculous;
-    // we choose to limit these percentile calculations to max 200 million values, which at 8 bytes per double
-    // should be less than 2 GB, small enough to comfortably fit in memory on a single machine.
-    // We convert the observations to a Scala array, sort them, and broadcast to all nodes.
+    // Maximum expected enrollment for a single experiment would be a few million clients;
+    // in order to efficiently parallelize these percentile calculations, we impose a generous limit
+    // of 200 million values, which at 8 bytes per double should be less than 2 GB,
+    // small enough to comfortably fit in memory on a single machine.
+    // We convert the observations to a Scala array, sort them, and broadcast to all nodes, so that we
+    // can have each node running iterations in parallel on local data.
     val observations = measureDF
       .collect()
       .map(_.getDouble(0))
