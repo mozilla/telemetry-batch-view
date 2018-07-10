@@ -73,15 +73,6 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
     ErrorAggRow("id2", "branch1", 4, 4, 3, 3, 0, 0, 0, 0)
   )
 
-  val engagementData = Seq(
-    ExperimentSummaryEngagementRow("a", "id1", "control", "20180601", 100, 350, 13),
-    ExperimentSummaryEngagementRow("a", "id1", "control", "20180602", 110, 310, 14),
-    ExperimentSummaryEngagementRow("a", "id1", "control", "20180602", 108, 332, 17),
-    ExperimentSummaryEngagementRow("a", "id1", "control", "20180602",  95, 392, 14),
-    ExperimentSummaryEngagementRow("a", "id1", "control", "20180603", 120, 370, 15),
-    ExperimentSummaryEngagementRow("a", "id1", "control", "20180604", 130, 380, 16)
-  )
-
   val experimentMetrics = List(
     "scalar_content_browser_usage_graphite",
     "histogram_content_gc_max_pause_ms_2"
@@ -192,13 +183,43 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
   "Engagement metrics" can "be calculated" in {
     import spark.implicits._
 
-    val data = engagementData.toDS().toDF()
+    val rand = new scala.util.Random(0)
+    def jittered(i: Int): Int = {
+      val multiplier = 1.0 + (0.1 * (rand.nextDouble() - 0.5))
+      (i * multiplier).toInt
+    }
+
+    val rows: Seq[ExperimentSummaryEngagementRow] =
+      for {
+        clientId <- List("a", "b", "c", "d", "e")
+        date <- List("20180601", "20180602", "20180603", "20180604")
+        _ <- 1 to 2
+      } yield ExperimentSummaryEngagementRow(
+        client_id = clientId,
+        experiment_id = "experiment_id",
+        experiment_branch = "control",
+        submission_date_s3 = date,
+        total_time = jittered(3600),
+        active_ticks = jittered(1000),
+        scalar_parent_browser_engagement_total_uri_count = jittered(20)
+      )
+
+    val data = rows.toDF()
+
     val metrics = ExperimentEngagementAnalyzer.getMetrics(data, iterations = 10)
-    metrics.length should be (4)
+    metrics should have length 4
 
     val filtered = metrics.filter(_.metric_name == "engagement_daily_hours")
-    filtered.length should be (1)
+    filtered should have length 1
     val mth = filtered.head
-    mth.statistics.get.length should be (9)
+    val stats = mth.statistics.get
+    stats should have length 9
+    val medianStats = stats.filter(_.name == "Median").head
+    val expectedRange = 2.0 +- 0.1
+    medianStats.value should equal(expectedRange)
+    medianStats.confidence_low.get should equal(expectedRange)
+    medianStats.confidence_high.get should equal(expectedRange)
+    medianStats.confidence_low.get should be < medianStats.value
+    medianStats.confidence_high.get should be > medianStats.value
   }
 }

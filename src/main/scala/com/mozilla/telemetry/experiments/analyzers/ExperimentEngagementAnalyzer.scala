@@ -32,8 +32,8 @@ object Percentiles {
 }
 
 object TimeConstants {
-  val ticksPerSecond: Int = 5
-  val secondsPerHour: Int = 3600
+  val ticksPerSecond: Double = 5.0
+  val secondsPerHour: Double = 3600.0
 }
 
 /**
