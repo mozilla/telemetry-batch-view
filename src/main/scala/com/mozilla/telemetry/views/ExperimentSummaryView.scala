@@ -22,7 +22,10 @@ object ExperimentSummaryView {
   def experimentsUrl: String = "https://normandy.services.mozilla.com/api/v1/recipe/"
   def experimentsUrlParams: List[(String, String)] = List(("format", "json"))
   def experimentsQualifyingAction: List[String] = List("preference-experiment", "opt-out-study")
-  def excludedExperiments: List[String] = List("pref-flip-screenshots-release-1369150", "pref-flip-search-composition-57-release-1413565")
+  def excludedExperiments: List[String] = List(
+    "pref-flip-screenshots-release-1369150",
+    "pref-flip-search-composition-57-release-1413565",
+    "pref-hotfix-tls-13-avast-rollback")
   private case class NormandyRecipeBranch(ratio: Int, slug: String, value: Any)
   private case class NormandyRecipeArguments(branches: List[NormandyRecipeBranch],
                                              slug: Option[String],
@@ -43,6 +46,10 @@ object ExperimentSummaryView {
     val to = opt[String]("to", descr = "To submission date", required = false)
     val inputBucket = opt[String]("inbucket", descr = "Source bucket for main_summary data", required = false)
     val outputBucket = opt[String]("bucket", descr = "Destination bucket for parquet data", required = true)
+    val maxRecordsPerFile = opt[Int]("max-records-per-file",
+      descr = "Max number of rows to write to output files before splitting",
+      required = false,
+      default=Some(500000))
     verify()
   }
 
@@ -68,7 +75,8 @@ object ExperimentSummaryView {
     implicit val sc = spark.sparkContext
 
     val outputBucket = conf.outputBucket()
-    val inputBucket = conf.inputBucket.get.getOrElse(outputBucket)
+    val inputBucket = conf.inputBucket.getOrElse(outputBucket)
+    val maxRecordsPerFile = conf.maxRecordsPerFile()
 
     for (offset <- 0 to Days.daysBetween(from, to).getDays) {
       val currentDate = from.plusDays(offset)
@@ -84,7 +92,7 @@ object ExperimentSummaryView {
       val experiments = getExperimentList(getExperimentRecipes(), currentDate.toDate)
 
       experiments.foreach(e => deletePreviousOutput(outputBucket, s3prefix, currentDateString, e))
-      writeExperiments(input, output, currentDateString, experiments, spark)
+      writeExperiments(input, output, currentDateString, experiments, spark, maxRecordsPerFile)
 
       logger.info(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
       logger.info("=======================================================================================")
@@ -97,7 +105,8 @@ object ExperimentSummaryView {
     deletePrefix(bucket, completePrefix)
   }
 
-  def writeExperiments(input: String, output: String, date: String, experiments: List[String], spark: SparkSession): Unit = {
+  def writeExperiments(input: String, output: String, date: String, experiments: List[String], spark: SparkSession,
+                       maxRecordsPerFile: Int): Unit = {
     val mainSummary = spark.read.parquet(input)
 
     mainSummary
@@ -111,6 +120,7 @@ object ExperimentSummaryView {
       // Usage characteristics will most likely be "get all pings from an experiment for all days"
       .partitionBy("experiment_id", "submission_date_s3")
       .mode("append")
+      .option("maxRecordsPerFile", maxRecordsPerFile)
       .parquet(output)
   }
 
