@@ -84,7 +84,22 @@ object ExperimentEngagementAnalyzer {
   private def filterOutliersAndAggregatePerClientDaily(
       input: DataFrame, outlierPercentile: Double = 0.9999, relativeError: Double = 0.0001): DataFrame = {
 
-    val dailyWithOutliers = input
+    val clientsSwitchingBranches = input
+      .select("experiment_id", "experiment_branch", "client_id")
+      .distinct()
+      .groupBy("experiment_id", "client_id")
+      .count()
+      .filter(col("count") > 1)
+      .drop(col("count"))
+      .persist()
+
+    logger.info(s"Pruning ${clientsSwitchingBranches.count()} " +
+      "clients that appear in more than one branch per experiment")
+
+    val inputWithoutSwitchers = input
+      .join(clientsSwitchingBranches.unpersist(), Seq("experiment_id", "client_id"), joinType = "leftanti")
+
+    val dailyWithOutliers = inputWithoutSwitchers
       .groupBy("experiment_id", "experiment_branch", "client_id", "submission_date_s3")
       .agg(
         sum(expr(s"total_time/${TimeConstants.secondsPerHour}"))

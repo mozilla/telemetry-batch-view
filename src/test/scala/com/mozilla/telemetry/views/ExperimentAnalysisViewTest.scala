@@ -204,7 +204,9 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
         scalar_parent_browser_engagement_total_uri_count = jittered(20)
       )
 
-    val data = rows.toDF()
+    val branchSwitcher = ExperimentSummaryEngagementRow("a", "experiment_id", "treatment", "20180601", 3600, 1000, 20)
+
+    val data = (rows :+ branchSwitcher).toDF()
 
     val metrics = ExperimentEngagementAnalyzer.getMetrics(data, iterations = 10)
     metrics should have length 4
@@ -215,7 +217,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
     val stats = mth.statistics.get
     stats should have length 9
     val medianStats = stats.filter(_.name == "Median").head
-    val expectedRange = 2.0 +- 0.1
+    val expectedRange = 2.0 +- 0.2
     medianStats.value should equal(expectedRange)
     medianStats.confidence_low.get should equal(expectedRange)
     medianStats.confidence_high.get should equal(expectedRange)
