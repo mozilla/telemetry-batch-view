@@ -13,12 +13,12 @@ import org.apache.spark.sql.functions._
   * See https://metrics.mozilla.com/protected/sguha/shield_bootstrap.html#definitions
   */
 object EngagementMeasures {
-  val mth  = "engagement_daily_hours"
-  val mah  = "engagement_daily_active_hours"
-  val muri = "engagement_hourly_uris"
-  val mins = "engagement_intensity"
-  val base: List[String] = List(mth, mah, muri)
-  val derived: List[String] = List(mins)
+  val dailyHours: String = "engagement_daily_hours"
+  val dailyActiveHours: String = "engagement_daily_active_hours"
+  val hourlyUris: String = "engagement_hourly_uris"
+  val intensity: String = "engagement_intensity"
+  val base: List[String] = List(dailyHours, dailyActiveHours, hourlyUris)
+  val derived: List[String] = List(intensity)
   val all: List[String] = base ++ derived
 }
 
@@ -31,6 +31,11 @@ object Percentiles {
   }
 }
 
+object TimeConstants {
+  val ticksPerSecond: Int = 5
+  val secondsPerHour: Int = 3600
+}
+
 /**
   * Introduced for bug 1460090, based on a proof-of-concept analysis in
   * https://metrics.mozilla.com/protected/sguha/shield_bootstrap.html
@@ -39,8 +44,8 @@ object ExperimentEngagementAnalyzer {
 
   val logger: org.slf4j.Logger = org.slf4j.LoggerFactory.getLogger(getClass)
 
-  // We pass around this one instance to different threads, which should be fine because the implementation
-  // looks to use ThreadLocals such that each thread is getting a unique generator.
+  // Each executor will get a new copy of this variable as it will be included in the percentileArrays closure;
+  // it looks to use ThreadLocals such that each thread is getting a unique random generator.
   val poisson = Poisson(mean = 1.0)
 
 
@@ -82,9 +87,14 @@ object ExperimentEngagementAnalyzer {
     val dailyWithOutliers = input
       .groupBy("experiment_id", "experiment_branch", "client_id", "submission_date_s3")
       .agg(
-        sum(expr("total_time/3600.0")).cast("double").alias(EngagementMeasures.mth),
-        sum(expr("active_ticks/(3600.0/5)")).cast("double").alias(EngagementMeasures.mah),
-        sum("scalar_parent_browser_engagement_total_uri_count").alias(EngagementMeasures.muri)
+        sum(expr(s"total_time/${TimeConstants.secondsPerHour}"))
+          .cast("double")
+          .alias(EngagementMeasures.dailyHours),
+        sum(expr(s"active_ticks/(${TimeConstants.secondsPerHour}/${TimeConstants.ticksPerSecond})"))
+          .cast("double")
+          .alias(EngagementMeasures.dailyActiveHours),
+        sum("scalar_parent_browser_engagement_total_uri_count")
+          .alias(EngagementMeasures.hourlyUris)
       )
 
     dailyWithOutliers.persist()
@@ -94,23 +104,23 @@ object ExperimentEngagementAnalyzer {
     val outlierCutoffs = dailyWithOutliers.stat
       .approxQuantile(EngagementMeasures.base.toArray, Array(outlierPercentile), relativeError)
       .map(_.head)
-    val daily =
-      (EngagementMeasures.base, outlierCutoffs)
-        .zipped
-        .foldLeft(dailyWithOutliers) { (df, cutInfo) =>
-          val (measure, cut) = cutInfo
-          df.where(col(measure) < cut)
-        }
+
+    val daily = (EngagementMeasures.base, outlierCutoffs)
+      .zipped
+      .foldLeft(dailyWithOutliers) { (df, cutInfo) =>
+        val (measure, cut) = cutInfo
+        df.where(col(measure) < cut)
+      }
 
     val clients = daily
       .groupBy("experiment_id", "experiment_branch", "client_id")
       .agg(
-        avg(EngagementMeasures.mth).alias(EngagementMeasures.mth),
-        avg(EngagementMeasures.mah).alias(EngagementMeasures.mah),
-        expr(s"sum(${EngagementMeasures.muri})/(1.0 / 3600.0 + sum(${EngagementMeasures.mah}))")
-          .cast("double").alias(EngagementMeasures.muri),
-        expr(s"sum(${EngagementMeasures.mah})/(1.0 / 3600.0 + sum(${EngagementMeasures.mth}))")
-          .cast("double").alias(EngagementMeasures.mins)
+        avg(EngagementMeasures.dailyHours).alias(EngagementMeasures.dailyHours),
+        avg(EngagementMeasures.dailyActiveHours).alias(EngagementMeasures.dailyActiveHours),
+        expr(s"sum(${EngagementMeasures.hourlyUris})/(1.0 / ${TimeConstants.secondsPerHour} + sum(${EngagementMeasures.dailyActiveHours}))")
+          .cast("double").alias(EngagementMeasures.hourlyUris),
+        expr(s"sum(${EngagementMeasures.dailyActiveHours})/(1.0 / ${TimeConstants.secondsPerHour} + sum(${EngagementMeasures.dailyHours}))")
+          .cast("double").alias(EngagementMeasures.intensity)
       )
       .na.fill(0)
 
@@ -141,7 +151,7 @@ object ExperimentEngagementAnalyzer {
       branch: String,
       measure: String,
       iterations: Int,
-      limit: Int = 200000000): MetricAnalysis = {
+      maxClientsPerBranch: Int = 200000000): MetricAnalysis = {
 
     val sc = clients.sparkSession.sparkContext
 
@@ -149,7 +159,7 @@ object ExperimentEngagementAnalyzer {
       .filter(s"experiment_id = '$experimentId'")
       .filter(s"experiment_branch = '$branch'")
       .select(measure)
-      .limit(limit)
+      .limit(maxClientsPerBranch)
 
     // Maximum expected enrollment for a single experiment would be a few million clients;
     // in order to efficiently parallelize these percentile calculations, we impose a generous limit
@@ -160,6 +170,7 @@ object ExperimentEngagementAnalyzer {
     val observations = measureDF
       .collect()
       .map(_.getDouble(0))
+
     util.Sorting.quickSort(observations)
     val count = observations.length
     val observationsBroadcast = sc.broadcast(observations)
@@ -224,6 +235,7 @@ object ExperimentEngagementAnalyzer {
     else {
       arr(i - 1) + (f - i) * (arr(i) - arr(i - 1))
     }
+    // scalastyle:on
   }
 
 
