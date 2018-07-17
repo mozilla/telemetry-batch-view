@@ -28,6 +28,7 @@ object ExperimentSummaryView {
     "pref-hotfix-tls-13-avast-rollback")
   private case class NormandyRecipeBranch(ratio: Int, slug: String, value: Any)
   private case class NormandyRecipeArguments(branches: List[NormandyRecipeBranch],
+                                             isHighVolume: Option[Boolean],
                                              slug: Option[String],
                                              name: Option[String])
   private case class NormandyRecipe(id: Long,
@@ -143,6 +144,7 @@ object ExperimentSummaryView {
 
   def shouldProcessExperiment(r: NormandyRecipe, date: Date): Boolean = {
     experimentsQualifyingAction.contains(r.action) &&
+    r.arguments.isHighVolume != Some(true) &&
     !excludedExperiments.contains(r.arguments.slug.get) &&
     ((r.enabled == true) || r.last_updated.after(date)) // is this experiment enabled for this date?
   }
@@ -158,7 +160,8 @@ object ExperimentSummaryView {
       case Success(r) =>
         Try(r.arguments.slug.getOrElse(r.arguments.name.get)) match {
           case Success(slug) =>
-            Some(r.copy(arguments=NormandyRecipeArguments(r.arguments.branches, Some(slug), Some(slug))))
+            Some(r.copy(arguments=NormandyRecipeArguments(r.arguments.branches, r.arguments.isHighVolume, Some(slug),
+              Some(slug))))
           case _ =>
             None
         }
