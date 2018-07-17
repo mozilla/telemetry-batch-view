@@ -116,7 +116,7 @@ object ExperimentSummaryView {
       .select(col("*"), explode(col("experiments")).as(Array("experiment_id", "experiment_branch")))
       .where(col("experiment_id").isin(experiments:_*))
       .withColumn("submission_date_s3", lit(date))
-      .repartition(col("experiment_id"))
+      .coalesce(10)
       .write
       // Usage characteristics will most likely be "get all pings from an experiment for all days"
       .partitionBy("experiment_id", "submission_date_s3")
