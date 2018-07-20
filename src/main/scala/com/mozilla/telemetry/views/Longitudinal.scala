@@ -741,7 +741,7 @@ object LongitudinalView {
                                    histogramDefinitions: Map[String, HistogramDefinition]) {
     val histogramsList = payloads.map(Histograms.stripKeyedHistograms)
 
-    val uniqueKeys = histogramsList.flatMap(x => x.keys).distinct.toSet
+    val uniqueKeys = histogramsList.flatMap(x => x.keys).distinct
 
     val validKeys = for {
       key <- uniqueKeys
@@ -758,7 +758,7 @@ object LongitudinalView {
         }
       }
 
-      val uniqueLabels = keyedHistogramsList.flatMap(x => x.keys).distinct.toSet
+      val uniqueLabels = keyedHistogramsList.flatMap(x => x.keys).distinct
       val vectorized = for {
         label <- uniqueLabels
         vector = vectorizeHistogram(label, definition, keyedHistogramsList, histogramSchema)
@@ -772,7 +772,7 @@ object LongitudinalView {
                               histogramDefinitions: Map[String, HistogramDefinition]) {
     val histogramsList = payloads.map(Histograms.stripHistograms)
 
-    val uniqueKeys = histogramsList.flatMap(x => x.keys).distinct.toSet
+    val uniqueKeys = histogramsList.flatMap(x => x.keys).distinct
 
     val validKeys = for {
       key <- uniqueKeys
@@ -903,7 +903,7 @@ object LongitudinalView {
         }
       }
 
-      val uniqueLabels = keyedScalarsList.flatMap(x => x.keys).distinct.toSet
+      val uniqueLabels = keyedScalarsList.flatMap(x => x.keys).distinct
       val vectorized = for {
         label <- uniqueLabels
         vector = vectorizeScalar(label, definition, keyedScalarsList)
