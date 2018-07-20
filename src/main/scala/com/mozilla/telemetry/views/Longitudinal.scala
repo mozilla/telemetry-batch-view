@@ -76,7 +76,7 @@ protected class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHist
 }
 
 object LongitudinalView {
-  private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
+  @transient lazy val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
 
   val jobName = "longitudinal"
 
@@ -1047,7 +1047,8 @@ object LongitudinalView {
       Option(root.build)
     } catch {
       case e: Throwable =>
-        // Ignore buggy clients
+        // Log buggy clients errors and continue
+        logger.warn(org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e))
         None
     }
   }
