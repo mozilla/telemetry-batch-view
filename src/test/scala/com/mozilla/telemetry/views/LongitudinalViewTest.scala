@@ -41,7 +41,7 @@ class LongitudinalViewTest extends FlatSpec with Matchers with PrivateMethodTest
         ("SEARCH_SERVICE_ENGINE_COUNT" ->
           ("values" -> ("1" -> constant)) ~
           ("sum" -> constant)) ~
-        ("FX_TAB_SWITCH_TOTAL_MS" ->
+        ("MOCK_EXPONENTIAL_OPTOUT" ->
           ("values" -> ("1" -> constant)) ~
           ("sum" -> constant)) ~
         ("GC_MS" ->
@@ -496,10 +496,10 @@ class LongitudinalViewTest extends FlatSpec with Matchers with PrivateMethodTest
   }
 
   "Exponential histograms" must "be converted correctly" in {
-    val histograms = fixture.optoutRow.getList[Row](fixture.optoutRow.fieldIndex("fx_tab_switch_total_ms"))
+    val histograms = fixture.optoutRow.getList[Row](fixture.optoutRow.fieldIndex("mock_exponential_optout"))
     assert(histograms.length == fixture.payloads.length)
 
-    val reference = List(0, ParentConstant) ++ List.fill(18)(0)
+    val reference = List(0, ParentConstant) ++ List.fill(8)(0)
     histograms.foreach{ x =>
       assert(x.getAs[Long]("sum") == ParentConstant.toLong)
       assert(x.getList[Int](x.fieldIndex("values")).toList == reference.toList)
