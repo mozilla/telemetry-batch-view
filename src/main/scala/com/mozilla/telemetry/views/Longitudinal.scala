@@ -484,11 +484,7 @@ object LongitudinalView {
         .name("startup_window_visible_read_bytes").`type`().optional().longType()
       .endRecord()
 
-    val histogramType = SchemaBuilder
-      .record("histogram").fields()
-        .name("values").`type`().array().items().intType().noDefault()
-        .name("sum").`type`().longType().noDefault()
-      .endRecord()
+    val histogramType = standardHistogramSchema
 
     val builder = SchemaBuilder
       .record("Submission").fields()
@@ -727,8 +723,14 @@ object LongitudinalView {
   }
   // scalastyle:on return
 
-  def getStandardHistogramSchema(schema: Schema): Schema = {
-    getElemType(schema, "fx_tab_switch_total_ms")
+  // ref: http://fdahms.com/2015/10/14/scala-and-the-transient-lazy-val-pattern/
+  // this val will only be calculated once per partition, and will not be serialized
+  @transient lazy val standardHistogramSchema: Schema = {
+    SchemaBuilder
+      .record("histogram").fields()
+        .name("values").`type`().array().items().intType().noDefault()
+        .name("sum").`type`().longType().noDefault()
+      .endRecord()
   }
 
   def getElemType(schema: Schema, field: String): Schema = {
@@ -746,7 +748,7 @@ object LongitudinalView {
       definition <- histogramDefinitions.get(key)
     } yield (key, definition)
 
-    val histogramSchema = getStandardHistogramSchema(schema)
+    val histogramSchema = standardHistogramSchema
 
     for ((key, definition) <- validKeys) {
       val keyedHistogramsList = histogramsList.map{x =>
@@ -777,7 +779,7 @@ object LongitudinalView {
       definition <- histogramDefinitions.get(key)
     } yield (key, definition)
 
-    val histogramSchema = getStandardHistogramSchema(schema)
+    val histogramSchema = standardHistogramSchema
 
     for ((key, definition) <- validKeys) {
       root.set(key.toLowerCase, vectorizeHistogram(key, definition, histogramsList, histogramSchema))
