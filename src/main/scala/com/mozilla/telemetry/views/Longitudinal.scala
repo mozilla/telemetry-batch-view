@@ -852,14 +852,14 @@ object LongitudinalView {
           case Some(scalars) => process -> scalars.extract[Map[String, AnyVal]]
           case _ => process -> Map[String, AnyVal]()
         }
-      } toMap
+      }.toMap
     }
 
     // this allows us to avoid iterating
     // through every payload on every scalar
     val byProcessScalarList = MainPing.DefaultProcessTypes.map{ process =>
       process -> scalarsList.map(_(process))
-    } toMap
+    }.toMap
 
     for {
       (key, definition) <- scalarDefinitions.toList
@@ -880,7 +880,7 @@ object LongitudinalView {
           case Some(scalars) => process -> scalars.extract[Map[String, Map[String, AnyVal]]]
           case _ => process -> Map[String, Map[String, AnyVal]]()
         }
-      } toMap
+      }.toMap
     }
 
     // this allows us to avoid iterating
