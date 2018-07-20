@@ -80,6 +80,10 @@ object LongitudinalView {
 
   val jobName = "longitudinal"
 
+  // Allow at most .5% of clients to be ignored
+  // Clients are ignored when they have any bad data of some sort
+  val MaxFractionIgnoredClients = .005
+
   // Column name prefix used to prevent name clashing between scalars and other
   // columns.
   private val ScalarColumnNamePrefix = "scalar_"
@@ -240,9 +244,14 @@ object LongitudinalView {
           List((processedCount + ignoredCount, ignoredCount)).toIterator
         }
 
-      val counts = partitionCounts.reduce((x, y) => (x._1 + y._1, x._2 + y._2))
-      logger.info("Clients seen: %d".format(counts._1))
-      logger.info("Clients ignored: %d".format(counts._2))
+      val (clientsSeen, clientsIgnored) = partitionCounts.reduce((x, y) => (x._1 + y._1, x._2 + y._2))
+
+      logger.info(s"Clients seen: $clientsSeen")
+      logger.info(s"Clients ignored: $clientsIgnored")
+
+      if((1.0 * clientsIgnored) / clientsSeen > MaxFractionIgnoredClients){
+        throw new Exception(s"More clients ignored than are allowed. Ignored $clientsIgnored out of $clientsSeen clients.")
+      }
     } catch {
       // Delete incomplete data
       case e: Exception =>
