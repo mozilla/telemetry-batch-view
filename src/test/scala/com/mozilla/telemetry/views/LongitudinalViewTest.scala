@@ -16,6 +16,7 @@ import org.scalatest.{FlatSpec, Matchers, PrivateMethodTester}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.WrappedArray
+import scala.language.reflectiveCalls
 import scala.io.Source
 
 class LongitudinalViewTest extends FlatSpec with Matchers with PrivateMethodTester with DataFrameSuiteBase {
