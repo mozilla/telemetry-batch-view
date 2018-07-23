@@ -53,6 +53,8 @@ object MainSummaryView {
   val histogramsWhitelist =
     "A11Y_INSTANTIATED_FLAG" ::
     "A11Y_CONSUMERS" ::
+    "BROWSER_IS_USER_DEFAULT" ::
+    "BROWSER_IS_USER_DEFAULT_ERROR" ::
     "CERT_VALIDATION_SUCCESS_BY_CA" ::
     "CYCLE_COLLECTOR_MAX_PAUSE" ::
     "DEVTOOLS_ENTRY_POINT" ::
