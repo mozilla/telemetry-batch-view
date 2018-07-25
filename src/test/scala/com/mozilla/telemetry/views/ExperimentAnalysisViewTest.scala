@@ -4,7 +4,7 @@
 package com.mozilla.telemetry
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
-import com.mozilla.telemetry.experiments.analyzers.{CrashAnalyzer, ExperimentEngagementAnalyzer, MetricAnalysis}
+import com.mozilla.telemetry.experiments.analyzers.{EngagementAggCols, ExperimentEngagementAnalyzer, StatisticalComputation}
 import com.mozilla.telemetry.views.ExperimentAnalysisView
 import org.apache.spark.sql.functions.col
 import org.scalatest.{FlatSpec, Matchers}
@@ -191,12 +191,12 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
 
     val rows: Seq[ExperimentSummaryEngagementRow] =
       for {
-        clientId <- List("a", "b", "c", "d", "e")
-        date <- List("20180601", "20180602", "20180603", "20180604")
-        _ <- 1 to 2
+        clientId <- (1 to 5).map(i => s"client_$i")
+        date <- (0 to 9).map(i => s"2018071$i")
+        _ <- 1 to 2  // ensure we have multiple pings per client to aggregate
       } yield ExperimentSummaryEngagementRow(
         client_id = clientId,
-        experiment_id = "experiment_id",
+        experiment_id = "experiment_1",
         experiment_branch = "control",
         submission_date_s3 = date,
         total_time = jittered(3600),
@@ -204,18 +204,19 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
         scalar_parent_browser_engagement_total_uri_count = jittered(20)
       )
 
-    val branchSwitcher = ExperimentSummaryEngagementRow("a", "experiment_id", "treatment", "20180601", 3600, 1000, 20)
+    val branchSwitcher = ExperimentSummaryEngagementRow("client_1", "experiment_1", "treatment", "20180601", 3600, 1000, 20)
 
     val data = (rows :+ branchSwitcher).toDF()
 
-    val metrics = ExperimentEngagementAnalyzer.getMetrics(data, iterations = 10)
-    metrics should have length 4
+    val metrics = ExperimentEngagementAnalyzer.getMetrics(data, iterations = 50)
+        .filter(_.experiment_branch == "control")
+    metrics should have length EngagementAggCols.values.size
 
-    val filtered = metrics.filter(_.metric_name == "engagement_daily_hours")
-    filtered should have length 1
-    val mth = filtered.head
-    val stats = mth.statistics.get
-    stats should have length 9
+    val filteredDailyHours = metrics.filter(_.metric_name == "engagement_daily_hours")
+    filteredDailyHours should have length 1
+    val dailyHours = filteredDailyHours.head
+    val stats = dailyHours.statistics.get
+    stats should have length StatisticalComputation.values.size
     val medianStats = stats.filter(_.name == "Median").head
     val expectedRange = 2.0 +- 0.2
     medianStats.value should equal(expectedRange)
