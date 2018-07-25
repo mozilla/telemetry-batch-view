@@ -11,7 +11,8 @@ val localMaven = "s3://net-mozaws-data-us-west-2-ops-mavenrepo/"
 
 resolvers += "S3 local maven snapshots" at localMavenHttps + "snapshots"
 
-val sparkVersion = "2.3.0"
+// Bumped from 2.3.0 to 2.3.1 for bugfix: https://issues.apache.org/jira/browse/SPARK-23986
+val sparkVersion = "2.3.1"
 // Should keep hadoop version in sync with the dependency defined by Spark.
 val hadoopVersion = "2.6.5"
 

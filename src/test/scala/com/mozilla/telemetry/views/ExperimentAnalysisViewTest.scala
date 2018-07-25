@@ -4,7 +4,8 @@
 package com.mozilla.telemetry
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
-import com.mozilla.telemetry.experiments.analyzers.{EngagementAggCols, ExperimentEngagementAnalyzer, StatisticalComputation}
+import com.mozilla.telemetry.experiments.analyzers.{CrashAnalyzer, EngagementAggCols, EnrollmentWindowCols, ExperimentEngagementAnalyzer, MetricAnalysis}
+import com.mozilla.telemetry.experiments.statistics.StatisticalComputation
 import com.mozilla.telemetry.views.ExperimentAnalysisView
 import org.apache.spark.sql.functions.col
 import org.scalatest.{FlatSpec, Matchers}
@@ -150,7 +151,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
   }
 
   // Bug 1463248
-  "Experiment Analysis View" can "filter out pings with missing branches" in {
+  it can "filter out pings with missing branches" in {
     import spark.implicits._
 
     val data = missingBranchData.toDS().toDF().where(col("experiment_id") === "id1")
@@ -165,7 +166,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
     totalClients should be (3.0)
   }
 
-  "Experiment Analysis View" can "filter out pings with missing client IDs" in {
+  it can "filter out pings with missing client IDs" in {
     import spark.implicits._
 
     val data = missingClientId.toDS().toDF().where(col("experiment_id") === "id1")
@@ -180,7 +181,49 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
     totalClients should be (3.0)
   }
 
-  "Engagement metrics" can "be calculated" in {
+
+  val sampleEngagementRow = ExperimentSummaryEngagementRow(
+    client_id = "client1",
+    experiment_id = "experiment_1",
+    experiment_branch = "control",
+    submission_date_s3 = "20180101",
+    total_time = 3600,
+    active_ticks = 1000,
+    scalar_parent_browser_engagement_total_uri_count = 20
+  )
+
+  // This one row should get thrown out the the outlier cuts.
+  val outlierEngagementRow: ExperimentSummaryEngagementRow = sampleEngagementRow.copy(
+    client_id = "other",
+    total_time = 40000,
+    active_ticks = 10000,
+    scalar_parent_browser_engagement_total_uri_count = 300
+  )
+
+  "Engagement metrics" should "calculate the correct week number" in {
+    import spark.implicits._
+
+    val df = Seq(
+      sampleEngagementRow.copy(submission_date_s3 = "20180101"),
+      sampleEngagementRow.copy(submission_date_s3 = "20180107"),
+      sampleEngagementRow.copy(submission_date_s3 = "20180108"),
+      sampleEngagementRow.copy(submission_date_s3 = "20180114"),
+      sampleEngagementRow.copy(submission_date_s3 = "20180115"),
+      sampleEngagementRow.copy(submission_date_s3 = "20180121"),
+      sampleEngagementRow.copy(submission_date_s3 = "20180122"),
+      sampleEngagementRow.copy(submission_date_s3 = "20180128"),
+      sampleEngagementRow.copy(submission_date_s3 = "20180129"),
+      sampleEngagementRow.copy(submission_date_s3 = "20180201")
+    ).toDF()
+
+    val weekNums = df
+      .select(EnrollmentWindowCols.week_number.expr)
+      .collect()
+      .map(_.getLong(0))
+    weekNums should be (Array(1, 1, 2, 2, 3, 3, 4, 4, 5, 5))
+  }
+
+  it should "calculate reasonable median and confidence intervals" in {
     import spark.implicits._
 
     val rand = new scala.util.Random(0)
@@ -224,5 +267,42 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
     medianStats.confidence_high.get should equal(expectedRange)
     medianStats.confidence_low.get should be < medianStats.value
     medianStats.confidence_high.get should be > medianStats.value
+
+    val filteredRetentionWeek2 = metrics.filter(_.metric_name == "retained_in_week_2")
+    filteredRetentionWeek2 should have length 1
+    val retained = filteredRetentionWeek2.head
+    val meanStats = retained.statistics.get.filter(_.name == "Mean").head
+    meanStats.value should equal(0.75 +- 0.01)
+    meanStats.confidence_low.get should be < meanStats.value
+    meanStats.confidence_low.get should be >= 0.0
+    meanStats.confidence_high.get should be > meanStats.value
+    meanStats.confidence_high.get should be <= 1.0
+  }
+
+  it can "calculate reasonable retention means" in {
+    import spark.implicits._
+
+    val enrollmentRow = sampleEngagementRow.copy(submission_date_s3 = "20180101")
+
+    val activeInWeek2 = enrollmentRow.copy(
+      submission_date_s3 = "20180108",
+      scalar_parent_browser_engagement_total_uri_count = 10)
+    val retainedInWeek3 = enrollmentRow.copy(
+      submission_date_s3 = "20180115",
+      scalar_parent_browser_engagement_total_uri_count = 0)
+
+    val data = Seq(outlierEngagementRow, enrollmentRow, activeInWeek2, retainedInWeek3).toDF()
+
+    val metrics = ExperimentEngagementAnalyzer.getMetrics(data, iterations = 5)
+
+    def meanValueForMetric(metricName: String): Double =
+      metrics.filter(_.metric_name == metricName).head.statistics.get.filter(_.name == "Mean").head.value
+
+    meanValueForMetric("retained_in_week_1") should be (0.0)
+    meanValueForMetric("retained_in_week_2") should be (1.0)
+    meanValueForMetric("retained_in_week_3") should be (1.0)
+    meanValueForMetric("retained_active_in_week_1") should be (0.0)
+    meanValueForMetric("retained_active_in_week_2") should be (1.0)
+    meanValueForMetric("retained_active_in_week_3") should be (0.0)
   }
 }
