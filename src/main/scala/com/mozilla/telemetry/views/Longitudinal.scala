@@ -8,7 +8,7 @@ import com.mozilla.telemetry.avro
 import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.metrics._
 import com.mozilla.telemetry.parquet.ParquetFile
-import com.mozilla.telemetry.utils.{deletePrefix, _}
+import com.mozilla.telemetry.utils.{deletePrefix => utilsDeletePrefix, _}
 import org.apache.avro.generic.{GenericData, GenericRecord, GenericRecordBuilder}
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.spark.Partitioner
@@ -22,7 +22,14 @@ import scala.collection.mutable.ListBuffer
 import scala.math.abs
 import scala.reflect.ClassTag
 
-protected class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHistorySize: Int = 1000) extends Iterator[List[Map[String, Any]]] {
+import scala.collection.mutable.ListBuffer
+
+class S3Handler extends Serializable {
+  def uploadFile(localFile: java.io.File, outputBucket: String, prefix: String): Unit = S3Store.uploadFile(localFile, outputBucket, prefix)
+  def deletePrefix(bucket: String, prefix: String): Unit = utilsDeletePrefix(bucket, prefix)
+}
+
+protected class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHistorySize: Int) extends Iterator[List[Map[String, Any]]] {
   // Less than 1% of clients in a sampled dataset over a 3 months period has more than 1000 fragments.
   var buffer = ListBuffer[Map[String, Any]]()
   var currentKey =
@@ -84,6 +91,18 @@ object LongitudinalView {
   // Clients are ignored when they have any bad data of some sort
   val MaxFractionIgnoredClients = .005
 
+  // This value is the total number of pings that a client must have
+  // for their pingset to be early filtered (e.g. before partitioning)
+  //
+  // There is a tradeoff here:
+  //  - Increasing the size means that we filter fewer clients
+  //  - Decreasing the size means we increase the size of the data structure,
+  //    which is in memory on each executor (and the driver)
+  //
+  // From 2018/01/22 to 2018/06/22, 2158 clients had 5000 or more pings.
+  val DefaultFilterLimit = 5000
+  val DefaultMaxHistorySize = 1000
+
   // Column name prefix used to prevent name clashing between scalars and other
   // columns.
   private val ScalarColumnNamePrefix = "scalar_"
@@ -116,7 +135,7 @@ object LongitudinalView {
     }
   }
 
-  private class Opts(args: Array[String]) extends ScallopConf(args) {
+  class Opts(args: Array[String]) extends ScallopConf(args) {
     val from = opt[String]("from", descr = "From submission date. Defaults to 6 months before `to`.", required = false)
     val to = opt[String]("to", descr = "To submission date", required = true)
     val outputBucket = opt[String]("bucket", descr = "bucket", required = true)
@@ -167,25 +186,95 @@ object LongitudinalView {
         case channel if channels.map(_.contains(channel)).getOrElse(true) => true
       }
 
-    run(opts: Opts, messages, sc.defaultParallelism)
-    sc.stop()
-  }
-
-  private def run(opts: Opts, messages: RDD[Message], numPartitions: Int): Unit = {
-    val prefix = s"${jobName}/v${opts.to()}"
-    val outputBucket = opts.outputBucket()
+    val handler = new S3Handler()
 
     val includeOptin = opts.includeOptin.get match {
         case Some(v) => v.toBoolean // fail loudly on invalid string
         case _ => false
     }
 
+    val histogramDefinitions = Histograms.definitions(includeOptin)
+
+    // Only show parent scalars
+    val scalarDefinitions = Scalars.definitions(includeOptin).filter(_._2.process == Some("parent"))
+
+    run(opts.to(), opts.outputBucket(), messages, sc.defaultParallelism, handler, histogramDefinitions, scalarDefinitions, DefaultFilterLimit)
+
+    sc.stop()
+  }
+
+  private def getOrderKey(message: Message): Option[((String, String, Int), Int)] = {
+    // This replicate the existing code, except returns a small data structure rather
+    // than the entire ping, and doesn't filter in the for loop
+
+    val fields = message.fieldsAsMap
+
+    val payload = message.payload.getOrElse(fields.getOrElse("submission", "{}")) match {
+      case p: String => parse(p) \ "payload"
+      case _ => JObject()
+    }
+
+    for {
+      clientId <- fields.get("clientId").asInstanceOf[Option[String]]
+      info <- fields.get("payload.info").asInstanceOf[Option[String]]
+
+      json = parse(info)
+      JString(startDate) <- (json \ "subsessionStartDate").toOption
+      JInt(counter) <- (json \ "profileSubsessionCounter").toOption
+    } yield ((clientId, startDate, counter.toInt), 1)
+  }
+
+  def run(version: String, outputBucket: String, messages: RDD[Message], numPartitions: Int,
+                  s3Handler: S3Handler, histogramDefinitions: Map[String, HistogramDefinition],
+                  scalarDefinitions: Map[String, ScalarDefinition], filterLimit: Int): Unit = {
+    val prefix = s"$jobName/v$version"
+
     // Cleans out prefix if data already exists
-    deletePrefix(outputBucket, prefix)
+    s3Handler.deletePrefix(outputBucket, prefix)
 
     try {
       // Sort submissions in descending order
       implicit val ordering = Ordering[(String, String, Int)].reverse
+
+      val allowedLargeClientKeys = messages
+        .flatMap(getOrderKey)
+        .repartitionAndSortWithinPartitions(new ClientIdPartitioner(numPartitions))
+        .mapPartitions{ case it: Iterator[((String, String, Int), Int)] =>
+          var allowedClientKeys: ListBuffer[(String, Set[(String, Int)])] = new ListBuffer()
+
+          var currentClientId: String = ""
+          var currentClientKeys: ListBuffer[(String, Int)] = new ListBuffer()
+          var currentClientKeysCount: Int = 0
+
+          while(it.hasNext) {
+            val ((clientId, startDate, counter), _) = it.next()
+
+            if(clientId != currentClientId) {
+              currentClientKeys.clear()
+              currentClientKeysCount = 0
+              currentClientId = clientId.asInstanceOf[String]
+            }
+
+            if(currentClientKeysCount < DefaultMaxHistorySize) {
+              val key: (String, Int) = (startDate.asInstanceOf[String], counter.asInstanceOf[Int])
+              currentClientKeys += key
+            }
+
+            currentClientKeysCount += 1
+
+            if(currentClientKeysCount == filterLimit){
+              val clientKeys: (String, Set[(String, Int)]) = (clientId.asInstanceOf[String], currentClientKeys.toSet)
+              allowedClientKeys += clientKeys
+            }
+          }
+
+          allowedClientKeys.iterator
+        }
+        .collect()
+        .toMap
+
+      val clientLookupMap = messages.sparkContext.broadcast(allowedLargeClientKeys)
+
       val clientMessages = messages
         .flatMap {
           (message) =>
@@ -201,20 +290,18 @@ object LongitudinalView {
               info = parse(json)
               JString(startDate) <- (info \ "subsessionStartDate").toOption
               JInt(counter) <- (info \ "profileSubsessionCounter").toOption
-            } yield ((clientId, startDate, counter.toInt),
+              subsessionCounter = counter.toInt
+
+              if(!clientLookupMap.value.contains(clientId) || clientLookupMap.value(clientId).contains((startDate, subsessionCounter)))
+            } yield ((clientId, startDate, subsessionCounter),
               fields + ("payload" -> compact(render(payload))) - "submission")
         }
         .repartitionAndSortWithinPartitions(new ClientIdPartitioner(numPartitions))
         .map { case (key, value) => (key._1, value) }
 
-      val histogramDefinitions = Histograms.definitions(includeOptin)
-
-      // Only show parent scalars
-      val scalarDefinitions = Scalars.definitions(includeOptin).filter(_._2.process == Some("parent"))
-
       val partitionCounts = clientMessages
         .mapPartitions { case it =>
-          val clientIterator = new ClientIterator(it)
+          val clientIterator = new ClientIterator(it, DefaultMaxHistorySize)
           val schema = buildSchema(histogramDefinitions, scalarDefinitions)
 
           val allRecords = for {
@@ -237,7 +324,7 @@ object LongitudinalView {
             // Block size has to be increased to pack more than a couple hundred profiles
             // within the same row group.
             val localFile = new java.io.File(ParquetFile.serialize(records, schema, 8).toUri())
-            S3Store.uploadFile(localFile, outputBucket, prefix)
+            s3Handler.uploadFile(localFile, outputBucket, prefix)
             localFile.delete()
           }
 
@@ -255,7 +342,8 @@ object LongitudinalView {
     } catch {
       // Delete incomplete data
       case e: Exception =>
-        deletePrefix(outputBucket, prefix)
+        e.printStackTrace()
+        s3Handler.deletePrefix(outputBucket, prefix)
         throw e
     }
   }

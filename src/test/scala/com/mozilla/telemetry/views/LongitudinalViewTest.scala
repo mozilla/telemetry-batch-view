@@ -4,20 +4,43 @@
 package com.mozilla.telemetry.views
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
+import com.mozilla.telemetry.heka.RichMessage
 import com.mozilla.telemetry.metrics.{HistogramsClass, ScalarsClass}
 import com.mozilla.telemetry.parquet.ParquetFile
 import com.mozilla.telemetry.utils.MainPing
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.functions.lit
+import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{FlatSpec, Matchers, PrivateMethodTester}
+
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.FileSystems
+
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.WrappedArray
 import scala.language.reflectiveCalls
 import scala.io.Source
+
+// ScalaMock objects and functions are not serializable
+// so we'll need to mock the class ourselves
+// ref: https://groups.google.com/forum/#!topic/scalatest-users/7t7MVNzGUTQ
+class MockHandler(outputPath: String) extends S3Handler with Serializable {
+  var deletePrefixCount = 0
+
+  override def uploadFile(file: File, bucket: String, prefix: String): Unit = {
+    val path = FileSystems.getDefault().getPath(outputPath)
+    Files.copy(file.toPath(), path)
+  }
+
+  override def deletePrefix(outputBucket: String, prefix: String): Unit = deletePrefixCount += 1
+}
+
 
 class LongitudinalViewTest extends FlatSpec with Matchers with PrivateMethodTester with DataFrameSuiteBase {
   val ParentConstant = 42
@@ -25,7 +48,7 @@ class LongitudinalViewTest extends FlatSpec with Matchers with PrivateMethodTest
   val GpuConstant = 17
 
   lazy val fixture = {
-    def createPayload(idx: Int): Map[String, Any] = {
+    def createPayload(idx: Int, clientId: String = "26c9d181-b95b-4af5-bb35-84ebf0da795d"): Map[String, Any] = {
       val histograms = (constant: Int) => {
         ("FIPS_ENABLED" ->
           ("values" -> ("0" -> 0)) ~
@@ -202,7 +225,7 @@ class LongitudinalViewTest extends FlatSpec with Matchers with PrivateMethodTest
         ("profileSubsessionCounter" -> (1000 - idx)) ~
         ("reason" -> "shutdown")
 
-      Map("clientId" -> "26c9d181-b95b-4af5-bb35-84ebf0da795d",
+      Map("clientId" -> clientId,
         "os" -> "Windows_NT",
         "normalizedChannel" -> "aurora",
         "documentId" -> idx.toString,
@@ -279,6 +302,44 @@ class LongitudinalViewTest extends FlatSpec with Matchers with PrivateMethodTest
       val missingOsRows = spark.read.load(missingOsFilename).collect()
       val missingOsRow = missingOsRows(0)
 
+      ////////////////////
+      // Test the run function
+      ////////////////////
+
+      // When we add pre-filtering, we expect some clients to be filtered
+      // and others to not. We'll test both these groups
+      // Pre-filtering will take precedence over MaxHistorySize in
+      // the ClientIterator, so we can leave that value at 1000
+      val version = "1"
+      val outputBucket = "mock-bucket"
+      val prefix = s"${LongitudinalView.jobName}/v$version"
+      val filterPingLimit = 5
+
+      // get some pings from a client who won't be filtered at all
+      val filteredClient = "client-id-1"
+      val unfilteredClient = "client-id-2"
+
+      private val filteredClientPings = for (i <- 1 to filterPingLimit*2) yield createPayload(i, filteredClient)
+      private val unfilteredClientPings = for (i <- 2 to filterPingLimit) yield createPayload(i, unfilteredClient)
+
+      private val dupedPings = for (i <- 1 to filterPingLimit) yield createPayload(filterPingLimit + 1, filteredClient)
+
+      implicit val formats = DefaultFormats
+      private val pings = filteredClientPings ++ dupedPings ++ unfilteredClientPings
+      private val msgs = pings.map(r => RichMessage("some-client-id", r, Some(compact(render(Extraction.decompose(r))))))
+      val messages = sc.parallelize(msgs)
+
+      val outputPath = "/tmp/output.parquet"
+
+      // just delete the file before running, don't make me add BeforeAndAfterAll
+      (new File(outputPath)).delete()
+      val mockHandler = new MockHandler(outputPath)
+
+      LongitudinalView.run(version, outputBucket, messages, 1, mockHandler, optoutHistogramDefs, optoutScalarDefs, filterPingLimit)
+
+      val runResult = spark.read.parquet(s"file://$outputPath")
+      val filteredClientRow = runResult.filter(runResult("client_id") === lit(filteredClient)).first()
+      val unfilteredClientRow = runResult.filter(runResult("client_id") === lit(unfilteredClient)).first()
     }
   }
 
@@ -592,7 +653,7 @@ class LongitudinalViewTest extends FlatSpec with Matchers with PrivateMethodTest
   "ClientIterator" should "not trim histories of size < 1000" in {
     val template = ("foo", Map("client" -> "foo"))
     val history = List.fill(ParentConstant)(template)
-    val split_history = new ClientIterator(history.iterator).toList
+    val split_history = new ClientIterator(history.iterator, LongitudinalView.DefaultMaxHistorySize).toList
     assert(split_history.length == 1)
     split_history(0).length === ParentConstant
   }
@@ -600,7 +661,7 @@ class LongitudinalViewTest extends FlatSpec with Matchers with PrivateMethodTest
   it should "not trim histories of size 1000" in {
     val template = ("foo", Map("client" -> "foo"))
     val history = List.fill(1000)(template)
-    val split_history = new ClientIterator(history.iterator).toList
+    val split_history = new ClientIterator(history.iterator, LongitudinalView.DefaultMaxHistorySize).toList
     assert(split_history.length == 1)
     split_history(0).length === 1000
   }
@@ -609,7 +670,7 @@ class LongitudinalViewTest extends FlatSpec with Matchers with PrivateMethodTest
     val template1 = ("foo", Map("client" -> "foo"))
     val template2 = ("bar", Map("client" -> "bar"))
     val history = List.fill(2000)(template1) ++ List.fill(2000)(template2)
-    val split_history = new ClientIterator(history.iterator).toList
+    val split_history = new ClientIterator(history.iterator, LongitudinalView.DefaultMaxHistorySize).toList
     assert(split_history.length == 2)
     split_history.map(x => assert(x.length == 1000))
   }
@@ -783,5 +844,25 @@ class LongitudinalViewTest extends FlatSpec with Matchers with PrivateMethodTest
 
   "OS" must "be allowed to go missing" in {
     assert(fixture.missingOsRow.getAs[String]("os") == fixture.payloads(0)("os"))
+  }
+
+  "Handler" must "call delete prefix only once" in {
+    // This works because this should increment on the driver
+    // but we can't check for upload counts, because those happen
+    // on the executors
+    assert(fixture.mockHandler.deletePrefixCount == 1)
+  }
+
+  "ParquetOutput" must "contain two clients" in {
+    assert(fixture.runResult.count() == 2)
+    assert(fixture.runResult.select("client_id").distinct().count() == 2)
+  }
+
+  it must "have filtered row with filterPingLimit entries" in {
+    assert(fixture.filteredClientRow.getAs[Seq[String]]("build").length == fixture.filterPingLimit)
+  }
+
+  it must "have unfiltered row with filterPingLimit-1 entries" in {
+    assert(fixture.unfilteredClientRow.getAs[Seq[String]]("build").length == fixture.filterPingLimit - 1)
   }
 }
