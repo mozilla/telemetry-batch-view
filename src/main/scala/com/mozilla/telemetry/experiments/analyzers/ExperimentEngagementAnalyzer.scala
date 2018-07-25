@@ -3,38 +3,151 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.experiments.analyzers
 
-import breeze.stats.MeanAndVariance
 import breeze.stats.distributions.Poisson
-import com.mozilla.telemetry.experiments.statistics.ZScore99
-import org.apache.spark.sql.DataFrame
+import com.mozilla.telemetry.utils.ColumnEnumeration
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{DoubleType, IntegerType}
+import org.apache.spark.sql.{Column, DataFrame}
 
 /**
-  * See https://metrics.mozilla.com/protected/sguha/shield_bootstrap.html#definitions
+  * See discussion of confidence levels in
+  * https://metrics.mozilla.com/protected/sguha/shield_bootstrap.html#the-shift-plot
   */
-object EngagementMeasures {
-  val dailyHours: String = "engagement_daily_hours"
-  val dailyActiveHours: String = "engagement_daily_active_hours"
-  val hourlyUris: String = "engagement_hourly_uris"
-  val intensity: String = "engagement_intensity"
-  val base: List[String] = List(dailyHours, dailyActiveHours, hourlyUris)
-  val derived: List[String] = List(intensity)
-  val all: List[String] = base ++ derived
+object ConfidenceInterval {
+  val confidenceLevel:  Double = 0.975
+  val confidenceMargin: Double = 0.5 * (1.0 - confidenceLevel)
+  val percentileLow:    Double = 0.0 + confidenceMargin
+  val percentileHigh:   Double = 1.0 - confidenceMargin
 }
 
-object Percentiles {
-  val ints: Seq[Int] = (1 to 9).map(_ * 10)
-  val decimals: Seq[Double] = ints.map(_ * 0.01)
-  val names: Seq[String] = ints.map {
+case class ConfidenceInterval(arr: Array[Double]) {
+  def low:  Double = breeze.stats.DescriptiveStats.percentile(arr, ConfidenceInterval.percentileLow)
+  def high: Double = breeze.stats.DescriptiveStats.percentile(arr, ConfidenceInterval.percentileHigh)
+}
+
+/**
+  * Columns we need to pull from the input DataFrame.
+  */
+object InputCols extends ColumnEnumeration {
+  val experiment_id, experiment_branch, client_id, submission_date_s3 = Val()
+  val total_time, active_ticks, scalar_parent_browser_engagement_total_uri_count = Val()
+}
+
+/**
+  * Derived columns calculated via window functions.
+  */
+object InputWindowCols extends ColumnEnumeration {
+  private val branchSet: Column =
+    collect_set(InputCols.experiment_branch.col).over(
+      Window
+        .partitionBy(InputCols.experiment_id.col, InputCols.client_id.col)
+        .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+    )
+
+  val branch_count = Val(size(branchSet))
+}
+
+/**
+  * Aggregations we apply per experiment/branch/client/day.
+  */
+object DailyAggCols extends ColumnEnumeration {
+  val partitionCols: Array[Column] = Array(
+    InputCols.experiment_id.col,
+    InputCols.experiment_branch.col,
+    InputCols.client_id.col,
+    InputCols.submission_date_s3.col
+  )
+
+  val ticksPerSecond: Double = 5.0
+  val secondsPerHour: Double = 3600.0
+
+  val sum_total_hours = Val(
+    sum(InputCols.total_time.col).cast(DoubleType) / secondsPerHour
+  )
+  val sum_active_hours = Val(
+    sum(InputCols.active_ticks.col.cast(DoubleType) * ticksPerSecond / secondsPerHour)
+  )
+  val sum_total_uris = Val(
+    sum(InputCols.scalar_parent_browser_engagement_total_uri_count.col)
+  )
+}
+
+  * Aggregations per experiment/branch/client, giving a summary per client
+  * of engagement over all completed days of the experiment.
+  */
+object EngagementAggCols extends ColumnEnumeration {
+  val partitionCols: Array[Column] = Array(
+    InputCols.experiment_id.col,
+    InputCols.experiment_branch.col,
+    InputCols.client_id.col
+  )
+
+  val engagement_daily_active_hours = Val(avg(DailyAggCols.sum_active_hours.col))
+  val engagement_hourly_uris = Val(
+    sum(DailyAggCols.sum_total_uris.col) /
+      (sum(DailyAggCols.sum_active_hours.col) + 1.0 / DailyAggCols.secondsPerHour)
+  )
+  val engagement_intensity = Val(
+    sum(DailyAggCols.sum_active_hours.col) /
+      (sum(DailyAggCols.sum_total_hours.col) + 1.0 / DailyAggCols.secondsPerHour)
+  )
+}
+
+/**
+  * Object capturing the logic for naming and computing a particular percentile.
+  *
+  * @param pInt The desired percentile as an integer between 0 and 100
+  */
+case class PercentileComputation(pInt: Int) extends StatisticalComputation {
+  val p: Double = pInt * 0.01
+
+  override def name: String = pInt match {
     case 50 => "Median"
-    case p => s"${p}th Percentile"
+    case _ => s"${pInt}th Percentile"
+  }
+
+  /**
+    * Based on https://github.com/scalanlp/breeze/blob/releases/v1.0-RC2/math/src/main/scala/breeze/stats/DescriptiveStats.scala#L523
+    *
+    * The array must already be sorted.
+    */
+  override def calculate(arr: Array[Double]): Double = {
+      if (p > 1 || p < 0) throw new IllegalArgumentException("p must be in [0,1]")
+      // +1 so that the .5 == mean for even number of elements.
+      val f = (arr.length + 1) * p
+      val i = f.toInt
+      if (i == 0) {
+        arr.head
+      }
+      else if (i >= arr.length) {
+        arr.last
+      }
+      else {
+        arr(i - 1) + (f - i) * (arr(i) - arr(i - 1))
+      }
+    }
+}
+
+object MeanComputation extends StatisticalComputation {
+  override val name: String = "Mean"
+  override def calculate(arr: Array[Double]): Double = {
+    breeze.stats.mean(arr)
   }
 }
 
-object TimeConstants {
-  val ticksPerSecond: Double = 5.0
-  val secondsPerHour: Double = 3600.0
+object StatisticalComputation {
+  val percentileInts: Seq[Int] = 5 +: (10 to 90 by 10) :+ 95
+  val percentiles: Seq[PercentileComputation] = percentileInts.map(PercentileComputation)
+  val values: Seq[StatisticalComputation] = percentiles :+ MeanComputation
+  val names: Seq[String] = values.map(_.name)
 }
+
+trait StatisticalComputation {
+  def name: String
+  def calculate(arr: Array[Double]): Double
+}
+
 
 /**
   * Introduced for bug 1460090, based on a proof-of-concept analysis in
@@ -58,13 +171,12 @@ object ExperimentEngagementAnalyzer {
     */
   def getMetrics(experimentsDF: DataFrame, iterations: Int): Seq[MetricAnalysis] = {
 
-    val clients = filterOutliersAndAggregatePerClientDaily(experimentsDF)
-    clients.persist()
+    val clients = filterOutliersAndAggregatePerClientDaily(experimentsDF).persist()
 
     logger.info(s"Calculating engagement metrics for ${clients.count()} client/experiment/branch rows")
 
     val branches = clients
-      .select("experiment_id", "experiment_branch")
+      .select(InputCols.experiment_id.col, InputCols.experiment_branch.col)
       .distinct()
       .collect()
       .map { row => (row.getString(0), row.getString(1)) }
@@ -72,7 +184,7 @@ object ExperimentEngagementAnalyzer {
     val metricAnalyses =
       for {
         (experimentId, branch) <- branches
-        measure <- EngagementMeasures.all
+        measure <- EngagementAggCols.names
       } yield calculateMetricAnalysis(clients, experimentId, branch, measure, iterations)
 
     clients.unpersist()
@@ -84,59 +196,44 @@ object ExperimentEngagementAnalyzer {
   private def filterOutliersAndAggregatePerClientDaily(
       input: DataFrame, outlierPercentile: Double = 0.9999, relativeError: Double = 0.0001): DataFrame = {
 
-    val clientsSwitchingBranches = input
-      .select("experiment_id", "experiment_branch", "client_id")
-      .distinct()
-      .groupBy("experiment_id", "client_id")
-      .count()
-      .filter(col("count") > 1)
-      .drop(col("count"))
+    val inputWithBranchCount = input
+      .select(col("*"), InputWindowCols.branch_count.expr)
       .persist()
 
-    logger.info(s"Pruning ${clientsSwitchingBranches.count()} " +
+    val numClientsSwitchingBranches = inputWithBranchCount
+      .filter(InputWindowCols.branch_count.col > 1)
+      .select(InputCols.experiment_id.col, InputCols.client_id.col)
+      .distinct()
+      .count()
+
+    logger.info(s"Pruning $numClientsSwitchingBranches " +
       "clients that appear in more than one branch per experiment")
 
-    val inputWithoutSwitchers = input
-      .join(clientsSwitchingBranches.unpersist(), Seq("experiment_id", "client_id"), joinType = "leftanti")
+    val dailyWithOutliers = inputWithBranchCount
+      .filter(InputWindowCols.branch_count.col === 1)
+      .groupBy(DailyAggCols.partitionCols: _*)
+      .agg(DailyAggCols.exprs.head, DailyAggCols.exprs.tail: _*)
+      .select(col("*"), EnrollmentWindowCols.week_number.expr)
+      .persist()
 
-    val dailyWithOutliers = inputWithoutSwitchers
-      .groupBy("experiment_id", "experiment_branch", "client_id", "submission_date_s3")
-      .agg(
-        sum(expr(s"total_time/${TimeConstants.secondsPerHour}"))
-          .cast("double")
-          .alias(EngagementMeasures.dailyHours),
-        sum(expr(s"active_ticks/(${TimeConstants.secondsPerHour}/${TimeConstants.ticksPerSecond})"))
-          .cast("double")
-          .alias(EngagementMeasures.dailyActiveHours),
-        sum("scalar_parent_browser_engagement_total_uri_count")
-          .alias(EngagementMeasures.hourlyUris)
-      )
-
-    dailyWithOutliers.persist()
+    inputWithBranchCount.unpersist()
 
     // Per sguha, we expect every hypothesis test to benefit from removing outliers above the 99.99th percentile;
     // see https://metrics.mozilla.com/protected/sguha/shield_bootstrap.html#remove-outliers
     val outlierCutoffs = dailyWithOutliers.stat
-      .approxQuantile(EngagementMeasures.base.toArray, Array(outlierPercentile), relativeError)
+      .approxQuantile(DailyAggCols.names.toArray, Array(outlierPercentile), relativeError)
       .map(_.head)
 
-    val daily = (EngagementMeasures.base, outlierCutoffs)
+    val daily = (DailyAggCols.cols, outlierCutoffs)
       .zipped
       .foldLeft(dailyWithOutliers) { (df, cutInfo) =>
         val (measure, cut) = cutInfo
-        df.where(col(measure) < cut)
+        df.where(measure < cut)
       }
 
     val clients = daily
-      .groupBy("experiment_id", "experiment_branch", "client_id")
-      .agg(
-        avg(EngagementMeasures.dailyHours).alias(EngagementMeasures.dailyHours),
-        avg(EngagementMeasures.dailyActiveHours).alias(EngagementMeasures.dailyActiveHours),
-        expr(s"sum(${EngagementMeasures.hourlyUris})/(1.0 / ${TimeConstants.secondsPerHour} + sum(${EngagementMeasures.dailyActiveHours}))")
-          .cast("double").alias(EngagementMeasures.hourlyUris),
-        expr(s"sum(${EngagementMeasures.dailyActiveHours})/(1.0 / ${TimeConstants.secondsPerHour} + sum(${EngagementMeasures.dailyHours}))")
-          .cast("double").alias(EngagementMeasures.intensity)
-      )
+      .groupBy(EngagementAggCols.partitionCols: _*)
+      .agg(EngagementAggCols.exprs.head, EngagementAggCols.exprs.tail: _*)
       .na.fill(0)
 
     dailyWithOutliers.unpersist()
@@ -190,6 +287,8 @@ object ExperimentEngagementAnalyzer {
     val count = observations.length
     val observationsBroadcast = sc.broadcast(observations)
 
+    val fullSampleComputations = StatisticalComputation.values.map(_.calculate(observations)).toArray
+
     // The "Poisson bootstrap" is a statistical technique where we resample the dataset many times,
     // calculating percentiles on each sample, then use the distribution of each percentile across
     // all samples in order to estimate confidence in each percentile value.
@@ -199,7 +298,7 @@ object ExperimentEngagementAnalyzer {
     // and returns an array giving one value per calculated percentile.
     //
     // See: https://metrics.mozilla.com/protected/sguha/shield_bootstrap.html#bootstrapping
-    val percentileArrays: Array[Array[Double]] = sc.parallelize(1 to iterations).flatMap { _ =>
+    val bootstrapComputations: Array[Array[Double]] = sc.parallelize(1 to iterations).flatMap { _ =>
 
       // For each observation, we draw a random poisson value (usually 0 or 1 with a tail of larger integers)
       // and duplicate the observation that many times.
@@ -214,44 +313,23 @@ object ExperimentEngagementAnalyzer {
         // thus we have to guard against the possibility of an empty sample.
         None
       } else {
-        Some(Percentiles.decimals.map(percentileFromSortedArray(resampled, _)).toArray)
+        Some(StatisticalComputation.values.map(_.calculate(resampled)).toArray)
       }
     }.collect()
 
     observationsBroadcast.unpersist()
 
-    val statsArray: Array[Statistic] = (percentileArrays.transpose, Percentiles.names)
-      .zipped
-      .map { case (valuesForPercentile, nameForPercentile) =>
-        val stats: MeanAndVariance = breeze.stats.meanAndVariance(valuesForPercentile)
-        val z99 = ZScore99 * (stats.stdDev * scala.math.sqrt(stats.count.toDouble - 1.0))
-        Statistic(None, nameForPercentile, stats.mean,
-          Some(stats.mean - z99), Some(stats.mean + z99),
-          None, None)
-      }
+    val statsArray: Array[Statistic] =
+      (fullSampleComputations, bootstrapComputations.transpose, StatisticalComputation.names)
+        .zipped
+        .map { case (fullSampleValue, bootstrapValues, nameForComputation) =>
+          val confidence = ConfidenceInterval(bootstrapValues)
+          Statistic(None, nameForComputation, fullSampleValue, Some(confidence.low), Some(confidence.high), None, None)
+        }
 
     MetricAnalysis(experimentId, branch, "", count, measure, "DoubleScalar",
       Map.empty[Long, HistogramPoint],
       Some(statsArray))
   }
-
-
-  /**
-    * Based on https://github.com/scalanlp/breeze/blob/releases/v1.0-RC2/math/src/main/scala/breeze/stats/DescriptiveStats.scala#L523
-    */
-  private def percentileFromSortedArray(arr: Array[Double], p: Double): Double = {
-    // scalastyle:off
-    if (p > 1 || p < 0) throw new IllegalArgumentException("p must be in [0,1]")
-    // +1 so that the .5 == mean for even number of elements.
-    val f = (arr.length + 1) * p
-    val i = f.toInt
-    if (i == 0) arr.head
-    else if (i >= arr.length) arr.last
-    else {
-      arr(i - 1) + (f - i) * (arr(i) - arr(i - 1))
-    }
-    // scalastyle:on
-  }
-
 
 }

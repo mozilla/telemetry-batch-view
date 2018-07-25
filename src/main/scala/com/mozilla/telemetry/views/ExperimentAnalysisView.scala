@@ -71,7 +71,8 @@ object ExperimentAnalysisView {
     val metric = opt[String]("metric", descr = "Run job on just this metric", required = false)
     val experiment = opt[String]("experiment", descr = "Run job on just this experiment", required = false)
     val date = opt[String]("date", descr = "Run date for this job (defaults to yesterday)", required = false)
-    val jackknifeBlocks = opt[Int]("jackknifeBlocks", descr = "Number of jackknife blocks to use", required = false,
+    val jackknifeBlocks = opt[Int]("jackknifeBlocks",
+      descr = "Number of jackknife blocks to use; set to 0 to disable base metrics", required = false,
       default = Some(defaultJackknifeBlocks))
     val bootstrapIterations = opt[Int]("bootstrapIterations",
       descr = "Number of bootstrap iterations to use for engagement metrics; set to 0 to disable engagement metrics",
@@ -180,33 +181,42 @@ object ExperimentAnalysisView {
     val pingCount = experimentsFiltered.count()
     val numJackknifeBlocks = conf.jackknifeBlocks()
     val bootstrapIterations = conf.bootstrapIterations()
-    val persisted = repartitionAndPersist(experimentsFiltered, pingCount, experiment, experimentMetrics, numJackknifeBlocks)
 
-    val schemaFields = persisted.schema.map(_.name)
+    val metrics: Seq[MetricAnalysis] = if (numJackknifeBlocks <= 0) {
+      Seq.empty[MetricAnalysis]
+    } else {
 
-    val metricList = getMetrics(conf).filter {case (name, md) => schemaFields.contains(name)}
+      val persisted = repartitionAndPersist(experimentsFiltered, pingCount, experiment, experimentMetrics, numJackknifeBlocks)
 
-    val metrics = metricList.flatMap {
-      case (name: String, md: MetricDefinition) =>
-        md match {
-          case hd: HistogramDefinition =>
-            new HistogramAnalyzer(name, hd, persisted, numJackknifeBlocks).analyze()
-          case sd: ScalarDefinition =>
-            ScalarAnalyzer.getAnalyzer(name, sd, persisted, numJackknifeBlocks).analyze()
-          case _ => throw new UnsupportedOperationException("Unsupported metric definition type")
-        }
+      val schemaFields = persisted.schema.map(_.name)
+
+      val metricList = getMetrics(conf).filter {case (name, md) => schemaFields.contains(name)}
+
+      val baseMetrics = metricList.flatMap {
+        case (name: String, md: MetricDefinition) =>
+          md match {
+            case hd: HistogramDefinition =>
+              new HistogramAnalyzer(name, hd, persisted, numJackknifeBlocks).analyze()
+            case sd: ScalarDefinition =>
+              ScalarAnalyzer.getAnalyzer(name, sd, persisted, numJackknifeBlocks).analyze()
+            case _ => throw new UnsupportedOperationException("Unsupported metric definition type")
+          }
+      }
+
+      val metadata = ExperimentAnalyzer.getExperimentMetadata(persisted).collect()
+
+      metadata ++ baseMetrics
     }
 
     val crashes = CrashAnalyzer.getExperimentCrashes(errorAggregates)
-    val metadata = ExperimentAnalyzer.getExperimentMetadata(persisted).collect()
 
-    val engagement = if (bootstrapIterations > 0) {
-      ExperimentEngagementAnalyzer.getMetrics(experimentsFiltered, bootstrapIterations)
-    } else {
+    val engagement = if (bootstrapIterations <= 0) {
       Seq.empty[MetricAnalysis]
+    } else {
+      ExperimentEngagementAnalyzer.getMetrics(experimentsFiltered, bootstrapIterations)
     }
 
-    (metadata ++ metrics ++ engagement ++ crashes).toList
+    (metrics ++ engagement ++ crashes).toList
   }
 
   // Repartitions dataset if warranted, adds a jackknife block id, and persists the result for quicker access
