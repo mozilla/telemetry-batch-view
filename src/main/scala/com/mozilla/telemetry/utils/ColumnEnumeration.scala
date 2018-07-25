@@ -14,12 +14,12 @@ import scala.language.implicitConversions
   * name as a val, and then get access to that Scala-level name as a string to
   * pass into Spark SQL expressions.
   *
-  * You can also define a derived column by passing a SQL expression string into Val();
-  * this logical definition is then available as `expr`.
+  * You can also define a derived column by passing a SQL expression string into
+  * the ColumnDefinition constructor; this logical definition is then available as `expr`.
   */
 abstract class ColumnEnumeration extends Enumeration {
 
-  protected case class Val(private val definition: Column = new Column("")) extends super.Val {
+  protected case class ColumnDefinition(private val definition: Column = new Column(this.toString())) extends super.Val {
     /**
       * The name as given in the Scala code.
       *
@@ -35,13 +35,10 @@ abstract class ColumnEnumeration extends Enumeration {
     /**
       * The logic defining the column as a spark.sql.Column
       */
-    def expr: Column = definition.toString match {
-      case "" => new Column(name)
-      case _ => definition.alias(name)
-    }
+    def expr: Column = definition.alias(name)
   }
 
-  implicit def valueToColumnEnumerationVal(value: Value): Val = value.asInstanceOf[Val]
+  implicit def valueToColumnDefinition(value: Value): ColumnDefinition = value.asInstanceOf[ColumnDefinition]
 
   def names: List[String] = {
     values.toList.map(_.name)

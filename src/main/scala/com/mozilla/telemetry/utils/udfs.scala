@@ -5,12 +5,13 @@ package com.mozilla.telemetry.utils
 
 import java.math.BigDecimal
 import java.sql.{Date, Timestamp}
+
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
-import org.apache.spark.sql.{Column, Row, SparkSession}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.functions._
 import com.mozilla.spark.sql.hyperloglog.functions._
 import com.mozilla.spark.sql.hyperloglog.aggregates._
+
 import scala.annotation.tailrec
 
 class CollectList(inputStruct: StructType, orderCols: List[String], maxLength: Option[Int]) extends UserDefinedAggregateFunction {

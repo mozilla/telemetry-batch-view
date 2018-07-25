@@ -7,11 +7,11 @@ import org.apache.spark.sql.Column
 import org.scalatest.{FlatSpec, Matchers}
 
 object Cols extends ColumnEnumeration {
-  val first_one, second_one = Val()
-  val custom_definition = Val(new Column("base_column") / 5)
+  val first_one, second_one = ColumnDefinition()
+  val custom_definition = ColumnDefinition(new Column("base_column") / 5)
 }
 
-class ExperimentEngagementAnalyzerTest extends FlatSpec with Matchers {
+class ColumnEnumerationTest extends FlatSpec with Matchers {
 
   "implicit defs" can "be accessed" in {
     Cols.first_one.name shouldBe "first_one"
