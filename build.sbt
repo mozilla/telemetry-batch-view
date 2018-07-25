@@ -57,12 +57,7 @@ lazy val root = (project in file(".")).
 
 dependencyOverrides += "com.google.guava" % "guava" % "25.1-jre"
 dependencyOverrides += "com.google.code.findbugs" % "jsr305" % "3.0.2"
-/*
- The HBase client requires protobuf-java 2.5.0 but scalapb uses protobuf-java 3.x
- so we have to force the dependency here. This should be fine as we are using only
- version 2 of the protobuf spec.
-*/
-dependencyOverrides += "com.google.protobuf" % "protobuf-java" % "2.5.0"
+
 
 run in Compile := Defaults.runTask(fullClasspath in Compile, mainClass in (Compile, run), runner in (Compile, run)).evaluated
 assemblyJarName in assembly := s"telemetry-batch-view-${version.value}.jar"
