@@ -25,12 +25,17 @@ import scala.reflect.ClassTag
 import scala.collection.mutable.ListBuffer
 
 class S3Handler extends Serializable {
+  /*
+   * This class exists solely so that we can mock the `uploadFile` and `deletePrefix`
+   * functions in tests without having to rely on moto.
+   */
+
   def uploadFile(localFile: java.io.File, outputBucket: String, prefix: String): Unit = S3Store.uploadFile(localFile, outputBucket, prefix)
   def deletePrefix(bucket: String, prefix: String): Unit = utilsDeletePrefix(bucket, prefix)
 }
 
 protected class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHistorySize: Int) extends Iterator[List[Map[String, Any]]] {
-  // Less than 1% of clients in a sampled dataset over a 3 months period has more than 1000 fragments.
+  // Less than 1% of clients in a sampled dataset over a 3 months period has more than maxHistorySize fragments.
   var buffer = ListBuffer[Map[String, Any]]()
   var currentKey =
     if (it.hasNext) {
@@ -88,11 +93,20 @@ object LongitudinalView {
   val jobName = "longitudinal"
 
   // Allow at most .5% of clients to be ignored
-  // Clients are ignored when they have any bad data of some sort
+  // Clients are ignored when they have any bad data
   val MaxFractionIgnoredClients = .005
 
   // This value is the total number of pings that a client must have
   // for their pingset to be early filtered (e.g. before partitioning)
+  // These clients will not be excluded from the dataset, but we are
+  // able to not shuffle some of their pings when we repartition
+  // the dataset by client_id.
+  //
+  // For example, if we set DefaultFilterLimit to 10,
+  // and a client has 20 pings, then their first 10 pings
+  // (the earliest ones) will be pre-filtered, and removed
+  // before shuffling the data. Their last 10 pings will
+  // still be shuffled during the repartition phase.
   //
   // There is a tradeoff here:
   //  - Increasing the size means that we filter fewer clients
