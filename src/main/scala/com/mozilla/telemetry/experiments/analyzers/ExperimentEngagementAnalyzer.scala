@@ -82,22 +82,50 @@ object ExperimentEngagementAnalyzer {
 
 
   private def filterOutliersAndAggregatePerClientDaily(
-      input: DataFrame, outlierPercentile: Double = 0.9999, relativeError: Double = 0.0001): DataFrame = {
+      input: DataFrame,
+      outlierPercentile: Double = 0.9999,
+      relativeError: Double = 0.0001,
+      branchSwitcherFractionThreshold: Double = 0.05): DataFrame = {
 
-    val clientsSwitchingBranches = input
+    val branchesPerClientPerExperiment = input
       .select("experiment_id", "experiment_branch", "client_id")
       .distinct()
       .groupBy("experiment_id", "client_id")
-      .count()
-      .filter(col("count") > 1)
-      .drop(col("count"))
+      .agg(count("*").alias("branch_count"))
       .persist()
 
-    logger.info(s"Pruning ${clientsSwitchingBranches.count()} " +
-      "clients that appear in more than one branch per experiment")
+    val clientsSwitchingBranches = branchesPerClientPerExperiment
+      .filter(col("branch_count") > 1)
+      .select("experiment_id", "client_id")
 
-    val inputWithoutSwitchers = input
-      .join(clientsSwitchingBranches.unpersist(), Seq("experiment_id", "client_id"), joinType = "leftanti")
+    val inputWithoutSwitchers =
+      input.join(
+        clientsSwitchingBranches,
+        usingColumns = Seq("experiment_id", "client_id"),
+        joinType = "leftanti")
+
+    // Log some stats about branch switchers that we're filtering out,
+    // which could indicate problems with the experiment.
+    branchesPerClientPerExperiment
+        .groupBy("experiment_id")
+        .agg(
+          count("*"),
+          count(when(col("branch_count") > 1, "*"))
+        )
+        .foreach { row =>
+          val experimentId = row.getString(0)
+          val nClients = row.getLong(1)
+          val nSwitchers = row.getLong(2)
+          val switcherFraction = nSwitchers.toDouble / nClients.toDouble
+          logger.info(s"Pruning $nSwitchers out of $nClients clients from experiment '$experimentId' " +
+            "because they appear in more than one branch")
+          if (switcherFraction > branchSwitcherFractionThreshold) {
+            logger.warn("The fraction of clients appearing in more than one branch " +
+              s"of experiment '$experimentId' is suspiciously high; " +
+              "there might be a problem with the experiment deployment or data collection")
+          }
+        }
+    branchesPerClientPerExperiment.unpersist()
 
     val dailyWithOutliers = inputWithoutSwitchers
       .groupBy("experiment_id", "experiment_branch", "client_id", "submission_date_s3")
@@ -111,8 +139,7 @@ object ExperimentEngagementAnalyzer {
         sum("scalar_parent_browser_engagement_total_uri_count")
           .alias(EngagementMeasures.hourlyUris)
       )
-
-    dailyWithOutliers.persist()
+      .persist()
 
     // Per sguha, we expect every hypothesis test to benefit from removing outliers above the 99.99th percentile;
     // see https://metrics.mozilla.com/protected/sguha/shield_bootstrap.html#remove-outliers
