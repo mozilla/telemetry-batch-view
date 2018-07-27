@@ -220,13 +220,9 @@ object LongitudinalView {
   private def getOrderKey(message: Message): Option[((String, String, Int), Int)] = {
     // This replicate the existing code, except returns a small data structure rather
     // than the entire ping, and doesn't filter in the for loop
+    // Replicated code is in the `flatMap` stage of `clientMessages` processing
 
     val fields = message.fieldsAsMap
-
-    val payload = message.payload.getOrElse(fields.getOrElse("submission", "{}")) match {
-      case p: String => parse(p) \ "payload"
-      case _ => JObject()
-    }
 
     for {
       clientId <- fields.get("clientId").asInstanceOf[Option[String]]
@@ -266,19 +262,17 @@ object LongitudinalView {
             if(clientId != currentClientId) {
               currentClientKeys.clear()
               currentClientKeysCount = 0
-              currentClientId = clientId.asInstanceOf[String]
+              currentClientId = clientId
             }
 
             if(currentClientKeysCount < DefaultMaxHistorySize) {
-              val key: (String, Int) = (startDate.asInstanceOf[String], counter.asInstanceOf[Int])
-              currentClientKeys += key
+              currentClientKeys += ((startDate, counter))
             }
 
             currentClientKeysCount += 1
 
-            if(currentClientKeysCount == filterLimit){
-              val clientKeys: (String, Set[(String, Int)]) = (clientId.asInstanceOf[String], currentClientKeys.toSet)
-              allowedClientKeys += clientKeys
+            if(currentClientKeysCount == filterLimit) {
+              allowedClientKeys += ((clientId, currentClientKeys.toSet))
             }
           }
 
@@ -350,13 +344,12 @@ object LongitudinalView {
       logger.info(s"Clients seen: $clientsSeen")
       logger.info(s"Clients ignored: $clientsIgnored")
 
-      if((1.0 * clientsIgnored) / clientsSeen > MaxFractionIgnoredClients){
+      if((1.0 * clientsIgnored) / clientsSeen > MaxFractionIgnoredClients) {
         throw new Exception(s"More clients ignored than are allowed. Ignored $clientsIgnored out of $clientsSeen clients.")
       }
     } catch {
       // Delete incomplete data
       case e: Exception =>
-        e.printStackTrace()
         s3Handler.deletePrefix(outputBucket, prefix)
         throw e
     }
