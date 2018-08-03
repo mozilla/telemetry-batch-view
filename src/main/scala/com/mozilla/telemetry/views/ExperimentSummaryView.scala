@@ -51,6 +51,18 @@ object ExperimentSummaryView {
       descr = "Max number of rows to write to output files before splitting",
       required = false,
       default=Some(500000))
+    val experimentLimit = opt[Int](
+      "experiment-limit",
+      descr = "Number of experiments to limit results to",
+      required = false)
+    val sampleId = opt[String](
+      "sample-id",
+      descr = "Sample_id to restrict results to",
+      required = false)
+    val rowLimit = opt[Int](
+      "row-limit",
+      descr = "Number of rows to limit input to",
+      required = false)
     verify()
   }
 
@@ -78,6 +90,7 @@ object ExperimentSummaryView {
     val outputBucket = conf.outputBucket()
     val inputBucket = conf.inputBucket.getOrElse(outputBucket)
     val maxRecordsPerFile = conf.maxRecordsPerFile()
+    val sampleId = conf.sampleId.toOption
 
     for (offset <- 0 to Days.daysBetween(from, to).getDays) {
       val currentDate = from.plusDays(offset)
@@ -90,10 +103,10 @@ object ExperimentSummaryView {
       val s3prefix = s"$jobName/$schemaVersion"
       val output = s"s3://$outputBucket/$s3prefix/"
 
-      val experiments = getExperimentList(getExperimentRecipes(), currentDate.toDate)
+      val experiments = getExperimentList(getExperimentRecipes(), currentDate.toDate, conf.experimentLimit.toOption)
 
       experiments.foreach(e => deletePreviousOutput(outputBucket, s3prefix, currentDateString, e))
-      writeExperiments(input, output, currentDateString, experiments, spark, maxRecordsPerFile)
+      writeExperiments(input, output, currentDateString, experiments, spark, maxRecordsPerFile, sampleId)
 
       logger.info(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
       logger.info("=======================================================================================")
@@ -107,12 +120,18 @@ object ExperimentSummaryView {
   }
 
   def writeExperiments(input: String, output: String, date: String, experiments: List[String], spark: SparkSession,
-                       maxRecordsPerFile: Int): Unit = {
+                       maxRecordsPerFile: Int, sampleId: Option[String] = None, rowLimit: Option[Int] = None): Unit = {
     val mainSummary = spark.read.parquet(input)
+    val sampleIdClause = sampleId.map(s => s"sample_id='$s'").getOrElse("TRUE")
 
-    mainSummary
+    val mainSummaryFiltered = mainSummary
       .where("experiments IS NOT NULL AND size(experiments) > 0")
+      .where(sampleIdClause)
       .dropDuplicates("document_id")
+
+    val mainSummaryLimited = rowLimit.map(mainSummaryFiltered.limit(_)).getOrElse(mainSummaryFiltered)
+
+    mainSummaryLimited
       .select(col("*"), explode(col("experiments")).as(Array("experiment_id", "experiment_branch")))
       .where(col("experiment_id").isin(experiments:_*))
       .withColumn("submission_date_s3", lit(date))
@@ -129,16 +148,19 @@ object ExperimentSummaryView {
     parse(Http(experimentsUrl).params(experimentsUrlParams).asString.body)
   }
 
-  def getExperimentList(json: JValue, date: Date): List[String] = json match {
-    case JArray(x) => x.flatMap(v =>
-      getNormalizedRecipe(v) match {
-        case Some(r) if shouldProcessExperiment(r, date) =>
-          List(r.arguments.slug.get)
-        case _ =>
-          List()
-      }
-    )
-    case _ => throw NormandyException("Unexpected response format from experiment recipe server")
+  def getExperimentList(json: JValue, date: Date, limit: Option[Int] = None): List[String] = {
+    val experiments = json match {
+      case JArray(x) => x.flatMap(v =>
+        getNormalizedRecipe(v) match {
+          case Some(r) if shouldProcessExperiment(r, date) =>
+            List(r.arguments.slug.get)
+          case _ =>
+            List()
+        }
+      )
+      case _ => throw NormandyException("Unexpected response format from experiment recipe server")
+    }
+    limit.map(experiments.take(_)).getOrElse(experiments)
   }
 
 
