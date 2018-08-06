@@ -7,18 +7,15 @@ import java.time._
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
-import org.apache.spark.sql.types._
+import com.mozilla.telemetry.heka.Dataset
+import com.mozilla.telemetry.metrics._
+import com.mozilla.telemetry.utils._
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.types._
 import org.joda.time.{DateTime, Days, format}
 import org.json4s.JsonAST._
-import org.rogach.scallop._
-import com.mozilla.telemetry.heka.Dataset
-import com.mozilla.telemetry.utils.{Addon, Attribution, Events,
-  Experiment, getOrCreateSparkSession, MainPing, S3Store}
-import com.mozilla.telemetry.utils.{BooleanUserPref, IntegerUserPref, StringUserPref, UserPref}
 import org.json4s.{DefaultFormats, JValue}
-import com.mozilla.telemetry.metrics._
-import com.mozilla.telemetry.utils.writeTextFile
+import org.rogach.scallop._
 
 import scala.util.{Success, Try}
 
@@ -28,6 +25,9 @@ object MainSummaryView {
   def schemaVersion: String = "v4"
   def jobName: String = "main_summary"
 
+  // Allow at most .5% of records to be ignored
+  // Records are ignored when we can't properly deserialize them
+  val MaxFractionIgnoredPings = .00005
 
   // The following user prefs will be included as top-level
   // fields, named according to UserPref.fieldName()
@@ -177,80 +177,66 @@ object MainSummaryView {
       case _ => DateTime.now.minusDays(1)
     }
 
-    // Set up Spark
-    for (offset <- 0 to Days.daysBetween(from, to).getDays) {
-      val spark = getOrCreateSparkSession(jobName)
-      implicit val sc = spark.sparkContext
-      val sqlContext = spark.sqlContext
-      val hadoopConf = sc.hadoopConfiguration
-      hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
+    try{
+      // Set up Spark
+      for (offset <- 0 to Days.daysBetween(from, to).getDays) {
+        val spark = getOrCreateSparkSession(jobName)
+        implicit val sc = spark.sparkContext
+        val sqlContext = spark.sqlContext
+        val hadoopConf = sc.hadoopConfiguration
+        hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
 
-      val currentDate = from.plusDays(offset)
-      val currentDateString = currentDate.toString("yyyyMMdd")
-      val filterChannel = conf.channel.get
-      val filterVersion = conf.appVersion.get
-      val filterDocType = conf.docType()
+        val currentDate = from.plusDays(offset)
+        val currentDateString = currentDate.toString("yyyyMMdd")
+        val filterChannel = conf.channel.get
+        val filterVersion = conf.appVersion.get
+        val filterDocType = conf.docType()
 
-      logger.info("=======================================================================================")
-      logger.info(s"BEGINNING JOB $jobName FOR $currentDateString")
-      logger.info(s" Filtering for docType = '${filterDocType}'")
-      if (filterChannel.nonEmpty) logger.info(s" Filtering for channel = '${filterChannel.get}'")
-      if (filterVersion.nonEmpty) logger.info(s" Filtering for version = '${filterVersion.get}'")
+        logger.info("=======================================================================================")
+        logger.info(s"BEGINNING JOB $jobName FOR $currentDateString")
+        logger.info(s" Filtering for docType = '${filterDocType}'")
+        if (filterChannel.nonEmpty) logger.info(s" Filtering for channel = '${filterChannel.get}'")
+        if (filterVersion.nonEmpty) logger.info(s" Filtering for version = '${filterVersion.get}'")
 
-      val scalarDefinitions = Scalars.definitions(includeOptin = true)
-        .toList.sortBy(_._1)
-        .filter(!_._2.originalName.startsWith("telemetry.mock"))
+        val scalarDefinitions = Scalars.definitions(includeOptin = true)
+          .toList.sortBy(_._1)
+          .filter(!_._2.originalName.startsWith("telemetry.mock"))
 
-      val histogramDefinitions = filterHistogramDefinitions(
-        Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true),
-        useWhitelist = !conf.allHistograms())
+        val histogramDefinitions = filterHistogramDefinitions(
+          Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true),
+          useWhitelist = !conf.allHistograms())
 
-      val schema = buildSchema(userPrefsList, scalarDefinitions, histogramDefinitions)
-      val ignoredCount = sc.accumulator(0, "Number of Records Ignored")
-      val processedCount = sc.accumulator(0, "Number of Records Processed")
+        val schema = buildSchema(userPrefsList, scalarDefinitions, histogramDefinitions)
+        val ignoredCount = sc.accumulator(0, "Number of Records Ignored")
+        val processedCount = sc.accumulator(0, "Number of Records Processed")
 
-      val telemetrySource = currentDate match {
-        case d if d.isBefore(fmt.parseDateTime("20161012")) => "telemetry-oldinfra"
-        case _ => "telemetry"
-      }
+        val telemetrySource = currentDate match {
+          case d if d.isBefore(fmt.parseDateTime("20161012")) => "telemetry-oldinfra"
+          case _ => "telemetry"
+        }
 
-      // if `fixed`, then data is read in fixed 268MB blocks
-      val numPartitions = conf.readMode() match {
-        case "aligned" => Some(sc.defaultParallelism * conf.inputPartitionMultiplier())
-        case _ => None
-      }
+        // if `fixed`, then data is read in fixed 268MB blocks
+        val numPartitions = conf.readMode() match {
+          case "aligned" => Some(sc.defaultParallelism * conf.inputPartitionMultiplier())
+          case _ => None
+        }
 
-      val messages = Dataset(telemetrySource)
-        .where("sourceName") {
-          case "telemetry" => true
-        }.where("sourceVersion") {
-          case "4" => true
-        }.where("docType") {
-          case dt => dt == filterDocType
-        }.where("appName") {
-          case "Firefox" => true
-        }.where("submissionDate") {
-          case date if date == currentDate.toString("yyyyMMdd") => true
-        }.where("appUpdateChannel") {
-          case channel => filterChannel.isEmpty || channel == filterChannel.get
-        }.where("appVersion") {
-          case v => filterVersion.isEmpty || v == filterVersion.get
-        }.records(conf.limit.get, numPartitions)
-
-      if(!messages.isEmpty()){
-        val rowRDD = messages.flatMap(m => {
-          val row = m.toJValue.map(doc => messageToRow(doc, scalarDefinitions, histogramDefinitions))
-          row match {
-            case None =>
-              ignoredCount += 1
-              None
-            case Some(x) =>
-              processedCount += 1
-              x
-          }
-        })
-
-        val records = sqlContext.createDataFrame(rowRDD, schema)
+        val messages = Dataset(telemetrySource)
+          .where("sourceName") {
+            case "telemetry" => true
+          }.where("sourceVersion") {
+            case "4" => true
+          }.where("docType") {
+            case dt => dt == filterDocType
+          }.where("appName") {
+            case "Firefox" => true
+          }.where("submissionDate") {
+            case date if date == currentDate.toString("yyyyMMdd") => true
+          }.where("appUpdateChannel") {
+            case channel => filterChannel.isEmpty || channel == filterChannel.get
+          }.where("appVersion") {
+            case v => filterVersion.isEmpty || v == filterVersion.get
+          }.records(conf.limit.get, numPartitions)
 
         // Note we cannot just use 'partitionBy' below to automatically populate
         // the submission_date partition, because none of the write modes do
@@ -266,31 +252,61 @@ object MainSummaryView {
         val s3prefix = s"${filterDocType}_summary/$schemaVersion/submission_date_s3=$currentDateString"
         val s3path = s"s3://${conf.outputBucket()}/$s3prefix"
 
-        // Repartition the dataframe by sample_id before saving.
-        val partitioned = records.repartition(100, records.col("sample_id"))
+        if(!messages.isEmpty()){
+          val rowRDD = messages.flatMap(m => {
+            val row = m.toJValue.map(doc => messageToRow(doc, scalarDefinitions, histogramDefinitions))
+            row match {
+              case None =>
+                ignoredCount += 1
+                None
+              case Some(x) =>
+                processedCount += 1
+                x
+            }
+          })
 
-        // limit the size of output files so they don't break during s3 upload
-        val maxRecordsPerFile = conf.maxRecordsPerFile()
+          val records = sqlContext.createDataFrame(rowRDD, schema)
 
-        // Then write to S3 using the given fields as path name partitions. Overwrites
-        // existing data.
-        partitioned.write.partitionBy("sample_id").mode("overwrite").option("maxRecordsPerFile", maxRecordsPerFile).parquet(s3path)
+          // Repartition the dataframe by sample_id before saving.
+          val partitioned = records.repartition(100, records.col("sample_id"))
 
-        conf.schemaReportLocation.get match {
-          case Some(path) => writeTextFile(path, partitioned.schema.treeString)
-          case None =>
+          // limit the size of output files so they don't break during s3 upload
+          val maxRecordsPerFile = conf.maxRecordsPerFile()
+
+          // Then write to S3 using the given fields as path name partitions. Overwrites
+          // existing data.
+          partitioned.write.partitionBy("sample_id").mode("overwrite").option("maxRecordsPerFile", maxRecordsPerFile).parquet(s3path)
+
+          conf.schemaReportLocation.get match {
+            case Some(path) => writeTextFile(path, partitioned.schema.treeString)
+            case None =>
+          }
+
+          // Then remove the _SUCCESS file so we don't break Spark partition discovery.
+          S3Store.deleteKey(conf.outputBucket(), s"$s3prefix/_SUCCESS")
         }
 
-        // Then remove the _SUCCESS file so we don't break Spark partition discovery.
-        S3Store.deleteKey(conf.outputBucket(), s"$s3prefix/_SUCCESS")
+        val recordsIgnored = ignoredCount.value
+        val recordsSeen = recordsIgnored + processedCount.value
+
+        logger.info(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
+        logger.info("     RECORDS SEEN:    %d".format(recordsSeen))
+        logger.info("     RECORDS IGNORED: %d".format(recordsIgnored))
+        logger.info("=======================================================================================")
+
+        if ((1.0 * recordsIgnored) / recordsSeen > MaxFractionIgnoredPings) {
+          throw TooManyRecordsIgnoredException(
+            s"More records ignored than are allowed. Ignored $recordsIgnored out of $recordsSeen records.",
+            conf.outputBucket(), s3prefix)
+        }
+
+        sc.stop()
       }
-
-      logger.info(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
-      logger.info("     RECORDS SEEN:    %d".format(ignoredCount.value + processedCount.value))
-      logger.info("     RECORDS IGNORED: %d".format(ignoredCount.value))
-      logger.info("=======================================================================================")
-
-      sc.stop()
+    } catch {
+      // Delete incomplete data
+      case e@TooManyRecordsIgnoredException(_, bucket, prefix) =>
+        deletePrefix(bucket, prefix)
+        throw e
     }
   }
 
@@ -1165,4 +1181,6 @@ object MainSummaryView {
       ++ buildHistogramSchema(histogramDefinitions)
       ++ buildAddonScalarSchema)
   }
+
+  case class TooManyRecordsIgnoredException(message: String, outputBucket: String, outputPrefix: String) extends Exception(message)
 }
