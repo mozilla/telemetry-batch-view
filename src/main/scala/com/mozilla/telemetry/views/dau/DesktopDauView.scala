@@ -31,7 +31,7 @@ object DesktopDauView extends GenericDauTrait {
       conf.from.getOrElse(conf.to()),
       conf.to(),
       inputBasePath = s"${conf.bucket()}/client_count_daily/v2",
-      outputBasePath = s"${conf.bucket()}/dau/v1"
+      outputBasePath = s"${conf.bucket()}/desktop_dau/v1"
     )
   }
 }
