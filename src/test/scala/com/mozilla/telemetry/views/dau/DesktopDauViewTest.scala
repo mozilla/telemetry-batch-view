@@ -21,7 +21,8 @@ class DesktopDauViewTest extends GenericDauTraitTest {
       DesktopDauView,
       args = Array(
         "--to", "20180128",
-        "--bucket", tempDir
+        "--bucket", tempDir,
+        "--bucket-protocol", ""
       ),
       input = (1 to 28).flatMap{ d =>
         // d clients per day, to ensure mau and smoothed_dau work properly
