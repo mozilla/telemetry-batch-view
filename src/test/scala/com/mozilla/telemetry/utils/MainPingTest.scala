@@ -299,6 +299,24 @@ class MainPingTest extends FlatSpec with Matchers {
       |    "sum_squares_lo": 78,
       |    "sum_squares_hi": 0
       |  },
+      |  "google.in-content.organic": {
+      |    "range": [1, 2],
+      |    "bucket_count": 3,
+      |    "histogram_type": 4,
+      |    "values": {"0": 1, "1": 0},
+      |    "sum": 1,
+      |    "sum_squares_lo": 1,
+      |    "sum_squares_hi": 0
+      |  },
+      |  "bing.in-content:organic": {
+      |    "range": [1, 2],
+      |    "bucket_count": 3,
+      |    "histogram_type": 4,
+      |    "values": {"0": 1, "1": 0},
+      |    "sum": 1,
+      |    "sum_squares_lo": 1,
+      |    "sum_squares_hi": 0
+      |  },
       |  "toast1": {
       |    "range": [1, 2],
       |    "bucket_count": 3,
@@ -335,6 +353,8 @@ class MainPingTest extends FlatSpec with Matchers {
       ("google.abouthome", "google", "abouthome", 1L),
       ("google.urlbar",    "google", "urlbar",    67L),
       ("yahoo.urlbar",     "yahoo",  "urlbar",    78L),
+      ("google.in-content.organic", "google", "in-content:organic", 1L),
+      ("bing.in-content:organic", "bing", "in-content:organic", 1L),
       ("toast1",           null,     null,        null),
       ("toast2",           null,     null,        10L),
       ("toast3.badcount",  "toast3", "badcount",  null))) {
