@@ -169,7 +169,9 @@ object MainPing{
       case _ => null
     }
     try {
-      val searchKeyPattern(engine, source) = name
+      // patch broken specification of in-content search keys in 61.0.2:
+      // https://bugzilla.mozilla.org/show_bug.cgi?id=1481671
+      val searchKeyPattern(engine, source) = name.replace("in-content.", "in-content:")
       Row(engine, source, count)
     } catch {
       case e: scala.MatchError => Row(null, null, count)
