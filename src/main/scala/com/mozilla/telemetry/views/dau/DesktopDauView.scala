@@ -17,8 +17,13 @@ object DesktopDauView extends GenericDauTrait {
       required = false)
     val bucket: ScallopOption[String] = opt[String](
       "bucket",
-      default = Some("s3://telemetry-parquet"),
-      descr = "location where input and output data sets are stored",
+      default = Some("telemetry-parquet"),
+      descr = "bucket where input and output data sets are stored",
+      required = false)
+    val bucketProto: ScallopOption[String] = opt[String](
+      "bucket-protocol",
+      default = Some("s3://"),
+      descr = "hadoop compatible filesystem protocol to be used with --bucket",
       required = false)
     verify()
   }
@@ -30,8 +35,8 @@ object DesktopDauView extends GenericDauTrait {
     GenericDauConf(
       conf.from.getOrElse(conf.to()),
       conf.to(),
-      inputBasePath = s"${conf.bucket()}/client_count_daily/v2",
-      outputBasePath = s"${conf.bucket()}/desktop_dau/v1"
+      inputBasePath = s"${conf.bucketProto()}${conf.bucket()}/client_count_daily/v2",
+      outputBasePath = s"${conf.bucketProto()}${conf.bucket()}/desktop_dau/v1"
     )
   }
 }

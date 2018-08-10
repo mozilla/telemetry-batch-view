@@ -15,15 +15,17 @@ class DesktopDauViewTest extends GenericDauTraitTest {
   "main" must "generate correct dau" in {
     import spark.implicits._
     spark.udf.register("hll_create", hllCreate _)
-    val mau = (1 to 28).sum
+    val mau = (2 to 28).sum
     val smoothed_dau = (22 to 28).sum/7.0
     testGenericDauTraitMain(
       DesktopDauView,
       args = Array(
         "--to", "20180128",
-        "--bucket", tempDir
+        "--bucket", tempDir,
+        "--bucket-protocol", ""
       ),
-      input = (1 to 28).flatMap{ d =>
+      // don't include day 1 to ensure we can handle missing days
+      input = (2 to 28).flatMap{ d =>
         // d clients per day, to ensure mau and smoothed_dau work properly
         (1 to d).map{_=>(f"201801$d%02d", randomUUID.toString)}
       }
