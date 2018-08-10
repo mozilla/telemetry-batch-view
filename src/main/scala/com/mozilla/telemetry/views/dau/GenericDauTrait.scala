@@ -7,7 +7,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit.DAYS
 
-import com.mozilla.telemetry.utils.getOrCreateSparkSession
+import com.mozilla.telemetry.utils.{getOrCreateSparkSession, hadoopExists}
 import com.mozilla.telemetry.utils.UDFs.{HllMerge, MozUDFs}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.{DataFrame, functions => F}
@@ -29,7 +29,7 @@ trait GenericDauTrait {
       // detect input date column
       .option("basePath", conf.inputBasePath)
       // read input dates by path
-      .parquet(conf.inputPaths:_*)
+      .parquet(conf.inputPaths.filter(hadoopExists):_*)
 
     val result = aggregate(input, conf)
 

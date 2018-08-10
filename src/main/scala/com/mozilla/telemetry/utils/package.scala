@@ -157,4 +157,13 @@ package object utils{
     file.write(body.getBytes)
     file.close()
   }
+
+  /** Detect existence of a directory or file using hadoop
+    *
+    * @param pathString path to the directory or file to detect using hadoop
+    */
+  def hadoopExists(pathString: String): Boolean = {
+    val path = new Path(pathString)
+    FileSystem.get(path.toUri, new Configuration()).exists(path)
+  }
 }
