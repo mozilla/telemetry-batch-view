@@ -261,4 +261,15 @@ class ClientsDailyViewTest extends FlatSpec with Matchers with DataFrameSuiteBas
       Map("sessions_started_on_this_day" -> 2)
     )
   }
+
+  it must "sum count histograms properly" in {
+    test(
+      List(
+        MainSummaryRow(),
+        getRowCountHistograms(100),
+        getRowCountHistograms(1)
+      ),
+      getExpectCountHistogramSum(101)
+    )
+  }
 }
