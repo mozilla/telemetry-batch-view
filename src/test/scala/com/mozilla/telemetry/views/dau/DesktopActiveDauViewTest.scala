@@ -6,31 +6,26 @@ package com.mozilla.telemetry.views.dau
 import java.util.UUID.randomUUID
 
 import com.holdenkarau.spark.testing.Utils.createTempDir
-import com.mozilla.spark.sql.hyperloglog.functions.hllCreate
-import org.apache.spark.sql.{functions=>F}
 
-class DesktopDauViewTest extends GenericDauTraitTest {
+class DesktopActiveDauViewTest extends GenericDauTraitTest {
   private val tempDir = createTempDir().toString
 
-  "main" must "generate correct dau" in {
+  "main" must "generate active dau" in {
     import spark.implicits._
-    spark.udf.register("hll_create", hllCreate _)
-    val mau = (2 to 28).sum
-    val smoothed_dau = average(22 to 28)
+    val mau = (1 to 28).filter(_ % 10 >= 5).sum
+    val smoothed_dau = average((22 to 28).filter(_ % 10 >= 5))
     testGenericDauTraitMain(
-      DesktopDauView,
+      DesktopActiveDauView,
       args = Array(
         "--to", "20180128",
         "--bucket", tempDir,
         "--bucket-protocol", ""
       ),
       // don't include day 1 to ensure we can handle missing days
-      input = (2 to 28).flatMap{ d =>
+      input = (1 to 28).flatMap{ d =>
         // d clients per day, to ensure mau and smoothed_dau work properly
-        (1 to d).map{_=>(f"201801$d%02d", randomUUID.toString)}
-      }
-        .toDF("submission_date", "hll")
-        .withColumn("hll", F.expr("hll_create(hll, 12)")),
+        (1 to d).map{_=>(f"201801$d%02d", randomUUID.toString, d % 10)}
+      }.toDF("submission_date_s3", "client_id", "scalar_parent_browser_engagement_total_uri_count_sum"),
       expect = List(
         (28, mau, smoothed_dau, smoothed_dau/mau, "20180128")
       ).toDF("dau", "mau", "smoothed_dau", "er", "submission_date_s3")

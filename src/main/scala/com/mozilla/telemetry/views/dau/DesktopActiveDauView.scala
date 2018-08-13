@@ -3,8 +3,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views.dau
 
-object DesktopDauView extends GenericDauTrait {
-  val jobName: String = "desktop_dau"
+object DesktopActiveDauView extends GenericDauTrait {
+  val jobName: String = "desktop_active_dau"
 
   def getGenericDauConf(args: Array[String]): GenericDauConf = {
     val conf = new BaseCliConf(args)
@@ -12,8 +12,11 @@ object DesktopDauView extends GenericDauTrait {
     GenericDauConf(
       conf.from.getOrElse(conf.to()),
       conf.to(),
-      inputBasePath = s"${conf.bucketProto()}${conf.bucket()}/client_count_daily/v2",
-      outputBasePath = s"${conf.bucketProto()}${conf.bucket()}/desktop_dau/v1"
+      countColumn = Some("client_id"),
+      inputBasePath = s"${conf.bucketProto()}${conf.bucket()}/clients_daily/v6",
+      inputDateColumn = "submission_date_s3",
+      outputBasePath = s"${conf.bucketProto()}${conf.bucket()}/desktop_active_dau/v1",
+      where = "scalar_parent_browser_engagement_total_uri_count_sum >= 5"
     )
   }
 }

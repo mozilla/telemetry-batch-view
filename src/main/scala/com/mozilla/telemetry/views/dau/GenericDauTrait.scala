@@ -11,10 +11,32 @@ import com.mozilla.telemetry.utils.{getOrCreateSparkSession, hadoopExists}
 import com.mozilla.telemetry.utils.UDFs.{HllMerge, MozUDFs}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.{DataFrame, functions => F}
+import org.rogach.scallop.{ScallopConf, ScallopOption}
 
 trait GenericDauTrait {
   val jobName: String
   def getGenericDauConf(args: Array[String]): GenericDauConf
+
+  class BaseCliConf(args: Array[String]) extends ScallopConf(args) {
+    val to: ScallopOption[String] = opt[String](
+      "to",
+      descr = "newest date for which to generate counts (inclusive)",
+      required = true)
+    val from: ScallopOption[String] = opt[String](
+      "from",
+      descr = "oldest date for which to generate counts, default is `--to` value (inclusive)",
+      required = false)
+    val bucket: ScallopOption[String] = opt[String](
+      "bucket",
+      default = Some("telemetry-parquet"),
+      descr = "bucket where input and output data sets are stored",
+      required = false)
+    val bucketProto: ScallopOption[String] = opt[String](
+      "bucket-protocol",
+      default = Some("s3://"),
+      descr = "hadoop compatible filesystem protocol to be used with --bucket",
+      required = false)
+  }
 
   def main(args: Array[String]) {
     val conf = getGenericDauConf(args)

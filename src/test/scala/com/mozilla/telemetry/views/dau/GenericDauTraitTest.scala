@@ -12,6 +12,8 @@ trait GenericDauTraitTest extends FlatSpec with Matchers with DataFrameSuiteBase
 
   def nonHllCols(df: DataFrame): List[String] = df.columns.filter(!hllCols.contains(_)).toList
 
+  def average(input: Seq[Int]): Double = input.sum / input.length
+
   def writeInput(conf: GenericDauConf, input: DataFrame): Unit = input
     .write
     .mode("overwrite")
