@@ -47,9 +47,7 @@ class GenericDauConfTest extends GenericDauTraitTest {
         (1 to 3).map{_=>("2018-01-31", randomUUID.toString, randomUUID.toString, "C", "c")}.toList :::
         (1 to 2).map{_=>("2018-01-31", randomUUID.toString, randomUUID.toString, "C", "d")}.toList :::
         (1 to 2).map{_=>("2018-02-01", randomUUID.toString, randomUUID.toString, "C", "c")}.toList :::
-        (1 to 3).map{_=>("2018-02-01", randomUUID.toString, randomUUID.toString, "C", "d")}.toList :::
-        // pad the list so that all needed dates exist
-        (4 to 30).map { d => (f"2018-01-$d%02d", null, null, null, null) }.toList
+        (1 to 3).map{_=>("2018-02-01", randomUUID.toString, randomUUID.toString, "C", "d")}.toList
       ).toDF("activity_date", "id", "ignore", "country", "hll"),
       expect = List(
         (4, 4, 4.0, 1.0, "B", "b", "180131"),
