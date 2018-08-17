@@ -281,7 +281,11 @@ object LongitudinalView {
         .collect()
         .toMap
 
+      logger.info("\nLOGGING CLIENTS")
+      logger.info(s"Number of clients in Map: ${allowedLargeClientKeys.size}")
+      //allowedLargeClientKeys.map{ case(clientId, keys) => (clientId, keys.size) }.foreach(x => logger.info(x.toString))
       val clientLookupMap = messages.sparkContext.broadcast(allowedLargeClientKeys)
+
 
       val clientMessages = messages
         .flatMap {
@@ -309,14 +313,17 @@ object LongitudinalView {
 
       val partitionCounts = clientMessages
         .mapPartitions { case it =>
+          logger.info("TEMPORARYLOG: Starting map partitions!")
           val clientIterator = new ClientIterator(it, DefaultMaxHistorySize)
           val schema = buildSchema(histogramDefinitions, scalarDefinitions)
+          logger.info("TEMPORARYLOG: Built schema")
 
           val allRecords = for {
             client <- clientIterator
             record = buildRecord(client, schema, histogramDefinitions, scalarDefinitions)
           } yield record
 
+          logger.info("TEMPORARYLOG: Created all records")
           var ignoredCount = 0
           var processedCount = 0
           val records = allRecords.map(r => r match {
@@ -327,12 +334,17 @@ object LongitudinalView {
               ignoredCount += 1
               r
           }).flatten
+          logger.info("TEMPORARYLOG: Set the records straight")
+          logger.info(s"TEMPORARYLOG: processed $processedCount records, ignored $ignoredCount records")
 
           while (records.nonEmpty) {
             // Block size has to be increased to pack more than a couple hundred profiles
             // within the same row group.
+            logger.info("TEMPORARYLOG: Creating new parquet file")
             val localFile = new java.io.File(ParquetFile.serialize(records, schema, 8).toUri())
+            logger.info("TEMPORARYLOG: Uploading new parquet file")
             s3Handler.uploadFile(localFile, outputBucket, prefix)
+            logger.info("TEMPORARYLOG: Deleting parquet file")
             localFile.delete()
           }
 
@@ -1144,7 +1156,8 @@ object LongitudinalView {
       case e: Throwable =>
         // Log buggy clients errors and continue
         logger.warn(org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e))
-        None
+        throw e
+        //None
     }
   }
 }
