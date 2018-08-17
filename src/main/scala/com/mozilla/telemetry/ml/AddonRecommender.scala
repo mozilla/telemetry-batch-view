@@ -100,7 +100,7 @@ object AddonRecommender {
   /**
     * Get a new dataset from the Longitudinal dataset containing only the relevant addon data.
     * @param sparkSession The SparkSession used for loading the Longitudinal dataset.
-    * @param addonBlacklist The a list of addon GUIDs to exclude.
+    * @param addonWhitelist The a list of addon GUIDs that are valid
     * @param amoDB The AMO database fetched by AMODatabase.
     * @return A 4 columns Dataset with each row having the client id, the addon GUID
     *         and the hashed client id and GUID.
