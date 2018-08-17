@@ -105,7 +105,7 @@ object AddonRecommender {
     * @return A 4 columns Dataset with each row having the client id, the addon GUID
     *         and the hashed client id and GUID.
     */
-  private def getAddonData(sparkSession: SparkSession, addonBlacklist: List[String], amoDB: Map[String, Any]) = {
+  private def getAddonData(sparkSession: SparkSession, addonWhitelist: List[String], amoDB: Map[String, Any]) = {
     import sparkSession.sqlContext.implicits._
     sparkSession.sqlContext.sql("select * from longitudinal")
       .where("active_addons is not null")
@@ -115,7 +115,7 @@ object AddonRecommender {
       .flatMap { case Addons(Some(clientId), Some(addons)) =>
         for {
           (addonId, meta) <- addons
-          if !addonBlacklist.contains(addonId) && amoDB.contains(addonId)
+          if addonWhitelist.contains(addonId) && amoDB.contains(addonId)
           addonName <- meta.name
           blocklisted <- meta.blocklisted
           signedState <- meta.signed_state
@@ -173,8 +173,14 @@ object AddonRecommender {
     val sc = spark.sparkContext
     import spark.implicits._
 
-    val blacklist = List("loop@mozilla.org", "firefox@getpocket.com", "e10srollout@mozilla.org", "firefox-hotfix@mozilla.org")
-    val clientAddons = getAddonData(spark, blacklist, amoDbMap)
+    import org.json4s.jackson.JsonMethods.{parse}
+    import com.mozilla.telemetry.utils.{S3Store}
+    import org.json4s._
+    implicit val formats = DefaultFormats
+    val istream = S3Store.getKey("telemetry-parquet", "telemetry-ml/addon_recommender/only_guids_top_200.json");
+    val json_str = scala.io.Source.fromInputStream(istream).mkString
+    val whitelist = parse(json_str).extract[List[String]]
+    val clientAddons = getAddonData(spark, whitelist, amoDbMap)
 
     val ratings = clientAddons
       .map{ case (_, _, hashedClientId, hashedAddonId) => Rating(hashedClientId, hashedAddonId, 1.0f)}
