@@ -203,7 +203,7 @@ class AddonRecommenderTest extends FlatSpec with Matchers with DataFrameSuiteBas
     val hash = PrivateMethod[Int]('hash)
 
     // Filter the dataframe, collect and validate the results.
-    val df = AddonRecommender invokePrivate getAddonData(spark, List("{blacklisted-addon-guid}"), amoDB)
+    val df = AddonRecommender invokePrivate getAddonData(spark, List("{webext-addon-guid}", "{legacy-addon-guid}"), amoDB)
 
     val data = df.collect()
     assert(data.length == 2)
