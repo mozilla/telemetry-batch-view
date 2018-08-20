@@ -1156,8 +1156,8 @@ object LongitudinalView {
       case e: Throwable =>
         // Log buggy clients errors and continue
         logger.warn(org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e))
-        throw e
-        //None
+        //throw e
+        None
     }
   }
 }
