@@ -55,7 +55,8 @@ object AddonRecommender {
       val runDate = opt[String]("runDate", descr = "The execution date", required = false)
       val privateBucket = opt[String]("privateBucket", descr = "Destination bucket for archiving the model data", required = true)
       val publicBucket = opt[String]("publicBucket", descr = "Destination bucket for the latest public model", required = true)
-      val longitudinalOverride = opt[String]("longitudinalOverride", descr = "Source location for longitudinal, if not using metastore-provided dataset", required = false)
+      val longitudinalOverride = opt[String]("longitudinalOverride",
+        descr = "Source location for longitudinal, if not using metastore-provided dataset", required = false)
     }
 
     val recommend = new Subcommand("recommend") {

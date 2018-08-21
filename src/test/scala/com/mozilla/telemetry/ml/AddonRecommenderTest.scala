@@ -199,7 +199,7 @@ class AddonRecommenderTest extends FlatSpec with Matchers with DataFrameSuiteBas
     dataset.createOrReplaceTempView("longitudinal")
 
     // Declare the private methods from AddonRecommender so that we can call them.
-    val getAddonData = PrivateMethod[Dataset[(String, String, Int, Int)]]('getAddonData)
+    val getAddonData = PrivateMethod[Dataset[(String, String, Int, Int, Option[String])]]('getAddonData)
     val hash = PrivateMethod[Int]('hash)
 
     // Filter the dataframe, collect and validate the results.
