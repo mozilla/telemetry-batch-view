@@ -19,7 +19,7 @@ import org.rogach.scallop._
   * We use HLLs to get client_counts for a set of
   * values across a set of dimensions.
   */
-object QuantumRCView {
+object QuantumRCView extends BatchJobBase {
 
   val TotalCountColName = "total_clients"
   val DatasetPrefix = "quantum_rc"
@@ -129,6 +129,6 @@ object QuantumRCView {
       .mode(WriteMode)
       .parquet(s"s3://${conf.bucket()}/$DatasetPrefix/$Version/$WeekPartitionName=$from")
 
-    spark.stop()
+    if (shouldStopContextAtEnd(spark)) { spark.stop() }
   }
 }

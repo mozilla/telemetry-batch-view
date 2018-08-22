@@ -11,7 +11,7 @@ import org.apache.spark.sql.functions._
 import org.rogach.scallop._
 
 
-object RetentionView {
+object RetentionView extends BatchJobBase {
   class Conf(args: Array[String]) extends ScallopConf(args) {
     val date = opt[String]("date", descr = "Run date for this job", required = true)
     val input = opt[String]("input", descr = "Source for parquet data", required = true)
@@ -85,6 +85,6 @@ object RetentionView {
       .mode("overwrite")
       .parquet(s"s3://${conf.bucket()}/${conf.prefix()}/start_date=${conf.date()}")
 
-    spark.stop()
+    if (shouldStopContextAtEnd(spark)) { spark.stop() }
   }
 }

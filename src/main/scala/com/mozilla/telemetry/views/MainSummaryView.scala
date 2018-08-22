@@ -19,7 +19,7 @@ import org.rogach.scallop._
 
 import scala.util.{Success, Try}
 
-object MainSummaryView {
+object MainSummaryView extends BatchJobBase {
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
 
   def schemaVersion: String = "v4"
@@ -207,10 +207,7 @@ object MainSummaryView {
 
 
   // Configuration for command line arguments
-  private class Conf(args: Array[String]) extends ScallopConf(args) {
-    val from = opt[String]("from", descr = "From submission date", required = false)
-    val to = opt[String]("to", descr = "To submission date", required = false)
-    val outputBucket = opt[String]("bucket", descr = "Destination bucket for parquet data", required = true)
+  private class Conf(args: Array[String]) extends BaseOpts(args) {
     val limit = opt[Int]("limit", descr = "Maximum number of files to read from S3", required = false)
     val channel = opt[String]("channel", descr = "Only process data from the given channel", required = false)
     val appVersion = opt[String]("version", descr = "Only process data from the given app version", required = false)
@@ -228,33 +225,22 @@ object MainSummaryView {
 
   def main(args: Array[String]) {
     val conf = new Conf(args) // parse command line arguments
-    val fmt = format.DateTimeFormat.forPattern("yyyyMMdd")
-    val to = conf.to.get match {
-      case Some(t) => fmt.parseDateTime(t)
-      case _ => DateTime.now.minusDays(1)
-    }
-    val from = conf.from.get match {
-      case Some(f) => fmt.parseDateTime(f)
-      case _ => DateTime.now.minusDays(1)
-    }
 
     try{
       // Set up Spark
-      for (offset <- 0 to Days.daysBetween(from, to).getDays) {
+      for (submissionDate <- datesBetween(conf.from(), conf.to.toOption)) {
         val spark = getOrCreateSparkSession(jobName)
         implicit val sc = spark.sparkContext
         val sqlContext = spark.sqlContext
         val hadoopConf = sc.hadoopConfiguration
         hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
 
-        val currentDate = from.plusDays(offset)
-        val currentDateString = currentDate.toString("yyyyMMdd")
         val filterChannel = conf.channel.get
         val filterVersion = conf.appVersion.get
         val filterDocType = conf.docType()
 
         logger.info("=======================================================================================")
-        logger.info(s"BEGINNING JOB $jobName FOR $currentDateString")
+        logger.info(s"BEGINNING JOB $jobName FOR $submissionDate")
         logger.info(s" Filtering for docType = '${filterDocType}'")
         if (filterChannel.nonEmpty) logger.info(s" Filtering for channel = '${filterChannel.get}'")
         if (filterVersion.nonEmpty) logger.info(s" Filtering for version = '${filterVersion.get}'")
@@ -271,8 +257,8 @@ object MainSummaryView {
         val ignoredCount = sc.accumulator(0, "Number of Records Ignored")
         val processedCount = sc.accumulator(0, "Number of Records Processed")
 
-        val telemetrySource = currentDate match {
-          case d if d.isBefore(fmt.parseDateTime("20161012")) => "telemetry-oldinfra"
+        val telemetrySource = submissionDate match {
+          case d if d < "20161012" => "telemetry-oldinfra"
           case _ => "telemetry"
         }
 
@@ -292,7 +278,7 @@ object MainSummaryView {
           }.where("appName") {
             case "Firefox" => true
           }.where("submissionDate") {
-            case date if date == currentDate.toString("yyyyMMdd") => true
+            case date if date == submissionDate => true
           }.where("appUpdateChannel") {
             case channel => filterChannel.isEmpty || channel == filterChannel.get
           }.where("appVersion") {
@@ -310,7 +296,7 @@ object MainSummaryView {
         //    loaded, so we can't do single day incremental updates.
         //  - "ignore" causes new data not to be saved.
         // So we manually add the "submission_date_s3" parameter to the s3path.
-        val s3prefix = s"${filterDocType}_summary/$schemaVersion/submission_date_s3=$currentDateString"
+        val s3prefix = s"${filterDocType}_summary/$schemaVersion/submission_date_s3=$submissionDate"
         val s3path = s"s3://${conf.outputBucket()}/$s3prefix"
 
         if(!messages.isEmpty()){
@@ -350,7 +336,7 @@ object MainSummaryView {
         val recordsIgnored = ignoredCount.value
         val recordsSeen = recordsIgnored + processedCount.value
 
-        logger.info(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
+        logger.info(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $submissionDate")
         logger.info("     RECORDS SEEN:    %d".format(recordsSeen))
         logger.info("     RECORDS IGNORED: %d".format(recordsIgnored))
         logger.info("=======================================================================================")
@@ -361,7 +347,7 @@ object MainSummaryView {
             conf.outputBucket(), s3prefix)
         }
 
-        sc.stop()
+        if (shouldStopContextAtEnd(spark)) { spark.stop() }
       }
     } catch {
       // Delete incomplete data
