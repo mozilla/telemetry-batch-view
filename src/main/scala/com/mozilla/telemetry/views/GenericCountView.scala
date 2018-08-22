@@ -10,7 +10,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.rogach.scallop._
 
-object GenericCountView {
+object GenericCountView extends BatchJobBase {
 
   val DefaultSubmissionDateCol = "submission_date_s3"
   val DefaultHllBits = 12
@@ -159,6 +159,6 @@ object GenericCountView {
       .mode(conf.writeMode())
       .parquet(s"s3://${conf.outputBucket()}/$version$partition")
 
-    spark.stop()
+    if (shouldStopContextAtEnd(spark)) { spark.stop() }
   }
 }

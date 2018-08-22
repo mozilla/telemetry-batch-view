@@ -6,10 +6,9 @@ package com.mozilla.telemetry.views
 import com.mozilla.telemetry.utils.{S3Store, getOrCreateSparkSession}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
-import org.joda.time.{DateTime, Days, format}
 import org.rogach.scallop._
 
-object MainEventsView {
+object MainEventsView extends BatchJobBase {
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
 
   def schemaVersion: String = "v1"
@@ -17,26 +16,14 @@ object MainEventsView {
   def jobName: String = "events"
 
   // Configuration for command line arguments
-  private class Conf(args: Array[String]) extends ScallopConf(args) {
-    val from = opt[String]("from", descr = "From submission date", required = false)
-    val to = opt[String]("to", descr = "To submission date", required = false)
+  private class Conf(args: Array[String]) extends BaseOpts(args) {
     val sampleId = opt[String]("sampleid", descr = "Sample ID to limit processing to", required = false)
     val inputBucket = opt[String]("inbucket", descr = "Source bucket for main_summary data", required = false)
-    val outputBucket = opt[String]("bucket", descr = "Destination bucket for parquet data", required = true)
     verify()
   }
 
   def main(args: Array[String]) {
     val conf = new Conf(args) // parse command line arguments
-    val fmt = format.DateTimeFormat.forPattern("yyyyMMdd")
-    val to = conf.to.get match {
-      case Some(t) => fmt.parseDateTime(t)
-      case _ => DateTime.now.minusDays(1)
-    }
-    val from = conf.from.get match {
-      case Some(f) => fmt.parseDateTime(f)
-      case _ => DateTime.now.minusDays(1)
-    }
 
     // Set up Spark
     val spark = getOrCreateSparkSession("EventsView")
@@ -58,10 +45,7 @@ object MainEventsView {
     val outputBucket = conf.outputBucket()
     val inputBucket = conf.inputBucket.get.getOrElse(outputBucket)
 
-    for (offset <- 0 to Days.daysBetween(from, to).getDays) {
-      val currentDate = from.plusDays(offset)
-      val currentDateString = currentDate.toString("yyyyMMdd")
-
+    for (currentDateString <- datesBetween(conf.from(), conf.to.toOption)) {
       logger.info("=======================================================================================")
       logger.info(s"BEGINNING JOB $jobName $schemaVersion FOR $currentDateString")
 
@@ -84,7 +68,7 @@ object MainEventsView {
       logger.info(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
       logger.info("=======================================================================================")
     }
-    spark.stop()
+    if (shouldStopContextAtEnd(spark)) { spark.stop() }
   }
 
   def eventsFromMain(mainSummaryData: DataFrame, sampleId: Option[String]): DataFrame = {

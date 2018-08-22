@@ -3,6 +3,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+
 import com.mozilla.telemetry.heka.Dataset
 import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import org.apache.spark.SparkContext
@@ -16,38 +19,26 @@ import org.json4s.jackson.JsonMethods._
 import org.rogach.scallop._
 
 
-object CrashAggregateView {
+object CrashAggregateView extends BatchJobBase {
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
 
-  private class Conf(args: Array[String]) extends ScallopConf(args) {
-    val from = opt[String]("from", descr = "From submission date", required = false)
-    val to = opt[String]("to", descr = "To submission date", required = false)
-    val outputBucket = opt[String]("bucket", descr = "Destination bucket for parquet data", required = true)
+  private class Conf(args: Array[String]) extends BaseOpts(args) {
     verify()
   }
 
   def main(args: Array[String]) {
     // load configuration for the time range
     val conf = new Conf(args)
-    val fmt = format.DateTimeFormat.forPattern("yyyyMMdd")
-    val to = conf.to.get match {
-      case Some(t) => fmt.parseDateTime(t)
-      case _ => DateTime.now.minusDays(1)
-    }
-    val from = conf.from.get match {
-      case Some(f) => fmt.parseDateTime(f)
-      case _ => DateTime.now.minusDays(1)
-    }
 
     // set up Spark
-    val spark = getOrCreateSparkSession("CrashAggregateVie")
+    val spark = getOrCreateSparkSession("CrashAggregateView")
     implicit val sc = spark.sparkContext
     val hadoopConf = sc.hadoopConfiguration
     hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
 
-    for (offset <- 0 to Days.daysBetween(from, to).getDays) {
-      val currentDate = from.plusDays(offset)
-      val currentDateString = currentDate.toString("yyyy-MM-dd")
+    for (submissionDate <- datesBetween(conf.from(), conf.to.toOption)) {
+      val date = LocalDate.parse(submissionDate, BatchJobBase.DateFormatter)
+      val submissionDateDash = date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
 
       val messages = Dataset("telemetry")
         .where("sourceName") {
@@ -57,7 +48,7 @@ object CrashAggregateView {
         }.where("docType") {
           case doc if List("main", "crash") contains doc => true
         }.where("submissionDate") {
-          case date if date == currentDate.toString("yyyyMMdd") => true
+          case date if date == submissionDate => true
         }.map(message => {
           val fields = message.fieldsAsMap
           fields.get("docType") match {
@@ -79,16 +70,16 @@ object CrashAggregateView {
       val records = spark.createDataFrame(rowRDD.coalesce(1), schema)
 
       // upload the resulting aggregate Spark records to S3
-      records.write.mode(SaveMode.Overwrite).parquet(s"s3://${conf.outputBucket()}/crash_aggregates/v1/submission_date=$currentDateString")
+      records.write.mode(SaveMode.Overwrite).parquet(s"s3://${conf.outputBucket()}/crash_aggregates/v1/submission_date=$submissionDateDash")
 
       logger.info("=======================================================================================")
-      logger.info(s"JOB COMPLETED SUCCESSFULLY FOR $currentDate")
+      logger.info(s"JOB COMPLETED SUCCESSFULLY FOR $submissionDate")
       logger.info(s"${main_processed.value} main pings processed, ${main_ignored.value} pings ignored")
       logger.info(s"${browser_crash_processed.value} browser crash pings processed, ${browser_crash_ignored.value} pings ignored")
       logger.info(s"${content_crash_ignored.value} content crash pings ignored")
       logger.info("=======================================================================================")
 
-      spark.stop()
+      if (shouldStopContextAtEnd(spark)) { spark.stop() }
     }
   }
 

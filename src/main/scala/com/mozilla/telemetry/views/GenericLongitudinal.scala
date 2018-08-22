@@ -10,7 +10,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Column, DataFrame, SQLContext}
 import org.rogach.scallop._
 
-object GenericLongitudinalView {
+object GenericLongitudinalView extends BatchJobBase {
 
   val DefaultWriteMode = "overwrite"
 
@@ -119,7 +119,7 @@ object GenericLongitudinalView {
       .mode(opts.writeMode())
       .parquet(s"s3://$outputPath/$version")
 
-    spark.stop()
+    if (shouldStopContextAtEnd(spark)) { spark.stop() }
   }
 
   def run(sqlContext: SQLContext, opts: Opts): DataFrame = {

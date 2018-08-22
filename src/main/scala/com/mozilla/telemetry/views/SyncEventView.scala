@@ -7,23 +7,20 @@ import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.utils._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
-import org.joda.time.{DateTime, Days, format}
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods.parse
 import org.json4s.{JValue, string2JsonInput}
 import org.rogach.scallop._
 
-object SyncEventView {
+object SyncEventView extends BatchJobBase {
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
 
   def schemaVersion: String = "v1"
   def jobName: String = "sync_events"
 
   // Configuration for command line arguments
-  private class Conf(args: Array[String]) extends ScallopConf(args) {
-    val from = opt[String]("from", descr = "From submission date", required = false)
-    val to = opt[String]("to", descr = "To submission date", required = false)
-    val outputBucket = opt[String]("bucket", descr = "Destination bucket for parquet data", required = false)
+  private class Conf(args: Array[String]) extends BaseOpts(args) {
+    override val outputBucket = opt[String]("bucket", descr = "Destination bucket for parquet data", required = false)
     val outputFilename = opt[String]("outputFilename", descr = "Destination local filename for parquet data", required = false)
     val limit = opt[Int]("limit", descr = "Maximum number of files to read from S3", required = false)
     verify()
@@ -33,15 +30,6 @@ object SyncEventView {
     val conf = new Conf(args) // parse command line arguments
     if (!conf.outputBucket.supplied && !conf.outputFilename.supplied) {
       conf.errorMessageHandler("One of outputBucket or outputFilename must be specified")
-    }
-    val fmt = format.DateTimeFormat.forPattern("yyyyMMdd")
-    val to = conf.to.get match {
-      case Some(t) => fmt.parseDateTime(t)
-      case _ => DateTime.now.minusDays(1)
-    }
-    val from = conf.from.get match {
-      case Some(f) => fmt.parseDateTime(f)
-      case _ => DateTime.now.minusDays(1)
     }
 
     // Set up Spark
@@ -55,10 +43,7 @@ object SyncEventView {
     hadoopConf.setInt("dfs.blocksize", parquetSize)
     hadoopConf.set("parquet.enable.summary-metadata", "false")
 
-    for (offset <- 0 to Days.daysBetween(from, to).getDays) {
-      val currentDate = from.plusDays(offset)
-      val currentDateString = currentDate.toString("yyyyMMdd")
-
+    for (currentDateString <- datesBetween(conf.from(), conf.to.toOption)) {
       logger.info("=======================================================================================")
       logger.info(s"BEGINNING JOB $jobName FOR $currentDateString")
 
@@ -73,7 +58,7 @@ object SyncEventView {
         }.where("docType") {
           case "sync" => true
         }.where("submissionDate") {
-          case date if date == currentDate.toString("yyyyMMdd") => true
+          case date if date == currentDateString => true
         }.records(conf.limit.get)
 
       val rowRDD = messages.flatMap(m => {
@@ -120,7 +105,7 @@ object SyncEventView {
       logger.info("=======================================================================================")
     }
 
-    spark.stop()
+    if (shouldStopContextAtEnd(spark)) { spark.stop() }
   }
 
   // Convert the given Heka message containing a "sync" ping with event data
