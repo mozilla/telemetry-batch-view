@@ -128,6 +128,10 @@ object MainSummaryView {
     "WEBVR_USERS_VIEW_IN" :: Nil
 
 
+  val NaturalHistogramRepresentationList =
+    "A11Y_INSTANTIATED_FLAG" :: Nil
+
+
   /*
    * Addon scalars are included as a key, value
    * in a MAP type column. For example, the boolean
@@ -513,8 +517,12 @@ object MainSummaryView {
 
   // Convert the given Heka message containing a "main" ping
   // to a map containing just the fields we're interested in.
-  def messageToRow(doc: JValue, scalarDefinitions: List[(String, ScalarDefinition)], histogramDefinitions: List[(String,
-    HistogramDefinition)], userPrefs: List[UserPref] = userPrefsList): Option[Row] = {
+  def messageToRow(doc: JValue,
+                   scalarDefinitions: List[(String, ScalarDefinition)],
+                   histogramDefinitions: List[(String, HistogramDefinition)],
+                   naturalHistogramRepresentationList: List[String] = NaturalHistogramRepresentationList,
+                   userPrefs: List[UserPref] = userPrefsList
+                  ): Option[Row] = {
     try {
       implicit val formats = DefaultFormats
 
@@ -798,7 +806,8 @@ object MainSummaryView {
 
       val histogramRow = MainPing.histogramsToRow(
         MainPing.DefaultProcessTypes.map{ p => p -> (histograms(p) merge keyedHistograms(p)) }.toMap,
-        histogramDefinitions
+        histogramDefinitions,
+        naturalHistogramRepresentationList
       )
 
       val addonScalarsRow = MainPing.addonScalarsToRow(
@@ -912,27 +921,24 @@ object MainSummaryView {
   }
 
   def filterHistogramDefinitions(definitions: Map[String, HistogramDefinition], useWhitelist: Boolean = false): List[(String, HistogramDefinition)] = {
-    definitions.toList.filter(_._2 match {
-      case _: LinearHistogram => true
-      case _: ExponentialHistogram => true
-      case _: EnumeratedHistogram => true
-      case _: BooleanHistogram => true
-      case _: FlagHistogram => true // FIXME: hack to allow `A11Y_INSTANTIATED_FLAG` through until we can update it
-      case _: CategoricalHistogram => true
-      case _ => false
-    }).filter(
+    definitions.toList.filter(
       entry => !useWhitelist || histogramsWhitelist.contains(entry._2.originalName)
     ).sortBy(_._1)
   }
 
   val HistogramSchema = MapType(IntegerType, IntegerType, true)
   val CategoricalHistogramSchema = MapType(StringType, IntegerType, true)
+  val CountHistogramSchema = IntegerType
+  val FlagHistogramSchema = BooleanType
 
-  def buildHistogramSchema(histogramDefinitions: List[(String, HistogramDefinition)]): List[StructField] = {
+  def buildHistogramSchema(histogramDefinitions: List[(String, HistogramDefinition)], naturalHistogramRepresentationList: List[String]): List[StructField] = {
     histogramDefinitions.map{
       case (name, definition) =>
+        val useHistogramRep = naturalHistogramRepresentationList.contains(definition.originalName)
         definition match {
-          case _: CategoricalHistogram => (name, definition, CategoricalHistogramSchema)
+          case _: CategoricalHistogram if(!useHistogramRep) => (name, definition, CategoricalHistogramSchema)
+          case _: CountHistogram if(!useHistogramRep) => (name, definition, CountHistogramSchema)
+          case _: FlagHistogram if(!useHistogramRep) => (name, definition, FlagHistogramSchema)
           case _ => (name, definition, HistogramSchema)
         }
     }.map{
@@ -950,8 +956,11 @@ object MainSummaryView {
     StructField("block", IntegerType, nullable = true)
   ))
 
-  def buildSchema(userPrefs: List[UserPref], scalarDefinitions: List[(String, ScalarDefinition)],
-                  histogramDefinitions: List[(String, HistogramDefinition)]): StructType = {
+  def buildSchema(userPrefs: List[UserPref],
+                  scalarDefinitions: List[(String, ScalarDefinition)],
+                  histogramDefinitions: List[(String, HistogramDefinition)],
+                  naturalHistogramRepresentationList: List[String] = NaturalHistogramRepresentationList
+                  ): StructType = {
     StructType(List(
       StructField("document_id", StringType, nullable = false), // id
       StructField("client_id", StringType, nullable = true), // clientId
@@ -1178,7 +1187,7 @@ object MainSummaryView {
       StructField("ghost_windows_content_above_1", LongType, nullable = true)
     ) ++ buildUserPrefsSchema(userPrefs)
       ++ buildScalarSchema(scalarDefinitions)
-      ++ buildHistogramSchema(histogramDefinitions)
+      ++ buildHistogramSchema(histogramDefinitions, naturalHistogramRepresentationList)
       ++ buildAddonScalarSchema)
   }
 

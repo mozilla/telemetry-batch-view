@@ -436,26 +436,64 @@ object MainPing{
     }
   }
 
-  def histogramsToRow(histograms: Map[String, JValue], definitions: List[(String, HistogramDefinition)]): Row = {
+  def extractCountHistogram(histogram: JValue): Option[Integer] = {
+    // Count histograms are null unless the
+    // 0 bucket has a value
+    extractHistogramMap(histogram) match {
+      case null => None
+      case m => m.get(0)
+    }
+  }
+
+  def extractFlagHistogram(histogram: JValue): Option[Boolean] = {
+    // Flag histograms are null unless:
+    // both buckets 0 and 1 are present,
+    // they both have valid values (0 or 1),
+    // and only one of the buckets is true (aka has value 1).
+    extractHistogramMap(histogram) match {
+      case null => None
+      case m => for {
+          zero_is_false <- m.get(0).map(_ == 0)
+          zero_is_true <- m.get(0).map(_ == 1)
+          one_is_false <- m.get(1).map(_ == 0)
+          one_is_true <- m.get(1).map(_ == 1)
+          if((zero_is_false ^ zero_is_true) && (one_is_false ^ one_is_true) && (zero_is_true ^ one_is_true))
+        } yield zero_is_false && one_is_true
+    }
+  }
+
+  def extract(func: JValue => Any)(histogram: JValue): Any = {
+    func(histogram) match {
+      case None => null
+      case Some(v) => v
+      case o => o
+    }
+  }
+
+  def histogramsToRow(histograms: Map[String, JValue], definitions: List[(String, HistogramDefinition)], naturalHistogramRepresentationList: List[String]): Row = {
     implicit val formats = DefaultFormats
 
     Row.fromSeq(
       definitions.map{
         case (name, definition) =>
+          val useHistogramRep = naturalHistogramRepresentationList.contains(definition.originalName)
           definition match {
-            case d: CategoricalHistogram => (definition, extractCategoricalHistogramMap(d) _)
+            case d: CategoricalHistogram if(!useHistogramRep) => (definition, extractCategoricalHistogramMap(d) _)
+            case d: CountHistogram if(!useHistogramRep) => (definition, extractCountHistogram _)
+            case d: FlagHistogram if(!useHistogramRep) => (definition, extractFlagHistogram _)
             case _ => (definition, extractHistogramMap _)
           }
       }.map{
         case (definition, extractFunc) =>
+          val extraction = extract(extractFunc(_)) _
           definition.keyed match {
             case true =>
-              Try((histograms(definition.process.get) \ definition.originalName).extract[Map[String,JValue]].mapValues(extractFunc).map(identity)) match {
+              Try((histograms(definition.process.get) \ definition.originalName).extract[Map[String,JValue]].mapValues(extraction).map(identity)) match {
                 case Success(keyedHistogram) => keyedHistogram
                 case _ => null
               }
             case false =>
-              extractFunc(histograms(definition.process.get) \ definition.originalName)
+              extraction(histograms(definition.process.get) \ definition.originalName)
           }
       }
     )

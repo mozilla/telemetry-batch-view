@@ -171,5 +171,23 @@
     "releaseChannelCollection": "opt-out",
     "description": "a testing histogram; not meant to be touched",
     "record_in_processes": ["main", "content", "gpu"]
+  },
+  "MOCK_COUNT": {
+    "alert_emails": ["telemetry-client-dev@mozilla.com"],
+    "expires_in_version": "never",
+    "kind": "count",
+    "keyed": false,
+    "releaseChannelCollection": "opt-out",
+    "description": "a testing histogram; not meant to be touched",
+    "record_in_processes": ["main", "content", "gpu"]
+  },
+  "MOCK_FLAG": {
+    "alert_emails": ["telemetry-client-dev@mozilla.com"],
+    "expires_in_version": "never",
+    "kind": "flag",
+    "keyed": false,
+    "releaseChannelCollection": "opt-out",
+    "description": "a testing histogram; not meant to be touched",
+    "record_in_processes": ["main", "content", "gpu"]
   }
 }
