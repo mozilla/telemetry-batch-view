@@ -68,11 +68,12 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
               userPreferences: List[UserPref] = userPrefs,
               scalarDefinitions: List[(String, ScalarDefinition)] = scalarDefs,
               histogramDefinitions: List[(String, HistogramDefinition)] = histogramDefs,
-              testInvalidFields: List[String] = Nil
+              testInvalidFields: List[String] = Nil,
+              naturalHistogramRepresentationList: List[String] = Nil
              ): Unit = {
     val doc = message.toJValue.get
-    val summary = MainSummaryView.messageToRow(doc, scalarDefinitions, histogramDefinitions, userPreferences)
-    val applied = applySchema(summary.get, MainSummaryView.buildSchema(userPreferences, scalarDefinitions, histogramDefinitions))
+    val summary = MainSummaryView.messageToRow(doc, scalarDefinitions, histogramDefinitions, naturalHistogramRepresentationList, userPreferences)
+    val applied = applySchema(summary.get, MainSummaryView.buildSchema(userPreferences, scalarDefinitions, histogramDefinitions, naturalHistogramRepresentationList))
     val actual = applied.getValuesMap(expected.keys.toList)
 
     if (!testInvalidFields.isEmpty) {
@@ -1071,6 +1072,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
     val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(
       Histograms.definitions(includeOptin = false, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true),
       useWhitelist = true)
+
     val allScalarDefs = Scalars.definitions(includeOptin = true).toList.sortBy(_._1)
 
     val fakeHisto =
@@ -1151,7 +1153,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
     }.toMap
 
     val expectedHistos = MainPing
-      .histogramsToRow(expectedProcessHistos, allHistogramDefs)
+      .histogramsToRow(expectedProcessHistos, allHistogramDefs, Nil)
       .toSeq.zip(allHistogramDefs.map(_._1)).map(_.swap).toMap
 
     val expectedProcessScalars = MainPing.DefaultProcessTypes.map { p =>
@@ -1698,12 +1700,210 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
             |  }
             |}""".stripMargin),
       None)
+
     val expected = Map(
       "histogram_parent_mock_categorical" -> Map("am" -> 0, "a" -> 1, "strange" -> 1, CategoricalHistogram.SpillBucketName -> 3)
     )
 
     compare(message, expected)
   }
+
+  it can "Scalarize count histograms" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.histograms" ->
+          """
+            |{
+            |  "MOCK_COUNT": {
+            |    "range": [1, 2],
+            |    "bucket_count": 3,
+            |    "histogram_type": 3,
+            |    "values": {
+            |      "0": 10,
+            |      "1": 0
+            |    },
+            |    "sum": 0
+            |  }
+            |}""".stripMargin),
+      None)
+    val expected = Map(
+      "histogram_parent_mock_count" -> 10
+    )
+
+    compare(message, expected)
+  }
+
+  it can "Not scalarize histogram-represented count histograms" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.histograms" ->
+          """
+            |{
+            |  "MOCK_COUNT": {
+            |    "range": [1, 2],
+            |    "bucket_count": 3,
+            |    "histogram_type": 3,
+            |    "values": {
+            |      "0": 10,
+            |      "1": 0
+            |    },
+            |    "sum": 0
+            |  }
+            |}""".stripMargin),
+      None)
+    val expected = Map(
+      "histogram_parent_mock_count" -> Map(0 -> 10, 1 -> 0)
+    )
+
+    compare(message, expected, naturalHistogramRepresentationList=List("MOCK_COUNT"))
+  }
+
+  it can "Show improper count histograms as null" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.histograms" ->
+          """
+            |{
+            |  "MOCK_COUNT": {
+            |    "range": [1, 2],
+            |    "bucket_count": 3,
+            |    "histogram_type": 3,
+            |    "values": {
+            |      "1": 2
+            |    },
+            |    "sum": 0
+            |  }
+            |}""".stripMargin),
+      None)
+    val expected = Map(
+      "histogram_parent_mock_count" -> null
+    )
+
+    compare(message, expected)
+  }
+
+  it can "Scalarize true flag histograms" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.histograms" ->
+          """
+            |{
+            |  "MOCK_FLAG": {
+            |    "range": [1, 2],
+            |    "bucket_count": 3,
+            |    "histogram_type": 3,
+            |    "values": {
+            |      "0": 0,
+            |      "1": 1
+            |    },
+            |    "sum": 1
+            |  }
+            |}""".stripMargin),
+      None)
+    val expected = Map(
+      "histogram_parent_mock_flag" -> true
+    )
+
+    compare(message, expected)
+  }
+
+  it can "Scalarize false flag histograms" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.histograms" ->
+          """
+            |{
+            |  "MOCK_FLAG": {
+            |    "range": [1, 2],
+            |    "bucket_count": 3,
+            |    "histogram_type": 3,
+            |    "values": {
+            |      "0": 1,
+            |      "1": 0
+            |    },
+            |    "sum": 0
+            |  }
+            |}""".stripMargin),
+      None)
+    val expected = Map(
+      "histogram_parent_mock_flag" -> false
+    )
+
+    compare(message, expected)
+  }
+
+
+  it can "Not scalarize histogram-represented flag histograms" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.histograms" ->
+          """
+            |{
+            |  "MOCK_FLAG": {
+            |    "range": [1, 2],
+            |    "bucket_count": 3,
+            |    "histogram_type": 3,
+            |    "values": {
+            |      "0": 0,
+            |      "1": 1
+            |    },
+            |    "sum": 1
+            |  }
+            |}""".stripMargin),
+      None)
+    val expected = Map(
+      "histogram_parent_mock_flag" -> Map(0 -> 0, 1 -> 1)
+    )
+
+    compare(message, expected, naturalHistogramRepresentationList=List("MOCK_FLAG"))
+  }
+
+  it can "Set improper flag histograms to null" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "payload.histograms" ->
+          """
+            |{
+            |  "MOCK_FLAG": {
+            |    "range": [1, 2],
+            |    "bucket_count": 3,
+            |    "histogram_type": 3,
+            |    "values": {
+            |      "0": 1,
+            |      "1": 1
+            |    },
+            |    "sum": 1
+            |  }
+            |}""".stripMargin),
+      None)
+    val expected = Map(
+      "histogram_parent_mock_flag" -> null
+    )
+
+    compare(message, expected)
+  }
+
 
   it can "properly show e10s_multi_processes" in {
     val message = RichMessage(
