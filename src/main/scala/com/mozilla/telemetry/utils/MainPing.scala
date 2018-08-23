@@ -425,7 +425,7 @@ object MainPing{
    * Converts buckets to their labels.
    * Accumulates all non-labeled buckets into the spill bucket.
    */
-  def extractCategoricalHistogramMap(definition: CategoricalHistogram)(histogram: JValue): Map[String, Int] = {
+  private def extractCategoricalHistogramMap(definition: CategoricalHistogram)(histogram: JValue): Map[String, Int] = {
     extractHistogramMap(histogram) match {
       case null => null
       case l => l.toList
@@ -436,7 +436,7 @@ object MainPing{
     }
   }
 
-  def extractCountHistogram(histogram: JValue): Option[Integer] = {
+  private def extractCountHistogram(histogram: JValue): Option[Integer] = {
     // Count histograms are null unless the
     // 0 bucket has a value
     extractHistogramMap(histogram) match {
@@ -445,7 +445,7 @@ object MainPing{
     }
   }
 
-  def extractFlagHistogram(histogram: JValue): Option[Boolean] = {
+  private def extractFlagHistogram(histogram: JValue): Option[Boolean] = {
     // Flag histograms are null unless:
     // both buckets 0 and 1 are present,
     // they both have valid values (0 or 1),
@@ -462,7 +462,7 @@ object MainPing{
     }
   }
 
-  def extract(func: JValue => Any)(histogram: JValue): Any = {
+  private def extract(func: JValue => Any)(histogram: JValue): Any = {
     func(histogram) match {
       case None => null
       case Some(v) => v
@@ -470,7 +470,10 @@ object MainPing{
     }
   }
 
-  def histogramsToRow(histograms: Map[String, JValue], definitions: List[(String, HistogramDefinition)], naturalHistogramRepresentationList: List[String]): Row = {
+  def histogramsToRow(histograms: Map[String, JValue],
+                      definitions: List[(String, HistogramDefinition)],
+                      naturalHistogramRepresentationList: List[String]
+                     ): Row = {
     implicit val formats = DefaultFormats
 
     Row.fromSeq(
