@@ -72,8 +72,21 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
               naturalHistogramRepresentationList: List[String] = Nil
              ): Unit = {
     val doc = message.toJValue.get
-    val summary = MainSummaryView.messageToRow(doc, scalarDefinitions, histogramDefinitions, naturalHistogramRepresentationList, userPreferences)
-    val applied = applySchema(summary.get, MainSummaryView.buildSchema(userPreferences, scalarDefinitions, histogramDefinitions, naturalHistogramRepresentationList))
+
+    val summary = MainSummaryView.messageToRow(
+      doc,
+      scalarDefinitions,
+      histogramDefinitions,
+      naturalHistogramRepresentationList,
+      userPreferences)
+
+    val schema = MainSummaryView.buildSchema(
+      userPreferences,
+      scalarDefinitions,
+      histogramDefinitions,
+      naturalHistogramRepresentationList)
+
+    val applied = applySchema(summary.get, schema)
     val actual = applied.getValuesMap(expected.keys.toList)
 
     if (!testInvalidFields.isEmpty) {
