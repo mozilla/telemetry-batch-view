@@ -25,7 +25,7 @@ object MainSummaryView {
   def schemaVersion: String = "v4"
   def jobName: String = "main_summary"
 
-  // Allow at most .5% of records to be ignored
+  // Allow at most .005% of records to be ignored
   // Records are ignored when we can't properly deserialize them
   val MaxFractionIgnoredPings = .00005
 
@@ -127,7 +127,28 @@ object MainSummaryView {
     "WEBVR_TIME_SPENT_VIEWING_IN_OPENVR" ::
     "WEBVR_USERS_VIEW_IN" :: Nil
 
-
+  /**
+   * Count and Flag histograms are both automatically
+   * transformed into Scalars. Count histograms become
+   * integer counts, and Flag histograms become boolean
+   * values.
+   *
+   * If instead a count or flag histogram should have
+   * it's natural histogram representation - a Map
+   * of buckets and their associated counts - then
+   * including the probe name here will ensure that.
+   *
+   * For example, a Flag histogram with values
+   * {0: 1, 1: 0} will be recorded as False. However,
+   * including the probe name here will store the
+   * {0: 1, 1: 0} Map instead.
+   *
+   * WARNING: Removing or adding to this list will change
+   * the schema for that probe's columns, rendering all
+   * previous data unreadable. The normal method is to
+   * include a probe name here when added to the whitelist,
+   * and never remove it.
+   */
   val NaturalHistogramRepresentationList =
     "A11Y_INSTANTIATED_FLAG" :: Nil
 
