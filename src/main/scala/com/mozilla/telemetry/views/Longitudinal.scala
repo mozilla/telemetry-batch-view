@@ -114,7 +114,7 @@ object LongitudinalView {
   //    which is in memory on each executor (and the driver)
   //
   // From 2018/01/22 to 2018/06/22, 2158 clients had 5000 or more pings.
-  val DefaultFilterLimit = 5000
+  val DefaultFilterLimit = 4000
   val DefaultMaxHistorySize = 1000
 
   // Column name prefix used to prevent name clashing between scalars and other
@@ -198,7 +198,7 @@ object LongitudinalView {
         case sample if samples.contains(sample) => true
       }.where("appUpdateChannel") {
         case channel if channels.map(_.contains(channel)).getOrElse(true) => true
-      }
+      }.records(Some(1600))
 
     val handler = new S3Handler()
 
