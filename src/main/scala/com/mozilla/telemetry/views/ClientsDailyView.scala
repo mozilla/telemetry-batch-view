@@ -262,7 +262,6 @@ object ClientsDailyView {
     aggSum("scalar_parent_devtools_accessibility_node_inspected_count"),
     aggSum("scalar_parent_devtools_accessibility_opened_count"),
     aggSum("scalar_parent_devtools_accessibility_picker_used_count"),
-    aggSum("scalar_parent_devtools_accessibility_select_accessible_for_node"),
     aggSum("scalar_parent_devtools_accessibility_service_enabled_count"),
     aggSum("scalar_parent_devtools_copy_full_css_selector_opened"),
     aggSum("scalar_parent_devtools_copy_unique_css_selector_opened"),
