@@ -198,7 +198,7 @@ object LongitudinalView {
         case sample if samples.contains(sample) => true
       }.where("appUpdateChannel") {
         case channel if channels.map(_.contains(channel)).getOrElse(true) => true
-      }.records(Some(1600))
+      }.records(minPartitions=Some(1600))
 
     val handler = new S3Handler()
 
