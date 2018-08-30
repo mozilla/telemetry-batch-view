@@ -3,14 +3,15 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+
 import com.mozilla.telemetry.heka.Dataset
 import com.mozilla.telemetry.utils.{Experiment, getOrCreateSparkSession}
 import org.apache.spark.sql.SaveMode
-import org.joda.time.{DateTime, Days, format}
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.json4s.jackson.Serialization
-import org.rogach.scallop.ScallopConf
 
 case class Application(
     architecture: String,
@@ -162,23 +163,15 @@ case class CrashSummary (
   }
 }
 
-object CrashSummaryView {
+object CrashSummaryView extends BatchJobBase {
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
 
-  private class Opts(args: Array[String]) extends ScallopConf(args) {
-    val outputBucket = opt[String](
+  private class Opts(args: Array[String]) extends BaseOpts(args) {
+    override val outputBucket = opt[String](
       "outputBucket",
       descr = "Bucket in which to save data",
       required = false,
       default = Some("telemetry-test-bucket"))
-    val from = opt[String](
-      "from",
-      descr = "From submission date",
-      required = false)
-    val to = opt[String](
-      "to",
-      descr = "To submission date",
-      required = false)
     val dryRun = opt[Boolean](
       "dryRun",
       descr = "Calculate the dataset, but do not write to S3",
@@ -219,25 +212,16 @@ object CrashSummaryView {
 
     // Parse command line options
     val opts = new Opts(args)
-    val fmt = format.DateTimeFormat.forPattern("yyyyMMdd")
-    val to = opts.to.get match {
-      case Some(t) => fmt.parseDateTime(t)
-      case _ => DateTime.now.minusDays(1)
-    }
-    val from = opts.from.get match {
-      case Some(f) => fmt.parseDateTime(f)
-      case _ => DateTime.now.minusDays(1)
-    }
 
-    for (offset <- 0 to Days.daysBetween(from, to).getDays) {
-      val currentDate = from.plusDays(offset)
-      val currentDateString = currentDate.toString("yyyy-MM-dd")
+    for (submissionDate <- datesBetween(opts.from(), opts.to.toOption)) {
+      val date = LocalDate.parse(submissionDate, BatchJobBase.DateFormatter)
+      val submissionDateDash = date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
 
       val messages = Dataset("telemetry")
         .where("sourceName") { case "telemetry" => true }
         .where("sourceVersion") { case "4" => true }
         .where("docType") { case "crash" => true }
-        .where("submissionDate") { case date if date == currentDate.toString("yyyyMMdd") => true }
+        .where("submissionDate") { case date if date == submissionDate => true }
 
       val processedPings = spark.sparkContext.longAccumulator("processedPings")
       val discardedPings = spark.sparkContext.longAccumulator("discardedPings")
@@ -257,7 +241,7 @@ object CrashSummaryView {
       if (!opts.dryRun()) {
         val prefix = s"crash_summary/v1"
         val outputBucket = opts.outputBucket()
-        val path = s"s3://${outputBucket}/${prefix}/submission_date=${currentDateString}"
+        val path = s"s3://${outputBucket}/${prefix}/submission_date=${submissionDateDash}"
         dataset.write.mode(SaveMode.Overwrite).parquet(path)
       }
       logger.info("************************************")
@@ -266,6 +250,7 @@ object CrashSummaryView {
       logger.info(s"Discarded pings: ${discardedPings.value}")
       logger.info("************************************")
     }
-    sc.stop()
+
+    if (shouldStopContextAtEnd(spark)) { spark.stop() }
   }
 }

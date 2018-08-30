@@ -13,7 +13,7 @@ import org.rogach.scallop.ScallopConf
 
 import scala.util.{Failure, Success, Try}
 
-object ExperimentAnalysisView {
+object ExperimentAnalysisView extends BatchJobBase {
   private val defaultErrorAggregatesBucket = "net-mozaws-prod-us-west-2-pipeline-data"
   private val errorAggregatesPath = "experiment_error_aggregates/v1"
   private val jobName = "experiment_analysis"
@@ -132,7 +132,8 @@ object ExperimentAnalysisView {
         .write.mode("overwrite").parquet(outputLocation)
 
       logger.info(s"Wrote aggregates to $outputLocation")
-      spark.stop()
+
+      if (shouldStopContextAtEnd(spark)) { spark.stop() }
     }
   }
 

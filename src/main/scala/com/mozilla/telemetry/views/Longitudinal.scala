@@ -87,7 +87,7 @@ protected class ClientIterator(it: Iterator[(String, Map[String, Any])], maxHist
   // scalastyle:on return
 }
 
-object LongitudinalView {
+object LongitudinalView extends BatchJobBase {
   @transient lazy val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
 
   val jobName = "longitudinal"
@@ -214,7 +214,7 @@ object LongitudinalView {
 
     run(opts.to(), opts.outputBucket(), messages, sc.defaultParallelism, handler, histogramDefinitions, scalarDefinitions, DefaultFilterLimit)
 
-    sc.stop()
+    if (shouldStopContextAtEnd(spark)) { spark.stop() }
   }
 
   private def getOrderKey(message: Message): Option[((String, String, Int), Int)] = {

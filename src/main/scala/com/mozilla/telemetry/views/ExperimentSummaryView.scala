@@ -3,12 +3,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
+import java.time.{LocalDate, ZoneId}
 import java.util.Date
 
 import com.mozilla.telemetry.utils.{deletePrefix, getOrCreateSparkSession}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
-import org.joda.time.{DateTime, Days, format}
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.rogach.scallop._
@@ -16,7 +16,7 @@ import scalaj.http.Http
 
 import scala.util.{Success, Try}
 
-object ExperimentSummaryView {
+object ExperimentSummaryView extends BatchJobBase {
   def schemaVersion: String = "v1"
   def jobName: String = "experiments"
   def experimentsUrl: String = "https://normandy.services.mozilla.com/api/v1/recipe/"
@@ -42,11 +42,8 @@ object ExperimentSummaryView {
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getSimpleName)
 
   // Configuration for command line arguments
-  private class Conf(args: Array[String]) extends ScallopConf(args) {
-    val from = opt[String]("from", descr = "From submission date", required = false)
-    val to = opt[String]("to", descr = "To submission date", required = false)
+  private class Conf(args: Array[String]) extends BaseOpts(args) {
     val inputBucket = opt[String]("inbucket", descr = "Source bucket for main_summary data", required = false)
-    val outputBucket = opt[String]("bucket", descr = "Destination bucket for parquet data", required = true)
     val maxRecordsPerFile = opt[Int]("max-records-per-file",
       descr = "Max number of rows to write to output files before splitting",
       required = false,
@@ -68,16 +65,6 @@ object ExperimentSummaryView {
 
   def main(args: Array[String]) {
     val conf = new Conf(args)
-    // parse command line arguments
-    val fmt = format.DateTimeFormat.forPattern("yyyyMMdd")
-    val to = conf.to.get match {
-      case Some(t) => fmt.parseDateTime(t)
-      case _ => DateTime.now.minusDays(1)
-    }
-    val from = conf.from.get match {
-      case Some(f) => fmt.parseDateTime(f)
-      case _ => DateTime.now.minusDays(1)
-    }
 
     val spark = getOrCreateSparkSession(jobName)
 
@@ -92,26 +79,27 @@ object ExperimentSummaryView {
     val maxRecordsPerFile = conf.maxRecordsPerFile()
     val sampleId = conf.sampleId.toOption
 
-    for (offset <- 0 to Days.daysBetween(from, to).getDays) {
-      val currentDate = from.plusDays(offset)
-      val currentDateString = currentDate.toString("yyyyMMdd")
+    for (submissionDate <- datesBetween(conf.from(), conf.to.get)) {
+      val currentLocalDate = LocalDate.parse(submissionDate, BatchJobBase.DateFormatter)
+      val currentDate = Date.from(currentLocalDate.atStartOfDay(ZoneId.of("UTC")).toInstant)
 
       logger.info("=======================================================================================")
-      logger.info(s"BEGINNING JOB $jobName $schemaVersion FOR $currentDateString")
+      logger.info(s"BEGINNING JOB $jobName $schemaVersion FOR $submissionDate")
 
-      val input = s"s3://$inputBucket/main_summary/${MainSummaryView.schemaVersion}/submission_date_s3=$currentDateString"
+      val input = s"s3://$inputBucket/main_summary/${MainSummaryView.schemaVersion}/submission_date_s3=$submissionDate"
       val s3prefix = s"$jobName/$schemaVersion"
       val output = s"s3://$outputBucket/$s3prefix/"
 
-      val experiments = getExperimentList(getExperimentRecipes(), currentDate.toDate, conf.experimentLimit.toOption)
+      val experiments = getExperimentList(getExperimentRecipes(), currentDate, conf.experimentLimit.toOption)
 
-      experiments.foreach(e => deletePreviousOutput(outputBucket, s3prefix, currentDateString, e))
-      writeExperiments(input, output, currentDateString, experiments, spark, maxRecordsPerFile, sampleId)
+      experiments.foreach(e => deletePreviousOutput(outputBucket, s3prefix, submissionDate, e))
+      writeExperiments(input, output, submissionDate, experiments, spark, maxRecordsPerFile, sampleId)
 
-      logger.info(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $currentDateString")
+      logger.info(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $submissionDate")
       logger.info("=======================================================================================")
     }
-    sc.stop()
+
+    if (shouldStopContextAtEnd(spark)) { spark.stop() }
   }
 
   def deletePreviousOutput(bucket: String, prefix: String, date: String, experiment: String): Unit = {
