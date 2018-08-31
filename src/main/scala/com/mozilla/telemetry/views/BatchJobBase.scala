@@ -50,7 +50,7 @@ abstract class BatchJobBase extends Serializable {
     val outputBucket = opt[String](
       "bucket",
       descr = "Destination bucket for parquet data",
-      required = true)
+      required = false)
   }
 
   protected def shouldStopContextAtEnd(spark: SparkSession): Boolean = {
