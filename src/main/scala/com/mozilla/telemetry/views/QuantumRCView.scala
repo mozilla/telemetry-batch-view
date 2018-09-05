@@ -3,7 +3,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
-import com.github.nscala_time.time.Imports._
+import java.time._
+import java.time.format.DateTimeFormatter
+
 import com.mozilla.telemetry.utils.UDFs._
 import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import org.apache.spark.sql.DataFrame
@@ -40,23 +42,22 @@ object QuantumRCView extends BatchJobBase {
     verify()
   }
 
-  private val fmt = DateTimeFormat.forPattern("yyyyMMdd")
+  private val fmt = DateTimeFormatter.ofPattern("yyyyMMdd")
 
-  // Joda time does not have a nice way of getting the first Sunday of the
-  // current week, so this is a workaround.
-  private def getFirstDayOfWeek(other: DateTime) = other.dayOfWeek.get match {
-    case 7 => other
-    case _ => other.minusWeeks(1).withDayOfWeek(7)
+  // Get Sunday as the first day of the week
+  private def getFirstDayOfWeek(other: LocalDate) = other.getDayOfWeek() match {
+    case DayOfWeek.SUNDAY => other
+    case _ => other.minusWeeks(1).`with`(DayOfWeek.SUNDAY)
   }
 
   private def getFrom(conf: Conf): String = {
-    fmt.print(getFirstDayOfWeek(fmt.parseDateTime(getTo(conf))))
+    fmt.format(getFirstDayOfWeek(LocalDate.parse(getTo(conf), fmt)))
   }
 
   private def getTo(conf: Conf): String = {
-    conf.to.get match {
+    conf.to.toOption match {
       case Some(t) => t
-      case _ => fmt.print(DateTime.now.minusDays(1))
+      case _ => LocalDate.now(clock).minusDays(1).format(fmt)
     }
   }
 

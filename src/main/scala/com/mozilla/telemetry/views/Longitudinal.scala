@@ -3,7 +3,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
-import com.github.nscala_time.time.Imports._
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+
 import com.mozilla.telemetry.avro
 import com.mozilla.telemetry.heka.{Dataset, Message}
 import com.mozilla.telemetry.metrics._
@@ -21,7 +23,6 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scala.math.abs
 import scala.reflect.ClassTag
-
 import scala.collection.mutable.ListBuffer
 
 class S3Handler extends Serializable {
@@ -162,15 +163,15 @@ object LongitudinalView extends BatchJobBase {
 
   def main(args: Array[String]): Unit = {
     val opts = new Opts(args)
-    val fmt = DateTimeFormat.forPattern("yyyyMMdd")
+    val fmt = DateTimeFormatter.ofPattern("yyyyMMdd")
 
     val to = opts.to()
-    val from = opts.from.get match {
+    val from = opts.from.toOption match {
       case Some(f) => f
-      case _ => fmt.print(fmt.parseDateTime(to).minusMonths(6))
+      case _ => LocalDate.parse(to, fmt).minusMonths(6).format(fmt)
     }
 
-    val channels = opts.channels.get.map(_.split(","))
+    val channels = opts.channels.toOption.map(_.split(","))
 
     val samples = opts.samples.get match {
         case Some(s) => s.split(",")

@@ -3,7 +3,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
-import com.github.nscala_time.time.Imports._
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+
 import com.mozilla.telemetry.utils.UDFs._
 import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import org.apache.spark.sql.functions._
@@ -86,19 +88,19 @@ object GenericCountView extends BatchJobBase {
     verify()
   }
 
-  private val fmt = DateTimeFormat.forPattern("yyyyMMdd")
+  private val fmt = DateTimeFormatter.ofPattern("yyyyMMdd")
 
   private def getFrom(conf: Conf): String = {
-    conf.from.get match {
+    conf.from.toOption match {
       case Some(t) => t
-      case _ => fmt.print(fmt.parseDateTime(getTo(conf)).minusMonths(6))
+      case _ => LocalDate.parse(getTo(conf), fmt).minusMonths(6).format(fmt)
     }
   }
 
   private def getTo(conf: Conf): String = {
     conf.to.get match {
       case Some(t) => t
-      case _ => fmt.print(DateTime.now.minusDays(1))
+      case _ => LocalDate.now(clock).minusDays(1).format(fmt)
     }
   }
 
