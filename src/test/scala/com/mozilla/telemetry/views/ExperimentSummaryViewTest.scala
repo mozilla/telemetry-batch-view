@@ -3,13 +3,14 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry
 
+import java.time.{LocalDateTime, OffsetDateTime, ZoneOffset}
+
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.views.ExperimentSummaryView
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.col
 import org.scalatest.{FlatSpec, Matchers}
 import org.json4s.jackson.JsonMethods.parse
-import org.joda.time.DateTime
 
 import scala.io.Source
 
@@ -18,6 +19,11 @@ case class ExperimentMainSummary(document_id: String, client_id: String,
 
 
 class ExperimentSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
+
+  def getOffsetDateTime(year: Int, month: Int, day: Int, hour: Int, min: Int): OffsetDateTime = {
+    LocalDateTime.of(year, month, day, hour, min).atOffset(ZoneOffset.UTC)
+  }
+
   "Experiment records" can "be exploded from MainSummary" in {
     sc.setLogLevel("WARN")
 
@@ -206,15 +212,15 @@ class ExperimentSummaryViewTest extends FlatSpec with Matchers with DataFrameSui
     val expected831 = Set("shield-public-infobar-display-bug1368141", "shield-lazy-client-classify")
     val expected830 = expected831 + "nightly-nothing-burger-1"
 
-    assert(ExperimentSummaryView.getExperimentList(json, new DateTime(2017, 8, 30, 0, 0).toDate).toSet == expected830)
-    assert(ExperimentSummaryView.getExperimentList(json, new DateTime(2017, 8, 31, 0, 0).toDate).toSet == expected831)
+    assert(ExperimentSummaryView.getExperimentList(json, getOffsetDateTime(2017, 8, 30, 0, 0)).toSet == expected830)
+    assert(ExperimentSummaryView.getExperimentList(json, getOffsetDateTime(2017, 8, 31, 0, 0)).toSet == expected831)
   }
 
   it can "be limited by option" in {
     val apiFixturePath = getClass.getResource("/normandy_api_result.json").getPath()
     val json = parse(Source.fromFile(apiFixturePath).mkString)
 
-    val aug30 = new DateTime(2017, 8, 30, 0, 0).toDate
+    val aug30 = getOffsetDateTime(2017, 8, 30, 0, 0)
     val expected = Set("shield-public-infobar-display-bug1368141")
 
     assert(ExperimentSummaryView.getExperimentList(json, aug30, Some(1)).toSet == expected)
