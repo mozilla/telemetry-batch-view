@@ -41,7 +41,6 @@ lazy val root = (project in file(".")).
     libraryDependencies += "org.apache.parquet" % "parquet-avro" % "1.7.0",
     libraryDependencies += "net.sandrogrzicic" %% "scalabuff-runtime" % "1.4.0",
     libraryDependencies += "org.xerial.snappy" % "snappy-java" % "1.1.7.2",
-    libraryDependencies += "joda-time" % "joda-time" % "2.10",
     libraryDependencies += "org.apache.hadoop" % "hadoop-client" % hadoopVersion excludeAll(ExclusionRule(organization = "javax.servlet")),
     libraryDependencies += "org.apache.hadoop" % "hadoop-aws" % hadoopVersion excludeAll(ExclusionRule(organization = "javax.servlet")),
     libraryDependencies += "org.rogach" %% "scallop" % "3.1.2",
