@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
-import java.time.LocalDate
+import java.time.{LocalDate, ZoneOffset}
 import java.time.format.DateTimeFormatter
 
 import com.mozilla.telemetry.heka.Dataset
@@ -13,10 +13,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.util.LongAccumulator
-import org.joda.time._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
-import org.rogach.scallop._
 
 
 object CrashAggregateView extends BatchJobBase {
@@ -212,10 +210,9 @@ object CrashAggregateView extends BatchJobBase {
 
   // scalastyle:off return
   private def getCrashPair(pingFields: Map[String, Any]): Option[(List[java.io.Serializable], List[Double])] = {
-    val build = pingFields.get("environment.build") match {
-      case Some(value: String) => parse(value)
-      case _ => JObject()
-    }
+    val submissionDateFormatter = DateTimeFormatter.ofPattern("yyyyMMdd").withZone(ZoneOffset.UTC)
+    val activityDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneOffset.UTC)
+
     val info = pingFields.get("payload.info") match {
       case Some(value: String) => parse(value)
       case _ => JObject()
@@ -234,9 +231,8 @@ object CrashAggregateView extends BatchJobBase {
     // obtain the activity date clamped to a reasonable time range
     val submissionDate = pingFields.get("submissionDate") match {
       case Some(date: String) =>
-        // convert YYYYMMDD timestamp to a real date
         try {
-          format.DateTimeFormat.forPattern("yyyyMMdd").withZone(org.joda.time.DateTimeZone.UTC).parseDateTime(date)
+          LocalDate.parse(date, submissionDateFormatter)
         } catch {
           case _: Throwable => return None
         }
@@ -245,16 +241,12 @@ object CrashAggregateView extends BatchJobBase {
     val activityDateRaw = if (isMainPing) {
       info \ "subsessionStartDate" match {
         case JString(date: String) =>
-          val activityDateFormat = format.ISODateTimeFormat.dateTime()
           try {
-            // only keep the date part of the timestamp
-            activityDateFormat.withZone(org.joda.time.DateTimeZone.UTC).parseDateTime(date).withMillisOfDay(0)
+            LocalDate.parse(date.substring(0, 10), activityDateFormatter)
           } catch {
-            case _: Throwable =>
-              return None
+            case _: Throwable => return None
           }
-        case _ =>
-          return None
+        case _ => return None
       }
     } else {
       val payload = pingFields.get("payload") match {
@@ -264,15 +256,12 @@ object CrashAggregateView extends BatchJobBase {
 
       payload \ "payload" \ "crashDate" match {
         case JString(date: String) =>
-          val activityDateFormat =  format.DateTimeFormat.forPattern("yyyy-MM-dd")
           try {
-            activityDateFormat.withZone(org.joda.time.DateTimeZone.UTC).parseDateTime(date).withMillisOfDay(0)
+            LocalDate.parse(date, activityDateFormatter)
           } catch {
-            case _: Throwable =>
-              return None
+            case _: Throwable => return None
           }
-        case _ =>
-          return None
+        case _ => return None
       }
     }
 
@@ -283,7 +272,7 @@ object CrashAggregateView extends BatchJobBase {
     } else {
       activityDateRaw
     }
-    val activityDateString = format.DateTimeFormat.forPattern("yyyy-MM-dd").print(activityDate) // format activity date as YYYY-MM-DD
+    val activityDateString = activityDate.format(activityDateFormatter) // format activity date as YYYY-MM-DD
 
     // obtain the unique key of the aggregate that this ping belongs to
     val uniqueKey = activityDateString :: (
