@@ -5,6 +5,8 @@ package com.mozilla.telemetry.ml
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
+import java.time.{Instant, ZoneOffset}
+import java.time.format.DateTimeFormatter
 
 import breeze.linalg.{DenseMatrix, DenseVector}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
@@ -13,7 +15,6 @@ import org.apache.spark.ml.evaluation.NaNRegressionEvaluator
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.apache.spark.sql.SparkSession
-import org.joda.time.{DateTime, format}
 import org.json4s.JsonDSL._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -305,10 +306,10 @@ object AddonRecommender {
         val cwd = new java.io.File(".").getCanonicalPath
         val outputDir = new java.io.File(cwd, output)
 
-        val fmt = format.DateTimeFormat.forPattern("yyyyMMdd")
+        val fmt = DateTimeFormatter.ofPattern("yyyyMMdd")
         val date = conf.train.runDate.get match {
           case Some(f) => f
-          case _ => fmt.print(DateTime.now)
+          case _ => Instant.now().atOffset(ZoneOffset.UTC).format(fmt)
         }
 
         train(outputDir.getCanonicalPath, date, conf.train.privateBucket(), conf.train.publicBucket(), conf.train.longitudinalOverride.toOption)
