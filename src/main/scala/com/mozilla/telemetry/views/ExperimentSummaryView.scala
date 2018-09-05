@@ -3,8 +3,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
-import java.time.{LocalDate, ZoneId}
-import java.util.Date
+import java.time.{LocalDate, OffsetDateTime, ZoneOffset}
+import java.time.format.DateTimeFormatter
 
 import com.mozilla.telemetry.utils.{deletePrefix, getOrCreateSparkSession}
 import org.apache.spark.sql.SparkSession
@@ -32,7 +32,7 @@ object ExperimentSummaryView extends BatchJobBase {
                                              slug: Option[String],
                                              name: Option[String])
   private case class NormandyRecipe(id: Long,
-                                    last_updated: Date,
+                                    last_updated: OffsetDateTime,
                                     enabled: Boolean,
                                     action: String,
                                     arguments: NormandyRecipeArguments)
@@ -72,16 +72,16 @@ object ExperimentSummaryView extends BatchJobBase {
     spark.conf.set("parquet.block.size", parquetSize)
     spark.conf.set("dfs.blocksize", parquetSize)
 
-    implicit val sc = spark.sparkContext
-
     val outputBucket = conf.outputBucket()
     val inputBucket = conf.inputBucket.getOrElse(outputBucket)
     val maxRecordsPerFile = conf.maxRecordsPerFile()
     val sampleId = conf.sampleId.toOption
 
-    for (submissionDate <- datesBetween(conf.from(), conf.to.get)) {
-      val currentLocalDate = LocalDate.parse(submissionDate, BatchJobBase.DateFormatter)
-      val currentDate = Date.from(currentLocalDate.atStartOfDay(ZoneId.of("UTC")).toInstant)
+    for (submissionDate <- datesBetween(conf.from(), conf.to.toOption)) {
+      val currentDate = LocalDate
+        .parse(submissionDate, BatchJobBase.DateFormatter)
+        .atStartOfDay(ZoneOffset.UTC)
+        .toOffsetDateTime
 
       logger.info("=======================================================================================")
       logger.info(s"BEGINNING JOB $jobName $schemaVersion FOR $submissionDate")
@@ -136,7 +136,7 @@ object ExperimentSummaryView extends BatchJobBase {
     parse(Http(experimentsUrl).params(experimentsUrlParams).asString.body)
   }
 
-  def getExperimentList(json: JValue, date: Date, limit: Option[Int] = None): List[String] = {
+  def getExperimentList(json: JValue, date: OffsetDateTime, limit: Option[Int] = None): List[String] = {
     val experiments = json match {
       case JArray(x) => x.flatMap(v =>
         getNormalizedRecipe(v) match {
@@ -152,19 +152,27 @@ object ExperimentSummaryView extends BatchJobBase {
   }
 
 
-  def shouldProcessExperiment(r: NormandyRecipe, date: Date): Boolean = {
+  def shouldProcessExperiment(r: NormandyRecipe, date: OffsetDateTime): Boolean = {
     experimentsQualifyingAction.contains(r.action) &&
     r.arguments.isHighVolume != Some(true) &&
     !excludedExperiments.contains(r.arguments.slug.get) &&
-    ((r.enabled == true) || r.last_updated.after(date)) // is this experiment enabled for this date?
+    (r.enabled || r.last_updated.isAfter(date)) // is this experiment enabled for this date?
   }
+
+  // Custom json4s serializer for java time
+  private object OffsetDateTimeSerializer extends CustomSerializer[OffsetDateTime](_ => (
+    {
+      case JString(s) => OffsetDateTime.parse(s)
+    },
+    {
+      case date: OffsetDateTime => JString(date.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+    })
+  )
 
   private def getNormalizedRecipe(json: JValue): Option[NormandyRecipe] = {
     // Some normandy recipes stuff the slug in a "slug" field and some in a "name" field
     // Here we try to normalize this a bit
-    implicit val formats = new DefaultFormats {
-      override def dateFormatter = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
-    }
+    implicit val formats = DefaultFormats ++ Seq(OffsetDateTimeSerializer)
 
     Try(json.extract[NormandyRecipe]) match {
       case Success(r) =>
