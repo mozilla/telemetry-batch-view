@@ -4,6 +4,8 @@
 package com.mozilla.telemetry
 
 import java.net.URI
+import java.time.{Instant, LocalDate, OffsetDateTime, ZoneOffset}
+import java.time.format.DateTimeFormatter
 import java.util.zip.CRC32
 
 import org.apache.spark.SparkConf
@@ -14,7 +16,6 @@ import org.apache.hadoop.fs.FileSystem
 package object utils{
   import java.rmi.dgc.VMID
   import org.apache.hadoop.fs.Path
-  import org.joda.time._
 
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
 
@@ -37,8 +38,9 @@ package object utils{
     "" -> "")
 
   private val millisPerHour = 60 * 60 * 1000
+  private val secondsPerHour = 60 * 60
   private val millisPerDay = millisPerHour * 24
-  private val dateFormatter = org.joda.time.format.ISODateTimeFormat.dateTime()
+  private val dateFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
   private val uncamelPattern = java.util.regex.Pattern.compile("(^[^A-Z]+|[A-Z][^A-Z]+)")
 
   def camelize(name: String): String = {
@@ -93,30 +95,30 @@ package object utils{
     // especially time zone offsets that are not between -12 and 14 hours inclusive (see bug 1250894)
     // for these time zones, we're going to use some hacky arithmetic to bring them into range;
     // they will still represent the same moment in time, just with a correct time zone
-    // we're going to use the relatively lenient joda-time parser and output it in standard ISO format
-    val date = dateFormatter.withOffsetParsed().parseDateTime(timestamp)
-    val timezoneOffsetHours = date.getZone.getOffset(date).toDouble / millisPerHour
-    def fixTimezone(i: Int) = org.joda.time.DateTimeZone.forOffsetMillis(
-      ((timezoneOffsetHours + (i * 12) * Math.floor(timezoneOffsetHours / (-i * 12)).toInt) * millisPerHour).toInt)
+    // we're going to output it in standard ISO format
+    val date = OffsetDateTime.parse(timestamp, dateFormatter)
+    val timezoneOffsetHours = date.getOffset().getTotalSeconds.toDouble / secondsPerHour
+    def fixTimezone(i: Int) =
+      ZoneOffset.ofTotalSeconds(
+      ((timezoneOffsetHours + (i * 12) * Math.floor(timezoneOffsetHours / (-i * 12)).toInt) * secondsPerHour).toInt)
+
     val timezone = if (timezoneOffsetHours < -12.0) {
       fixTimezone(1)
     } else if (timezoneOffsetHours > 14.0) {
       fixTimezone(-1)
     } else {
-      date.getZone
+      date.getOffset
     }
-    dateFormatter.withZone(timezone).print(date)
+    date.format(dateFormatter.withZone(timezone))
   }
 
   def normalizeYYYYMMDDTimestamp(YYYYMMDD: String): String = {
-    dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(
-      format.DateTimeFormat.forPattern("yyyyMMdd")
-        .withZone(org.joda.time.DateTimeZone.UTC)
-        .parseDateTime(YYYYMMDD.asInstanceOf[String]))
+    val format = DateTimeFormatter.ofPattern("yyyyMMdd")
+    LocalDate.parse(YYYYMMDD, format).atStartOfDay(ZoneOffset.UTC).format(dateFormatter)
   }
 
   def normalizeEpochTimestamp(timestamp: BigInt): String = {
-    dateFormatter.withZone(org.joda.time.DateTimeZone.UTC).print(new DateTime(timestamp.toLong * millisPerDay))
+    Instant.ofEpochMilli(timestamp.toLong * millisPerDay).atOffset(ZoneOffset.UTC).format(dateFormatter)
   }
 
   def temporaryFileName(): Path = {
@@ -134,7 +136,7 @@ package object utils{
   }
 
   def yesterdayAsYYYYMMDD: String = {
-    DateTime.now.minusDays(1).toString("yyyyMMdd")
+    Instant.now().atOffset(ZoneOffset.UTC).minusDays(1).format(DateTimeFormatter.ofPattern("yyyyMMdd"))
   }
 
   def deletePrefix(bucket: String, prefix: String): Unit = {

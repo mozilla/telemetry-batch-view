@@ -345,14 +345,14 @@ class LongitudinalViewTest extends FlatSpec with Matchers with PrivateMethodTest
 
   "Scalar fields" must "be converted correctly" in {
     val stringFields = Array(
-      "submission_date"       -> "2016-01-28T00:00:00.000Z",
+      "submission_date"       -> "2016-01-28T00:00:00Z",
       "geo_country"           -> "US",
       "geo_city"              -> "New York",
       "dnt_header"            -> "1",
-      "subsession_start_date" -> "2015-12-09T12:00:00.000-02:00",
-      "session_start_date"    -> "2015-12-09T12:00:00.000-02:00",
-      "profile_creation_date" -> "2014-02-21T00:00:00.000Z",
-      "profile_reset_date"    -> "2014-03-03T00:00:00.000Z"
+      "subsession_start_date" -> "2015-12-09T12:00:00-02:00",
+      "session_start_date"    -> "2015-12-09T12:00:00-02:00",
+      "profile_creation_date" -> "2014-02-21T00:00:00Z",
+      "profile_reset_date"    -> "2014-03-03T00:00:00Z"
     )
 
     val floatFields = Array(
