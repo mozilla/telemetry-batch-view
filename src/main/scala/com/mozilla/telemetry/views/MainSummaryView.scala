@@ -12,7 +12,6 @@ import com.mozilla.telemetry.metrics._
 import com.mozilla.telemetry.utils._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
-import org.joda.time.{DateTime, Days, format}
 import org.json4s.JsonAST._
 import org.json4s.{DefaultFormats, JValue}
 import org.rogach.scallop._

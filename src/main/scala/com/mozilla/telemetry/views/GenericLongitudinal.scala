@@ -3,7 +3,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
-import com.github.nscala_time.time.Imports._
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+
 import com.mozilla.telemetry.utils.{CollectList, getOrCreateSparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
@@ -78,17 +80,17 @@ object GenericLongitudinalView extends BatchJobBase {
   }
 
   def getFrom(opts: Opts): String = {
-    val fmt = DateTimeFormat.forPattern("yyyyMMdd")
+    val fmt = DateTimeFormatter.ofPattern("yyyyMMdd")
     val to = opts.to()
 
-    opts.from.get match {
+    opts.from.toOption match {
       case Some(f) => f
-      case _ => fmt.print(fmt.parseDateTime(to).minusMonths(6))
+      case _ => LocalDate.parse(to, fmt).minusMonths(6).format(fmt)
     }
   }
 
   def getInputTable(sqlContext: SQLContext, opts: Opts): DataFrame = {
-    opts.inputTablename.get match {
+    opts.inputTablename.toOption match {
       case Some(t) => sqlContext.sql(s"SELECT * FROM $t")
       case _ => sqlContext.read.load(opts.inputFiles())
     }
