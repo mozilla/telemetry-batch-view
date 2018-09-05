@@ -206,7 +206,6 @@ object ClientsDailyView {
     aggSum("histogram_parent_devtools_shadereditor_opened_count"),
     aggSum("histogram_parent_devtools_storage_opened_count"),
     aggSum("histogram_parent_devtools_styleeditor_opened_count"),
-    aggSum("histogram_parent_devtools_toolbox_opened_count"),
     aggSum("histogram_parent_devtools_webaudioeditor_opened_count"),
     aggSum("histogram_parent_devtools_webconsole_opened_count"),
     aggSum("histogram_parent_devtools_webide_opened_count"),

@@ -55,6 +55,8 @@ object AddonRecommender {
       val runDate = opt[String]("runDate", descr = "The execution date", required = false)
       val privateBucket = opt[String]("privateBucket", descr = "Destination bucket for archiving the model data", required = true)
       val publicBucket = opt[String]("publicBucket", descr = "Destination bucket for the latest public model", required = true)
+      val longitudinalOverride = opt[String]("longitudinalOverride",
+        descr = "Source location for longitudinal, if not using metastore-provided dataset", required = false)
     }
 
     val recommend = new Subcommand("recommend") {
@@ -102,11 +104,18 @@ object AddonRecommender {
     * @param sparkSession The SparkSession used for loading the Longitudinal dataset.
     * @param addonWhitelist The a list of addon GUIDs that are valid
     * @param amoDB The AMO database fetched by AMODatabase.
+    * @param longitudinalOverride Optional longitudinal location for ad-hoc or manual job runs
     * @return A 4 columns Dataset with each row having the client id, the addon GUID
     *         and the hashed client id and GUID.
     */
-  private def getAddonData(sparkSession: SparkSession, addonWhitelist: List[String], amoDB: Map[String, Any]) = {
+  private def getAddonData(sparkSession: SparkSession, addonWhitelist: List[String], amoDB: Map[String, Any], longitudinalOverride: Option[String] = None) = {
     import sparkSession.sqlContext.implicits._
+
+    longitudinalOverride match {
+      case Some(location) => sparkSession.read.parquet(location).createOrReplaceTempView("longitudinal")
+      case _ => None
+    }
+
     sparkSession.sqlContext.sql("select * from longitudinal")
       .where("active_addons is not null")
       .where("build is not null and build[0].application_name = 'Firefox'")
@@ -164,7 +173,7 @@ object AddonRecommender {
   }
 
   // scalastyle:off methodLength
-  private def train(localOutputDir: String, runDate: String, privateBucket: String, publicBucket: String) = {
+  private def train(localOutputDir: String, runDate: String, privateBucket: String, publicBucket: String, longitudinalOverride: Option[String] = None) = {
     // The AMODatabase init needs to happen before we get the SparkContext,
     // otherwise the job will fail due to all the workers being idle.
     val amoDbMap = AMODatabase.getAddonMap()
@@ -180,7 +189,7 @@ object AddonRecommender {
     val istream = S3Store.getKey("telemetry-parquet", "telemetry-ml/addon_recommender/only_guids_top_200.json");
     val json_str = scala.io.Source.fromInputStream(istream).mkString
     val whitelist = parse(json_str).extract[List[String]]
-    val clientAddons = getAddonData(spark, whitelist, amoDbMap)
+    val clientAddons = getAddonData(spark, whitelist, amoDbMap, longitudinalOverride)
 
     val ratings = clientAddons
       .map{ case (_, _, hashedClientId, hashedAddonId) => Rating(hashedClientId, hashedAddonId, 1.0f)}
@@ -302,7 +311,7 @@ object AddonRecommender {
           case _ => fmt.print(DateTime.now)
         }
 
-        train(outputDir.getCanonicalPath, date, conf.train.privateBucket(), conf.train.publicBucket())
+        train(outputDir.getCanonicalPath, date, conf.train.privateBucket(), conf.train.publicBucket(), conf.train.longitudinalOverride.toOption)
 
       case None =>
         conf.printHelp()

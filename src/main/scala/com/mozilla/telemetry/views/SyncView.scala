@@ -19,7 +19,6 @@ object SyncView extends BatchJobBase {
 
   // Configuration for command line arguments
   private class Conf(args: Array[String]) extends BaseOpts(args) {
-    override val outputBucket = opt[String]("bucket", descr = "Destination bucket for parquet data", required = false)
     val outputFilename = opt[String]("outputFilename", descr = "Destination local filename for parquet data", required = false)
     val limit = opt[Int]("limit", descr = "Maximum number of files to read from S3", required = false)
     verify()

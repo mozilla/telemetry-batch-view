@@ -53,7 +53,8 @@ lazy val root = (project in file(".")).
     // Test dependencies
     libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.5" % Test,
     libraryDependencies += "com.github.tomakehurst" % "wiremock-standalone" % "2.18.0" % Test,
-    libraryDependencies += "com.holdenkarau" %% "spark-testing-base" % "2.3.0_0.9.0" % Test
+    libraryDependencies += "com.holdenkarau" %% "spark-testing-base" % "2.3.0_0.9.0" % Test,
+    libraryDependencies += "com.lihaoyi" % "ammonite" % "1.1.2" % Test cross CrossVersion.full
   )
 
 dependencyOverrides += "com.google.guava" % "guava" % "25.1-jre"
@@ -94,3 +95,8 @@ updateOptions := updateOptions.value.withLatestSnapshots(false)
 val scalaStyleConfigUrl = Some(url("https://raw.githubusercontent.com/mozilla/moztelemetry/master/scalastyle-config.xml"))
 (scalastyleConfigUrl in Compile) := scalaStyleConfigUrl
 (scalastyleConfigUrl in Test) := scalaStyleConfigUrl
+
+// Configure ammonite to replace `sbt console`
+addCommandAlias(name = "ammonite", value = "test:runMain ammonite.Main")
+addCommandAlias(name = "amm", value = "ammonite")
+addCommandAlias(name = "console", value = "ammonite")
