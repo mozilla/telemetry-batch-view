@@ -3,10 +3,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.utils
 
+import java.time.format.DateTimeFormatter
+import java.time.{Instant, ZoneOffset}
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
-import org.joda.time.DateTime
-import org.json4s.{DefaultFormats, JValue}
+import org.json4s.JValue
 import org.json4s.JsonAST._
 import java.util.UUID
 
@@ -497,7 +499,7 @@ object SyncPingConversion {
     }
     val (osName, osVersion, osLocale) = extractOSData(ping, payload)
 
-    val syncDay = new DateTime(when).toDateTime.toString("yyyyMMdd")
+    val syncDay = Instant.ofEpochMilli(when).atOffset(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyMMdd"))
 
     val rowRepeatedPart = List(
       // The metadata...

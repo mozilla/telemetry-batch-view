@@ -3,11 +3,13 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry
 
+import java.time.format.DateTimeFormatter
+import java.time.{Instant, ZoneOffset}
+
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.utils.{SyncPingConversion, getOrCreateSparkSession}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.joda.time.DateTime
 import org.json4s.JsonAST.{JArray, JNothing, JObject}
 import org.json4s.{DefaultFormats, JValue}
 import org.scalatest.{FlatSpec, Matchers}
@@ -70,7 +72,10 @@ class SyncFlatViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
         sync.getAs[String]("device_id") should be((pingSync \ "deviceID").extract[String])
         sync.getAs[Long]("took") should be((pingSync \ "took").extract[Long])
         sync.getAs[GenericRowWithSchema]("status") should be(null)
-        sync.getAs[String]("sync_day") should be (new DateTime((pingSync \ "when").extract[Long]).toDateTime.toString("yyyyMMdd"))
+        sync.getAs[String]("sync_day") should be (
+          Instant.ofEpochMilli((pingSync \ "when").extract[Long])
+            .atOffset(ZoneOffset.UTC)
+            .format(DateTimeFormatter.ofPattern("yyyyMMdd")))
 
         // engine specific data
         val engineName = sync.getAs[String]("engine_name")
