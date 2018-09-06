@@ -300,7 +300,7 @@ object LongitudinalView {
               JInt(counter) <- (info \ "profileSubsessionCounter").toOption
               subsessionCounter = counter.toInt
 
-              if(!clientLookupMap.value.contains(clientId) || clientLookupMap.value(clientId).contains((startDate, subsessionCounter)))
+              if(!clientLookupMap.value.contains(clientId))// || clientLookupMap.value(clientId).contains((startDate, subsessionCounter)))
             } yield ((clientId, startDate, subsessionCounter),
               fields + ("payload" -> compact(render(payload))) - "submission")
         }
