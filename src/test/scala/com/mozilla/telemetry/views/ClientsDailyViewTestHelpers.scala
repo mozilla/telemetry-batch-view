@@ -175,7 +175,6 @@ object ClientsDailyViewTestHelpers {
     sync_count_mobile: Option[Int] = None,
     telemetry_enabled: Option[Boolean] = None,
     timezone_offset: Option[Int] = None,
-    total_time: Option[Int] = None,
     update_auto_download: Option[Boolean] = None,
     update_channel: Option[String] = None,
     update_enabled: Option[Boolean] = None,
@@ -430,7 +429,6 @@ object ClientsDailyViewTestHelpers {
     subsession_length = Some(value.get * 3600), // convert value to hours
     sync_count_desktop = value,
     sync_count_mobile = value,
-    total_time = Some(value.get * 3600), // convert value to hours
     web_notification_shown = value
   )
 
@@ -509,7 +507,6 @@ object ClientsDailyViewTestHelpers {
     "int(round(subsession_hours_sum))" -> value,
     "sync_count_desktop_sum" -> value,
     "sync_count_mobile_sum" -> value,
-    "int(round(total_hours_sum))" -> value,
     "web_notification_shown_sum" -> value
   )
 }

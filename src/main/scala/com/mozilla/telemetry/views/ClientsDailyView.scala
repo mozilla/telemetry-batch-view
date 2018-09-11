@@ -282,7 +282,6 @@ object ClientsDailyView {
     aggSum("sync_count_mobile"),
     aggFirst("telemetry_enabled"),
     aggFirst("timezone_offset"),
-    aggSum(expr("total_time/3600.0"), "total_hours_sum"),
     aggFirst("update_auto_download"),
     aggFirst("update_channel"),
     aggFirst("update_enabled"),

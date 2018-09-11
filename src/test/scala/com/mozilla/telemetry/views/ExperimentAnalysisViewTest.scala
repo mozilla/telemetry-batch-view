@@ -35,7 +35,7 @@ case class ExperimentSummaryEngagementRow(
   experiment_id: String,
   experiment_branch: String,
   submission_date_s3: String,
-  total_time: Int,
+  subsession_length: Int,
   active_ticks: Int,
   scalar_parent_browser_engagement_total_uri_count: Int)
 
@@ -187,7 +187,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
     experiment_id = "experiment_1",
     experiment_branch = "control",
     submission_date_s3 = "20180101",
-    total_time = 3600,
+    subsession_length = 3600,
     active_ticks = 1000,
     scalar_parent_browser_engagement_total_uri_count = 20
   )
@@ -195,7 +195,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
   // This one row should get thrown out the the outlier cuts.
   val outlierEngagementRow: ExperimentSummaryEngagementRow = sampleEngagementRow.copy(
     client_id = "other",
-    total_time = 40000,
+    subsession_length = 40000,
     active_ticks = 10000,
     scalar_parent_browser_engagement_total_uri_count = 300
   )
@@ -242,7 +242,7 @@ class ExperimentAnalysisViewTest extends FlatSpec with Matchers with DataFrameSu
         experiment_id = "experiment_1",
         experiment_branch = "control",
         submission_date_s3 = date,
-        total_time = jittered(3600),
+        subsession_length = jittered(3600),
         active_ticks = jittered(1000),
         scalar_parent_browser_engagement_total_uri_count = jittered(20)
       )

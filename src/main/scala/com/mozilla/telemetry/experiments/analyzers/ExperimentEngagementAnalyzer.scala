@@ -33,7 +33,7 @@ case class ConfidenceInterval(arr: Array[Double]) {
   */
 object InputCols extends ColumnEnumeration {
   val experiment_id, experiment_branch, client_id, submission_date_s3 = ColumnDefinition()
-  val total_time, active_ticks, scalar_parent_browser_engagement_total_uri_count = ColumnDefinition()
+  val subsession_length, active_ticks, scalar_parent_browser_engagement_total_uri_count = ColumnDefinition()
 }
 
 /**
@@ -70,7 +70,7 @@ object DailyAggCols extends ColumnEnumeration {
   val secondsPerHour: Double = 3600.0
 
   val sum_total_hours = ColumnDefinition(
-    f.sum(InputCols.total_time.col).cast(DoubleType) / secondsPerHour
+    f.sum(InputCols.subsession_length.col).cast(DoubleType) / secondsPerHour
   )
   val sum_active_hours = ColumnDefinition(
     f.sum(InputCols.active_ticks.col.cast(DoubleType) * ticksPerSecond / secondsPerHour)
