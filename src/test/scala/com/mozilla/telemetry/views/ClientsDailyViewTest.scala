@@ -261,4 +261,18 @@ class ClientsDailyViewTest extends FlatSpec with Matchers with DataFrameSuiteBas
       Map("sessions_started_on_this_day" -> 2)
     )
   }
+
+  it must "handle keyed scalars properly" in {
+    test(
+      List(
+        getRowAggMapSum(Some(Map("a" -> Some(1), "b" -> Some(10)))),
+        getRowAggMapSum(Some(Map("a" -> Some(9)))),
+        getRowAggMapSum(Some(Map("c" -> Some(0)))),
+        getRowAggMapSum(Some(Map("b" -> None))),
+        getRowAggMapSum(Some(Map("d" -> None))),
+        MainSummaryRow()
+      ),
+      getExpectAggMapSum(Map("a" -> 10, "b" -> 10, "c" -> 0))
+    )
+  }
 }

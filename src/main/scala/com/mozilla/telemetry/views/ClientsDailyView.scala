@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
-import com.mozilla.telemetry.utils.{AggMapFirst, AggSearchCounts, getOrCreateSparkSession}
+import com.mozilla.telemetry.utils.{AggMapFirst, AggMapSum, AggSearchCounts, getOrCreateSparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{Column, DataFrame}
 import org.rogach.scallop._
@@ -99,6 +99,9 @@ object ClientsDailyView {
 
   private val mapFirst = new AggMapFirst()
   private def aggMapFirst(field: String): Column = mapFirst(col(field)).alias(field)
+
+  private val mapSum = new AggMapSum()
+  private def aggMapSum(field: String): Column = mapSum(col(field)).alias(s"${field}_sum")
 
   private def aggMax(field: String): Column = max(field).alias(s"${field}_max")
 
@@ -261,6 +264,7 @@ object ClientsDailyView {
     aggSum("scalar_parent_devtools_accessibility_node_inspected_count"),
     aggSum("scalar_parent_devtools_accessibility_opened_count"),
     aggSum("scalar_parent_devtools_accessibility_picker_used_count"),
+    aggMapSum("scalar_parent_devtools_accessibility_select_accessible_for_node"),
     aggSum("scalar_parent_devtools_accessibility_service_enabled_count"),
     aggSum("scalar_parent_devtools_copy_full_css_selector_opened"),
     aggSum("scalar_parent_devtools_copy_unique_css_selector_opened"),
