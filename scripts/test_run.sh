@@ -1,4 +1,22 @@
 #!/bin/bash
+#
+# Run a basic sanity check for command line arguments in jobs.
+#
+# This script will submit the telemetry-batch-view job to Spark. This is meant
+# to catch runtime errors that occur within the first few minutes of execution.
+# This script can be run to determine whether a job will fail on EMR.
+#
+# To run the test:
+#   - sbt assembly
+#   - scp the target/scala-*/telemetry-batch-view-*.jar to an ATMO cluster
+#   - scp this script to the same directory
+#   - execute
+#       * `$ ./test_run.sh <jar_path>`
+#
+# The test will run each of the specified jobs for a minute and timeout. If the
+# job is fated to fail, it'll generally happen when parsing the command line
+# options ~40 seconds after submission.
+
 
 set -uo pipefail
 set -x
@@ -23,6 +41,7 @@ submit() {
     classname="$1"
     options="$2"
 
+    # timeout once the job has had enough time to run through scallop configurations
     timeout $timeout spark-submit \
         --master yarn \
         --deploy-mode client \
