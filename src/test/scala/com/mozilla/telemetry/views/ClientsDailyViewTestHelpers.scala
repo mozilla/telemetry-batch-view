@@ -148,6 +148,7 @@ object ClientsDailyViewTestHelpers {
     scalar_parent_devtools_accessibility_node_inspected_count: Option[Int] = None,
     scalar_parent_devtools_accessibility_opened_count: Option[Int] = None,
     scalar_parent_devtools_accessibility_picker_used_count: Option[Int] = None,
+    scalar_parent_devtools_accessibility_select_accessible_for_node: Option[scala.collection.Map[String,Option[Int]]] = None,
     scalar_parent_devtools_accessibility_service_enabled_count: Option[Int] = None,
     scalar_parent_devtools_copy_full_css_selector_opened: Option[Int] = None,
     scalar_parent_devtools_copy_unique_css_selector_opened: Option[Int] = None,
@@ -314,6 +315,14 @@ object ClientsDailyViewTestHelpers {
     "vendor" -> sValue,
     "windows_build_number" -> iValue,
     "windows_ubr" -> iValue
+  )
+
+  def getRowAggMapSum(value: Option[scala.collection.Map[String, Option[Int]]]): MainSummaryRow = MainSummaryRow(
+    scalar_parent_devtools_accessibility_select_accessible_for_node = value
+  )
+
+  def getExpectAggMapSum(value: Map[String, Int]): Map[String, Map[String, Int]] = Map(
+    "scalar_parent_devtools_accessibility_select_accessible_for_node_sum" -> value
   )
 
   def getRowAggMax(value: Option[Int]): MainSummaryRow = MainSummaryRow(
