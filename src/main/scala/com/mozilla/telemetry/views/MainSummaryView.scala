@@ -50,9 +50,10 @@ object MainSummaryView extends BatchJobBase {
 
 
   val histogramsWhitelist =
-    "A11Y_INSTANTIATED_FLAG" ::
     "A11Y_CONSUMERS" ::
+    "A11Y_INSTANTIATED_FLAG" ::
     "CERT_VALIDATION_SUCCESS_BY_CA" ::
+    "CONTENT_PAINT_TIME" ::
     "CYCLE_COLLECTOR_MAX_PAUSE" ::
     "DEVTOOLS_ABOUTDEBUGGING_OPENED_COUNT" ::
     "DEVTOOLS_ABOUT_DEVTOOLS_OPENED_KEY" ::
@@ -70,8 +71,8 @@ object MainSummaryView extends BatchJobBase {
     "DEVTOOLS_ENTRY_POINT" ::
     "DEVTOOLS_EYEDROPPER_OPENED_COUNT" ::
     "DEVTOOLS_FONTEDITOR_FONT_TYPE_DISPLAYED" ::
-    "DEVTOOLS_FONTEDITOR_N_FONT_AXES" ::
     "DEVTOOLS_FONTEDITOR_N_FONTS_RENDERED" ::
+    "DEVTOOLS_FONTEDITOR_N_FONT_AXES" ::
     "DEVTOOLS_FONTINSPECTOR_OPENED_COUNT" ::
     "DEVTOOLS_INSPECTOR_OPENED_COUNT" ::
     "DEVTOOLS_JSBROWSERDEBUGGER_OPENED_COUNT" ::
@@ -117,13 +118,13 @@ object MainSummaryView extends BatchJobBase {
     "HTTP_TRANSACTION_IS_SSL" ::
     "INPUT_EVENT_RESPONSE_COALESCED_MS" ::
     "IPC_READ_MAIN_THREAD_LATENCY_MS" ::
+    "MEMORY_DISTRIBUTION_AMONG_CONTENT" ::
+    "MEMORY_HEAP_ALLOCATED" ::
+    "MEMORY_RESIDENT_FAST" ::
     "MEMORY_TOTAL" ::
     "MEMORY_UNIQUE" ::
-    "MEMORY_RESIDENT_FAST" ::
-    "MEMORY_DISTRIBUTION_AMONG_CONTENT" ::
     "MEMORY_VSIZE" ::
     "MEMORY_VSIZE_MAX_CONTIGUOUS" ::
-    "MEMORY_HEAP_ALLOCATED" ::
     "NETWORK_CACHE_METADATA_FIRST_READ_TIME_MS" ::
     "NETWORK_CACHE_V2_HIT_TIME_MS" ::
     "NETWORK_CACHE_V2_MISS_TIME_MS" ::
@@ -786,6 +787,7 @@ object MainSummaryView extends BatchJobBase {
         // bug 1353114 - payload.simpleMeasurements.*
         (simpleMeasures \ "sessionRestored").extractOpt[Int],
         (simpleMeasures \ "totalTime").extractOpt[Int],
+        (simpleMeasures \ "blankWindowShown").extractOpt[Int],
 
         // bug 1362520 - plugin notifications
         hsum(histograms("parent") \ "PLUGINS_NOTIFICATION_SHOWN"),
@@ -1186,6 +1188,7 @@ object MainSummaryView extends BatchJobBase {
       StructField("first_paint", IntegerType, nullable = true),
       StructField("session_restored", IntegerType, nullable = true),
       StructField("total_time", IntegerType, nullable = true),
+      StructField("blank_window_shown", IntegerType, nullable = true),
 
       // bug 1362520 - plugin notifications
       StructField("plugins_notification_shown", IntegerType, nullable = true),
