@@ -46,6 +46,7 @@ object MainSummaryView extends BatchJobBase {
     BooleanUserPref("extensions.allow-non-mpc-extensions") ::
     BooleanUserPref("extensions.legacy.enabled") ::
     BooleanUserPref("browser.search.widget.inNavBar") ::
+    BooleanUserPref("marionette.enabled") ::
     StringUserPref("general.config.filename") :: Nil
 
 

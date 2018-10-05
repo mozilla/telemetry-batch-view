@@ -395,6 +395,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
                      "user_pref_extensions_allow_non_mpc_extensions" ::
                      "user_pref_extensions_legacy_enabled" ::
                      "user_pref_browser_search_widget_innavbar" ::
+                     "user_pref_marionette_enabled" ::
                      "user_pref_general_config_filename" :: Nil
 
     def testUserPrefs(doc: JValue, oldUserPrefs: Any, userPrefs: Seq[Any]): Unit = {
@@ -428,7 +429,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
         | }
         |}
       """.stripMargin)
-    testUserPrefs(json1, null, Seq(null, null, null, null))
+    testUserPrefs(json1, null, Seq(null, null, null, null, null, null))
 
     // Doesn't contain any prefs:
     val json2 = parse(
@@ -441,7 +442,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
         | }
         |}
       """.stripMargin)
-    testUserPrefs(json2, null, Seq(null, null, null, null))
+    testUserPrefs(json2, null, Seq(null, null, null, null, null, null))
 
     // Contains prefs, including dom.ipc.processCount and extensions.allow-non-mpc-extensions
     val json3 = parse(
@@ -460,7 +461,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
         | }
         |}
       """.stripMargin)
-    testUserPrefs(json3, Row(2, true), Seq(2, true, null, false))
+    testUserPrefs(json3, Row(2, true), Seq(2, true, null, false, null, null))
 
     // Contains dom.ipc.processCount and extensions.allow-non-mpc-extensions with bogus data types
     val json4 = parse(
@@ -478,7 +479,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
         | }
         |}
       """.stripMargin)
-    testUserPrefs(json4, null, Seq(null, null, null, null))
+    testUserPrefs(json4, null, Seq(null, null, null, null, null, null))
 
     // Missing the prefs section entirely:
     val json5 = parse(
@@ -490,7 +491,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
         | }
         |}
       """.stripMargin)
-    testUserPrefs(json5, null, Seq(null, null, null, null))
+    testUserPrefs(json5, null, Seq(null, null, null, null, null, null))
 
     // Contains dom.ipc.processCount but not extensions.allow-non-mpc-extensions
     val json6 = parse(
@@ -507,7 +508,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
         | }
         |}
       """.stripMargin)
-    testUserPrefs(json6, Row(4, null), Seq(4, null, null, null))
+    testUserPrefs(json6, Row(4, null), Seq(4, null, null, null, null, null))
 
     // Contains extensions.allow-non-mpc-extensions but not dom.ipc.processCount
     val json7 = parse(
@@ -524,7 +525,22 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
         | }
         |}
       """.stripMargin)
-    testUserPrefs(json7, Row(null, false), Seq(null, false, null, null))
+    testUserPrefs(json7, Row(null, false), Seq(null, false, null, null, null, null))
+
+    // Contains marionette.enabled
+    val json8 = parse(
+      """
+        |{
+        | "environment": {
+        |  "settings": {
+        |   "userPrefs": {
+        |    "marionette.enabled": true
+        |   }
+        |  }
+        | }
+        |}
+      """.stripMargin)
+    testUserPrefs(json8, null, Seq(null, null, null, null, true, null))
   }
 
   it can "be properly shown" in {
