@@ -206,6 +206,8 @@ object ExperimentAnalysisView extends BatchJobBase {
 
       val metadata = ExperimentAnalyzer.getExperimentMetadata(persisted).collect()
 
+      persisted.unpersist()
+
       metadata ++ baseMetrics
     }
 
