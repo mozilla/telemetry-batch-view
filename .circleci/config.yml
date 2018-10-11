@@ -6,6 +6,12 @@
 #   https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables
 ####################
 
+####################
+# Version: determines what features are available.
+####################
+
+version: 2.1
+
 
 ####################
 # Templates: see "anchors" in https://learnxinyminutes.com/docs/yaml/
@@ -14,74 +20,96 @@
 # See available image tags at https://hub.docker.com/r/mozilla/sbt/
 sbt_image: &sbt_image mozilla/sbt:8u171_1.1.6
 
-# The ~/.sbt directory holds any sbt or Scala versions requested by previous builds.
-# The ~/.ivy2 directory holds Java and Scala dependencies declared in the build.
-# Caching these two can significantly reduce sbt startup time.
-save_cache_settings: &save_cache_settings
-  key: telemetry-batch-view-{{ .Branch }}-{{ .Environment.CIRCLE_WORKFLOW_ID }}
-  paths:
-    - ~/.ivy2
-    - ~/.sbt
 
-prep_cache_settings: &prep_cache_settings
-  name: Clean directories to restore
-  command: |
-    rm -r ~/.ivy2 ~/.sbt
+####################
+# Commands: see https://circleci.com/docs/2.0/reusing-config
+####################
 
-restore_cache_settings: &restore_cache_settings
-  keys:
-    - telemetry-batch-view-{{ .Branch }}-{{ .Environment.CIRCLE_WORKFLOW_ID }}
-    - telemetry-batch-view-{{ .Branch }}
-    - telemetry-batch-view-
+commands:
+  restore_sbt_cache:
+    description: >-
+      Restore a cache of sbt dependencies if available.
+    steps:
+      - run:
+          name: Clean directories to restore
+          command: |
+            rm -r ~/.ivy2 ~/.sbt
+      - restore_cache:
+          keys:
+            - telemetry-batch-view-{{ .Branch }}-{{ .Environment.CIRCLE_WORKFLOW_ID }}
+            - telemetry-batch-view-{{ .Branch }}
+            - telemetry-batch-view-
 
-# At time of writing, we use the default container size (2 CPUs and 4GB memory),
-# but may renogotiate with CircleCI and enable larger resource_class
-# options at which point we might want to bump up the Java memory settings
-# and reduce the test parallelism.
-common_settings: &common_settings
-  docker:
-    - image: *sbt_image
-  working_directory: /telemetry-batch-view
-  # resource_class: xlarge
+  save_sbt_cache:
+    description: >-
+      Archive ~/.ivy2 and ~/.sbt for reuse on future runs in order to speed
+      build times and improve reliability when dependency providers are unavailable.
+      Note that only one job in the workflow needs to save the cache (we choose assembly)
+      and many jobs can restore that same cache.
+    steps:
+      - save_cache:
+          key: telemetry-batch-view-{{ .Branch }}-{{ .Environment.CIRCLE_WORKFLOW_ID }}
+          paths:
+            - ~/.ivy2
+            - ~/.sbt
 
-# CircleCI generally only triggers builds on commits to the main repository,
-# so PRs coming from branches of the main repo simply reference builds for existing commits
-# (CIRCLE_BRANCH=branchname and CIRCLE_PR_NUMBER is unset);
-# The only time PRs will trigger a build is when the PR is referencing a fork
-# (CIRCLE_BRANCH=pull/XXX and CIRCLE_PR_NUMBER=XXX).
-early_return_for_forked_pull_requests: &early_return_for_forked_pull_requests
-  name: Early return if this build is from a forked PR
-  command: |
-    if [ -n "$CIRCLE_PR_NUMBER" ]; then
-      echo "Nothing to upload for forked PRs, so marking this step successful"
-      circleci step halt
-    fi
+  # CircleCI generally only triggers builds on commits to the main repository,
+  # so PRs coming from branches of the main repo simply reference builds for existing commits
+  # (CIRCLE_BRANCH=branchname and CIRCLE_PR_NUMBER is unset);
+  # The only time PRs will trigger a build is when the PR is referencing a fork
+  # (CIRCLE_BRANCH=pull/XXX and CIRCLE_PR_NUMBER=XXX).
+  early_return_for_forked_pull_requests:
+    description: >-
+      If this build is from a fork, stop executing the current job and return success.
+      This is useful to avoid steps that will fail due to missing credentials.
+    steps:
+      - run:
+          name: Early return if this build is from a forked PR
+          command: |
+            if [ -n "$CIRCLE_PR_NUMBER" ]; then
+              echo "Nothing to upload for forked PRs, so marking this step successful"
+              circleci step halt
+            fi
 
-early_return_for_skip_tests: &early_return_for_skip_tests
-  name: Early return if the latest non-merge commit message contains "[skip-tests]"
-  command: |
-    COMMIT_MESSAGE=$(git log --format=%B --no-merges -n 1)
-    if [[ "$COMMIT_MESSAGE" =~ "[skip-tests]" ]]; then
-      echo "Skipping tests due to [skip-tests] flag, so marking this step successful"
-      circleci step halt
-    fi
+  early_return_for_skip_tests:
+    description: >-
+      If the latest non-merge commit message contains "[skip-tests]", stop executing
+      the current job and return success.
+    steps:
+      - run:
+          name: Early return if the latest commit contains "[skip-tests]"
+          command: |
+            COMMIT_MESSAGE=$(git log --format=%B --no-merges -n 1)
+            if [[ "$COMMIT_MESSAGE" =~ "[skip-tests]" ]]; then
+              echo "Skipping tests due to [skip-tests] flag, so marking this step successful"
+              circleci step halt
+            fi
+
+
+####################
+# Executors: see https://circleci.com/docs/2.0/reusing-config
+####################
+
+executors:
+  sbt_executor:
+    docker:
+      - image: *sbt_image
+    working_directory: /telemetry-batch-view
 
 
 ####################
 # Jobs: see https://circleci.com/docs/2.0/jobs-steps/
 ####################
 
-version: 2
 jobs:
 
   test:
-    <<: *common_settings
+    executor: sbt_executor
     parallelism: 8  # See https://circleci.com/docs/2.0/parallelism-faster-jobs/
     steps:
       - checkout
-      - run: *early_return_for_skip_tests
-      - run: *prep_cache_settings
-      - restore_cache: *restore_cache_settings
+      - early_return_for_skip_tests
+      - restore_sbt_cache
       - run:
           name: Scalatest
           command: |
@@ -94,12 +122,11 @@ jobs:
             bash <(curl -s https://codecov.io/bash)
 
   lint:
-    <<: *common_settings
+    executor: sbt_executor
     steps:
       - checkout
-      - run: *early_return_for_skip_tests
-      - run: *prep_cache_settings
-      - restore_cache: *restore_cache_settings
+      - early_return_for_skip_tests
+      - restore_sbt_cache
       - run:
           name: Scalastyle
           command: |
@@ -107,15 +134,16 @@ jobs:
 
   # Publish to Maven in S3 and assemble an uberjar for the deploy step.
   assembly:
-    <<: *common_settings
+    executor: sbt_executor
     steps:
-      - run: *early_return_for_forked_pull_requests
+      - early_return_for_forked_pull_requests
       - checkout
+      - restore_sbt_cache
       - run:
           name: Publish and Assemble
           command: |
             sbt publish assembly
-      - save_cache: *save_cache_settings
+      - save_sbt_cache
       - persist_to_workspace:
           root: target
           paths:
@@ -123,11 +151,9 @@ jobs:
 
   # Uses a "workspace" to get access to the assembled uberjar from the previous stage.
   deploy:
-    docker:
-      - image: *sbt_image
-    working_directory: /telemetry-batch-view
+    executor: sbt_executor
     steps:
-      - run: *early_return_for_forked_pull_requests
+      - early_return_for_forked_pull_requests
       - checkout
       - attach_workspace:
           at: /telemetry-batch-view/target
