@@ -22,8 +22,6 @@ object ClientsDailyViewTestHelpers {
     aborts_gmplugin: Option[Int] = None,
     aborts_plugin: Option[Int] = None,
     active_addons_count: Option[Long] = None,
-    active_experiment_branch: Option[String] = None,
-    active_experiment_id: Option[String] = None,
     active_ticks: Option[Int] = None,
     addon_compatibility_check_enabled: Option[Boolean] = None,
     app_build_id: Option[String] = None,
@@ -185,8 +183,6 @@ object ClientsDailyViewTestHelpers {
   )
 
   def getRowAggFirst(sValue: Option[String], bValue: Option[Boolean], iValue: Option[Int]): MainSummaryRow = MainSummaryRow(
-    active_experiment_branch = sValue,
-    active_experiment_id = sValue,
     addon_compatibility_check_enabled = bValue,
     app_build_id = sValue,
     app_display_version = sValue,
@@ -252,8 +248,6 @@ object ClientsDailyViewTestHelpers {
   )
 
   def getExpectAggFirst(sValue: String, bValue: Boolean, iValue: Int): Map[String, Any] = Map(
-    "active_experiment_branch" -> sValue,
-    "active_experiment_id" -> sValue,
     "addon_compatibility_check_enabled" -> bValue,
     "app_build_id" -> sValue,
     "app_display_version" -> sValue,

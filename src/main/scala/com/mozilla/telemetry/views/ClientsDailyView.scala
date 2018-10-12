@@ -145,8 +145,6 @@ object ClientsDailyView {
     aggSum("aborts_gmplugin"),
     aggSum("aborts_plugin"),
     aggMean("active_addons_count"),
-    aggFirst("active_experiment_branch"),
-    aggFirst("active_experiment_id"),
     // active_hours_sum has to be coerced from decimal to double for backwards compatibility
     aggSum(expr("DOUBLE(active_ticks/(3600.0/5))"), "active_hours_sum"),
     aggFirst("addon_compatibility_check_enabled"),
