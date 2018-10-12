@@ -195,7 +195,7 @@ object ExperimentEngagementAnalyzer {
       input: DataFrame, outlierPercentile: Double = 0.9999, relativeError: Double = 0.0001): DataFrame = {
 
     val inputWithBranchCount = input
-      .select(f.col("*"), InputWindowCols.branch_count.expr, InputWindowCols.branch_index.expr)
+      .select(InputCols.cols ++ InputWindowCols.exprs : _*)
       .filter(InputWindowCols.branch_index.col === 0)
       .drop(InputWindowCols.branch_index.col)
       .persist()
