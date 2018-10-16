@@ -269,7 +269,6 @@ object ClientsDailyView {
     aggSum("scalar_parent_devtools_copy_full_css_selector_opened"),
     aggSum("scalar_parent_devtools_copy_unique_css_selector_opened"),
     aggSum("scalar_parent_devtools_toolbar_eyedropper_opened"),
-    aggSum("scalar_parent_dom_contentprocess_troubled_due_to_memory"),
     aggSum("scalar_parent_navigator_storage_estimate_count"),
     aggSum("scalar_parent_navigator_storage_persist_count"),
     aggSum("scalar_parent_storage_sync_api_usage_extensions_using"),
