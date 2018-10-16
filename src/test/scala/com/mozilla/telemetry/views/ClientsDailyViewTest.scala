@@ -3,8 +3,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
+import java.io.StringWriter
+
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.views.ClientsDailyViewTestHelpers._
+import org.apache.log4j.{Level, PatternLayout, WriterAppender}
+import org.apache.spark.sql.AnalysisException
 import org.scalatest.{FlatSpec, Matchers}
 
 class ClientsDailyViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
@@ -274,5 +278,41 @@ class ClientsDailyViewTest extends FlatSpec with Matchers with DataFrameSuiteBas
       ),
       getExpectAggMapSum(Map("a" -> 10, "b" -> 10, "c" -> 0))
     )
+  }
+
+  it must "handle missing columns properly" in {
+    // prepare logger to capture warning
+    val writer = new StringWriter()
+    val appender = new WriterAppender(new PatternLayout("%p: %m"), writer)
+    ClientsDailyView.logger.addAppender(appender)
+    // disable normal logging output
+    val additivity = ClientsDailyView.logger.getAdditivity
+    ClientsDailyView.logger.setAdditivity(false)
+    // make sure log level is set correctly
+    val level = ClientsDailyView.logger.getLevel
+    ClientsDailyView.logger.setLevel(Level.WARN)
+    try {
+      // check output and generate warning
+      ClientsDailyView
+        .extractDayAggregates(spark
+          .sql("SELECT STRING(NULL) AS client_id, STRING(NULL) AS app_name"))
+        .columns should be(Array("client_id", "app_name"))
+      val expectWarningPrefix = s"WARN: JOB clients_daily v6 MISSING INPUT COLUMNS: "
+      writer.toString.slice(0, expectWarningPrefix.size) should be (expectWarningPrefix)
+    } finally {
+      // stop capturing logs
+      ClientsDailyView.logger.removeAppender(appender)
+      // restore normal logging output
+      ClientsDailyView.logger.setAdditivity(additivity)
+      // restore normal log level
+      ClientsDailyView.logger.setLevel(level)
+    }
+  }
+
+  it must "throw exception if aggregates is empty" in {
+    intercept[AnalysisException] {
+      ClientsDailyView
+        .extractDayAggregates(spark
+          .sql("SELECT STRING(NULL) AS client_id"))}
   }
 }

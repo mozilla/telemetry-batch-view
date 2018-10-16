@@ -4,11 +4,14 @@
 package com.mozilla.telemetry.views
 
 import com.mozilla.telemetry.utils.{AggMapFirst, AggMapSum, AggSearchCounts, getOrCreateSparkSession}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{Column, DataFrame}
 import org.rogach.scallop._
 
 object ClientsDailyView {
+  // allow visibility within "views" for testing
+  private[views] val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
   private val jobName: String = "clients_daily"
   private val schemaVersion: String = "v6"
 
@@ -68,21 +71,29 @@ object ClientsDailyView {
   }
 
   def extractDayAggregates(df: DataFrame): DataFrame = {
-    // add geo_subdivision{1,2} columns if missing
-    val df1 = if (df.columns.contains("geo_subdivision1")) {
-      df
-    } else {
-      df.withColumn("geo_subdivision1", expr("STRING(NULL)"))
-    }
-    val df2 = if (df1.columns.contains("geo_subdivision2")) {
-      df1
-    } else {
-      df1.withColumn("geo_subdivision2", expr("STRING(NULL)"))
-    }
+    // determine fieldAggregators that can be used against this DataFrame
+    val agg = Some(fieldAggregators
+      // unresolvedAttributeNames gets the names of columns used as inputs to an expression
+      .flatMap(unresolvedAttributeNames)
+      // filter out the column names that are present in df
+      .toSet -- df.columns)
+      // filter Some(missingColumns) to None unless nonEmpty
+      .filter(_.nonEmpty)
+      // filter expressions using missingColumns out of fieldAggregators
+      .map{ missingColumns =>
+        logger.warn(s"JOB $jobName $schemaVersion MISSING INPUT COLUMNS: ${missingColumns.mkString(", ")}")
+        fieldAggregators
+          .filter(unresolvedAttributeNames(_)
+            .forall(!missingColumns.contains(_)))}
+      // let spark throw AnalysisException if we filtered all aggregates
+      .filter(_.nonEmpty)
+      // default to fieldAggregators if there were no missing columns
+      .getOrElse(fieldAggregators)
 
-    val aggregates = df2
+    // perform aggregation
+    val aggregates = df
       .groupBy("client_id")
-      .agg(fieldAggregators.head, fieldAggregators.tail:_*)
+      .agg(agg.head, agg.tail:_*)
 
     /* expand search_counts with "search_counts.*". fields in search_counts
      * are prefixed with "search_count_" so this is safe
@@ -92,6 +103,13 @@ object ClientsDailyView {
         aggregates.schema.map{c => if (c.name == "search_counts") "search_counts.*" else c.name}:_*
       )
   }
+
+  private def unresolvedAttributeNames(c: Column): Seq[String] = c
+    .expr
+    .collectLeaves
+    .flatMap{
+      case attr: UnresolvedAttribute => Some(attr.name)
+      case _ => None}
 
   private def aggFirst(field: String): Column = first(field, ignoreNulls = true).alias(field)
 
