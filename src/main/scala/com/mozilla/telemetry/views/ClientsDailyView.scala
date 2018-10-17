@@ -3,8 +3,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
-import com.mozilla.telemetry.utils.{AggMapFirst, AggMapSum, AggSearchCounts, getOrCreateSparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import com.mozilla.telemetry.utils.udfs.{AggMapFirst, AggSearchCounts, AggMapSum}
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{Column, DataFrame}
 import org.rogach.scallop._
