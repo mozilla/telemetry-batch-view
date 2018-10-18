@@ -260,35 +260,41 @@ object ClientsDailyView {
       case _ => None
     }
 
-
-
   private def aggFirst(field: String): Column = first(field, ignoreNulls = true).alias(field)
 
   private def aggFirst(expression: Column, alias: String): Column = first(expression, ignoreNulls = true).alias(alias)
 
-  private val mapFirst = new AggMapFirst()
-  private def aggMapFirst(field: String): Column = mapFirst(col(field)).alias(field)
+  private def aggMapFirst(field: String): Column = {
+    val mapFirst = new AggMapFirst()
+    mapFirst(col(field)).alias(field)
+  }
 
-  private val mapSum = new AggMapSum()
-  private def aggMapSum(field: String): Column = mapSum(col(field)).alias(s"${field}_sum")
+  private def aggMapSum(field: String): Column = {
+    val mapSum = new AggMapSum()
+    mapSum(col(field)).alias(s"${field}_sum")
+  }
 
   private def aggMax(field: String): Column = max(field).alias(s"${field}_max")
 
   private def aggMean(field: String): Column = mean(field).alias(s"${field}_mean")
 
-  private val addonsFirst = new AggRowFirst[String](buildAddonSchema, 0, StringType)
-  private def aggAddonsFirst(field: String): Column = addonsFirst(col(field)).alias(field)
+  private def aggAddonsFirst(field: String): Column = {
+    val addonsFirst = new AggRowFirst[String](buildAddonSchema, 0, StringType)
+    addonsFirst(col(field)).alias(field)
+  }
 
-  private val searchSources = List(
-    "abouthome",
-    "contextmenu",
-    "newtab",
-    "searchbar",
-    "system",
-    "urlbar"
-  )
-  private val searchCounts = new AggSearchCounts(searchSources)
-  private def aggSearchCounts(field: String): Column = searchCounts(col(field)).alias(field)
+  private def aggSearchCounts(field: String): Column = {
+    val searchSources = List(
+      "abouthome",
+      "contextmenu",
+      "newtab",
+      "searchbar",
+      "system",
+      "urlbar"
+    )
+    val searchCounts = new AggSearchCounts(searchSources)
+    searchCounts(col(field)).alias(field)
+  }
 
   private def aggSum(field: String): Column = sum(field).alias(s"${field}_sum")
 
@@ -320,4 +326,5 @@ object ClientsDailyView {
       default = Some(2000000))
     verify()
   }
+
 }
