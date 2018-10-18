@@ -10,6 +10,10 @@ import com.mozilla.telemetry.views.ClientsDailyViewTestHelpers._
 import org.apache.log4j.{Level, PatternLayout, WriterAppender}
 import org.apache.spark.sql.AnalysisException
 import org.scalatest.{FlatSpec, Matchers}
+import com.mozilla.telemetry.Addon
+import org.apache.spark.sql.Row
+import scala.collection.mutable.WrappedArray
+
 
 class ClientsDailyViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
   def test(table: List[MainSummaryRow], expect: Map[String, Any]): Unit = {
@@ -116,6 +120,21 @@ class ClientsDailyViewTest extends FlatSpec with Matchers with DataFrameSuiteBas
         "experiments['C']" -> "3",
         "experiments['D']" -> "4"
       )
+    )
+  }
+
+  it must "handle 'active_addons' properly" in {
+    test(
+      List(
+        MainSummaryRow(),
+        MainSummaryRow(active_addons = Some(Seq(Addon("a")))),
+        MainSummaryRow(active_addons = Some(Seq(Addon("a"), Addon("b", true), Addon("c")))),
+        MainSummaryRow(active_addons = Some(Seq(Addon("b", false))))
+      ),
+      Map("active_addons" -> WrappedArray.make(Array(
+        Row.fromTuple(Addon("b", true)),
+        Row.fromTuple(Addon("a")),
+        Row.fromTuple(Addon("c")))))
     )
   }
 

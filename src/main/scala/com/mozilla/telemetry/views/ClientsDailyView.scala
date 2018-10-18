@@ -3,148 +3,26 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import com.mozilla.telemetry.utils.udfs.{AggMapFirst, AggSearchCounts, AggMapSum}
 import com.mozilla.telemetry.utils.getOrCreateSparkSession
+import com.mozilla.telemetry.utils.udfs.{AggMapFirst, AggMapSum, AggRowFirst, AggSearchCounts}
+import com.mozilla.telemetry.views.MainSummaryView.buildAddonSchema
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.sql.{Column, DataFrame}
 import org.rogach.scallop._
+
 
 object ClientsDailyView {
   // allow visibility within "views" for testing
   private[views] val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
   private val jobName: String = "clients_daily"
   private val schemaVersion: String = "v6"
-
-  class Conf(args: Array[String]) extends ScallopConf(args) {
-    val date = opt[String](
-      "date",
-      descr = "Submission date to process",
-      required = true)
-    val inputBucket = opt[String](
-      "input-bucket",
-      descr = "Source bucket for main_summary data",
-      required = false,
-      default = Some("telemetry-parquet"))
-    val outputBucket = opt[String](
-      "output-bucket",
-      descr = "Destination bucket for parquet data",
-      required = true)
-    val sampleId = opt[String](
-      "sample-id",
-      descr = "Sample_id to restrict results to",
-      required = false)
-    // 2,000,000 rows yields ~ 200MB files in snappy+parquet
-    val maxRecordsPerFile = opt[Int](
-      "max-records-per-file",
-      descr = "Max number of rows to write to output files before splitting",
-      required = false,
-      default=Some(2000000))
-    verify()
-  }
-
-  def main(args: Array[String]) {
-    val conf = new Conf(args)
-
-    val date = conf.date()
-    val maxRecordsPerFile = conf.maxRecordsPerFile()
-
-    val inputPath = s"s3://${conf.inputBucket()}/main_summary/" +
-      s"${MainSummaryView.schemaVersion}/submission_date_s3=$date"
-    val outputPath = s"s3://${conf.outputBucket()}/clients_daily/" +
-      s"$schemaVersion/submission_date_s3=$date"
-
-    val spark = getOrCreateSparkSession(jobName)
-
-    val df = spark.read.parquet(inputPath)
-    val input = conf.sampleId.get match {
-      case Some(sampleId) => df.where(s"sample_id = '$sampleId'")
-      case _ => df
-    }
-
-    val results = extractDayAggregates(input)
-
-    results
-      .write
-      .mode("overwrite")
-      .option("maxRecordsPerFile", maxRecordsPerFile)
-      .parquet(outputPath)
-  }
-
-  def extractDayAggregates(df: DataFrame): DataFrame = {
-    // determine fieldAggregators that can be used against this DataFrame
-    val agg = Some(fieldAggregators
-      // unresolvedAttributeNames gets the names of columns used as inputs to an expression
-      .flatMap(unresolvedAttributeNames)
-      // filter out the column names that are present in df
-      .toSet -- df.columns)
-      // filter Some(missingColumns) to None unless nonEmpty
-      .filter(_.nonEmpty)
-      // filter expressions using missingColumns out of fieldAggregators
-      .map{ missingColumns =>
-        logger.warn(s"JOB $jobName $schemaVersion MISSING INPUT COLUMNS: ${missingColumns.mkString(", ")}")
-        fieldAggregators
-          .filter(unresolvedAttributeNames(_)
-            .forall(!missingColumns.contains(_)))}
-      // let spark throw AnalysisException if we filtered all aggregates
-      .filter(_.nonEmpty)
-      // default to fieldAggregators if there were no missing columns
-      .getOrElse(fieldAggregators)
-
-    // perform aggregation
-    val aggregates = df
-      .groupBy("client_id")
-      .agg(agg.head, agg.tail:_*)
-
-    /* expand search_counts with "search_counts.*". fields in search_counts
-     * are prefixed with "search_count_" so this is safe
-     */
-    aggregates
-      .selectExpr(
-        aggregates.schema.map{c => if (c.name == "search_counts") "search_counts.*" else c.name}:_*
-      )
-  }
-
-  private def unresolvedAttributeNames(c: Column): Seq[String] = c
-    .expr
-    .collectLeaves
-    .flatMap{
-      case attr: UnresolvedAttribute => Some(attr.name)
-      case _ => None}
-
-  private def aggFirst(field: String): Column = first(field, ignoreNulls = true).alias(field)
-
-  private def aggFirst(expression: Column, alias: String): Column = first(expression, ignoreNulls = true).alias(alias)
-
-  private val mapFirst = new AggMapFirst()
-  private def aggMapFirst(field: String): Column = mapFirst(col(field)).alias(field)
-
-  private val mapSum = new AggMapSum()
-  private def aggMapSum(field: String): Column = mapSum(col(field)).alias(s"${field}_sum")
-
-  private def aggMax(field: String): Column = max(field).alias(s"${field}_max")
-
-  private def aggMean(field: String): Column = mean(field).alias(s"${field}_mean")
-
-  private val searchSources = List(
-    "abouthome",
-    "contextmenu",
-    "newtab",
-    "searchbar",
-    "system",
-    "urlbar"
-  )
-  private val searchCounts = new AggSearchCounts(searchSources)
-  private def aggSearchCounts(field: String): Column = searchCounts(col(field)).alias(field)
-
-  private def aggSum(field: String): Column = sum(field).alias(s"${field}_sum")
-
-  private def aggSum(expression: Column, alias: String): Column = sum(expression).alias(alias)
-
   private val fieldAggregators = List(
     aggSum("aborts_content"),
     aggSum("aborts_gmplugin"),
     aggSum("aborts_plugin"),
+    aggAddonsFirst("active_addons"),
     aggMean("active_addons_count"),
     // active_hours_sum has to be coerced from decimal to double for backwards compatibility
     aggSum(expr("DOUBLE(active_ticks/(3600.0/5))"), "active_hours_sum"),
@@ -310,4 +188,136 @@ object ClientsDailyView {
     aggFirst("windows_build_number"),
     aggFirst("windows_ubr")
   )
+
+  def main(args: Array[String]) {
+    val conf = new Conf(args)
+
+    val date = conf.date()
+    val maxRecordsPerFile = conf.maxRecordsPerFile()
+
+    val inputPath = s"s3://${conf.inputBucket()}/main_summary/" +
+      s"${MainSummaryView.schemaVersion}/submission_date_s3=$date"
+    val outputPath = s"s3://${conf.outputBucket()}/clients_daily/" +
+      s"$schemaVersion/submission_date_s3=$date"
+
+    val spark = getOrCreateSparkSession(jobName)
+
+    val df = spark.read.parquet(inputPath)
+    val input = conf.sampleId.get match {
+      case Some(sampleId) => df.where(s"sample_id = '$sampleId'")
+      case _ => df
+    }
+
+    val results = extractDayAggregates(input)
+
+    results
+      .write
+      .mode("overwrite")
+      .option("maxRecordsPerFile", maxRecordsPerFile)
+      .parquet(outputPath)
+  }
+
+  def extractDayAggregates(df: DataFrame): DataFrame = {
+    // determine fieldAggregators that can be used against this DataFrame
+    val agg = Some(fieldAggregators
+      // unresolvedAttributeNames gets the names of columns used as inputs to an expression
+      .flatMap(unresolvedAttributeNames)
+      // filter out the column names that are present in df
+      .toSet -- df.columns)
+      // filter Some(missingColumns) to None unless nonEmpty
+      .filter(_.nonEmpty)
+      // filter expressions using missingColumns out of fieldAggregators
+      .map { missingColumns =>
+        logger.warn(s"JOB $jobName $schemaVersion MISSING INPUT COLUMNS: ${missingColumns.mkString(", ")}")
+        fieldAggregators
+          .filter(unresolvedAttributeNames(_)
+            .forall(!missingColumns.contains(_)))
+      }
+      // let spark throw AnalysisException if we filtered all aggregates
+      .filter(_.nonEmpty)
+      // default to fieldAggregators if there were no missing columns
+      .getOrElse(fieldAggregators)
+
+    // perform aggregation
+    val aggregates = df
+      .groupBy("client_id")
+      .agg(agg.head, agg.tail: _*)
+
+    /* expand search_counts with "search_counts.*". fields in search_counts
+     * are prefixed with "search_count_" so this is safe
+     */
+    aggregates
+      .selectExpr(
+        aggregates.schema.map { c => if (c.name == "search_counts") "search_counts.*" else c.name }: _*
+      )
+  }
+
+  private def unresolvedAttributeNames(c: Column): Seq[String] = c
+    .expr
+    .collectLeaves
+    .flatMap {
+      case attr: UnresolvedAttribute => Some(attr.name)
+      case _ => None
+    }
+
+
+
+  private def aggFirst(field: String): Column = first(field, ignoreNulls = true).alias(field)
+
+  private def aggFirst(expression: Column, alias: String): Column = first(expression, ignoreNulls = true).alias(alias)
+
+  private val mapFirst = new AggMapFirst()
+  private def aggMapFirst(field: String): Column = mapFirst(col(field)).alias(field)
+
+  private val mapSum = new AggMapSum()
+  private def aggMapSum(field: String): Column = mapSum(col(field)).alias(s"${field}_sum")
+
+  private def aggMax(field: String): Column = max(field).alias(s"${field}_max")
+
+  private def aggMean(field: String): Column = mean(field).alias(s"${field}_mean")
+
+  private val addonsFirst = new AggRowFirst[String](buildAddonSchema, 0, StringType)
+  private def aggAddonsFirst(field: String): Column = addonsFirst(col(field)).alias(field)
+
+  private val searchSources = List(
+    "abouthome",
+    "contextmenu",
+    "newtab",
+    "searchbar",
+    "system",
+    "urlbar"
+  )
+  private val searchCounts = new AggSearchCounts(searchSources)
+  private def aggSearchCounts(field: String): Column = searchCounts(col(field)).alias(field)
+
+  private def aggSum(field: String): Column = sum(field).alias(s"${field}_sum")
+
+  private def aggSum(expression: Column, alias: String): Column = sum(expression).alias(alias)
+
+  class Conf(args: Array[String]) extends ScallopConf(args) {
+    val date = opt[String](
+      "date",
+      descr = "Submission date to process",
+      required = true)
+    val inputBucket = opt[String](
+      "input-bucket",
+      descr = "Source bucket for main_summary data",
+      required = false,
+      default = Some("telemetry-parquet"))
+    val outputBucket = opt[String](
+      "output-bucket",
+      descr = "Destination bucket for parquet data",
+      required = true)
+    val sampleId = opt[String](
+      "sample-id",
+      descr = "Sample_id to restrict results to",
+      required = false)
+    // 2,000,000 rows yields ~ 200MB files in snappy+parquet
+    val maxRecordsPerFile = opt[Int](
+      "max-records-per-file",
+      descr = "Max number of rows to write to output files before splitting",
+      required = false,
+      default = Some(2000000))
+    verify()
+  }
 }

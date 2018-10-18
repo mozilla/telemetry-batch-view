@@ -4,7 +4,6 @@
 package com.mozilla.telemetry
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
-import com.mozilla.telemetry.utils.getOrCreateSparkSession
 import com.mozilla.telemetry.views.AddonsView
 import org.scalatest.{FlatSpec, Matchers}
 
@@ -24,6 +23,12 @@ case class Addon(addon_id: String,
                  is_system: Boolean,
                  is_web_extension: Boolean,
                  multiprocess_compatible: Boolean)
+
+object Addon {
+  def apply(addon_id: String, blocklisted: Boolean = true): Addon = {
+    Addon(addon_id, blocklisted, "blah", true, true, "1", 1, "blah", true, true, 1, 1, 1, true, true, true)
+  }
+}
 
 case class PartialMain(document_id: String,
                        client_id: String,
