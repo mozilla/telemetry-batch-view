@@ -3,6 +3,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.views
 
+import com.mozilla.telemetry.Addon
+
 object ClientsDailyViewTestHelpers {
   case class SearchCount(
     engine: Option[String] = None,
@@ -21,9 +23,8 @@ object ClientsDailyViewTestHelpers {
     aborts_content: Option[Int] = None,
     aborts_gmplugin: Option[Int] = None,
     aborts_plugin: Option[Int] = None,
+    active_addons: Option[Seq[Addon]] = None,
     active_addons_count: Option[Long] = None,
-    active_experiment_branch: Option[String] = None,
-    active_experiment_id: Option[String] = None,
     active_ticks: Option[Int] = None,
     addon_compatibility_check_enabled: Option[Boolean] = None,
     app_build_id: Option[String] = None,
@@ -161,7 +162,7 @@ object ClientsDailyViewTestHelpers {
     scalar_parent_webrtc_nicer_turn_403s: Option[Int] = None,
     scalar_parent_webrtc_nicer_turn_438s: Option[Int] = None,
     search_cohort: Option[String] = None,
-    search_counts: Option[scala.collection.Seq[SearchCount]] = None,
+    search_counts: Option[Seq[SearchCount]] = None,
     session_restored: Option[Int] = None,
     shutdown_kill: Option[Int] = None,
     ssl_handshake_result_failure: Option[Int] = None,
@@ -185,8 +186,6 @@ object ClientsDailyViewTestHelpers {
   )
 
   def getRowAggFirst(sValue: Option[String], bValue: Option[Boolean], iValue: Option[Int]): MainSummaryRow = MainSummaryRow(
-    active_experiment_branch = sValue,
-    active_experiment_id = sValue,
     addon_compatibility_check_enabled = bValue,
     app_build_id = sValue,
     app_display_version = sValue,
@@ -252,8 +251,6 @@ object ClientsDailyViewTestHelpers {
   )
 
   def getExpectAggFirst(sValue: String, bValue: Boolean, iValue: Int): Map[String, Any] = Map(
-    "active_experiment_branch" -> sValue,
-    "active_experiment_id" -> sValue,
     "addon_compatibility_check_enabled" -> bValue,
     "app_build_id" -> sValue,
     "app_display_version" -> sValue,

@@ -6,7 +6,8 @@ package com.mozilla.telemetry.views
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-import com.mozilla.telemetry.utils.{CollectList, getOrCreateSparkSession}
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
+import com.mozilla.telemetry.utils.udfs.CollectList
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Column, DataFrame, SQLContext}
