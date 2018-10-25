@@ -695,6 +695,8 @@ object MainSummaryView extends BatchJobBase {
         (system \ "gfx" \ "features" \ "d2d" \ "status").extractOpt[String],
         (system \ "gfx" \ "features" \ "gpuProcess" \ "status").extractOpt[String],
         (system \ "gfx" \ "features" \ "advancedLayers" \ "status").extractOpt[String],
+        (system \ "gfx" \ "features" \ "wrQualified" \ "status").extractOpt[String],
+        (system \ "gfx" \ "features" \ "webrender" \ "status").extractOpt[String],
         (system \ "appleModelId").extractOpt[String],
         (system \ "sec" \ "antivirus").extract[Option[Seq[String]]],
         (system \ "sec" \ "antispyware").extract[Option[Seq[String]]],
@@ -1067,6 +1069,8 @@ object MainSummaryView extends BatchJobBase {
       StructField("gfx_features_d2d_status", StringType, nullable = true), // environment/system/gfx/features/d2d/status
       StructField("gfx_features_gpu_process_status", StringType, nullable = true), // environment/system/gfx/features/gpuProcess/status
       StructField("gfx_features_advanced_layers_status", StringType, nullable = true), // environment/system/gfx/features/advancedLayers/status
+      StructField("gfx_features_wrqualified_status", StringType, nullable = true), // environment/system/gfx/features/wrQualified/status
+      StructField("gfx_features_webrender_status", StringType, nullable = true), // environment/system/gfx/features/webrender/status
 
       StructField("apple_model_id", StringType, nullable = true), // environment/system/appleModelId
 
