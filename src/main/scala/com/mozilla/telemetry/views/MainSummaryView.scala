@@ -47,7 +47,8 @@ object MainSummaryView extends BatchJobBase {
     BooleanUserPref("extensions.legacy.enabled") ::
     BooleanUserPref("browser.search.widget.inNavBar") ::
     BooleanUserPref("marionette.enabled") ::
-    StringUserPref("general.config.filename") :: Nil
+    StringUserPref("general.config.filename") ::
+    BooleanUserPref("gfx.webrender.all.qualified") :: Nil
 
 
   val histogramsWhitelist =
