@@ -41,14 +41,14 @@ object MainSummaryView extends BatchJobBase {
   // See the `_getPrefData()` function in TelemetryEnvironment.jsm
   // for reference: https://mzl.la/2zo7kyK
   val userPrefsList =
-    IntegerUserPref("dom.ipc.plugins.sandbox-level.flash") ::
-    IntegerUserPref("dom.ipc.processCount") ::
+    BooleanUserPref("browser.search.widget.inNavBar") ::
     BooleanUserPref("extensions.allow-non-mpc-extensions") ::
     BooleanUserPref("extensions.legacy.enabled") ::
-    BooleanUserPref("browser.search.widget.inNavBar") ::
+    BooleanUserPref("gfx.webrender.all.qualified") ::
     BooleanUserPref("marionette.enabled") ::
-    StringUserPref("general.config.filename") ::
-    BooleanUserPref("gfx.webrender.all.qualified") :: Nil
+    IntegerUserPref("dom.ipc.plugins.sandbox-level.flash") ::
+    IntegerUserPref("dom.ipc.processCount") ::
+    StringUserPref("general.config.filename") :: Nil
 
 
   val histogramsWhitelist =
