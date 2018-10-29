@@ -9,3 +9,9 @@ This document records interesting code that we've deleted for the sake of discov
 
 Interesting bits: the Heavy Users job used a custom Paritioner called `ConsistentPartitioner` that optimized for copartitioning the same client_ids together even as the client_ids grow and wane.
 
+## Pioneer Online News Dwell Time v2
+
+* [Removal commit](https://github.com/mozilla/telemetry-batch-view/commit/df063c252f0211678347aa976b050ab22af976ac)
+* [State machine diagram](https://goo.gl/FMVjtB)
+
+This dataset was created as a one-off for the purposes of the Online News pioneer study. It created sessions that measured dwell time on a tld based on logs sent from users. It used a state machine to create the sessions, which is mildly interesting.
