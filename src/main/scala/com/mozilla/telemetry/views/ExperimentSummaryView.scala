@@ -132,9 +132,13 @@ object ExperimentSummaryView extends BatchJobBase {
       .parquet(output)
   }
 
-  def getExperimentRecipes(): JValue = {
-    parse(Http(experimentsUrl).params(experimentsUrlParams).asString.body)
-  }
+  def getExperimentRecipes(): JValue = parse(
+    Http(experimentsUrl)
+      .params(experimentsUrlParams)
+      .timeout(connTimeoutMs = 5000, readTimeoutMs = 60000)
+      .asString
+      .body
+  )
 
   def getExperimentList(json: JValue, date: OffsetDateTime, limit: Option[Int] = None): List[String] = {
     val experiments = json match {
