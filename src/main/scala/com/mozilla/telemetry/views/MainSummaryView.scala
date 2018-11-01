@@ -46,6 +46,7 @@ object MainSummaryView extends BatchJobBase {
     BooleanUserPref("extensions.legacy.enabled") ::
     BooleanUserPref("gfx.webrender.all.qualified") ::
     BooleanUserPref("marionette.enabled") ::
+    BooleanUserPref("privacy.fuzzyfox.enabled") ::
     IntegerUserPref("dom.ipc.plugins.sandbox-level.flash") ::
     IntegerUserPref("dom.ipc.processCount") ::
     StringUserPref("general.config.filename") :: Nil
