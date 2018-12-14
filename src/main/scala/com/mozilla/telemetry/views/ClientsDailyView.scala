@@ -82,7 +82,6 @@ object ClientsDailyView {
     aggSum("histogram_parent_devtools_canvasdebugger_opened_count"),
     aggSum("histogram_parent_devtools_computedview_opened_count"),
     aggSum("histogram_parent_devtools_custom_opened_count"),
-    aggSum("histogram_parent_devtools_developertoolbar_opened_count"),
     aggSum("histogram_parent_devtools_dom_opened_count"),
     aggSum("histogram_parent_devtools_eyedropper_opened_count"),
     aggSum("histogram_parent_devtools_fontinspector_opened_count"),

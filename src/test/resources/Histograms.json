@@ -7912,14 +7912,6 @@
     "description": "Number of times the DevTools Eyedropper has been opened via the color picker.",
     "releaseChannelCollection": "opt-out"
   },
-  "DEVTOOLS_DEVELOPERTOOLBAR_OPENED_COUNT": {
-    "alert_emails": ["dev-developer-tools@lists.mozilla.org"],
-    "expires_in_version": "never",
-    "kind": "count",
-    "bug_numbers": [1247985],
-    "description": "Number of times the DevTools Developer Toolbar / GCLI has been opened.",
-    "releaseChannelCollection": "opt-out"
-  },
   "DEVTOOLS_ABOUTDEBUGGING_OPENED_COUNT": {
     "alert_emails": ["dev-developer-tools@lists.mozilla.org", "jan@mozilla.com"],
     "expires_in_version": "never",
