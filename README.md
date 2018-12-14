@@ -25,6 +25,11 @@ The general workflow for telemetry-batch-view is:
 2. Test locally in [Airflow](https://www.github.com/mozilla/telemetry-airflow), testing just the jobs that your code change touches.
 3. Open PR, tag someone to review. Merge when approved, which will deploy the jar to production.
 
+Note that Airflow deployments depend on cluster bootstrap scripts governed by 
+[emr-bootstrap-spark](https://github.com/mozilla/emr-bootstrap-spark/).
+Changes in job behavior that don't seem to correspond to changes in this 
+repository's code could be related to changes in those other projects.
+
 ### Local Development
 
 There are two possible workflows for hacking on telemetry-batch-view: you can either create a docker container for building the package and running tests, or import the project into IntelliJ's IDEA.
