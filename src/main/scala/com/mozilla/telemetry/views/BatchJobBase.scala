@@ -8,6 +8,7 @@ import java.time.temporal.ChronoUnit
 import java.time.{Clock, LocalDate}
 
 import com.mozilla.telemetry.views.BatchJobBase._
+import com.mozilla.telemetry.views.untrustedmodules.UntrustedModulesView.shouldStopContextAtEnd
 import org.apache.spark.sql.SparkSession
 import org.rogach.scallop.{ScallopConf, ScallopOption}
 
@@ -55,6 +56,18 @@ abstract class BatchJobBase extends Serializable {
 
   protected def shouldStopContextAtEnd(spark: SparkSession): Boolean = {
     !spark.conf.get("spark.home", "").startsWith("/databricks")
+  }
+
+  /**
+    * Safely stops Spark session.
+    * This is no-op if running on Databricks - we can't stop it there since session is managed by the platform.
+    *
+    * @param spark Spark Session
+    */
+  protected def stopSessionSafely(spark:SparkSession):Unit={
+    if (shouldStopContextAtEnd(spark)) {
+      spark.stop()
+    }
   }
 }
 

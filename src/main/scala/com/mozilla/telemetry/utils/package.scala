@@ -13,7 +13,8 @@ import org.apache.spark.sql.SparkSession
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
 
-package object utils{
+package object utils {
+
   import java.rmi.dgc.VMID
   import org.apache.hadoop.fs.Path
 
@@ -65,9 +66,10 @@ package object utils{
     output.toString()
   }
 
-  def getOrCreateSparkSession(jobName: String, enableHiveSupport: Boolean = false): SparkSession = {
+  def getOrCreateSparkSession(jobName: String, enableHiveSupport: Boolean = false, additionalConfig: Seq[(String, String)] = Seq()): SparkSession = {
     val conf = new SparkConf().setAppName(jobName)
     conf.setMaster(conf.get("spark.master", "local[*]"))
+    additionalConfig.foreach { case (k, v) => conf.set(k, v) }
 
     val spark = enableHiveSupport match {
       case true => {
@@ -98,9 +100,10 @@ package object utils{
     // we're going to output it in standard ISO format
     val date = OffsetDateTime.parse(timestamp, dateFormatter)
     val timezoneOffsetHours = date.getOffset().getTotalSeconds.toDouble / secondsPerHour
+
     def fixTimezone(i: Int) =
       ZoneOffset.ofTotalSeconds(
-      ((timezoneOffsetHours + (i * 12) * Math.floor(timezoneOffsetHours / (-i * 12)).toInt) * secondsPerHour).toInt)
+        ((timezoneOffsetHours + (i * 12) * Math.floor(timezoneOffsetHours / (-i * 12)).toInt) * secondsPerHour).toInt)
 
     val timezone = if (timezoneOffsetHours < -12.0) {
       fixTimezone(1)
@@ -129,9 +132,9 @@ package object utils{
 
   def time[R](block: => R): R = {
     val t0 = System.nanoTime()
-    val result = block  // call-by-name
+    val result = block // call-by-name
     val t1 = System.nanoTime()
-    logger.info(s"Elapsed time: ${(t1 - t0)/1000000000.0} s")
+    logger.info(s"Elapsed time: ${(t1 - t0) / 1000000000.0} s")
     result
   }
 
