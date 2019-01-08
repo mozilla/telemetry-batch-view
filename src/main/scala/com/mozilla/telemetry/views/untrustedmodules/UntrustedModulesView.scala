@@ -25,6 +25,12 @@ object UntrustedModulesView extends BatchJobBase {
     val outputPath = opt[String]("outputPath", descr = "Output path", required = true)
     val symbolicationServiceUrl = opt[String]("symbolicationServiceUrl", required = false,
       default = Some("https://symbols.mozilla.org//symbolicate/v5"))
+    val partitionLimit = opt[Int]("partitionLimit", required = false, default = Some(5),
+      descr = "Number of partitions to coalesce to before symbolicating (can be used to throttle requests to symbolication server)")
+    val sampleFraction = opt[Double]("sampleFraction", required = false, default = Some(1),
+      descr = "Fraction of records to sample from original dataset (for testing)")
+
+
     verify()
   }
 
@@ -42,9 +48,17 @@ object UntrustedModulesView extends BatchJobBase {
         .where($"submission_date_s3" === currentDateString)
         .where($"metadata.normalized_channel" === "nightly") // filter out beta and release so we don't kill symbolication server
 
-      val newSchema = StructType(rawPings.schema.fields ++ Array(StructField("symbolicatedStacks", StringType, false)))
-      val symbolicated = rawPings.rdd.mapPartitions { rawPings =>
+      val sampled = conf.sampleFraction.toOption match {
+        case Some(ratio) => rawPings.sample(ratio)
+        case None => rawPings
+      }
+      val coalesced = conf.partitionLimit.toOption match {
+        case Some(p) => sampled.coalesce(p)
+        case None => sampled
+      }
 
+      val newSchema = StructType(coalesced.schema.fields ++ Array(StructField("symbolicatedStacks", StringType, false)))
+      val symbolicated = coalesced.rdd.mapPartitions { rawPings =>
         rawPings.map { rawPing =>
 
           val combinedStacks: Row = rawPing.getAs[Row]("payload").getAs[Row]("combined_stacks")
