@@ -63,8 +63,7 @@ object UntrustedModulesView extends BatchJobBase {
 
           val combinedStacks: Row = rawPing.getAs[Row]("payload").getAs[Row]("combined_stacks")
           val stacksJson = combinedStackToJson(combinedStacks)
-          //          val symbolicatedStacks = Symbolicator.symbolicate(conf.symbolicationServiceUrl())(stacksJson)
-          val symbolicatedStacks = stacksJson.map(identity).getOrElse("Empty combinedStacks")
+          val symbolicatedStacks = stacksJson.map(Symbolicator.symbolicate(conf.symbolicationServiceUrl())).getOrElse("Empty combinedStacks")
 
           val withSymbolicatedStacks: Row = Row.fromSeq(rawPing.toSeq ++ Array(symbolicatedStacks))
 
