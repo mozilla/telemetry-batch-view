@@ -57,7 +57,7 @@ object UntrustedModulesView extends BatchJobBase {
         case None => sampled
       }
 
-      val newSchema = StructType(coalesced.schema.fields ++ Array(StructField("symbolicatedStacks", StringType, false)))
+      val newSchema = StructType(coalesced.schema.fields ++ Array(StructField("symbolicated_stacks", StringType, false)))
       val symbolicated = coalesced.rdd.mapPartitions { rawPings =>
         rawPings.map { rawPing =>
 
