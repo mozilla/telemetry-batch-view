@@ -80,8 +80,20 @@ class UntrustedModulesViewTest extends FlatSpec with DataFrameSuiteBase with Mat
 
     val combinedStacks2: Row = spark.read.json(Seq(sparkSerializedCombinedStacksField).toDS).as[Payload].toDF().head().getAs[Row]("combined_stacks")
 
-    val stacksJson2 = parse(UntrustedModulesView.combinedStackToJson(combinedStacks2))
+    val stacksJson2 = parse(UntrustedModulesView.combinedStackToJson(combinedStacks2).get)
 
     stacksJson2 shouldEqual expectedJson
+  }
+
+  it should "handle empty stacks" in {
+    import spark.implicits._
+
+    val sparkSerializedCombinedStacksField ="""{"combined_stacks":{"memory_map":[],"stacks":[[],[]]}}"""
+
+    val combinedStacks: Row = spark.read.json(Seq(sparkSerializedCombinedStacksField).toDS).toDF().head().getAs[Row]("combined_stacks")
+
+    val stacksJson = UntrustedModulesView.combinedStackToJson(combinedStacks)
+
+    stacksJson shouldBe None
   }
 }
