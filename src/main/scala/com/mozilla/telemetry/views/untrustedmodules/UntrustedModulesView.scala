@@ -47,9 +47,10 @@ object UntrustedModulesView extends BatchJobBase {
 
         rawPings.map { rawPing =>
 
-          //          val unsymbolicatedStacks = ""
-          //          val symbolicatedStacks = Symbolicator.symbolicate(conf.symbolicationServiceUrl())(unsymbolicatedStacks)
-          val symbolicatedStacks = "test"
+          val combinedStacks: Row = rawPing.getAs[Row]("payload").getAs[Row]("combined_stacks")
+          val stacksJson = combinedStackToJson(combinedStacks)
+          //          val symbolicatedStacks = Symbolicator.symbolicate(conf.symbolicationServiceUrl())(stacksJson)
+          val symbolicatedStacks = stacksJson
 
           val withSymbolicatedStacks: Row = Row.fromSeq(rawPing.toSeq ++ Array(symbolicatedStacks))
 
@@ -75,6 +76,14 @@ object UntrustedModulesView extends BatchJobBase {
     val memoryMap = combinedStacks.memory_map.toList.map { mapping => List(mapping.module_name, mapping.debug_id) }
     val stacks = combinedStacks.stacks.toList.map { stack =>
       stack.toList.map { stackFrame => List(stackFrame.module_index, stackFrame.module_offset) }
+    }
+    compact(render(("memoryMap" -> memoryMap) ~ ("stacks" -> stacks)))
+  }
+
+  def combinedStackToJson(combinedStacks: Row): String = {
+    val memoryMap = combinedStacks.getAs[Seq[Row]]("memory_map").map { r => List(r.getAs[String]("module_name"), r.getAs[String]("debug_id")) }
+    val stacks = combinedStacks.getAs[Seq[Seq[Row]]]("stacks").map { stack =>
+      stack.map { stackFrame => List(stackFrame.getAs[Long]("module_index"), stackFrame.getAs[Long]("module_offset")) }
     }
     compact(render(("memoryMap" -> memoryMap) ~ ("stacks" -> stacks)))
   }

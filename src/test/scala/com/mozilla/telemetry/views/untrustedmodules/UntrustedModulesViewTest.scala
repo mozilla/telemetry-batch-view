@@ -5,6 +5,7 @@ package com.mozilla.telemetry.views.untrustedmodules
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.mozilla.telemetry.pings.Payload
+import org.apache.spark.sql.Row
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{FlatSpec, Matchers}
@@ -74,5 +75,13 @@ class UntrustedModulesViewTest extends FlatSpec with DataFrameSuiteBase with Mat
     val stacksJson = parse(UntrustedModulesView.combinedStackToJson(combinedStacks))
 
     stacksJson shouldEqual expectedJson
+
+
+
+    val combinedStacks2: Row = spark.read.json(Seq(sparkSerializedCombinedStacksField).toDS).as[Payload].toDF().head().getAs[Row]("combined_stacks")
+
+    val stacksJson2 = parse(UntrustedModulesView.combinedStackToJson(combinedStacks2))
+
+    stacksJson2 shouldEqual expectedJson
   }
 }
