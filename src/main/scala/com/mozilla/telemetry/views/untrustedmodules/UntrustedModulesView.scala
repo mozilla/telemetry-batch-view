@@ -12,6 +12,8 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import scalaj.http.Http
 
+import scala.util.{Failure, Success, Try}
+
 
 object UntrustedModulesView extends BatchJobBase {
 
@@ -29,7 +31,10 @@ object UntrustedModulesView extends BatchJobBase {
       descr = "Number of partitions to coalesce to before symbolicating (can be used to throttle requests to symbolication server)")
     val sampleFraction = opt[Double]("sampleFraction", required = false, default = Some(1),
       descr = "Fraction of records to sample from original dataset (for testing)")
-
+    val connectionTimeoutMs = opt[Int]("connectionTimeoutMs", required = false, default = Some(1000),
+      descr = "Symbolication service connection timeout (ms)")
+    val readTimeoutMs = opt[Int]("readTimeoutMs", required = false, default = Some(5000),
+      descr = "Symbolication service read timeout (ms)")
 
     verify()
   }
@@ -37,6 +42,8 @@ object UntrustedModulesView extends BatchJobBase {
   def main(args: Array[String]): Unit = {
     val conf = new Conf(args)
     val symbolServerUrl = conf.symbolicationServiceUrl()
+    val symbolServerConnectionTimeout = conf.connectionTimeoutMs()
+    val symbolServerReadTimeout = conf.readTimeoutMs()
     val spark = getOrCreateSparkSession(jobName = "UntrustedModulesView", enableHiveSupport = true,
       additionalConfig = Seq(("spark.sql.sources.partitionOverwriteMode", "dynamic")))
     require(spark.version >= "2.3", "Spark 2.3 is required due to dynamic partition overwrite mode")
@@ -65,7 +72,12 @@ object UntrustedModulesView extends BatchJobBase {
         rawPings.map { rawPing =>
           val combinedStacks: Row = rawPing.getAs[Row]("payload").getAs[Row]("combined_stacks")
           val stacksJson = combinedStackToJson(combinedStacks)
-          val symbolicatedStacks = stacksJson.map(Symbolicator.symbolicate(symbolServerUrl)).getOrElse("Empty combinedStacks")
+          val symbolicatedStacks = stacksJson.map {stacks=>
+            Symbolicator.symbolicate(symbolServerUrl, symbolServerConnectionTimeout, symbolServerReadTimeout)(stacks) match {
+              case Success(s) => s
+              case Failure(exception) => exception.getMessage
+            }
+          }.getOrElse("Empty combinedStacks")
 
           val withSymbolicatedStacks: Row = Row.fromSeq(rawPing.toSeq ++ Array(symbolicatedStacks))
 
@@ -117,17 +129,20 @@ object UntrustedModulesView extends BatchJobBase {
 object Symbolicator {
   //  val url = "https://symbols.mozilla.org//symbolicate/v5"
 
-  def symbolicate(url: String)(unsymbolicatedStacks: String): String = {
-    Http(url).postData(unsymbolicatedStacks).asString.body
+  def symbolicate(url: String, connectionTimeoutMs: Int, readTimeoutMs: Int)(unsymbolicatedStacks: String): Try[String] = {
+    Try {
+      Http(url).timeout(connTimeoutMs = 1000, readTimeoutMs = 5000).postData(unsymbolicatedStacks).asString.body
+    }
   }
 }
 
 object Test extends App {
   // scalastyle:off
+  // curl -d '{"stacks": [[[0, 20955], [1, 207483], [2, 265500], [2, 264903], [2, 5814], [2, 4985], [2, 4382], [2, 270656], [3, 77876], [4, 463985]]], "memoryMap": [["mozglue.pdb", "4F26C626A59BD87CFE4D05A43D48A2601"], ["kernelbase.pdb", "F4EEB437F634B4B76EE59F40C5E7FEFB1"], ["firefox.pdb", "8A265F2F4F95C74B92DC10568A6437091"], ["kernel32.pdb", "63816243EC704DC091BC31470BAC48A31"], ["ntdll.pdb", "38A5841BD353770D9C800BF1AF6B17EB1"]]}' https://symbols.mozilla.org//symbolicate/v5
   val testInput =
     """{"memoryMap": [["mozglue.pdb", "4F26C626A59BD87CFE4D05A43D48A2601"], ["kernelbase.pdb", "F4EEB437F634B4B76EE59F40C5E7FEFB1"], ["firefox.pdb", "8A265F2F4F95C74B92DC10568A6437091"], ["kernel32.pdb", "63816243EC704DC091BC31470BAC48A31"], ["ntdll.pdb", "38A5841BD353770D9C800BF1AF6B17EB1"]], "stacks": [[[0, 20955], [1, 207483], [2, 265500], [2, 264903], [2, 5814], [2, 4985], [2, 4382], [2, 270656], [3, 77876], [4, 463985]]]}"""
 
-  val symbolicated = Symbolicator.symbolicate("https://symbols.mozilla.org//symbolicate/v5")(testInput)
+  val symbolicated = Symbolicator.symbolicate("https://symbols.mozilla.org//symbolicate/v5", 100, 100)(testInput)
   println("test input:")
   println(testInput)
   println()
