@@ -36,6 +36,7 @@ object UntrustedModulesView extends BatchJobBase {
 
   def main(args: Array[String]): Unit = {
     val conf = new Conf(args)
+    val symbolServerUrl = conf.symbolicationServiceUrl()
     val spark = getOrCreateSparkSession(jobName = "UntrustedModulesView", enableHiveSupport = true,
       additionalConfig = Seq(("spark.sql.sources.partitionOverwriteMode", "dynamic")))
     require(spark.version >= "2.3", "Spark 2.3 is required due to dynamic partition overwrite mode")
@@ -52,18 +53,19 @@ object UntrustedModulesView extends BatchJobBase {
         case Some(ratio) => rawPings.sample(ratio)
         case None => rawPings
       }
+
       val coalesced = conf.partitionLimit.toOption match {
         case Some(p) => sampled.coalesce(p)
         case None => sampled
       }
 
       val newSchema = StructType(coalesced.schema.fields ++ Array(StructField("symbolicated_stacks", StringType, false)))
+
       val symbolicated = coalesced.rdd.mapPartitions { rawPings =>
         rawPings.map { rawPing =>
-
           val combinedStacks: Row = rawPing.getAs[Row]("payload").getAs[Row]("combined_stacks")
           val stacksJson = combinedStackToJson(combinedStacks)
-          val symbolicatedStacks = stacksJson.map(Symbolicator.symbolicate(conf.symbolicationServiceUrl())).getOrElse("Empty combinedStacks")
+          val symbolicatedStacks = stacksJson.map(Symbolicator.symbolicate(symbolServerUrl)).getOrElse("Empty combinedStacks")
 
           val withSymbolicatedStacks: Row = Row.fromSeq(rawPing.toSeq ++ Array(symbolicatedStacks))
 
