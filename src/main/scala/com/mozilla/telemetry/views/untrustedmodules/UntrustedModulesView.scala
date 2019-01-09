@@ -66,20 +66,21 @@ object UntrustedModulesView extends BatchJobBase {
         case None => sampled
       }
 
-      val newSchema = StructType(coalesced.schema.fields ++ Array(StructField("symbolicated_stacks", StringType, false)))
+      val newSchema = StructType(coalesced.schema.fields ++ Array(
+        StructField("symbolicated_stacks", StringType, nullable = true), StructField("symbolication_error", StringType, nullable = true)))
 
       val symbolicated = coalesced.rdd.mapPartitions { rawPings =>
         rawPings.map { rawPing =>
           val combinedStacks: Row = rawPing.getAs[Row]("payload").getAs[Row]("combined_stacks")
           val stacksJson = combinedStackToJson(combinedStacks)
-          val symbolicatedStacks = stacksJson.map {stacks=>
+          val symbolicatedStacksWithError = stacksJson.map { stacks =>
             Symbolicator.symbolicate(symbolServerUrl, symbolServerConnectionTimeout, symbolServerReadTimeout)(stacks) match {
-              case Success(s) => s
-              case Failure(exception) => exception.getMessage
+              case Success(s) => Seq(s, null)
+              case Failure(exception) => Seq(null, exception.getMessage)
             }
-          }.getOrElse("Empty combinedStacks")
+          }.getOrElse(Seq(null, "Empty combinedStacks"))
 
-          val withSymbolicatedStacks: Row = Row.fromSeq(rawPing.toSeq ++ Array(symbolicatedStacks))
+          val withSymbolicatedStacks: Row = Row.fromSeq(rawPing.toSeq ++ symbolicatedStacksWithError)
 
           withSymbolicatedStacks
         }
