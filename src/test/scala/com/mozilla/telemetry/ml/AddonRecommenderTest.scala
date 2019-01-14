@@ -8,28 +8,26 @@ import java.nio.file.Files
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers, PrivateMethodTester}
-import org.apache.spark.sql.Dataset
 
 import scala.collection.Map
 
-private case class TestBuildData(application_name: Option[String])
-private case class TestActiveAddonData(blocklisted: Option[Boolean],
-                                       description: Option[String],
-                                       name: Option[String],
-                                       user_disabled: Option[Boolean],
-                                       app_disabled: Option[Boolean],
-                                       version: Option[String],
-                                       scope: Option[Int],
-                                       `type`: Option[String],
-                                       foreign_install: Option[Boolean],
-                                       has_binary_components: Option[Boolean],
-                                       install_day: Option[Long],
-                                       update_day: Option[Long],
-                                       signed_state: Option[Int],
-                                       is_system: Option[Boolean])
-private case class TestLongitudinalRow(client_id: Option[String],
-                                       active_addons: Option[Seq[Map[String, TestActiveAddonData]]],
-                                       build: Option[Seq[TestBuildData]])
+
+private case class TestAddonData(addon_id: String,
+                                 app_disabled: Boolean = false,
+                                 blocklisted: Boolean = false,
+                                 foreign_install: Boolean = false,
+                                 has_binary_components: Boolean = false,
+                                 install_day: Long = 1,
+                                 is_system: Boolean = false,
+                                 is_web_extension: Boolean = true,
+                                 multiprocess_compatible: Boolean = true,
+                                 name: String = "addon name",
+                                 scope: Long = 1,
+                                 signed_state: Long = 2,
+                                 `type`: String = "extension",
+                                 update_day: Long = 1,
+                                 user_disabled: Boolean = false,
+                                 version: String = "1.0")
 
 class AddonRecommenderTest extends FlatSpec with Matchers with DataFrameSuiteBase with BeforeAndAfterAll with PrivateMethodTester {
   private var amoDB: Map[String, AMOAddonInfo] = Map[String, AMOAddonInfo]()
@@ -159,51 +157,32 @@ class AddonRecommenderTest extends FlatSpec with Matchers with DataFrameSuiteBas
     import spark.implicits._
     val dataset = List(
       // This user has an add-on which is not on AMO and a webextension one.
-      TestLongitudinalRow(Some("foo_id"),
-        Some(List(Map(
-          "{unlisted-addon-guid}" -> TestActiveAddonData(
-            Some(false), Some("Nice desc"), Some("addon name"), Some(false), Some(false), Some("1.0"),
-            Some(1), Some("extension"), Some(false), Some(false), Some(1), Some(1), Some(2), Some(true)),
-          "{webext-addon-guid}" -> TestActiveAddonData(
-            Some(false), Some("Nice desc"), Some("addon name"), Some(false), Some(false), Some("1.0"),
-            Some(1), Some("extension"), Some(false), Some(false), Some(1), Some(1), Some(2), Some(true))))
-        ),
-        Some(List(TestBuildData(Some("Firefox"))))
+      clientsDailyRow("foo_id",
+        Array(
+          TestAddonData("{unlisted-addon-guid}", is_web_extension = false),
+          TestAddonData("{webext-addon-guid}")
+        )
       ),
       // User with a legacy add-on and a blacklisted one.
-      TestLongitudinalRow(Some("legacy_user_id"),
-        Some(List(Map(
-          "{legacy-addon-guid}" -> TestActiveAddonData(
-            Some(false), Some("Nice desc"), Some("addon name"), Some(false), Some(false), Some("1.0"),
-            Some(1), Some("extension"), Some(false), Some(false), Some(1), Some(1), Some(2), Some(true)),
-          "{blacklisted-addon-guid}" -> TestActiveAddonData(
-            Some(false), Some("Nice desc"), Some("addon name"), Some(false), Some(false), Some("1.0"),
-            Some(1), Some("extension"), Some(false), Some(false), Some(1), Some(1), Some(2), Some(true))))
-        ),
-        Some(List(TestBuildData(Some("Firefox"))))
+      clientsDailyRow("legacy_user_id",
+        Array(
+          TestAddonData("{legacy-addon-guid}", is_web_extension = false),
+          TestAddonData("{blacklisted-addon-guid}")
+        )
       ),
       // User with a series of disabled add-ons.
-      TestLongitudinalRow(Some("disabled_user_id"),
-        Some(List(Map(
-          "{legacy-addon-guid}" -> TestActiveAddonData(
-            Some(false), Some("Nice desc"), Some("addon name"), Some(true), Some(false), Some("1.0"),
-            Some(1), Some("extension"), Some(false), Some(false), Some(1), Some(1), Some(2), Some(true)),
-          "{webext-addon-guid}" -> TestActiveAddonData(
-            Some(false), Some("Nice desc"), Some("addon name"), Some(false), Some(true), Some("1.0"),
-            Some(1), Some("extension"), Some(false), Some(false), Some(1), Some(1), Some(2), Some(true))))
-        ),
-        Some(List(TestBuildData(Some("Firefox"))))
+      clientsDailyRow("disabled_user_id",
+        Array(
+          TestAddonData("{legacy-addon-guid}", is_web_extension = false, user_disabled = true),
+          TestAddonData("{webext-addon-guid}", app_disabled = true)
+        )
       )
     ).toDS()
 
-    dataset.createOrReplaceTempView("longitudinal")
-
-    // Declare the private methods from AddonRecommender so that we can call them.
-    val getAddonData = PrivateMethod[Dataset[(String, String, Int, Int)]]('getAddonData)
-    val hash = PrivateMethod[Int]('hash)
+    dataset.createOrReplaceTempView("clients_daily")
 
     // Filter the dataframe, collect and validate the results.
-    val df = AddonRecommender invokePrivate getAddonData(spark, List("{webext-addon-guid}", "{legacy-addon-guid}"), amoDB, None)
+    val df = AddonRecommender.getAddonData(spark, List("{webext-addon-guid}", "{legacy-addon-guid}"), amoDB, "clients_daily", "20190101", 100)
 
     val data = df.collect()
     assert(data.length == 2)
@@ -211,13 +190,25 @@ class AddonRecommenderTest extends FlatSpec with Matchers with DataFrameSuiteBas
     // Check the first expected user.
     assert(data(0)._1 == "foo_id")
     assert(data(0)._2 == "{webext-addon-guid}")
-    assert(data(0)._3 == (AddonRecommender invokePrivate hash("foo_id")))
-    assert(data(0)._4 == (AddonRecommender invokePrivate hash("{webext-addon-guid}")))
+    assert(data(0)._3 == AddonRecommender.hash("foo_id"))
+    assert(data(0)._4 == AddonRecommender.hash("{webext-addon-guid}"))
 
     // Check the second expected user.
     assert(data(1)._1 == "legacy_user_id")
     assert(data(1)._2 == "{legacy-addon-guid}")
-    assert(data(1)._3 == (AddonRecommender invokePrivate hash("legacy_user_id")))
-    assert(data(1)._4 == (AddonRecommender invokePrivate hash("{legacy-addon-guid}")))
+    assert(data(1)._3 == AddonRecommender.hash("legacy_user_id"))
+    assert(data(1)._4 == AddonRecommender.hash("{legacy-addon-guid}"))
+  }
+
+  private def clientsDailyRow(clientId: String, activeAddons: Array[TestAddonData]): ClientsDailyRow = {
+    implicit def toOption[T](any: T) = Option(any)
+    val addons = activeAddons.map { case TestAddonData(addon_id, app_disabled, blocklisted, foreign_install,
+    has_binary_components, install_day, is_system, is_web_extension, multiprocess_compatible, name, scope,
+    signed_state, _type, update_day, user_disabled, version) =>
+      ActiveAddon(addon_id, app_disabled, blocklisted, foreign_install,
+        has_binary_components, install_day, is_system, is_web_extension, multiprocess_compatible, name, scope,
+        signed_state, _type, update_day, user_disabled, version)
+    }
+    ClientsDailyRow(clientId, "Firefox", addons, "release", "1", "20190110")
   }
 }
