@@ -10,7 +10,8 @@ import java.time.format.DateTimeFormatter
 
 import breeze.linalg.{DenseMatrix, DenseVector}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
-import com.mozilla.telemetry.utils.{S3Store, getOrCreateSparkSession}
+import com.mozilla.telemetry.utils.getOrCreateSparkSession
+import com.mozilla.telemetry.views.DatabricksSupport
 import org.apache.spark.ml.evaluation.NaNRegressionEvaluator
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
@@ -46,7 +47,7 @@ private case class Addon(blocklisted: Option[Boolean],
 
 private case class ItemFactors(id: Int, features: Array[Float])
 
-object AddonRecommender {
+object AddonRecommender extends DatabricksSupport {
   implicit val formats = Serialization.formats(NoTypeHints)
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
 
@@ -285,7 +286,9 @@ object AddonRecommender {
       .zip(model.avgMetrics)
       .foreach(logger.info)
 
-    sc.stop()
+    if (shouldStopContextAtEnd(spark)) {
+      spark.stop()
+    }
   }
   // scalastyle:on methodLength
 

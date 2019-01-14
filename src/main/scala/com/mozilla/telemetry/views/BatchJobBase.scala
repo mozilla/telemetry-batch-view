@@ -14,7 +14,7 @@ import org.rogach.scallop.{ScallopConf, ScallopOption}
 /***
   * Base class for batch processing jobs
   */
-abstract class BatchJobBase extends Serializable {
+abstract class BatchJobBase extends DatabricksSupport with Serializable {
 
   val clock: Clock = Clock.systemUTC()
 
@@ -52,10 +52,6 @@ abstract class BatchJobBase extends Serializable {
       descr = "Destination bucket for parquet data",
       required = false)
   }
-
-  protected def shouldStopContextAtEnd(spark: SparkSession): Boolean = {
-    !spark.conf.get("spark.home", "").startsWith("/databricks")
-  }
 }
 
 object BatchJobBase {
@@ -64,4 +60,10 @@ object BatchJobBase {
     */
   val DateFormat = "yyyyMMdd"
   val DateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern(DateFormat)
+}
+
+trait DatabricksSupport {
+  protected def shouldStopContextAtEnd(spark: SparkSession): Boolean = {
+    !spark.conf.get("spark.home", "").startsWith("/databricks")
+  }
 }
