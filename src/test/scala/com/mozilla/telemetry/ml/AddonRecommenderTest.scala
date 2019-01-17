@@ -7,7 +7,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 import scala.collection.Map
 
@@ -29,7 +29,7 @@ private case class TestAddonData(addon_id: String,
                                  user_disabled: Boolean = false,
                                  version: String = "1.0")
 
-class AddonRecommenderTest extends FlatSpec with Matchers with DataFrameSuiteBase with BeforeAndAfterAll with PrivateMethodTester {
+class AddonRecommenderTest extends FlatSpec with Matchers with DataFrameSuiteBase with BeforeAndAfterAll {
   private var amoDB: Map[String, AMOAddonInfo] = Map[String, AMOAddonInfo]()
 
   override def beforeAll() {
@@ -146,11 +146,9 @@ class AddonRecommenderTest extends FlatSpec with Matchers with DataFrameSuiteBas
   }
 
   "hash" must "return positive hash codes" in {
-    val hash = PrivateMethod[Int]('hash)
-
     val testString = "test-string"
     assert(testString.hashCode() < 0)
-    assert((AddonRecommender invokePrivate hash(testString)) > 0)
+    assert(AddonRecommender.hash(testString) > 0)
   }
 
   "getAddonData" must "filter undesired addons" in {
