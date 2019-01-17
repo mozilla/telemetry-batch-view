@@ -10,7 +10,7 @@ import java.time.{Instant, LocalDate, ZoneOffset}
 
 import breeze.linalg.{DenseMatrix, DenseVector}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
-import com.mozilla.telemetry.utils.getOrCreateSparkSession
+import com.mozilla.telemetry.utils.{S3Store, getOrCreateSparkSession}
 import com.mozilla.telemetry.views.DatabricksSupport
 import org.apache.spark.ml.evaluation.NaNRegressionEvaluator
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
@@ -18,7 +18,7 @@ import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.json4s.JsonDSL._
 import org.json4s._
-import org.json4s.jackson.JsonMethods._
+import org.json4s.jackson.JsonMethods.{parse, _}
 import org.json4s.jackson.Serialization
 import org.json4s.jackson.Serialization.write
 import org.rogach.scallop._
@@ -27,7 +27,6 @@ import scala.collection.Map
 import scala.io.Source
 import scala.language.reflectiveCalls
 import scala.sys.process._
-
 
 object AddonRecommender extends DatabricksSupport {
   implicit val formats = Serialization.formats(NoTypeHints)
@@ -188,12 +187,10 @@ object AddonRecommender extends DatabricksSupport {
 
     val spark = getOrCreateSparkSession("AddonRecommenderTest", enableHiveSupport = true)
     val sc = spark.sparkContext
-    import com.mozilla.telemetry.utils.S3Store
-    import org.json4s._
-    import org.json4s.jackson.JsonMethods.parse
+
     import spark.implicits._
     implicit val formats = DefaultFormats
-    val istream = S3Store.getKey("telemetry-parquet", "telemetry-ml/addon_recommender/only_guids_top_200.json");
+    val istream = S3Store.getKey("telemetry-parquet", "telemetry-ml/addon_recommender/only_guids_top_200.json")
     val json_str = scala.io.Source.fromInputStream(istream).mkString
     val whitelist = parse(json_str).extract[List[String]]
     val clientAddons = getAddonData(spark, whitelist, amoDbMap, inputTable, dateFrom, sampling)
@@ -310,9 +307,7 @@ object AddonRecommender extends DatabricksSupport {
         val addons = conf.recommend.addons().split(",")
         val top = conf.recommend.top()
         val input = conf.recommend.input()
-        // scalastyle:off print-ln
-        recommend(input, addons.toSet).take(top).foreach(println)
-        // scalastyle:on print-ln
+        recommend(input, addons.toSet).take(top).foreach(logger.info)
 
       case Some(command) if command == conf.train =>
         val output = conf.train.output()
@@ -320,7 +315,7 @@ object AddonRecommender extends DatabricksSupport {
         val outputDir = new java.io.File(cwd, output)
 
         val fmt = DateTimeFormatter.ofPattern("yyyyMMdd")
-        val date = conf.train.runDate.get match {
+        val date = conf.train.runDate.toOption match {
           case Some(f) => f
           case _ => Instant.now().atOffset(ZoneOffset.UTC).format(fmt)
         }
