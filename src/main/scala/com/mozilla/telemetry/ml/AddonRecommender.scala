@@ -26,7 +26,6 @@ import org.rogach.scallop._
 import scala.collection.Map
 import scala.io.Source
 import scala.language.reflectiveCalls
-import scala.sys.process._
 
 object AddonRecommender extends DatabricksSupport {
   implicit val formats = Serialization.formats(NoTypeHints)
@@ -272,21 +271,7 @@ object AddonRecommender extends DatabricksSupport {
     S3Store.uploadFile(addonCachePath.toFile, privateBucket, privateS3prefix, addonCachePath.getFileName.toString)
     S3Store.uploadFile(addonCachePath.toFile, privateBucket, latestS3prefix, addonCachePath.getFileName.toString)
 
-    // Serialize model to HDFS and then copy it to the local machine. We need to do this
-    // instead of simply saving to file:// due to permission issues.
-    try {
-      model.write.overwrite().save(s"$localOutputDir/als.model")
-      // Run the copy as a shell command: unfortunately, FileSystem.copyToLocalFile
-      // triggers the same permission issues that we experience when saving to file://.
-      val copyCmdOutput = s"hdfs dfs -get $localOutputDir/als.model $localOutputDir/".!!
-      logger.debug("Command output " + copyCmdOutput)
-      // Save the model to S3 as well. We don't need to upload that in the public bucket.
-      model.write.overwrite().save(s"s3://$privateBucket/$privateS3prefix/als.model")
-    } catch {
-      // We failed to write the model to HDFS or there was a permission issue with the
-      // copy command.
-      case e: Exception => logger.error("Failed to write the model: " + e.getMessage)
-    }
+    model.write.overwrite().save(s"s3://$privateBucket/$privateS3prefix/als.model")
 
     logger.info("Cross validation statistics:")
     model.getEstimatorParamMaps
