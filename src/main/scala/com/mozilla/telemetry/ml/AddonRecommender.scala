@@ -113,7 +113,7 @@ object AddonRecommender extends DatabricksSupport {
       .where("channel = 'release'")
       .where("app_name = 'Firefox'")
       .where(s"submission_date_s3 >= '$dateFrom'")
-      .where(s"sample_id <= '$sampling'")
+      .where(s"sample_id < '$sampling'")
       .selectExpr(
         "client_id",
         "active_addons",
