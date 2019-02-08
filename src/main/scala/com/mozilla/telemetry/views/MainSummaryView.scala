@@ -786,6 +786,15 @@ object MainSummaryView extends BatchJobBase {
         (settings \ "blocklistEnabled").extractOpt[Boolean],
         (settings \ "addonCompatibilityCheckEnabled").extractOpt[Boolean],
         (settings \ "telemetryEnabled").extractOpt[Boolean],
+
+        // bug 1525702
+        (settings \ "intl" \ "acceptLanguages").extractOpt[List[String]],
+        (settings \ "intl" \ "appLocales").extractOpt[List[String]],
+        (settings \ "intl" \ "availableLocales").extractOpt[List[String]],
+        (settings \ "intl" \ "regionalPrefsLocales").extractOpt[List[String]],
+        (settings \ "intl" \ "requestedLocales").extractOpt[List[String]],
+        (settings \ "intl" \ "systemLocales").extractOpt[List[String]],
+
         getOldUserPrefs(settings \ "userPrefs"),
 
         Option(events.flatMap { case (p, e) => Events.getEvents(e, p) }).filter(!_.isEmpty),
@@ -1198,6 +1207,13 @@ object MainSummaryView extends BatchJobBase {
       StructField("blocklist_enabled", BooleanType, nullable = true), // environment.settings.blocklistEnabled
       StructField("addon_compatibility_check_enabled", BooleanType, nullable = true), // environment.settings.addonCompatibilityCheckEnabled
       StructField("telemetry_enabled", BooleanType, nullable = true), // environment.settings.telemetryEnabled
+
+      StructField("environment_settings_intl_accept_languages", ArrayType(StringType, containsNull = false), nullable = true),
+      StructField("environment_settings_intl_app_locales", ArrayType(StringType, containsNull = false), nullable = true),
+      StructField("environment_settings_intl_available_locales", ArrayType(StringType, containsNull = false), nullable = true),
+      StructField("environment_settings_intl_regional_prefs_locales", ArrayType(StringType, containsNull = false), nullable = true),
+      StructField("environment_settings_intl_requested_locales", ArrayType(StringType, containsNull = false), nullable = true),
+      StructField("environment_settings_intl_system_locales", ArrayType(StringType, containsNull = false), nullable = true),
 
       // TODO: Deprecate and eventually remove this field, preferring the top-level
       //       user_pref_* fields for easy schema evolution.
