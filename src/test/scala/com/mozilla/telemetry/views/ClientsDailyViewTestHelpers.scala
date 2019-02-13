@@ -181,7 +181,13 @@ object ClientsDailyViewTestHelpers {
     vendor: Option[String] = None,
     web_notification_shown: Option[Int] = None,
     windows_build_number: Option[Long] = None,
-    windows_ubr: Option[Long] = None
+    windows_ubr: Option[Long] = None,
+    environment_settings_intl_accept_languages: Option[List[String]] = None,
+    environment_settings_intl_app_locales: Option[List[String]] = None,
+    environment_settings_intl_available_locales: Option[List[String]] = None,
+    environment_settings_intl_regional_prefs_locales: Option[List[String]] = None,
+    environment_settings_intl_requested_locales: Option[List[String]] = None,
+    environment_settings_intl_system_locales: Option[List[String]] = None
   )
 
   def getRowAggFirst(sValue: Option[String], bValue: Option[Boolean], iValue: Option[Int]): MainSummaryRow = MainSummaryRow(
