@@ -185,7 +185,13 @@ object ClientsDailyView {
     aggFirst("vendor"),
     aggSum("web_notification_shown"),
     aggFirst("windows_build_number"),
-    aggFirst("windows_ubr")
+    aggFirst("windows_ubr"),
+    aggFirstNonemptyList("environment_settings_intl_accept_languages"),
+    aggFirstNonemptyList("environment_settings_intl_app_locales"),
+    aggFirstNonemptyList("environment_settings_intl_available_locales"),
+    aggFirstNonemptyList("environment_settings_intl_regional_prefs_locales"),
+    aggFirstNonemptyList("environment_settings_intl_requested_locales"),
+    aggFirstNonemptyList("environment_settings_intl_system_locales")
   )
 
   def main(args: Array[String]) {
@@ -262,6 +268,8 @@ object ClientsDailyView {
   private def aggFirst(field: String): Column = first(field, ignoreNulls = true).alias(field)
 
   private def aggFirst(expression: Column, alias: String): Column = first(expression, ignoreNulls = true).alias(alias)
+
+  private def aggFirstNonemptyList(field: String): Column = first(expr(s"IF(size($field) == 0, NULL, $field)"), ignoreNulls = true).alias(field)
 
   private def aggMapFirst(field: String): Column = {
     val mapFirst = new AggMapFirst()
