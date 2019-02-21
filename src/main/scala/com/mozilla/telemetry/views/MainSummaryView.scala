@@ -824,8 +824,9 @@ object MainSummaryView extends BatchJobBase {
         (simpleMeasures \ "totalTime").extractOpt[Int],
         (simpleMeasures \ "blankWindowShown").extractOpt[Int],
 
-        // bug 1362520 - plugin notifications
-        hsum(histograms("parent") \ "PLUGINS_NOTIFICATION_SHOWN"),
+        // bug 1362520 and 1526278 - plugin notifications
+        (histograms("parent") \ "PLUGINS_NOTIFICATION_SHOWN" \ "values" \ "1").extractOpt[Int],
+        (histograms("parent") \ "PLUGINS_NOTIFICATION_SHOWN" \ "values" \ "0").extractOpt[Int],
         MainPing.enumHistogramToRow(histograms("parent") \ "PLUGINS_NOTIFICATION_USER_ACTION", pluginNotificationUserActionKeys),
         hsum(histograms("parent") \ "PLUGINS_INFOBAR_SHOWN"),
         hsum(histograms("parent") \ "PLUGINS_INFOBAR_BLOCK"),
@@ -1234,8 +1235,9 @@ object MainSummaryView extends BatchJobBase {
       StructField("total_time", IntegerType, nullable = true),
       StructField("blank_window_shown", IntegerType, nullable = true),
 
-      // bug 1362520 - plugin notifications
+      // bug 1362520 and 1526278 - plugin notifications
       StructField("plugins_notification_shown", IntegerType, nullable = true),
+      StructField("plugins_notification_shown_false", IntegerType, nullable = true),
       StructField("plugins_notification_user_action", buildPluginNotificationUserActionSchema, nullable = true),
       StructField("plugins_infobar_shown", IntegerType, nullable = true),
       StructField("plugins_infobar_block", IntegerType, nullable = true),
