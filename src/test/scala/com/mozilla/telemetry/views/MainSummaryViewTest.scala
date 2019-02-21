@@ -234,6 +234,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
             "session_restored" -> 3289,
             "total_time" -> 1027690,
             "plugins_notification_shown" -> null,
+            "plugins_notification_shown_false" -> null,
             "plugins_notification_user_action" -> null,
             "plugins_infobar_shown" -> null,
             "plugins_infobar_block" -> null,
@@ -712,7 +713,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
             |  "PLUGINS_NOTIFICATION_SHOWN":{
             |    "range":[1,2],
             |    "histogram_type":2,
-            |    "values":{"1":3,"0":0,"2":0},
+            |    "values":{"1":3,"0":1,"2":0},
             |    "bucket_count":3,
             |    "sum":3
             |  },
@@ -757,6 +758,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
     val expected = Map(
       "document_id" -> "foo",
       "plugins_notification_shown" -> 3,
+      "plugins_notification_shown_false" -> 1,
       "plugins_notification_user_action" -> Row(3, 0, 0),
       "plugins_infobar_shown" -> 12,
       "plugins_infobar_allow" -> 2,
