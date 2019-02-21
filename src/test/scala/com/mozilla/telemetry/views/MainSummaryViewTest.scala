@@ -254,6 +254,12 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
             "user_pref_dom_ipc_processcount" -> null,
             "user_pref_extensions_allow_non_mpc_extensions" -> null,
             "user_pref_extensions_legacy_enabled" -> null,
+            "environment_settings_intl_accept_languages" -> List(),
+            "environment_settings_intl_app_locales" -> List(),
+            "environment_settings_intl_available_locales" -> List(),
+            "environment_settings_intl_regional_prefs_locales" -> List(),
+            "environment_settings_intl_requested_locales" -> List(),
+            "environment_settings_intl_system_locales" -> List(),
             "scalar_parent_mock_keyed_scalar_bool" -> null,
             "scalar_parent_mock_keyed_scalar_string" -> null,
             "scalar_parent_mock_keyed_scalar_uint" -> null,
@@ -2248,6 +2254,38 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
       None)
 
     val expected = Map("normalized_os_version" -> "14.5.0")
+
+    compare(message, expected)
+  }
+
+  "String lists in settings" can "be handled correctly" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.settings" ->
+          """
+            |{
+            |  "intl": {
+            |    "requestedLocales": ["it"],
+            |    "availableLocales": ["it", "en-AA"],
+            |    "appLocales": ["it", "en-BB"],
+            |    "systemLocales": ["it-IT", "en-IT"],
+            |    "regionalPrefsLocales": ["it-IT", "en-CC"],
+            |    "acceptLanguages": ["it-IT", "it", "en-US", "en"]
+            |  }
+            |}""".stripMargin),
+      None)
+
+    val expected = Map(
+      "environment_settings_intl_requested_locales" -> List("it"),
+      "environment_settings_intl_available_locales" -> List("it", "en-AA"),
+      "environment_settings_intl_app_locales" -> List("it", "en-BB"),
+      "environment_settings_intl_system_locales" -> List("it-IT", "en-IT"),
+      "environment_settings_intl_regional_prefs_locales" -> List("it-IT", "en-CC"),
+      "environment_settings_intl_accept_languages" -> List("it-IT", "it", "en-US", "en")
+    )
 
     compare(message, expected)
   }
