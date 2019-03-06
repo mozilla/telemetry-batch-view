@@ -41,6 +41,7 @@ object MainSummaryView extends BatchJobBase {
   // See the `_getPrefData()` function in TelemetryEnvironment.jsm
   // for reference: https://mzl.la/2zo7kyK
   val userPrefsList =
+    BooleanUserPref("browser.launcherProcess.enabled") ::
     BooleanUserPref("browser.search.widget.inNavBar") ::
     BooleanUserPref("extensions.allow-non-mpc-extensions") ::
     BooleanUserPref("extensions.legacy.enabled") ::
