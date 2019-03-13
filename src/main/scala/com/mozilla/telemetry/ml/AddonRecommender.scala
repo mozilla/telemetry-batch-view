@@ -184,7 +184,9 @@ object AddonRecommender extends DatabricksSupport {
     // otherwise the job will fail due to all the workers being idle.
     val amoDbMap = AMODatabase.getAddonMap()
 
-    val spark = getOrCreateSparkSession("AddonRecommenderTest", enableHiveSupport = true)
+    val conf = scala.Predef.Map("spark.executor.extraJavaOptions" -> "-Xss8m",
+      "spark.driver.extraJavaOptions" -> "-Xss8m")
+    val spark = getOrCreateSparkSession("AddonRecommenderTest", enableHiveSupport = true, extraConfigs = conf)
     val sc = spark.sparkContext
 
     import spark.implicits._
