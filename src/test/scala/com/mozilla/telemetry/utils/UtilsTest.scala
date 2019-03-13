@@ -76,4 +76,12 @@ class UtilsTest extends FlatSpec with Matchers {
     val expect = LocalDate.parse("2018-09-01", format).atStartOfDay(ZoneOffset.UTC)
     normalizeEpochTimestamp(expect.toInstant.toEpochMilli) == expect.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
   }
+
+  "getOrCreateSparkSession" should "add extra configs correctly" in {
+    val spark = getOrCreateSparkSession("Test Job",
+      extraConfigs = Map("hello" -> "world","firefox" -> "rocks"))
+
+    spark.conf.get("hello") should be ("world")
+    spark.conf.get("firefox") should be ("rocks")
+  }
 }
