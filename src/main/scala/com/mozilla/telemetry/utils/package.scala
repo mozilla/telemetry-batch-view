@@ -65,9 +65,13 @@ package object utils{
     output.toString()
   }
 
-  def getOrCreateSparkSession(jobName: String, enableHiveSupport: Boolean = false): SparkSession = {
+  def getOrCreateSparkSession(jobName: String, enableHiveSupport: Boolean = false,
+                              extraConfigs : Map[String, String] = Map.empty[String, String]) : SparkSession = {
     val conf = new SparkConf().setAppName(jobName)
     conf.setMaster(conf.get("spark.master", "local[*]"))
+
+    // yes, spark conf settings are mutable
+    extraConfigs.map {case (k, v) => conf.set(k, v)}
 
     val spark = enableHiveSupport match {
       case true => {
