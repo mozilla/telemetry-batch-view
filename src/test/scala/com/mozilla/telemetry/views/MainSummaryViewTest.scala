@@ -1208,12 +1208,14 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
   }
 
   "Histogram filter" can "include all whitelisted histograms" in {
-    val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(
-      Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true),
-      useWhitelist = true
+    val definitions = Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _,
+      includeCategorical = true)
+    val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(definitions, useWhitelist = true
     ).map { case (name, definition) => definition.originalName }.toSet
 
-    val expectedDefs = MainSummaryView.histogramsWhitelist.toSet
+    // Sometimes histograms stay in our list but aren't in the codebase anymore -- this shouldn't fail unrelated PRs
+    val expectedDefs = MainSummaryView.histogramsWhitelist.toSet.intersect(
+      definitions.map(_._2.originalName).toSet)
 
     allHistogramDefs should be(expectedDefs)
   }
