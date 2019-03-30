@@ -8,7 +8,7 @@ import com.mozilla.telemetry.utils.udfs.{AggMapFirst, AggMapSum, AggRowFirst, Ag
 import com.mozilla.telemetry.views.MainSummaryView.buildAddonSchema
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{DecimalType, StringType}
 import org.apache.spark.sql.{Column, DataFrame}
 import org.rogach.scallop._
 
@@ -171,7 +171,7 @@ object ClientsDailyView {
     aggMean("session_restored"),
     aggSum(expr("IF(subsession_counter = 1, 1, 0)"), "sessions_started_on_this_day"),
     aggSum("shutdown_kill"),
-    aggSum(expr("subsession_length/3600.0"), "subsession_hours_sum"),
+    aggSum(expr("subsession_length/3600.0").cast(DecimalType(38,9)), "subsession_hours_sum"),
     aggSum("ssl_handshake_result_failure"),
     aggSum("ssl_handshake_result_success"),
     aggFirst("sync_configured"),
