@@ -46,8 +46,9 @@ trait GenericDauTrait {
 
     val input = spark
       .read
+      // schema evolution detection disabled due to error on decimal type precision reduction
       // merge schemas to handle schema evolution
-      .option("mergeSchema", "true")
+      //.option("mergeSchema", "true")
       // detect input date column
       .option("basePath", conf.inputBasePath)
       // read input dates by path
