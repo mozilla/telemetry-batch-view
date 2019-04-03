@@ -171,7 +171,7 @@ object ClientsDailyView {
     aggMean("session_restored"),
     aggSum(expr("IF(subsession_counter = 1, 1, 0)"), "sessions_started_on_this_day"),
     aggSum("shutdown_kill"),
-    aggSum(expr("subsession_length/3600.0").cast(DecimalType(35,6)), "subsession_hours_sum"),
+    aggSum(expr("subsession_length/3600.0"), "subsession_hours_sum"),
     aggSum("ssl_handshake_result_failure"),
     aggSum("ssl_handshake_result_success"),
     aggFirst("sync_configured"),
