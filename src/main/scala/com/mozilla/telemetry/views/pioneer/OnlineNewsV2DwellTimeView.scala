@@ -22,7 +22,7 @@ object OnlineNewsV2DwellTimeView {
     val visitStartTime = initial_event.timestamp
     var totalDwellTime = 0L
     var totalIdleTime = 0L
-    var events = Array(initial_event)
+    var events = Seq(initial_event)
 
     def visitStartDate: java.sql.Date = new java.sql.Date(visitStartTime * 1000)
 
@@ -77,7 +77,7 @@ object OnlineNewsV2DwellTimeView {
     var currentVisit: Option[Visit] = Some(new Visit(pioneer_id, firstEvent, firstEvent.timestamp))
     var lastEvent: LogEvent = firstEvent
     var currentState: DwellTimeState = VisitActive
-    var dwellTimes: Array[DwellTime] = Array()
+    var dwellTimes: Seq[DwellTime] = Seq()
     var allDocumentIds: Set[String] = Set(firstEvent.document_id)
 
     def addEvent(event: LogEvent): Unit = {
@@ -224,7 +224,7 @@ object OnlineNewsV2DwellTimeView {
     }
 
     // Maps the Option[Visit], then folds left to add it to dwellTimes if it's non-empty
-    def end: Array[DwellTime] = {
+    def end: Seq[DwellTime] = {
       dwellTimes ++= currentVisit.map(_.asDwellTime)
       dwellTimes
     }
@@ -240,7 +240,7 @@ object OnlineNewsV2DwellTimeView {
 
   def main(args: Array[String]) {
     val sparkConf = new SparkConf().setAppName(jobName)
-    sparkConf.setMaster(sparkConf.get("spark.master", "local[*]"))
+    sparkConf.setMaster(sparkConf.get("spark.master"))
     // Note these are tuned for c3.4xlarge and the memory characteristics of this job
     sparkConf.set("spark.executor.memory", "20G")
     sparkConf.set("spark.memory.storageFraction", "0.6")
@@ -255,7 +255,6 @@ object OnlineNewsV2DwellTimeView {
 
     val conf = new Conf(args)
     import spark.implicits._
-    val actions = List("focus-start", "focus-end", "idle-start", "idle-end")
 
     val inputPath = {
       val path = s"s3://${conf.inputBucket()}/online_news_v2/deduped_daily/"
@@ -267,38 +266,44 @@ object OnlineNewsV2DwellTimeView {
 
     val online_news_entries = spark.read.parquet(inputPath).as[ExplodedEntry]
 
-    val flattenedEvents = online_news_entries
-      .groupByKey(_.pioneer_id)
-
     val dwell_times: Dataset[DwellTime] = online_news_entries.groupByKey(_.pioneer_id).flatMapGroups {
-      (pioneer_id, entries) => try {
-        val sorted = entries
-          .filter(e => actions.contains(e.details))
-          .map(_.toLogEvent)
-          .toIndexedSeq
-          .sortBy(_.timestamp)
-
-        (sorted.length > 0) match {
-          case false => None
-          case true => {
-            val stateMachine = new DwellTimeStateMachine(pioneer_id, sorted.head)
-            sorted.tail.foreach { e => stateMachine.addEvent(e) }
-            val visits = stateMachine.end
-            if (visits.tail.forall(_.branch != visits.head.branch))
-              throw new BranchSwitchException("Inconsistent Branches between visits")
-            else
-              visits
-          }
-        }
-      } catch {
-        case _: BranchSwitchException => None
-        case ex: Exception => throw new Exception(s"Exception while Processing ${pioneer_id}: $ex")
-      }
+      case (pioneer_id, entries) => entriesToVisits(pioneer_id, entries.toSeq)
     }
     val outputPath = conf.submissionDate.get match {
       case Some(date) => s"online_news_v2/dwell_time_daily/submission_date_s3=$date"
       case _ => s"online_news_v2/dwell_time_complete/"
     }
     dwell_times.write.mode("overwrite").parquet(outputPath)
+  }
+
+  val actions = List("focus-start", "focus-end", "idle-start", "idle-end")
+
+  def entriesToVisits(pioneer_id:String, entries: Seq[ExplodedEntry]): Seq[DwellTime] = {
+    try {
+      val sorted = entries
+        .filter(e => actions.contains(e.details))
+        .map(_.toLogEvent)
+        .sortBy(_.timestamp)
+
+      (sorted.length > 0) match {
+        case false => Seq.empty[DwellTime]
+        case true => {
+          val stateMachine = new DwellTimeStateMachine(pioneer_id, sorted.head)
+          sorted.tail.foreach { e => stateMachine.addEvent(e) }
+          val visits = stateMachine.end
+          if (visits.length > 1 && visits.tail.forall(_.branch != visits.head.branch)) {
+            throw new BranchSwitchException("Inconsistent Branches between visits")
+          } else {
+            visits
+          }
+        }
+      }
+    } catch {
+      case _: BranchSwitchException => Seq.empty[DwellTime]
+      case ex: Exception => {
+        logger.error(s"Exception while Processing ${pioneer_id}:")
+        throw ex
+      }
+    }
   }
 }
