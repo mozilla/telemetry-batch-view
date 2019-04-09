@@ -1,8 +1,6 @@
-/*
- * This Source Code Form is subject to the terms of the Mozilla Public
+/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
- */
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 package com.mozilla.telemetry.views.pioneer
 
@@ -10,10 +8,12 @@ import com.mozilla.telemetry.views.pioneer.OnlineNewsV2DwellTimeView.DwellTime
 import org.scalatest.{FlatSpec, Matchers}
 
 class OnlineNewsV2DwellTimeViewTest extends FlatSpec with Matchers {
+  //scalastyle:off
   def defaultEntry(entry_timestamp: Long, branch: String, details: String, url: String, ping_timestamp: Long = 12345,
                    document_id: String = "doc_id", pioneer_id: String = "p_id", study_name: String = "study_1",
                    geo_city: String = "Chicago", geo_country: String = "US",
                    submission_date_s3: String = "20190408"): ExplodedEntry = {
+    //scalastyle:on
     ExplodedEntry(ping_timestamp, document_id, pioneer_id, study_name, geo_city, geo_country, submission_date_s3,
       entry_timestamp, branch, details, url)
   }

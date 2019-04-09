@@ -13,9 +13,9 @@ object OnlineNewsV2DwellTimeView {
   val jobName = "online_news_dwell_time_view"
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getSimpleName)
 
-  case class DwellTime(pioneer_id: String, branch: String, document_ids: List[String], visit_start_date: java.sql.Date, domain: String,
-                       visit_start_time: Long, total_dwell_time: Long, total_idle_time: Long, nav_event_count: Int,
-                       days_since_appearance: Int, log_events: List[LogEvent])
+  case class DwellTime(pioneer_id: String, branch: String, document_ids: List[String], visit_start_date: java.sql.Date,
+                       domain: String, visit_start_time: Long, total_dwell_time: Long, total_idle_time: Long,
+                       nav_event_count: Int, days_since_appearance: Int, log_events: List[LogEvent])
 
   class BranchSwitchException(e: String) extends Exception(e)
   class UnexpectedStateException(e: String) extends Exception(e)
@@ -30,13 +30,13 @@ object OnlineNewsV2DwellTimeView {
 
     def visitStartDate: java.sql.Date = new java.sql.Date(visitStartTime * 1000)
 
-    private def addActiveTime(event: LogEvent) = {
+    def addActiveTime(event: LogEvent): Unit = {
       documentIds += event.document_id
       totalDwellTime += (event.timestamp - events.last.timestamp)
       events :+= event
     }
 
-    private def addIdleTime(event: LogEvent) = {
+    def addIdleTime(event: LogEvent): Unit = {
       val delta = event.timestamp - events.last.timestamp
       documentIds += event.document_id
       totalDwellTime += delta
