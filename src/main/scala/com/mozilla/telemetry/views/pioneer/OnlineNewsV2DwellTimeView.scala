@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 package com.mozilla.telemetry.views.pioneer
 
 import org.apache.spark.SparkConf
@@ -26,13 +30,13 @@ object OnlineNewsV2DwellTimeView {
 
     def visitStartDate: java.sql.Date = new java.sql.Date(visitStartTime * 1000)
 
-    def addActiveTime(event: LogEvent) = {
+    private def addActiveTime(event: LogEvent) = {
       documentIds += event.document_id
       totalDwellTime += (event.timestamp - events.last.timestamp)
       events :+= event
     }
 
-    def addIdleTime(event: LogEvent) = {
+    private def addIdleTime(event: LogEvent) = {
       val delta = event.timestamp - events.last.timestamp
       documentIds += event.document_id
       totalDwellTime += delta
@@ -193,32 +197,35 @@ object OnlineNewsV2DwellTimeView {
     }
 
     def compareUrls(oldEvent: LogEvent, newEvent: LogEvent): UrlState = {
-      if (oldEvent.getDomain == newEvent.getDomain) SameDomain
-      else DifferentDomain
+      if (oldEvent.getDomain == newEvent.getDomain) {
+        SameDomain
+      } else {
+        DifferentDomain
+      }
     }
 
-    def endCurrentVisitAndActivateNew(event: LogEvent) = {
+    private def endCurrentVisitAndActivateNew(event: LogEvent) = {
       dwellTimes ++= currentVisit.map(_.asDwellTime)
       newVisit(event)
     }
 
-    def endCurrentVisit = {
+    private def endCurrentVisit = {
       dwellTimes ++= currentVisit.map(_.asDwellTime)
       currentVisit = None
       currentState = NotInVisit
     }
 
-    def activateIdleVisit(event: LogEvent, addNav: Boolean = false) = {
+    private def activateIdleVisit(event: LogEvent, addNav: Boolean = false) = {
       currentVisit.map(_.addIdleTime(event))
       currentState = VisitActive
     }
 
-    def newVisit(event: LogEvent) = {
+    private def newVisit(event: LogEvent) = {
       currentVisit = Some(new Visit(pioneer_id, event, firstEvent.timestamp))
       currentState = VisitActive
     }
 
-    def newIdleVisit(event: LogEvent) = {
+    private def newIdleVisit(event: LogEvent) = {
       currentVisit = Some(new Visit(pioneer_id, event, firstEvent.timestamp))
       currentState = VisitIdle
     }
