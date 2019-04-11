@@ -78,5 +78,4 @@ submit ExperimentSummaryView    "$baseopt --inbucket telemetry-parquet --experim
 
 # submit GenericCountView
 # submit GenericLongitudinalView
-# submit QuantumRCView
 # submit RetentionView

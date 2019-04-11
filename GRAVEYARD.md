@@ -22,3 +22,9 @@ This dataset was created as a one-off for the purposes of the Online News pionee
 * [Obsolete Dataset documentation](http://docs-origin.telemetry.mozilla.org/datasets/obsolete/crash_aggregates/reference.html)
 
 This dataset was created to count crashes on a daily basis, before we introduced error aggregates.
+
+## Quantum RC
+
+* [Removal PR](https://github.com/mozilla/telemetry-batch-view/pull/531)
+
+This dataset was created to monitor that various metrics conformed to the Quantum release criteria expectations.
