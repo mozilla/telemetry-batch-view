@@ -15,3 +15,10 @@ Interesting bits: the Heavy Users job used a custom Paritioner called `Consisten
 * [State machine diagram](https://goo.gl/FMVjtB)
 
 This dataset was created as a one-off for the purposes of the Online News pioneer study. It created sessions that measured dwell time on a tld based on logs sent from users. It used a state machine to create the sessions, which is mildly interesting.
+
+## Crash Aggregates
+
+* [Removal PR](https://github.com/mozilla/telemetry-batch-view/pull/530)
+* [Obsolete Dataset documentation](http://docs-origin.telemetry.mozilla.org/datasets/obsolete/crash_aggregates/reference.html)
+
+This dataset was created to count crashes on a daily basis, before we introduced error aggregates.
