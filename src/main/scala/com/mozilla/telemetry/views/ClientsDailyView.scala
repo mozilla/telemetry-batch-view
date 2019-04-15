@@ -175,6 +175,8 @@ object ClientsDailyView {
     aggSum("ssl_handshake_result_failure"),
     aggSum("ssl_handshake_result_success"),
     aggFirst("sync_configured"),
+    aggMean("sync_count_desktop"),
+    aggMean("sync_count_mobile"),
     aggSum("sync_count_desktop"),
     aggSum("sync_count_mobile"),
     aggFirst("telemetry_enabled"),

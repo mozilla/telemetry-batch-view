@@ -346,7 +346,9 @@ object ClientsDailyViewTestHelpers {
     places_bookmarks_count = value,
     places_pages_count = value,
     scalar_parent_browser_engagement_unique_domains_count = value,
-    session_restored = value
+    session_restored = value,
+    sync_count_desktop = value,
+    sync_count_mobile = value
   )
 
   def getExpectAggMean(value: Int): Map[String, Int] = Map(
@@ -357,7 +359,9 @@ object ClientsDailyViewTestHelpers {
     "places_bookmarks_count_mean" -> value,
     "places_pages_count_mean" -> value,
     "scalar_parent_browser_engagement_unique_domains_count_mean" -> value,
-    "session_restored_mean" -> value
+    "session_restored_mean" -> value,
+    "sync_count_desktop_mean" -> value,
+    "sync_count_mobile_mean" -> value
   )
 
   def getRowAggSum(value: Option[Int]): MainSummaryRow = MainSummaryRow(
