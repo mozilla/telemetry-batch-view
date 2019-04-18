@@ -12,7 +12,7 @@ Defining a derived [Parquet](https://parquet.apache.org/) dataset, which uses a 
 
 ### Adding a new derived dataset
 
-See the [views](https://github.com/mozilla/telemetry-batch-view/tree/master/src/main/scala/views) folder for examples of jobs that create derived datasets.
+See the [views](https://github.com/mozilla/telemetry-batch-view/tree/master/src/main/scala/com/mozilla/telemetry/views) folder for examples of jobs that create derived datasets.
 
 See the [Firefox Data Documentation](https://mozilla.github.io/firefox-data-docs/datasets/reference.html) for more information about the individual derived datasets.
 For help finding the right dataset for your analysis, see
