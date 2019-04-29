@@ -43,6 +43,7 @@ object MainSummaryView extends BatchJobBase {
   val userPrefsList =
     BooleanUserPref("browser.launcherProcess.enabled") ::
     BooleanUserPref("browser.search.widget.inNavBar") ::
+    StringUserPref("browser.search.region") ::
     BooleanUserPref("extensions.allow-non-mpc-extensions") ::
     BooleanUserPref("extensions.legacy.enabled") ::
     BooleanUserPref("gfx.webrender.all.qualified") ::
