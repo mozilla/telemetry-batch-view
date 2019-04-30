@@ -261,6 +261,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
             "environment_settings_intl_regional_prefs_locales" -> List(),
             "environment_settings_intl_requested_locales" -> List(),
             "environment_settings_intl_system_locales" -> List(),
+            "environment_system_gfx_headless" -> null,
             "scalar_parent_mock_keyed_scalar_bool" -> null,
             "scalar_parent_mock_keyed_scalar_string" -> null,
             "scalar_parent_mock_keyed_scalar_uint" -> null,
