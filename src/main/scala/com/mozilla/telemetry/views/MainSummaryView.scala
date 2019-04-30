@@ -798,6 +798,9 @@ object MainSummaryView extends BatchJobBase {
         (settings \ "intl" \ "requestedLocales").extractOpt[List[String]],
         (settings \ "intl" \ "systemLocales").extractOpt[List[String]],
 
+        // bug 1536175
+        (system \ "gfx" \ "Headless").extractOpt[Boolean],
+
         getOldUserPrefs(settings \ "userPrefs"),
 
         Option(events.flatMap { case (p, e) => Events.getEvents(e, p) }).filter(!_.isEmpty),
@@ -1218,6 +1221,8 @@ object MainSummaryView extends BatchJobBase {
       StructField("environment_settings_intl_regional_prefs_locales", ArrayType(StringType, containsNull = false), nullable = true),
       StructField("environment_settings_intl_requested_locales", ArrayType(StringType, containsNull = false), nullable = true),
       StructField("environment_settings_intl_system_locales", ArrayType(StringType, containsNull = false), nullable = true),
+
+      StructField("environment_system_gfx_headless", BooleanType, nullable = true),
 
       // TODO: Deprecate and eventually remove this field, preferring the top-level
       //       user_pref_* fields for easy schema evolution.
