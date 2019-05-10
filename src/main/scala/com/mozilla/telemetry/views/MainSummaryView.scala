@@ -647,6 +647,7 @@ object MainSummaryView extends BatchJobBase {
       val addonScalars = payload \ "processes" \ MainPing.DynamicProcess \ "scalars"
       val addonKeyedScalars = payload \ "processes" \ MainPing.DynamicProcess \ "keyedScalars"
 
+      val fxaConfigured = MainPing.booleanHistogramToBoolean(histograms("parent") \ "FXA_CONFIGURED")
       val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms("parent") \ "WEAVE_CONFIGURED")
       val weaveDesktop = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_DESKTOP")
       val weaveMobile = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_MOBILE")
@@ -723,6 +724,7 @@ object MainSummaryView extends BatchJobBase {
         (doc \ "creationDate").extractOpt[String],
         (partner \ "distributionId").extractOpt[String],
         submissionDate,
+        fxaConfigured,
         weaveConfigured,
         weaveDesktop,
         weaveMobile,
@@ -1115,6 +1117,8 @@ object MainSummaryView extends BatchJobBase {
       StructField("creation_date", StringType, nullable = true), // creationDate
       StructField("distribution_id", StringType, nullable = true), // environment/partner/distributionId
       StructField("submission_date", StringType, nullable = false), // YYYYMMDD version of 'timestamp'
+      // See bug 1550752
+      StructField("fxa_configured", BooleanType, nullable = true), // FXA_CONFIGURED
       // See bug 1232050
       StructField("sync_configured", BooleanType, nullable = true), // WEAVE_CONFIGURED
       StructField("sync_count_desktop", IntegerType, nullable = true), // WEAVE_DEVICE_COUNT_DESKTOP
