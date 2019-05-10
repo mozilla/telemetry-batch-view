@@ -175,6 +175,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
             "creation_date" -> "2016-03-28T16:02:52.676Z",
             "distribution_id" -> null,
             "submission_date" -> "20160407",
+            "fxa_configured" -> false,
             "sync_configured" -> false,
             "sync_count_desktop" -> null,
             "sync_count_mobile" -> null,

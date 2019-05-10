@@ -174,6 +174,7 @@ object ClientsDailyView {
     aggSum(expr("subsession_length/3600.0"), "subsession_hours_sum"),
     aggSum("ssl_handshake_result_failure"),
     aggSum("ssl_handshake_result_success"),
+    aggFirst("fxa_configured"),
     aggFirst("sync_configured"),
     aggMean("sync_count_desktop"),
     aggMean("sync_count_mobile"),
