@@ -704,6 +704,9 @@ object MainSummaryView extends BatchJobBase {
         (system \ "gfx" \ "features" \ "advancedLayers" \ "status").extractOpt[String],
         (system \ "gfx" \ "features" \ "wrQualified" \ "status").extractOpt[String],
         (system \ "gfx" \ "features" \ "webrender" \ "status").extractOpt[String],
+        (system \ "hdd" \ "profile" \ "type").extractOpt[String],
+        (system \ "hdd" \ "binary" \ "type").extractOpt[String],
+        (system \ "hdd" \ "system" \ "type").extractOpt[String],
         (system \ "appleModelId").extractOpt[String],
         (system \ "sec" \ "antivirus").extract[Option[Seq[String]]],
         (system \ "sec" \ "antispyware").extract[Option[Seq[String]]],
@@ -1092,6 +1095,11 @@ object MainSummaryView extends BatchJobBase {
       StructField("gfx_features_advanced_layers_status", StringType, nullable = true), // environment/system/gfx/features/advancedLayers/status
       StructField("gfx_features_wrqualified_status", StringType, nullable = true), // environment/system/gfx/features/wrQualified/status
       StructField("gfx_features_webrender_status", StringType, nullable = true), // environment/system/gfx/features/webrender/status
+
+      // Bug 1552940
+      StructField("hdd_profile_type", StringType, nullable = true), // environment/system/hdd/profile/type
+      StructField("hdd_binary_type", StringType, nullable = true), // environment/system/hdd/binary/type
+      StructField("hdd_system_type", StringType, nullable = true), // environment/system/hdd/system/type
 
       StructField("apple_model_id", StringType, nullable = true), // environment/system/appleModelId
 
