@@ -2228,6 +2228,33 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
     compare(message, expected)
   }
 
+  "Hard drive info" can "be properly shown" in {
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.system" ->
+          """
+            |{
+            |  "hdd": {
+            |    "system": {
+            |      "model": "some_model",
+            |      "revision": "some_revision",
+            |      "type": "SSD"
+            |    }
+            |  }
+            |}""".stripMargin),
+      None)
+
+    val expected = Map(
+      "hdd_system_type" -> "SSD"
+    )
+
+    compare(message, expected)
+  }
+
   "Date diffs" can "be calculated" in {
     val diff = (d: String, t: Long) =>
       MainSummaryView.diffDateAndTimestamp(d, DateTimeFormatter.ISO_DATE_TIME, t * 1e9.toLong)
