@@ -1113,7 +1113,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
   "All possible histograms and scalars" can "be included" in {
     val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(
       Histograms.definitions(includeOptin = false, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true),
-      useWhitelist = true)
+      useAllowlist = true)
 
     val allScalarDefs = Scalars.definitions(includeOptin = true).toList.sortBy(_._1)
 
@@ -1212,14 +1212,14 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
     compare(message, expected, userPrefs, allScalarDefs, allHistogramDefs)
   }
 
-  "Histogram filter" can "include all whitelisted histograms" in {
+  "Histogram filter" can "include all allowed histograms" in {
     val definitions = Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _,
       includeCategorical = true)
-    val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(definitions, useWhitelist = true
+    val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(definitions, useAllowlist = true
     ).map { case (name, definition) => definition.originalName }.toSet
 
     // Sometimes histograms stay in our list but aren't in the codebase anymore -- this shouldn't fail unrelated PRs
-    val expectedDefs = MainSummaryView.histogramsWhitelist.toSet.intersect(
+    val expectedDefs = MainSummaryView.allowedHistograms.toSet.intersect(
       definitions.map(_._2.originalName).toSet)
 
     allHistogramDefs should be(expectedDefs)

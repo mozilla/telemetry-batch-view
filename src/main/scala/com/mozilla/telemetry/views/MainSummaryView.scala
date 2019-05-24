@@ -54,7 +54,7 @@ object MainSummaryView extends BatchJobBase {
     StringUserPref("general.config.filename") :: Nil
 
 
-  val histogramsWhitelist =
+  val allowedHistograms =
     "A11Y_CONSUMERS" ::
     "A11Y_INSTANTIATED_FLAG" ::
     "CERT_VALIDATION_SUCCESS_BY_CA" ::
@@ -226,7 +226,7 @@ object MainSummaryView extends BatchJobBase {
    * WARNING: Removing or adding to this list will change
    * the schema for that probe's columns, rendering all
    * previous data unreadable. The normal method is to
-   * include a probe name here when added to the whitelist,
+   * include a probe name here when added to the allowed list,
    * and never remove it.
    */
   val NaturalHistogramRepresentationList =
@@ -295,7 +295,7 @@ object MainSummaryView extends BatchJobBase {
 
         val histogramDefinitions = filterHistogramDefinitions(
           Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true),
-          useWhitelist = !conf.allHistograms())
+          useAllowlist = !conf.allHistograms())
 
         val schema = buildSchema(userPrefsList, scalarDefinitions, histogramDefinitions)
         val ignoredCount = sc.accumulator(0, "Number of Records Ignored")
@@ -1028,9 +1028,9 @@ object MainSummaryView extends BatchJobBase {
     )
   }
 
-  def filterHistogramDefinitions(definitions: Map[String, HistogramDefinition], useWhitelist: Boolean = false): List[(String, HistogramDefinition)] = {
+  def filterHistogramDefinitions(definitions: Map[String, HistogramDefinition], useAllowlist: Boolean = false): List[(String, HistogramDefinition)] = {
     definitions.toList.filter(
-      entry => !useWhitelist || histogramsWhitelist.contains(entry._2.originalName)
+      entry => !useAllowlist || allowedHistograms.contains(entry._2.originalName)
     ).sortBy(_._1)
   }
 

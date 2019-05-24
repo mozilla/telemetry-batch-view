@@ -96,7 +96,7 @@ object AddonRecommender extends DatabricksSupport {
     * Get a new dataset from the clients_daily dataset containing only the relevant addon data.
     *
     * @param spark          The SparkSession used for loading clients_daily dataset.
-    * @param addonWhitelist The a list of addon GUIDs that are valid
+    * @param allowedAddons  The list of addon GUIDs that are valid
     * @param amoDB          The AMO database fetched by AMODatabase.
     * @param inputTable     Name of the input table (can be used to override clients_daily)
     * @param dateFrom       Lower threshold date for clients' sample
@@ -104,7 +104,7 @@ object AddonRecommender extends DatabricksSupport {
     * @return A 4 columns Dataset with each row having the client id, the addon GUID
     *         and the hashed client id and GUID.
     */
-  private[ml] def getAddonData(spark: SparkSession, addonWhitelist: List[String], amoDB: Map[String, Any],
+  private[ml] def getAddonData(spark: SparkSession, allowedAddons: List[String], amoDB: Map[String, Any],
                                inputTable: String, dateFrom: String, sampling: Int): Dataset[(String, String, Int, Int)] = {
     import spark.implicits._
     spark.sql(s"SELECT * FROM $inputTable")
@@ -127,7 +127,7 @@ object AddonRecommender extends DatabricksSupport {
         for {
           addon <- activeAddons
           addonId <- addon.addon_id
-          if addonWhitelist.contains(addonId) && amoDB.contains(addonId)
+          if allowedAddons.contains(addonId) && amoDB.contains(addonId)
           addonName <- addon.name
           blocklisted <- addon.blocklisted
           signedState <- addon.signed_state
@@ -193,8 +193,8 @@ object AddonRecommender extends DatabricksSupport {
     implicit val formats = DefaultFormats
     val istream = S3Store.getKey("telemetry-parquet", "telemetry-ml/addon_recommender/only_guids_top_200.json")
     val json_str = scala.io.Source.fromInputStream(istream).mkString
-    val whitelist = parse(json_str).extract[List[String]]
-    val clientAddons = getAddonData(spark, whitelist, amoDbMap, inputTable, dateFrom, sampling)
+    val allowlist = parse(json_str).extract[List[String]]
+    val clientAddons = getAddonData(spark, allowlist, amoDbMap, inputTable, dateFrom, sampling)
 
     val ratings = clientAddons
       .map{ case (_, _, hashedClientId, hashedAddonId) => Rating(hashedClientId, hashedAddonId, 1.0f)}
