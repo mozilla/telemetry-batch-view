@@ -98,6 +98,7 @@ case class Meta(
 
 case class Payload(
     crashDate: String,
+    crashTime: Option[String],
     processType: Option[String],
     hasCrashEnvironment: Boolean,
     metadata: Map[String, String],
@@ -119,6 +120,7 @@ case class CrashSummary (
     build_version: String,
     build_id: String,
     channel: String,
+    crash_time: Option[String],
     application: String,
     os_name: String,
     os_version: String,
@@ -135,6 +137,7 @@ case class CrashSummary (
   def this(ping: CrashPing) = {
     this(
       client_id = ping.clientId,
+      crash_time = ping.payload.crashTime,
       normalized_channel = ping.meta.normalizedChannel,
       build_version = ping.meta.`environment.build`.version,
       build_id = ping.meta.`environment.build`.buildId,

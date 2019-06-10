@@ -96,6 +96,7 @@ class CrashSummaryViewTest extends FlatSpec with Matchers {
       assert(x.build_version == "40.0")
       assert(x.build_id == "20150706171725")
       assert(x.channel == "beta")
+      assert(x.crash_time == Some("2017-01-05T11:00:00.000Z"))
       assert(x.application == "Fennec")
       assert(x.os_name == "Linux")
       assert(x.os_version == "13")
