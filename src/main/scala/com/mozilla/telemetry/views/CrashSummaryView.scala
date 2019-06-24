@@ -242,7 +242,7 @@ object CrashSummaryView extends BatchJobBase {
 
       // Save to S3
       if (!opts.dryRun()) {
-        val prefix = s"crash_summary/v1"
+        val prefix = s"crash_summary/v2"
         val outputBucket = opts.outputBucket()
         val path = s"s3://${outputBucket}/${prefix}/submission_date=${submissionDateDash}"
         dataset.write.mode(SaveMode.Overwrite).parquet(path)
