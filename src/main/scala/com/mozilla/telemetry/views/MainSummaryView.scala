@@ -7,7 +7,8 @@ import java.time._
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
-import com.mozilla.telemetry.heka.Dataset
+import com.mozilla.telemetry.heka
+import com.mozilla.telemetry.ndjson
 import com.mozilla.telemetry.metrics._
 import com.mozilla.telemetry.utils._
 import org.apache.spark.sql.Row
@@ -268,6 +269,9 @@ object MainSummaryView extends BatchJobBase {
       default=Some("fixed"))
     val inputPartitionMultiplier = opt[Int]("input-partition-multiplier", descr="Partition multiplier for aligned read-mode", default=Some(4))
     val schemaReportLocation = opt[String]("schema-report-location", descr="Write schema.treeString to this file")
+    val outputFilesystem = choice(Seq("s3", "gs"), name="output-file-system", descr="Write to Amazon S3 (s3) or Google Cloud Storage (gs)", default=Some("s3"))
+    val inputSource = choice(Seq("protobuf", "ndjson"), name="input-source",
+      descr="Read raw pings from heka protobuf in S3 (protobuf) or newline delimited json in Google Cloud Storage (ndjson)", default=Some("protobuf"))
     verify()
   }
 
@@ -281,7 +285,9 @@ object MainSummaryView extends BatchJobBase {
         implicit val sc = spark.sparkContext
         val sqlContext = spark.sqlContext
         val hadoopConf = sc.hadoopConfiguration
-        hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
+        if (conf.outputFilesystem() == "s3") {
+          hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
+        }
 
         val filterChannel = conf.channel.get
         val filterVersion = conf.appVersion.get
@@ -316,22 +322,56 @@ object MainSummaryView extends BatchJobBase {
           case _ => None
         }
 
-        val messages = Dataset(telemetrySource)
-          .where("sourceName") {
-            case "telemetry" => true
-          }.where("sourceVersion") {
-            case "4" => true
-          }.where("docType") {
-            case dt => dt == filterDocType
-          }.where("appName") {
-            case "Firefox" => true
-          }.where("submissionDate") {
-            case date if date == submissionDate => true
-          }.where("appUpdateChannel") {
-            case channel => filterChannel.isEmpty || channel == filterChannel.get
-          }.where("appVersion") {
-            case v => filterVersion.isEmpty || v == filterVersion.get
-          }.records(conf.limit.get, numPartitions)
+        val messages = conf.inputSource.toOption match {
+          case Some("ndjson") =>
+            val dataset = ndjson
+              .Dataset(
+                telemetrySource,
+                Some(submissionDate)
+              ).where("namespace") {
+                case "telemetry" => true
+              }.where("version") {
+                case "4" => true
+              }.where("type") {
+                case dt => dt == filterDocType
+              }.where("app_name") {
+                case "Firefox" => true
+              }
+            // apply filterChannel as needed
+            val datasetWithFilteredChannel = filterChannel match {
+              case Some(expect) => dataset.where("app_update_channel") {
+                case channel => channel == expect
+              }
+              case _ => dataset
+            }
+            // apply filterVersion as needed
+            val datasetWithFilteredVersion = filterVersion match {
+              case Some(expect) => dataset.where("app_version") {
+                case v => v == expect
+              }
+              case _ => datasetWithFilteredChannel
+            }
+            // convert to rdd
+            datasetWithFilteredVersion.records()
+          case Some("heka") =>
+            // return
+            heka.Dataset(telemetrySource)
+            .where("sourceName") {
+              case "telemetry" => true
+            }.where("sourceVersion") {
+              case "4" => true
+            }.where("docType") {
+              case dt => dt == filterDocType
+            }.where("appName") {
+              case "Firefox" => true
+            }.where("submissionDate") {
+              case date if date == submissionDate => true
+            }.where("appUpdateChannel") {
+              case channel => filterChannel.isEmpty || channel == filterChannel.get
+            }.where("appVersion") {
+              case v => filterVersion.isEmpty || v == filterVersion.get
+            }.records(conf.limit.get, numPartitions).map(_.toJValue)
+        }
 
         // Note we cannot just use 'partitionBy' below to automatically populate
         // the submission_date partition, because none of the write modes do
@@ -343,13 +383,13 @@ object MainSummaryView extends BatchJobBase {
         //  - "error" (the default) causes the job to fail after any data is
         //    loaded, so we can't do single day incremental updates.
         //  - "ignore" causes new data not to be saved.
-        // So we manually add the "submission_date_s3" parameter to the s3path.
-        val s3prefix = s"${filterDocType}_summary/$schemaVersion/submission_date_s3=$submissionDate"
-        val s3path = s"s3://${conf.outputBucket()}/$s3prefix"
+        // So we manually add the "submission_date" parameter to the outputPath.
+        val keyPrefix = s"${filterDocType}_summary/$schemaVersion/submission_date=$submissionDate"
+        val outputPath = s"${conf.outputFilesystem()}://${conf.outputBucket()}/$keyPrefix"
 
         if(!messages.isEmpty()){
           val rowRDD = messages.flatMap(m => {
-            val row = m.toJValue.map(doc => messageToRow(doc, scalarDefinitions, histogramDefinitions))
+            val row = m.map(doc => messageToRow(doc, scalarDefinitions, histogramDefinitions))
             row match {
               case None =>
                 ignoredCount += 1
@@ -365,20 +405,16 @@ object MainSummaryView extends BatchJobBase {
           // Repartition the dataframe by sample_id before saving.
           val partitioned = records.repartition(100, records.col("sample_id"))
 
-          // limit the size of output files so they don't break during s3 upload
+          // limit the size of output files so they don't break during upload
           val maxRecordsPerFile = conf.maxRecordsPerFile()
 
-          // Then write to S3 using the given fields as path name partitions. Overwrites
-          // existing data.
-          partitioned.write.partitionBy("sample_id").mode("overwrite").option("maxRecordsPerFile", maxRecordsPerFile).parquet(s3path)
+          // Then write using the given fields as path name partitions. Overwrites existing data.
+          partitioned.write.partitionBy("sample_id").mode("overwrite").option("maxRecordsPerFile", maxRecordsPerFile).parquet(outputPath)
 
           conf.schemaReportLocation.get match {
             case Some(path) => writeTextFile(path, partitioned.schema.treeString)
             case None =>
           }
-
-          // Then remove the _SUCCESS file so we don't break Spark partition discovery.
-          S3Store.deleteKey(conf.outputBucket(), s"$s3prefix/_SUCCESS")
         }
 
         val recordsIgnored = ignoredCount.value
@@ -392,7 +428,7 @@ object MainSummaryView extends BatchJobBase {
         if ((1.0 * recordsIgnored) / recordsSeen > MaxFractionIgnoredPings) {
           throw TooManyRecordsIgnoredException(
             s"More records ignored than are allowed. Ignored $recordsIgnored out of $recordsSeen records.",
-            conf.outputBucket(), s3prefix)
+            conf.outputBucket(), keyPrefix)
         }
 
         if (shouldStopContextAtEnd(spark)) { spark.stop() }
