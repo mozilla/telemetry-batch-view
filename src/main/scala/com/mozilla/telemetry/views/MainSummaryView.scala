@@ -337,24 +337,20 @@ object MainSummaryView extends BatchJobBase {
               }.where("app_name") {
                 case "Firefox" => true
               }
-            // apply filterChannel as needed
             val datasetWithFilteredChannel = filterChannel match {
               case Some(expect) => dataset.where("app_update_channel") {
                 case channel => channel == expect
               }
               case _ => dataset
             }
-            // apply filterVersion as needed
             val datasetWithFilteredVersion = filterVersion match {
-              case Some(expect) => dataset.where("app_version") {
+              case Some(expect) => datasetWithFilteredChannel.where("app_version") {
                 case v => v == expect
               }
               case _ => datasetWithFilteredChannel
             }
-            // convert to rdd
             datasetWithFilteredVersion.records()
           case Some("heka") =>
-            // return
             heka.Dataset(telemetrySource)
             .where("sourceName") {
               case "telemetry" => true
@@ -384,7 +380,7 @@ object MainSummaryView extends BatchJobBase {
         //    loaded, so we can't do single day incremental updates.
         //  - "ignore" causes new data not to be saved.
         // So we manually add the "submission_date" parameter to the outputPath.
-        val keyPrefix = s"${filterDocType}_summary/$schemaVersion/submission_date=$submissionDate"
+        val keyPrefix = s"${filterDocType}_summary/$schemaVersion/submission_date_s3=$submissionDate"
         val outputPath = s"${conf.outputFilesystem()}://${conf.outputBucket()}/$keyPrefix"
 
         if(!messages.isEmpty()){
