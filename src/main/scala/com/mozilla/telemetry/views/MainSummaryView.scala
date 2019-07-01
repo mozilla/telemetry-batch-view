@@ -269,9 +269,10 @@ object MainSummaryView extends BatchJobBase {
       default=Some("fixed"))
     val inputPartitionMultiplier = opt[Int]("input-partition-multiplier", descr="Partition multiplier for aligned read-mode", default=Some(4))
     val schemaReportLocation = opt[String]("schema-report-location", descr="Write schema.treeString to this file")
-    val outputFilesystem = choice(Seq("s3", "gs"), name="output-file-system", descr="Write to Amazon S3 (s3) or Google Cloud Storage (gs)", default=Some("s3"))
-    val inputSource = choice(Seq("protobuf", "ndjson"), name="input-source",
-      descr="Read raw pings from heka protobuf in S3 (protobuf) or newline delimited json in Google Cloud Storage (ndjson)", default=Some("protobuf"))
+    val outputFilesystem = choice(Seq("s3", "gs", "file"), name="output-file-system",
+      descr="Write to Amazon S3 (s3) or Google Cloud Storage (gs)", default=Some("s3"))
+    val inputSource = choice(Seq("heka", "ndjson"), name="input-source",
+      descr="Read raw pings from heka protobuf in S3 (heka) or newline delimited json in Google Cloud Storage (ndjson)", default=Some("heka"))
     verify()
   }
 
@@ -322,23 +323,22 @@ object MainSummaryView extends BatchJobBase {
           case _ => None
         }
 
-        val messages = conf.inputSource.toOption match {
-          case Some("ndjson") =>
-            val dataset = ndjson
-              .Dataset(
+        val messages = conf.inputSource() match {
+          case "ndjson" =>
+            val dataset = ndjson.Dataset(
                 telemetrySource,
                 Some(submissionDate)
-              ).where("namespace") {
+              ).where("document_namespace") {
                 case "telemetry" => true
-              }.where("version") {
+              }.where("document_version") {
                 case "4" => true
-              }.where("type") {
+              }.where("document_type") {
                 case dt => dt == filterDocType
-              }.where("app_name") {
+              }.where("normalized_app_name") {
                 case "Firefox" => true
               }
             val datasetWithFilteredChannel = filterChannel match {
-              case Some(expect) => dataset.where("app_update_channel") {
+              case Some(expect) => dataset.where("normalized_channel") {
                 case channel => channel == expect
               }
               case _ => dataset
@@ -350,7 +350,7 @@ object MainSummaryView extends BatchJobBase {
               case _ => datasetWithFilteredChannel
             }
             datasetWithFilteredVersion.records()
-          case Some("heka") =>
+          case "heka" =>
             heka.Dataset(telemetrySource)
             .where("sourceName") {
               case "telemetry" => true

@@ -12,6 +12,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.io.compress.CompressionCodec
 
 package object utils{
   import java.rmi.dgc.VMID
@@ -156,11 +157,17 @@ package object utils{
     (crc.getValue % numBlocks).toInt
   }
 
-  def writeTextFile(path: String, body: String): Unit = {
+  def writeTextFile(path: String, body: String, compression: Option[CompressionCodec] = None): Unit = {
     val file = FileSystem
       .get(new URI(path), new Configuration())
       .create(new Path(path))
-    file.write(body.getBytes)
+    compression match {
+      case Some(codec) =>
+        val stream = codec.createOutputStream(file.getWrappedStream)
+        stream.write(body.getBytes)
+        stream.close()
+      case _ => file.write(body.getBytes)
+    }
     file.close()
   }
 

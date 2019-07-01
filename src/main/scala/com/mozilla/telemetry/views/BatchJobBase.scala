@@ -64,6 +64,6 @@ object BatchJobBase {
 
 trait DatabricksSupport {
   protected def shouldStopContextAtEnd(spark: SparkSession): Boolean = {
-    !spark.conf.get("spark.home", "").startsWith("/databricks")
+    !spark.conf.get("spark.home", "").startsWith("/databricks") && spark.conf.get("mozilla.doNotStopSparkContext", "").isEmpty
   }
 }
