@@ -51,7 +51,10 @@ object MainSummaryView extends BatchJobBase {
     BooleanUserPref("privacy.fuzzyfox.enabled") ::
     IntegerUserPref("dom.ipc.plugins.sandbox-level.flash") ::
     IntegerUserPref("dom.ipc.processCount") ::
-    StringUserPref("general.config.filename") :: Nil
+    StringUserPref("general.config.filename") ::
+    BooleanUserPref("security.enterprise_roots.auto-enabled") ::
+    BooleanUserPref("security.enterprise_roots.enabled") ::
+    BooleanUserPref("security.pki.mitm_detected") :: Nil
 
 
   val allowedHistograms =
