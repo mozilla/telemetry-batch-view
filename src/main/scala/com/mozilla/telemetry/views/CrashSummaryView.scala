@@ -229,14 +229,15 @@ object CrashSummaryView extends BatchJobBase {
       val processedPings = spark.sparkContext.longAccumulator("processedPings")
       val discardedPings = spark.sparkContext.longAccumulator("discardedPings")
       val crashPings = messages.records()
-        .map(x => this.transformPayload(x.fieldsAsMap, x.payload))
-      crashPings.foreach(x => {
-        if (!x.isDefined) {
-          discardedPings.add(1)
-        } else {
-          processedPings.add(1)
-        }
-      })
+        .map(x => {
+          val payload = this.transformPayload(x.fieldsAsMap, x.payload);
+          if (!payload.isDefined) {
+            discardedPings.add(1)
+          } else {
+            processedPings.add(1)
+          }
+          payload
+        })
       val crashSummary = crashPings.flatMap(identity[Option[CrashPing]]).map(new CrashSummary(_))
       val dataset = spark.createDataset(crashSummary)
 
@@ -248,7 +249,7 @@ object CrashSummaryView extends BatchJobBase {
         dataset.write.mode(SaveMode.Overwrite).parquet(path)
       }
       logger.info("************************************")
-      logger.info(s"Total pings: ${dataset.count()}")
+      logger.info(s"Total pings: ${processedPings.value + discardedPings.value}")
       logger.info(s"Processed pings: ${processedPings.value}")
       logger.info(s"Discarded pings: ${discardedPings.value}")
       logger.info("************************************")
