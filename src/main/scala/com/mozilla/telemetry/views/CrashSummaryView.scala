@@ -231,7 +231,7 @@ object CrashSummaryView extends BatchJobBase {
       val crashPings = messages.records()
         .map(x => {
           val payload = this.transformPayload(x.fieldsAsMap, x.payload);
-          if (!payload.isDefined) {
+          if (payload.isEmpty) {
             discardedPings.add(1)
           } else {
             processedPings.add(1)
