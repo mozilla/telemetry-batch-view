@@ -7,11 +7,11 @@ import java.time._
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
-import com.mozilla.telemetry.heka
-import com.mozilla.telemetry.ndjson
+import com.mozilla.telemetry.ndjson.Dataset
 import com.mozilla.telemetry.metrics._
 import com.mozilla.telemetry.utils._
-import org.apache.spark.sql.Row
+import org.apache.spark.SparkContext
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.types._
 import org.json4s.JsonAST._
 import org.json4s.{DefaultFormats, JValue}
@@ -257,7 +257,8 @@ object MainSummaryView extends BatchJobBase {
 
   // Configuration for command line arguments
   private class Conf(args: Array[String]) extends BaseOpts(args) {
-    val limit = opt[Int]("limit", descr = "Maximum number of files to read from S3", required = false)
+    val limit = opt[Int]("limit", descr = "Per-date maximum number of: files to read for --input-source=heka or rows to read for --input-source=ndjson",
+      required = false)
     val channel = opt[String]("channel", descr = "Only process data from the given channel", required = false)
     val appVersion = opt[String]("version", descr = "Only process data from the given app version", required = false)
     val allHistograms = opt[Boolean]("all-histograms", descr = "Flag to use all histograms", required = false)
@@ -269,24 +270,31 @@ object MainSummaryView extends BatchJobBase {
       default=Some("fixed"))
     val inputPartitionMultiplier = opt[Int]("input-partition-multiplier", descr="Partition multiplier for aligned read-mode", default=Some(4))
     val schemaReportLocation = opt[String]("schema-report-location", descr="Write schema.treeString to this file")
-    val outputFilesystem = choice(Seq("s3", "gs", "file"), name="output-file-system",
-      descr="Write to Amazon S3 (s3) or Google Cloud Storage (gs)", default=Some("s3"))
     val inputSource = choice(Seq("heka", "ndjson"), name="input-source",
       descr="Read raw pings from heka protobuf in S3 (heka) or newline delimited json in Google Cloud Storage (ndjson)", default=Some("heka"))
+    val inputBucket = opt[String]("input-bucket", descr="Bucket override for --input-source=ndjson", default=Some(Dataset.BUCKET))
+    val disableStopContextAtEnd = opt[Boolean]("disable-stop-context-at-end", descr = "Flag to leave spark context running", required = false)
     verify()
   }
 
   def main(args: Array[String]) {
     val conf = new Conf(args) // parse command line arguments
 
+    // add s3 filesystem to outputBucket if none is specified for backward compatibility
+    val Pattern = "(.*://.*)".r
+    val outputBucket = conf.outputBucket() match {
+      case Pattern(bucket) => bucket
+      case bucket => s"s3://$bucket"
+    }
+
     try{
       // Set up Spark
       for (submissionDate <- datesBetween(conf.from(), conf.to.toOption)) {
-        val spark = getOrCreateSparkSession(jobName)
-        implicit val sc = spark.sparkContext
+        implicit val spark: SparkSession = getOrCreateSparkSession(jobName)
+        implicit val sc: SparkContext = spark.sparkContext
         val sqlContext = spark.sqlContext
         val hadoopConf = sc.hadoopConfiguration
-        if (conf.outputFilesystem() == "s3") {
+        if (outputBucket.startsWith("s3")) {
           hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
         }
 
@@ -323,50 +331,24 @@ object MainSummaryView extends BatchJobBase {
           case _ => None
         }
 
+        val ds = Dataset(
+          telemetrySource,
+          Some(submissionDate),
+          conf.inputBucket(),
+          Map[String, PartialFunction[String, Boolean]](
+            "document_namespace" ->  { case "telemetry" => true},
+            "document_version" -> { case "4" => true },
+            "document_type" -> { case dt if dt == filterDocType => true },
+            "normalized_app_name" -> { case "Firefox" => true }
+          ) ++ filterChannel.map(
+            expect => ("normalized_channel", { case channel if channel == expect => true }: PartialFunction[String, Boolean])
+          ) ++ filterVersion.map(
+            expect => ("app_version", { case v if v == expect => true }: PartialFunction[String, Boolean])
+          )
+        )
         val messages = conf.inputSource() match {
-          case "ndjson" =>
-            val dataset = ndjson.Dataset(
-                telemetrySource,
-                Some(submissionDate)
-              ).where("document_namespace") {
-                case "telemetry" => true
-              }.where("document_version") {
-                case "4" => true
-              }.where("document_type") {
-                case dt => dt == filterDocType
-              }.where("normalized_app_name") {
-                case "Firefox" => true
-              }
-            val datasetWithFilteredChannel = filterChannel match {
-              case Some(expect) => dataset.where("normalized_channel") {
-                case channel => channel == expect
-              }
-              case _ => dataset
-            }
-            val datasetWithFilteredVersion = filterVersion match {
-              case Some(expect) => datasetWithFilteredChannel.where("app_version") {
-                case v => v == expect
-              }
-              case _ => datasetWithFilteredChannel
-            }
-            datasetWithFilteredVersion.records()
-          case "heka" =>
-            heka.Dataset(telemetrySource)
-            .where("sourceName") {
-              case "telemetry" => true
-            }.where("sourceVersion") {
-              case "4" => true
-            }.where("docType") {
-              case dt => dt == filterDocType
-            }.where("appName") {
-              case "Firefox" => true
-            }.where("submissionDate") {
-              case date if date == submissionDate => true
-            }.where("appUpdateChannel") {
-              case channel => filterChannel.isEmpty || channel == filterChannel.get
-            }.where("appVersion") {
-              case v => filterVersion.isEmpty || v == filterVersion.get
-            }.records(conf.limit.get, numPartitions).map(_.toJValue)
+          case "ndjson" => ds.records(conf.limit.toOption)
+          case "heka" => ds.asHeka.records(conf.limit.toOption, numPartitions).map(_.toJValue)
         }
 
         // Note we cannot just use 'partitionBy' below to automatically populate
@@ -381,7 +363,7 @@ object MainSummaryView extends BatchJobBase {
         //  - "ignore" causes new data not to be saved.
         // So we manually add the "submission_date" parameter to the outputPath.
         val keyPrefix = s"${filterDocType}_summary/$schemaVersion/submission_date_s3=$submissionDate"
-        val outputPath = s"${conf.outputFilesystem()}://${conf.outputBucket()}/$keyPrefix"
+        val outputPath = s"$outputBucket/$keyPrefix"
 
         if(!messages.isEmpty()){
           val rowRDD = messages.flatMap(m => {
@@ -427,7 +409,7 @@ object MainSummaryView extends BatchJobBase {
             conf.outputBucket(), keyPrefix)
         }
 
-        if (shouldStopContextAtEnd(spark)) { spark.stop() }
+        if (shouldStopContextAtEnd(spark) && !conf.disableStopContextAtEnd()) { spark.stop() }
       }
     } catch {
       // Delete incomplete data
