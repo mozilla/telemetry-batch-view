@@ -4,11 +4,9 @@
 package com.mozilla.telemetry.views
 
 import java.time.format.DateTimeFormatter
-import java.util.UUID.randomUUID
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
 import com.holdenkarau.spark.testing.Utils.createTempDir
-import com.mozilla.telemetry.ndjson
 import com.mozilla.telemetry.heka.{File, Message, RichMessage}
 import com.mozilla.telemetry.metrics._
 import com.mozilla.telemetry.utils._
@@ -26,7 +24,6 @@ import scala.io.Source
 import scalaj.http.HttpConstants.base64
 
 class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase with PrivateMethodTester {
-
   val scalarUrlMock = (a: String, b: String) => Source.fromFile("src/test/resources/Scalars.yaml")
 
   val scalars = new ScalarsClass {
@@ -2334,7 +2331,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
 
   private val tempDir = createTempDir().toString
 
-  "ndjson.Dataset source" should "succeed" in {
+  "ndjson source" should "supply doc.meta" in {
     implicit val formats: Formats = org.json4s.DefaultFormats
 
     val baseAttributes = Map(
@@ -2347,7 +2344,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
     val basePayload = Map("submission_timestamp" -> baseAttributes("submission_timestamp"))
     val compression = Some(new GzipCodec())
     val datasetTestingPath = s"file://$tempDir/input/ndjson"
-    val prefix = s"$datasetTestingPath/stage/telemetry-decoded_gcs-sink/output/2019-01-01/00/"
+    val prefix = s"$datasetTestingPath/telemetry-decoded_gcs-sink/output/2019-01-01/00/"
 
     val clientId1 = "b90fea24-38e0-4dd2-b4e4-9a83ed65d8b8"
     val docId1 = "4f81d2ae-c257-4364-bbf3-99bb1674b815"
@@ -2415,16 +2412,13 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
       case (line, index) => writeTextFile(s"$prefix/$index.ndjson.gz", s"$line\n", compression)
     }
 
-    ndjson.Dataset invokePrivate PrivateMethod[ndjson.Dataset]('useTestingPath)(datasetTestingPath)
-
-    spark.conf.set("mozilla.doNotStopSparkContext", "true")
-
     MainSummaryView.main(Array(
       "--from=20190101",
       "--to=20190101",
       "--input-source=ndjson",
-      "--output-file-system=file",
-      s"--bucket=$tempDir/output/ndjson"
+      s"--input-bucket=$datasetTestingPath",
+      s"--bucket=file://$tempDir/output/ndjson",
+      "--disable-stop-context-at-end"
     ))
 
     val result = spark.read.parquet(
@@ -2434,6 +2428,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
       "normalized_os_version", "country", "city", "geo_subdivision1", "geo_subdivision2",
       "submission_date", "timestamp", "client_submission_date", "client_clock_skew"
     ).orderBy("document_id").toJSON.collect.toList
+
     val expect = List(
       s"""{"document_id":"$docId1","client_id":"$clientId1","sample_id":42,"channel":
          |"metadata.uri.app_update_channel","normalized_channel":"normalized_channel",
@@ -2450,6 +2445,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
          |}""".replaceAll("\\s+\\|", ""),
       s"""{"document_id":"$docId3","submission_date":"20190701","timestamp":1561939200000000000}"""
     )
-    assert(result == expect)
+
+    result should contain theSameElementsAs expect
   }
 }
