@@ -77,7 +77,12 @@ class Dataset private (dataset: String, submissionDate: Option[String], bucket: 
       .json(s"$prefix/${isoSubmissionDate.getOrElse("*")}/*/*.ndjson.gz")
       .selectExpr("payload", "attributeMap.*")
 
-    val filtered = clauses.foldLeft(messages)((df, pair) => {
+    val limited = limit match {
+      case Some(x) => messages.limit(x)
+      case _ => messages
+    }
+
+    val filtered = clauses.foldLeft(limited)((df, pair) => {
       val (attribute, clause) = pair
       df.filter(r => {
         val value = r.getAs[String](attribute)
@@ -85,12 +90,7 @@ class Dataset private (dataset: String, submissionDate: Option[String], bucket: 
       })
     })
 
-    val limited = limit match {
-      case Some(x) => filtered.limit(x)
-      case _ => filtered
-    }
-
-    limited.rdd.map(
+    filtered.rdd.map(
       r => Try(Base64.decodeString(r.getAs[String]("payload"))).toOption.flatMap(parseOpt(_))
     ).map {
       case Some(doc) =>
