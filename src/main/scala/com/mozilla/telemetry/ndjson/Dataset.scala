@@ -45,7 +45,7 @@ class Dataset private (dataset: String, submissionDate: Option[String], bucket: 
       case (ds, (attr, clause)) => ds.where(ATTRIBUTE_TO_DIMENSION(attr))(clause)
     }
     submissionDate match {
-      case Some(expect) => hekaDataset.where("submissionDate") {case date => date == expect}
+      case Some(expect) => hekaDataset.where("submissionDate") {case date if date == expect => true}
       case _ => hekaDataset
     }
   }
