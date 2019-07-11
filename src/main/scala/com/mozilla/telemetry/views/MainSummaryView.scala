@@ -294,9 +294,9 @@ object MainSummaryView extends BatchJobBase {
         implicit val sc: SparkContext = spark.sparkContext
         val sqlContext = spark.sqlContext
         val hadoopConf = sc.hadoopConfiguration
-        if (outputBucket.startsWith("s3")) {
-          hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
-        }
+        hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
+        // prevent hadoop from trying to repair implicit directories on potentially read-only gs:// locations
+        spark.conf.set("fs.gs.implicit.dir.repair.enable", false)
 
         val filterChannel = conf.channel.get
         val filterVersion = conf.appVersion.get
