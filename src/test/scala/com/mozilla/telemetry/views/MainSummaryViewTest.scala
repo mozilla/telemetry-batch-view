@@ -23,7 +23,7 @@ import org.scalatest.{Assertion, FlatSpec, Matchers, PrivateMethodTester}
 import scala.io.Source
 import scalaj.http.HttpConstants.base64
 
-class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase with PrivateMethodTester {
+class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
   val scalarUrlMock = (a: String, b: String) => Source.fromFile("src/test/resources/Scalars.yaml")
 
   val scalars = new ScalarsClass {
@@ -2331,7 +2331,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
 
   private val tempDir = createTempDir().toString
 
-  "ndjson source" should "supply doc.meta" in {
+  "main method" should "correctly process ndjson-serialized input" in {
     implicit val formats: Formats = org.json4s.DefaultFormats
 
     val baseAttributes = Map(
