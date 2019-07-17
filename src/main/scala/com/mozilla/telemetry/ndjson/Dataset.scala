@@ -71,8 +71,6 @@ class Dataset private (dataset: String, submissionDate: Option[String], bucket: 
       case "telemetry" => s"$bucket/telemetry-decoded_gcs-sink/output"
     }
 
-    // TODO move document_namespace and document_type to path
-    // TODO use hive partition format for filterable path elements and allow submissionDate as a clause
     val messages = spark.read.schema(NDJSON_SCHEMA)
       .json(s"$prefix/${isoSubmissionDate.getOrElse("*")}/*/*.ndjson.gz")
       .selectExpr("payload", "attributeMap.*")
