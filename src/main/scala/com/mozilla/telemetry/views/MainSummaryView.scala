@@ -778,6 +778,8 @@ object MainSummaryView extends BatchJobBase {
         (settings \ "update" \ "enabled").extractOpt[Boolean],
         (settings \ "update" \ "autoDownload").extractOpt[Boolean],
         getAttribution(settings \ "attribution"),
+        (settings \ "attribution" \ "experiment").extractOpt[String],
+        (settings \ "attribution" \ "variation").extractOpt[String],
         (settings \ "sandbox" \ "effectiveContentProcessLevel").extractOpt[Int],
         (addons \ "activeExperiment" \ "id").extractOpt[String],
         (addons \ "activeExperiment" \ "branch").extractOpt[String],
@@ -1185,6 +1187,8 @@ object MainSummaryView extends BatchJobBase {
       StructField("update_enabled", BooleanType, nullable = true), // environment/settings/update/enabled
       StructField("update_auto_download", BooleanType, nullable = true), // environment/settings/update/autoDownload
       StructField("attribution", buildAttributionSchema, nullable = true), // environment/settings/attribution/
+      StructField("attribution_experiment", StringType, nullable = true), // environment/settings/attribution/experiment
+      StructField("attribution_variation", StringType, nullable = true), // environment/settings/attribution/variation
       StructField("sandbox_effective_content_process_level", IntegerType, nullable = true), // environment/settings/sandbox/effectiveContentProcessLevel
       StructField("active_experiment_id", StringType, nullable = true), // environment/addons/activeExperiment/id
       StructField("active_experiment_branch", StringType, nullable = true), // environment/addons/activeExperiment/branch
