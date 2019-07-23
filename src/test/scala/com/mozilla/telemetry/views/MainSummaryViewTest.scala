@@ -709,6 +709,36 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
     }
   }
 
+  it can "extract experiment and variation" in {
+    val attribution = """
+      |{
+      |  "attribution": {
+      |    "content": "sample_content",
+      |    "source": "sample_source",
+      |    "medium": "sample_medium",
+      |    "campaign": "sample_campaign",
+      |    "experiment": "sample_experiment",
+      |    "variation": "sample_variation"
+      |  }
+      |}
+    """.stripMargin
+
+    val message = RichMessage("1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.settings" -> attribution
+      ),
+      None)
+
+    val expected = Map(
+      "attribution_experiment" -> "sample_experiment",
+      "attribution_variation" -> "sample_variation"
+    )
+
+    compare(message, expected)
+  }
+
   "MainSummary plugin counts" can "be summarized" in {
     val message = RichMessage(
       "1234",
