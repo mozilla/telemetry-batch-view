@@ -55,7 +55,8 @@ object MainSummaryView extends BatchJobBase {
     StringUserPref("general.config.filename") ::
     BooleanUserPref("security.enterprise_roots.auto-enabled") ::
     BooleanUserPref("security.enterprise_roots.enabled") ::
-    BooleanUserPref("security.pki.mitm_detected") :: Nil
+    BooleanUserPref("security.pki.mitm_detected") ::
+    IntegerUserPref("network.trr.mode") :: Nil
 
 
   val allowedHistograms =
