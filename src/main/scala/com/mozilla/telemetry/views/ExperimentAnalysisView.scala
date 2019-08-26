@@ -24,7 +24,7 @@ object ExperimentAnalysisView extends BatchJobBase {
 
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getSimpleName)
 
-  private val columnsWhitelist = List(
+  private val allowedColumns = List(
     "client_id",
     "experiment_id",
     "experiment_branch",
@@ -55,8 +55,8 @@ object ExperimentAnalysisView extends BatchJobBase {
 
   implicit class ExperimentDataFrame(df: DataFrame) {
     def selectUsedColumns(extra: List[String] = List()): DataFrame = {
-      val whitelist = columnsWhitelist ++ extra
-      val columns = df.schema.map(_.name).filter(whitelist.contains(_))
+      val allowlist = allowedColumns ++ extra
+      val columns = df.schema.map(_.name).filter(allowlist.contains(_))
       df.select(columns.head, columns.tail: _*)
     }
   }
@@ -165,7 +165,7 @@ object ExperimentAnalysisView extends BatchJobBase {
       case _ => {
         val histogramDefs = MainSummaryView.filterHistogramDefinitions(
           Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _),
-          useWhitelist = true)
+          useAllowlist = true)
         val scalarDefs = Scalars.definitions(includeOptin = true).toList
         scalarDefs ++ histogramDefs
       }

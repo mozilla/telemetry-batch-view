@@ -84,7 +84,6 @@ object ClientsDailyViewTestHelpers {
     histogram_parent_devtools_canvasdebugger_opened_count: Option[Int] = None,
     histogram_parent_devtools_computedview_opened_count: Option[Int] = None,
     histogram_parent_devtools_custom_opened_count: Option[Int] = None,
-    histogram_parent_devtools_developertoolbar_opened_count: Option[Int] = None,
     histogram_parent_devtools_dom_opened_count: Option[Int] = None,
     histogram_parent_devtools_eyedropper_opened_count: Option[Int] = None,
     histogram_parent_devtools_fontinspector_opened_count: Option[Int] = None,
@@ -182,7 +181,13 @@ object ClientsDailyViewTestHelpers {
     vendor: Option[String] = None,
     web_notification_shown: Option[Int] = None,
     windows_build_number: Option[Long] = None,
-    windows_ubr: Option[Long] = None
+    windows_ubr: Option[Long] = None,
+    environment_settings_intl_accept_languages: Option[List[String]] = None,
+    environment_settings_intl_app_locales: Option[List[String]] = None,
+    environment_settings_intl_available_locales: Option[List[String]] = None,
+    environment_settings_intl_regional_prefs_locales: Option[List[String]] = None,
+    environment_settings_intl_requested_locales: Option[List[String]] = None,
+    environment_settings_intl_system_locales: Option[List[String]] = None
   )
 
   def getRowAggFirst(sValue: Option[String], bValue: Option[Boolean], iValue: Option[Int]): MainSummaryRow = MainSummaryRow(
@@ -341,7 +346,9 @@ object ClientsDailyViewTestHelpers {
     places_bookmarks_count = value,
     places_pages_count = value,
     scalar_parent_browser_engagement_unique_domains_count = value,
-    session_restored = value
+    session_restored = value,
+    sync_count_desktop = value,
+    sync_count_mobile = value
   )
 
   def getExpectAggMean(value: Int): Map[String, Int] = Map(
@@ -352,7 +359,9 @@ object ClientsDailyViewTestHelpers {
     "places_bookmarks_count_mean" -> value,
     "places_pages_count_mean" -> value,
     "scalar_parent_browser_engagement_unique_domains_count_mean" -> value,
-    "session_restored_mean" -> value
+    "session_restored_mean" -> value,
+    "sync_count_desktop_mean" -> value,
+    "sync_count_mobile_mean" -> value
   )
 
   def getRowAggSum(value: Option[Int]): MainSummaryRow = MainSummaryRow(
@@ -376,7 +385,6 @@ object ClientsDailyViewTestHelpers {
     histogram_parent_devtools_canvasdebugger_opened_count = value,
     histogram_parent_devtools_computedview_opened_count = value,
     histogram_parent_devtools_custom_opened_count = value,
-    histogram_parent_devtools_developertoolbar_opened_count = value,
     histogram_parent_devtools_dom_opened_count = value,
     histogram_parent_devtools_eyedropper_opened_count = value,
     histogram_parent_devtools_fontinspector_opened_count = value,
@@ -457,7 +465,6 @@ object ClientsDailyViewTestHelpers {
     "histogram_parent_devtools_canvasdebugger_opened_count_sum" -> value,
     "histogram_parent_devtools_computedview_opened_count_sum" -> value,
     "histogram_parent_devtools_custom_opened_count_sum" -> value,
-    "histogram_parent_devtools_developertoolbar_opened_count_sum" -> value,
     "histogram_parent_devtools_dom_opened_count_sum" -> value,
     "histogram_parent_devtools_eyedropper_opened_count_sum" -> value,
     "histogram_parent_devtools_fontinspector_opened_count_sum" -> value,

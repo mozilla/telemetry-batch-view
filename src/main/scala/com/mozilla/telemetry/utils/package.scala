@@ -12,6 +12,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.io.compress.CompressionCodec
 
 package object utils{
   import java.rmi.dgc.VMID
@@ -65,9 +66,13 @@ package object utils{
     output.toString()
   }
 
-  def getOrCreateSparkSession(jobName: String, enableHiveSupport: Boolean = false): SparkSession = {
+  def getOrCreateSparkSession(jobName: String, enableHiveSupport: Boolean = false,
+                              extraConfigs : Map[String, String] = Map.empty[String, String]) : SparkSession = {
     val conf = new SparkConf().setAppName(jobName)
     conf.setMaster(conf.get("spark.master", "local[*]"))
+
+    // yes, spark conf settings are mutable
+    extraConfigs.map {case (k, v) => conf.set(k, v)}
 
     val spark = enableHiveSupport match {
       case true => {
@@ -152,11 +157,17 @@ package object utils{
     (crc.getValue % numBlocks).toInt
   }
 
-  def writeTextFile(path: String, body: String): Unit = {
+  def writeTextFile(path: String, body: String, compression: Option[CompressionCodec] = None): Unit = {
     val file = FileSystem
       .get(new URI(path), new Configuration())
       .create(new Path(path))
-    file.write(body.getBytes)
+    compression match {
+      case Some(codec) =>
+        val stream = codec.createOutputStream(file.getWrappedStream)
+        stream.write(body.getBytes)
+        stream.close()
+      case _ => file.write(body.getBytes)
+    }
     file.close()
   }
 

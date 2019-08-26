@@ -334,4 +334,18 @@ class ClientsDailyViewTest extends FlatSpec with Matchers with DataFrameSuiteBas
         .extractDayAggregates(spark
           .sql("SELECT STRING(NULL) AS client_id"))}
   }
+
+  it must "skip empty lists" in {
+    test(
+      List(
+        MainSummaryRow(),
+        MainSummaryRow(environment_settings_intl_accept_languages = None),
+        MainSummaryRow(environment_settings_intl_accept_languages = Some(List())),
+        MainSummaryRow(environment_settings_intl_accept_languages = Some(List("en-US"))),
+        MainSummaryRow(environment_settings_intl_accept_languages = Some(List("en-CA"))),
+        MainSummaryRow()
+      ),
+      Map("environment_settings_intl_accept_languages" -> List("en-US"))
+    )
+  }
 }

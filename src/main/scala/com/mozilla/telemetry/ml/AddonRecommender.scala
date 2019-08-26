@@ -5,59 +5,51 @@ package com.mozilla.telemetry.ml
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
-import java.time.{Instant, ZoneOffset}
 import java.time.format.DateTimeFormatter
+import java.time.{Instant, LocalDate, ZoneOffset}
 
 import breeze.linalg.{DenseMatrix, DenseVector}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import com.mozilla.telemetry.utils.{S3Store, getOrCreateSparkSession}
+import com.mozilla.telemetry.views.DatabricksSupport
 import org.apache.spark.ml.evaluation.NaNRegressionEvaluator
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Dataset, SparkSession}
 import org.json4s.JsonDSL._
 import org.json4s._
-import org.json4s.jackson.JsonMethods._
+import org.json4s.jackson.JsonMethods.{parse, _}
 import org.json4s.jackson.Serialization
 import org.json4s.jackson.Serialization.write
 import org.rogach.scallop._
 
 import scala.collection.Map
 import scala.io.Source
-import scala.sys.process._
 import scala.language.reflectiveCalls
 
-private case class Rating(clientId: Int, addonId: Int, rating: Float)
-private case class Addons(client_id: Option[String], active_addons: Option[Map[String, Addon]])
-private case class Addon(blocklisted: Option[Boolean],
-                         description: Option[String],
-                         name: Option[String],
-                         user_disabled: Option[Boolean],
-                         app_disabled: Option[Boolean],
-                         version: Option[String],
-                         scope: Option[Int],
-                         `type`: Option[String],
-                         foreign_install: Option[Boolean],
-                         has_binary_components: Option[Boolean],
-                         install_day: Option[Long],
-                         update_day: Option[Long],
-                         signed_state: Option[Int],
-                         is_system: Option[Boolean])
-
-private case class ItemFactors(id: Int, features: Array[Float])
-
-object AddonRecommender {
+object AddonRecommender extends DatabricksSupport {
   implicit val formats = Serialization.formats(NoTypeHints)
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
 
   private class Conf(args: Array[String]) extends ScallopConf(args) {
+    private def dateOffset(minusDays: Int) = {
+      val date = LocalDate.now().minusDays(minusDays)
+      val formatter = DateTimeFormatter.ofPattern("yyyyMMdd")
+      date.format(formatter)
+    }
+
     val train = new Subcommand("train") {
       val output = opt[String]("output", descr = "Output path", required = true, default = Some("."))
       val runDate = opt[String]("runDate", descr = "The execution date", required = false)
       val privateBucket = opt[String]("privateBucket", descr = "Destination bucket for archiving the model data", required = true)
       val publicBucket = opt[String]("publicBucket", descr = "Destination bucket for the latest public model", required = true)
-      val longitudinalOverride = opt[String]("longitudinalOverride",
-        descr = "Source location for longitudinal, if not using metastore-provided dataset", required = false)
+      val inputTable = opt[String]("inputTable", default = Some("clients_daily"),
+        descr = "Input table, by default `clients_daily` is used", required = false)
+      val clientsSampleDateFrom = opt[String]("clientsSampleDateFrom", default = Some(dateOffset(minusDays = 90)),
+        descr = "Lower bound date for sampling `clients_daily`, formatted as `YYYYMMDD`, by default current date minus 90 days is used", required = false)
+      val clientsSamplingFraction = opt[Int]("clientsSamplingFraction", default = Some(100),
+        descr = "Fraction of `clients_daily` used for training - [1,100]", required = false,
+        validate = f => f >= 1 && f <= 100)
     }
 
     val recommend = new Subcommand("recommend") {
@@ -87,7 +79,7 @@ object AddonRecommender {
     ))
 
   // Positive hash function
-  private def hash(x: String): Int = x.hashCode & 0x7FFFFF
+  private[ml] def hash(x: String): Int = x.hashCode & 0x7FFFFF
 
   private def itemFactorsToMatrix(itemFactors: Array[ItemFactors]): DenseMatrix[Double] = {
     require(itemFactors.length > 0)
@@ -101,38 +93,49 @@ object AddonRecommender {
   }
 
   /**
-    * Get a new dataset from the Longitudinal dataset containing only the relevant addon data.
-    * @param sparkSession The SparkSession used for loading the Longitudinal dataset.
-    * @param addonWhitelist The a list of addon GUIDs that are valid
-    * @param amoDB The AMO database fetched by AMODatabase.
-    * @param longitudinalOverride Optional longitudinal location for ad-hoc or manual job runs
+    * Get a new dataset from the clients_daily dataset containing only the relevant addon data.
+    *
+    * @param spark          The SparkSession used for loading clients_daily dataset.
+    * @param allowedAddons  The list of addon GUIDs that are valid
+    * @param amoDB          The AMO database fetched by AMODatabase.
+    * @param inputTable     Name of the input table (can be used to override clients_daily)
+    * @param dateFrom       Lower threshold date for clients' sample
+    * @param sampling       Percent of clients to include in sample, based on `sample_id` column
     * @return A 4 columns Dataset with each row having the client id, the addon GUID
     *         and the hashed client id and GUID.
     */
-  private def getAddonData(sparkSession: SparkSession, addonWhitelist: List[String], amoDB: Map[String, Any], longitudinalOverride: Option[String] = None) = {
-    import sparkSession.sqlContext.implicits._
-
-    longitudinalOverride match {
-      case Some(location) => sparkSession.read.parquet(location).createOrReplaceTempView("longitudinal")
-      case _ => None
-    }
-
-    sparkSession.sqlContext.sql("select * from longitudinal")
-      .where("active_addons is not null")
-      .where("build is not null and build[0].application_name = 'Firefox'")
-      .selectExpr("client_id", "active_addons[0] as active_addons")
-      .as[Addons]
-      .flatMap { case Addons(Some(clientId), Some(addons)) =>
+  private[ml] def getAddonData(spark: SparkSession, allowedAddons: List[String], amoDB: Map[String, Any],
+                               inputTable: String, dateFrom: String, sampling: Int): Dataset[(String, String, Int, Int)] = {
+    import spark.implicits._
+    spark.sql(s"SELECT * FROM $inputTable")
+      .where("client_id IS NOT null")
+      .where("active_addons IS NOT null")
+      .where("channel = 'release'")
+      .where("app_name = 'Firefox'")
+      .where(s"submission_date_s3 >= '$dateFrom'")
+      .where(s"sample_id < '$sampling'")
+      .selectExpr(
+        "client_id",
+        "active_addons",
+        "submission_date_s3",
+        "row_number() OVER (PARTITION BY client_id ORDER BY submission_date_s3 desc) as rn"
+      )
+      .where("rn = 1")
+      .drop("rn")
+      .as[ClientWithAddons]
+      .flatMap { case ClientWithAddons(clientId, activeAddons) =>
         for {
-          (addonId, meta) <- addons
-          if addonWhitelist.contains(addonId) && amoDB.contains(addonId)
-          addonName <- meta.name
-          blocklisted <- meta.blocklisted
-          signedState <- meta.signed_state
-          userDisabled <- meta.user_disabled
-          appDisabled <- meta.app_disabled
-          addonType <- meta.`type`
-          if !blocklisted && (addonType != "extension" || signedState == 2) && !userDisabled && !appDisabled
+          addon <- activeAddons
+          addonId <- addon.addon_id
+          if allowedAddons.contains(addonId) && amoDB.contains(addonId)
+          addonName <- addon.name
+          blocklisted <- addon.blocklisted
+          signedState <- addon.signed_state
+          userDisabled <- addon.user_disabled
+          appDisabled <- addon.app_disabled
+          addonType <- addon.`type`
+          isSystem <- addon.is_system
+          if !blocklisted && (addonType != "extension" || signedState == 2) && !userDisabled && !appDisabled && !isSystem
         } yield {
           (clientId, addonId, hash(clientId), hash(addonId))
         }
@@ -174,23 +177,24 @@ object AddonRecommender {
   }
 
   // scalastyle:off methodLength
-  private def train(localOutputDir: String, runDate: String, privateBucket: String, publicBucket: String, longitudinalOverride: Option[String] = None) = {
+  private def train(localOutputDir: String, runDate: String, privateBucket: String, publicBucket: String,
+                    inputTable: String, dateFrom: String, sampling: Int) = {
+    logger.info(s"Training - using clients_daily from $dateFrom")
     // The AMODatabase init needs to happen before we get the SparkContext,
     // otherwise the job will fail due to all the workers being idle.
     val amoDbMap = AMODatabase.getAddonMap()
 
-    val spark = getOrCreateSparkSession("AddonRecommenderTest", enableHiveSupport = true)
+    val conf = scala.Predef.Map("spark.executor.extraJavaOptions" -> "-Xss8m",
+      "spark.driver.extraJavaOptions" -> "-Xss8m")
+    val spark = getOrCreateSparkSession("AddonRecommenderTest", enableHiveSupport = true, extraConfigs = conf)
     val sc = spark.sparkContext
-    import spark.implicits._
 
-    import org.json4s.jackson.JsonMethods.{parse}
-    import com.mozilla.telemetry.utils.{S3Store}
-    import org.json4s._
+    import spark.implicits._
     implicit val formats = DefaultFormats
-    val istream = S3Store.getKey("telemetry-parquet", "telemetry-ml/addon_recommender/only_guids_top_200.json");
+    val istream = S3Store.getKey("telemetry-parquet", "telemetry-ml/addon_recommender/only_guids_top_200.json")
     val json_str = scala.io.Source.fromInputStream(istream).mkString
-    val whitelist = parse(json_str).extract[List[String]]
-    val clientAddons = getAddonData(spark, whitelist, amoDbMap, longitudinalOverride)
+    val allowlist = parse(json_str).extract[List[String]]
+    val clientAddons = getAddonData(spark, allowlist, amoDbMap, inputTable, dateFrom, sampling)
 
     val ratings = clientAddons
       .map{ case (_, _, hashedClientId, hashedAddonId) => Rating(hashedClientId, hashedAddonId, 1.0f)}
@@ -223,6 +227,7 @@ object AddonRecommender {
       .setEvaluator(evaluator)
       .setEstimatorParamMaps(paramGrid)
       .setNumFolds(10)
+      .setParallelism(20)
 
     val model = cv.fit(ratings)
 
@@ -241,6 +246,10 @@ object AddonRecommender {
                               "id" -> addonId,
                               "isWebextension" -> JBool(AMODatabase.isWebextension(addonId, amoDbMap).getOrElse(false))).toMap)
     }))
+
+    val parentDir = Paths.get(localOutputDir)
+    if (!Files.exists(parentDir)) Files.createDirectories(parentDir)
+
     val addonMappingPath = Paths.get(s"$localOutputDir/addon_mapping.json")
     val privateS3prefix = s"telemetry-ml/addon_recommender/${runDate}"
     val latestS3prefix = "telemetry-ml/addon_recommender"
@@ -264,28 +273,16 @@ object AddonRecommender {
     S3Store.uploadFile(addonCachePath.toFile, privateBucket, privateS3prefix, addonCachePath.getFileName.toString)
     S3Store.uploadFile(addonCachePath.toFile, privateBucket, latestS3prefix, addonCachePath.getFileName.toString)
 
-    // Serialize model to HDFS and then copy it to the local machine. We need to do this
-    // instead of simply saving to file:// due to permission issues.
-    try {
-      model.write.overwrite().save(s"$localOutputDir/als.model")
-      // Run the copy as a shell command: unfortunately, FileSystem.copyToLocalFile
-      // triggers the same permission issues that we experience when saving to file://.
-      val copyCmdOutput = s"hdfs dfs -get $localOutputDir/als.model $localOutputDir/".!!
-      logger.debug("Command output " + copyCmdOutput)
-      // Save the model to S3 as well. We don't need to upload that in the public bucket.
-      model.write.overwrite().save(s"s3://$privateBucket/$privateS3prefix/als.model")
-    } catch {
-      // We failed to write the model to HDFS or there was a permission issue with the
-      // copy command.
-      case e: Exception => logger.error("Failed to write the model: " + e.getMessage)
-    }
+    model.write.overwrite().save(s"s3://$privateBucket/$privateS3prefix/als.model")
 
     logger.info("Cross validation statistics:")
     model.getEstimatorParamMaps
       .zip(model.avgMetrics)
       .foreach(logger.info)
 
-    sc.stop()
+    if (shouldStopContextAtEnd(spark)) {
+      spark.stop()
+    }
   }
   // scalastyle:on methodLength
 
@@ -297,9 +294,7 @@ object AddonRecommender {
         val addons = conf.recommend.addons().split(",")
         val top = conf.recommend.top()
         val input = conf.recommend.input()
-        // scalastyle:off print-ln
-        recommend(input, addons.toSet).take(top).foreach(println)
-        // scalastyle:on print-ln
+        recommend(input, addons.toSet).take(top).foreach(logger.info)
 
       case Some(command) if command == conf.train =>
         val output = conf.train.output()
@@ -307,15 +302,47 @@ object AddonRecommender {
         val outputDir = new java.io.File(cwd, output)
 
         val fmt = DateTimeFormatter.ofPattern("yyyyMMdd")
-        val date = conf.train.runDate.get match {
+        val date = conf.train.runDate.toOption match {
           case Some(f) => f
           case _ => Instant.now().atOffset(ZoneOffset.UTC).format(fmt)
         }
 
-        train(outputDir.getCanonicalPath, date, conf.train.privateBucket(), conf.train.publicBucket(), conf.train.longitudinalOverride.toOption)
+        train(outputDir.getCanonicalPath, date, conf.train.privateBucket(), conf.train.publicBucket(),
+          conf.train.inputTable(), conf.train.clientsSampleDateFrom(), conf.train.clientsSamplingFraction())
 
       case None =>
         conf.printHelp()
     }
   }
 }
+
+private case class Rating(clientId: Int, addonId: Int, rating: Float)
+
+private case class ItemFactors(id: Int, features: Array[Float])
+
+case class ClientWithAddons(client_id: String,
+                            active_addons: Array[ActiveAddon])
+
+case class ClientsDailyRow(client_id: String,
+                           app_name: String,
+                           active_addons: Array[ActiveAddon],
+                           channel: String,
+                           sample_id: String,
+                           submission_date_s3: String)
+
+case class ActiveAddon(addon_id: Option[String],
+                       app_disabled: Option[Boolean],
+                       blocklisted: Option[Boolean],
+                       foreign_install: Option[Boolean],
+                       has_binary_components: Option[Boolean],
+                       install_day: Option[Long],
+                       is_system: Option[Boolean],
+                       is_web_extension: Option[Boolean],
+                       multiprocess_compatible: Option[Boolean],
+                       name: Option[String],
+                       scope: Option[Long],
+                       signed_state: Option[Long],
+                       `type`: Option[String],
+                       update_day: Option[Long],
+                       user_disabled: Option[Boolean],
+                       version: Option[String])

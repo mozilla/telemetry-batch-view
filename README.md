@@ -12,7 +12,7 @@ Defining a derived [Parquet](https://parquet.apache.org/) dataset, which uses a 
 
 ### Adding a new derived dataset
 
-See the [views](https://github.com/mozilla/telemetry-batch-view/tree/master/src/main/scala/views) folder for examples of jobs that create derived datasets.
+See the [views](https://github.com/mozilla/telemetry-batch-view/tree/master/src/main/scala/com/mozilla/telemetry/views) folder for examples of jobs that create derived datasets.
 
 See the [Firefox Data Documentation](https://mozilla.github.io/firefox-data-docs/datasets/reference.html) for more information about the individual derived datasets.
 For help finding the right dataset for your analysis, see
@@ -24,6 +24,11 @@ The general workflow for telemetry-batch-view is:
 1. Make some local changes on your branch
 2. Test locally in [Airflow](https://www.github.com/mozilla/telemetry-airflow), testing just the jobs that your code change touches.
 3. Open PR, tag someone to review. Merge when approved, which will deploy the jar to production.
+
+Note that Airflow deployments depend on cluster bootstrap scripts governed by 
+[emr-bootstrap-spark](https://github.com/mozilla/emr-bootstrap-spark/).
+Changes in job behavior that don't seem to correspond to changes in this 
+repository's code could be related to changes in those other projects.
 
 ### Local Development
 

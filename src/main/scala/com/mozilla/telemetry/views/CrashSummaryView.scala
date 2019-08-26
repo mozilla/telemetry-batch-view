@@ -98,6 +98,7 @@ case class Meta(
 
 case class Payload(
     crashDate: String,
+    crashTime: Option[String],
     processType: Option[String],
     hasCrashEnvironment: Boolean,
     metadata: Map[String, String],
@@ -119,6 +120,7 @@ case class CrashSummary (
     build_version: String,
     build_id: String,
     channel: String,
+    crash_time: Option[String],
     application: String,
     os_name: String,
     os_version: String,
@@ -135,6 +137,7 @@ case class CrashSummary (
   def this(ping: CrashPing) = {
     this(
       client_id = ping.clientId,
+      crash_time = ping.payload.crashTime,
       normalized_channel = ping.meta.normalizedChannel,
       build_version = ping.meta.`environment.build`.version,
       build_id = ping.meta.`environment.build`.buildId,
@@ -226,26 +229,27 @@ object CrashSummaryView extends BatchJobBase {
       val processedPings = spark.sparkContext.longAccumulator("processedPings")
       val discardedPings = spark.sparkContext.longAccumulator("discardedPings")
       val crashPings = messages.records()
-        .map(x => this.transformPayload(x.fieldsAsMap, x.payload))
-      crashPings.foreach(x => {
-        if (!x.isDefined) {
-          discardedPings.add(1)
-        } else {
-          processedPings.add(1)
-        }
-      })
+        .map(x => {
+          val payload = this.transformPayload(x.fieldsAsMap, x.payload);
+          if (payload.isEmpty) {
+            discardedPings.add(1)
+          } else {
+            processedPings.add(1)
+          }
+          payload
+        })
       val crashSummary = crashPings.flatMap(identity[Option[CrashPing]]).map(new CrashSummary(_))
       val dataset = spark.createDataset(crashSummary)
 
       // Save to S3
       if (!opts.dryRun()) {
-        val prefix = s"crash_summary/v1"
+        val prefix = s"crash_summary/v2"
         val outputBucket = opts.outputBucket()
         val path = s"s3://${outputBucket}/${prefix}/submission_date=${submissionDateDash}"
         dataset.write.mode(SaveMode.Overwrite).parquet(path)
       }
       logger.info("************************************")
-      logger.info(s"Total pings: ${dataset.count()}")
+      logger.info(s"Total pings: ${processedPings.value + discardedPings.value}")
       logger.info(s"Processed pings: ${processedPings.value}")
       logger.info(s"Discarded pings: ${discardedPings.value}")
       logger.info("************************************")

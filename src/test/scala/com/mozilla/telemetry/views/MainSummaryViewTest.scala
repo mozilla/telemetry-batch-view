@@ -1,24 +1,27 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-package com.mozilla.telemetry
+package com.mozilla.telemetry.views
 
 import java.time.format.DateTimeFormatter
 
 import com.holdenkarau.spark.testing.DataFrameSuiteBase
+import com.holdenkarau.spark.testing.Utils.createTempDir
 import com.mozilla.telemetry.heka.{File, Message, RichMessage}
 import com.mozilla.telemetry.metrics._
 import com.mozilla.telemetry.utils._
-import com.mozilla.telemetry.views.MainSummaryView
+import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType, StructType}
 import org.json4s.JsonDSL._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
-import org.scalatest.{Assertion, FlatSpec, Matchers}
+import org.json4s.jackson.Serialization.{write => asJson}
+import org.scalatest.{Assertion, FlatSpec, Matchers, PrivateMethodTester}
 
 import scala.io.Source
+import scalaj.http.HttpConstants.base64
 
 class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase {
   val scalarUrlMock = (a: String, b: String) => Source.fromFile("src/test/resources/Scalars.yaml")
@@ -175,6 +178,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
             "creation_date" -> "2016-03-28T16:02:52.676Z",
             "distribution_id" -> null,
             "submission_date" -> "20160407",
+            "fxa_configured" -> false,
             "sync_configured" -> false,
             "sync_count_desktop" -> null,
             "sync_count_mobile" -> null,
@@ -234,6 +238,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
             "session_restored" -> 3289,
             "total_time" -> 1027690,
             "plugins_notification_shown" -> null,
+            "plugins_notification_shown_false" -> null,
             "plugins_notification_user_action" -> null,
             "plugins_infobar_shown" -> null,
             "plugins_infobar_block" -> null,
@@ -254,6 +259,13 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
             "user_pref_dom_ipc_processcount" -> null,
             "user_pref_extensions_allow_non_mpc_extensions" -> null,
             "user_pref_extensions_legacy_enabled" -> null,
+            "environment_settings_intl_accept_languages" -> List(),
+            "environment_settings_intl_app_locales" -> List(),
+            "environment_settings_intl_available_locales" -> List(),
+            "environment_settings_intl_regional_prefs_locales" -> List(),
+            "environment_settings_intl_requested_locales" -> List(),
+            "environment_settings_intl_system_locales" -> List(),
+            "environment_system_gfx_headless" -> null,
             "scalar_parent_mock_keyed_scalar_bool" -> null,
             "scalar_parent_mock_keyed_scalar_string" -> null,
             "scalar_parent_mock_keyed_scalar_uint" -> null,
@@ -396,7 +408,9 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
                      "user_pref_extensions_legacy_enabled" ::
                      "user_pref_browser_search_widget_innavbar" ::
                      "user_pref_marionette_enabled" ::
-                     "user_pref_general_config_filename" :: Nil
+                     "user_pref_general_config_filename" ::
+                     "user_pref_browser_search_region" ::
+                     Nil
 
     def testUserPrefs(doc: JValue, oldUserPrefs: Any, userPrefs: Seq[Any]): Unit = {
       val message = RichMessage(
@@ -429,7 +443,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
         | }
         |}
       """.stripMargin)
-    testUserPrefs(json1, null, Seq(null, null, null, null, null, null))
+    testUserPrefs(json1, null, Seq(null, null, null, null, null, null, null))
 
     // Doesn't contain any prefs:
     val json2 = parse(
@@ -442,7 +456,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
         | }
         |}
       """.stripMargin)
-    testUserPrefs(json2, null, Seq(null, null, null, null, null, null))
+    testUserPrefs(json2, null, Seq(null, null, null, null, null, null, null))
 
     // Contains prefs, including dom.ipc.processCount and extensions.allow-non-mpc-extensions
     val json3 = parse(
@@ -455,13 +469,14 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
         |    "browser.newtabpage.enhanced": true,
         |    "browser.startup.page": 3,
         |    "extensions.allow-non-mpc-extensions": true,
-        |    "browser.search.widget.inNavBar": false
+        |    "browser.search.widget.inNavBar": false,
+        |    "browser.search.region": "US"
         |   }
         |  }
         | }
         |}
       """.stripMargin)
-    testUserPrefs(json3, Row(2, true), Seq(2, true, null, false, null, null))
+    testUserPrefs(json3, Row(2, true), Seq(2, true, null, false, null, null, "US"))
 
     // Contains dom.ipc.processCount and extensions.allow-non-mpc-extensions with bogus data types
     val json4 = parse(
@@ -479,7 +494,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
         | }
         |}
       """.stripMargin)
-    testUserPrefs(json4, null, Seq(null, null, null, null, null, null))
+    testUserPrefs(json4, null, Seq(null, null, null, null, null, null, null))
 
     // Missing the prefs section entirely:
     val json5 = parse(
@@ -491,7 +506,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
         | }
         |}
       """.stripMargin)
-    testUserPrefs(json5, null, Seq(null, null, null, null, null, null))
+    testUserPrefs(json5, null, Seq(null, null, null, null, null, null, null))
 
     // Contains dom.ipc.processCount but not extensions.allow-non-mpc-extensions
     val json6 = parse(
@@ -508,7 +523,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
         | }
         |}
       """.stripMargin)
-    testUserPrefs(json6, Row(4, null), Seq(4, null, null, null, null, null))
+    testUserPrefs(json6, Row(4, null), Seq(4, null, null, null, null, null, null))
 
     // Contains extensions.allow-non-mpc-extensions but not dom.ipc.processCount
     val json7 = parse(
@@ -525,7 +540,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
         | }
         |}
       """.stripMargin)
-    testUserPrefs(json7, Row(null, false), Seq(null, false, null, null, null, null))
+    testUserPrefs(json7, Row(null, false), Seq(null, false, null, null, null, null, null))
 
     // Contains marionette.enabled
     val json8 = parse(
@@ -540,7 +555,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
         | }
         |}
       """.stripMargin)
-    testUserPrefs(json8, null, Seq(null, null, null, null, true, null))
+    testUserPrefs(json8, null, Seq(null, null, null, null, true, null, null))
   }
 
   it can "be properly shown" in {
@@ -694,6 +709,36 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
     }
   }
 
+  it can "extract experiment and variation" in {
+    val attribution = """
+      |{
+      |  "attribution": {
+      |    "content": "sample_content",
+      |    "source": "sample_source",
+      |    "medium": "sample_medium",
+      |    "campaign": "sample_campaign",
+      |    "experiment": "sample_experiment",
+      |    "variation": "sample_variation"
+      |  }
+      |}
+    """.stripMargin
+
+    val message = RichMessage("1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.settings" -> attribution
+      ),
+      None)
+
+    val expected = Map(
+      "attribution_experiment" -> "sample_experiment",
+      "attribution_variation" -> "sample_variation"
+    )
+
+    compare(message, expected)
+  }
+
   "MainSummary plugin counts" can "be summarized" in {
     val message = RichMessage(
       "1234",
@@ -706,7 +751,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
             |  "PLUGINS_NOTIFICATION_SHOWN":{
             |    "range":[1,2],
             |    "histogram_type":2,
-            |    "values":{"1":3,"0":0,"2":0},
+            |    "values":{"1":3,"0":1,"2":0},
             |    "bucket_count":3,
             |    "sum":3
             |  },
@@ -751,6 +796,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
     val expected = Map(
       "document_id" -> "foo",
       "plugins_notification_shown" -> 3,
+      "plugins_notification_shown_false" -> 1,
       "plugins_notification_user_action" -> Row(3, 0, 0),
       "plugins_infobar_shown" -> 12,
       "plugins_infobar_allow" -> 2,
@@ -1100,7 +1146,7 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
   "All possible histograms and scalars" can "be included" in {
     val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(
       Histograms.definitions(includeOptin = false, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true),
-      useWhitelist = true)
+      useAllowlist = true)
 
     val allScalarDefs = Scalars.definitions(includeOptin = true).toList.sortBy(_._1)
 
@@ -1199,13 +1245,15 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
     compare(message, expected, userPrefs, allScalarDefs, allHistogramDefs)
   }
 
-  "Histogram filter" can "include all whitelisted histograms" in {
-    val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(
-      Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true),
-      useWhitelist = true
+  "Histogram filter" can "include all allowed histograms" in {
+    val definitions = Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _,
+      includeCategorical = true)
+    val allHistogramDefs = MainSummaryView.filterHistogramDefinitions(definitions, useAllowlist = true
     ).map { case (name, definition) => definition.originalName }.toSet
 
-    val expectedDefs = MainSummaryView.histogramsWhitelist.toSet
+    // Sometimes histograms stay in our list but aren't in the codebase anymore -- this shouldn't fail unrelated PRs
+    val expectedDefs = MainSummaryView.allowedHistograms.toSet.intersect(
+      definitions.map(_._2.originalName).toSet)
 
     allHistogramDefs should be(expectedDefs)
   }
@@ -2213,6 +2261,33 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
     compare(message, expected)
   }
 
+  "Hard drive info" can "be properly shown" in {
+
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.system" ->
+          """
+            |{
+            |  "hdd": {
+            |    "system": {
+            |      "model": "some_model",
+            |      "revision": "some_revision",
+            |      "type": "SSD"
+            |    }
+            |  }
+            |}""".stripMargin),
+      None)
+
+    val expected = Map(
+      "hdd_system_type" -> "SSD"
+    )
+
+    compare(message, expected)
+  }
+
   "Date diffs" can "be calculated" in {
     val diff = (d: String, t: Long) =>
       MainSummaryView.diffDateAndTimestamp(d, DateTimeFormatter.ISO_DATE_TIME, t * 1e9.toLong)
@@ -2250,5 +2325,157 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
     val expected = Map("normalized_os_version" -> "14.5.0")
 
     compare(message, expected)
+  }
+
+  "String lists in settings" can "be handled correctly" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.settings" ->
+          """
+            |{
+            |  "intl": {
+            |    "requestedLocales": ["it"],
+            |    "availableLocales": ["it", "en-AA"],
+            |    "appLocales": ["it", "en-BB"],
+            |    "systemLocales": ["it-IT", "en-IT"],
+            |    "regionalPrefsLocales": ["it-IT", "en-CC"],
+            |    "acceptLanguages": ["it-IT", "it", "en-US", "en"]
+            |  }
+            |}""".stripMargin),
+      None)
+
+    val expected = Map(
+      "environment_settings_intl_requested_locales" -> List("it"),
+      "environment_settings_intl_available_locales" -> List("it", "en-AA"),
+      "environment_settings_intl_app_locales" -> List("it", "en-BB"),
+      "environment_settings_intl_system_locales" -> List("it-IT", "en-IT"),
+      "environment_settings_intl_regional_prefs_locales" -> List("it-IT", "en-CC"),
+      "environment_settings_intl_accept_languages" -> List("it-IT", "it", "en-US", "en")
+    )
+
+    compare(message, expected)
+  }
+
+  private val tempDir = createTempDir().toString
+
+  "main method" should "correctly process ndjson-serialized input" in {
+    implicit val formats: Formats = org.json4s.DefaultFormats
+
+    val baseAttributes = Map(
+      "submission_timestamp" -> "2019-07-01T00:00:00.000000Z",
+      "normalized_app_name" -> "Firefox",
+      "document_namespace" -> "telemetry",
+      "document_type" -> "main",
+      "document_version" -> "4"
+    )
+    val basePayload = Map("submission_timestamp" -> baseAttributes("submission_timestamp"))
+    val compression = Some(new GzipCodec())
+    val datasetTestingPath = s"file://$tempDir/input/ndjson"
+    val prefix = s"$datasetTestingPath/telemetry-decoded_gcs-sink/output/2019-01-01/00/"
+
+    val clientId1 = "b90fea24-38e0-4dd2-b4e4-9a83ed65d8b8"
+    val docId1 = "4f81d2ae-c257-4364-bbf3-99bb1674b815"
+    val docId2 = "509aa211-edab-4b59-911c-90db4040770a"
+    val docId3 = "cceb492c-2773-4b99-ad56-77c736faa6c4"
+
+    List(
+      Map(
+        "attributeMap" -> (baseAttributes + (
+          "normalized_channel" -> "attributeMap.normalized_channel",
+          "app_version" -> "attributeMap.app_version"
+        )),
+        "payload" -> (basePayload + (
+          "clientId" -> clientId1,
+          "sample_id" -> 42,
+          "document_id" -> docId1,
+          "normalized_channel" -> "normalized_channel",
+          "normalized_os_version" -> "normalized_os_version",
+          "metadata" -> Map(
+            "header" -> Map("date" -> "metadata.header.date"),
+            "geo" -> Map(
+              "country" -> "metadata.geo.country",
+              "city" -> "metadata.geo.city",
+              "subdivision1" -> "metadata.geo.subdivision1",
+              "subdivision2" -> "metadata.geo.subdivision2"
+            ),
+            "uri" -> Map(
+              "app_update_channel" -> "metadata.uri.app_update_channel"
+            )
+          )
+        ))
+      ),
+      Map(
+        "attributeMap" -> (baseAttributes + (
+          "normalized_channel" -> "release",
+          "app_version" -> "67.0.0"
+        )),
+        "payload" -> (basePayload + (
+          "clientId" -> clientId1,
+          "sample_id" -> 42,
+          "document_id" -> docId2,
+          "normalized_channel" -> "release",
+          "normalized_os_version" -> "10.0",
+          "metadata" -> Map(
+            "header" -> Map("date" -> "Mon, 1 Jul 2019 00:00:00 GMT"),
+            "geo" -> Map(
+              "country" -> "US",
+              "city" -> "Hermiston",
+              "subdivision1" -> "OR",
+              "subdivision2" -> "Umatilla"
+            ),
+            "uri" -> Map(
+              "app_update_channel" -> "release"
+            )
+          )
+        ))
+      ),
+      Map(
+        "attributeMap" -> baseAttributes,
+        "payload" -> (basePayload + ("document_id" -> docId3))
+      )
+    ).map(
+      msg => asJson(msg + ("payload" -> base64(asJson(msg("payload")))))
+    ).zipWithIndex.foreach {
+      case (line, index) => writeTextFile(s"$prefix/$index.ndjson.gz", s"$line\n", compression)
+    }
+
+    MainSummaryView.main(Array(
+      "--from=20190101",
+      "--to=20190101",
+      "--input-source=ndjson",
+      s"--input-bucket=$datasetTestingPath",
+      s"--bucket=file://$tempDir/output/ndjson",
+      "--disable-stop-context-at-end"
+    ))
+
+    val result = spark.read.parquet(
+      s"file://$tempDir/output/ndjson/main_summary/v4/submission_date_s3=20190101"
+    ).select(
+      "document_id", "client_id", "sample_id", "channel", "normalized_channel",
+      "normalized_os_version", "country", "city", "geo_subdivision1", "geo_subdivision2",
+      "submission_date", "timestamp", "client_submission_date", "client_clock_skew"
+    ).orderBy("document_id").toJSON.collect.toList
+
+    val expect = List(
+      s"""{"document_id":"$docId1","client_id":"$clientId1","sample_id":42,"channel":
+         |"metadata.uri.app_update_channel","normalized_channel":"normalized_channel",
+         |"normalized_os_version":"normalized_os_version","country":"metadata.geo.country",
+         |"city":"metadata.geo.city","geo_subdivision1":"metadata.geo.subdivision1",
+         |"geo_subdivision2":"metadata.geo.subdivision2","submission_date":"20190701",
+         |"timestamp":1561939200000000000,"client_submission_date":"metadata.header.date"
+         |}""".replaceAll("\\s+\\|", ""),
+      s"""{"document_id":"$docId2","client_id":"$clientId1","sample_id":42,"channel":"release",
+         |"normalized_channel":"release","normalized_os_version":"10.0","country":"US","city":
+         |"Hermiston","geo_subdivision1":"OR","geo_subdivision2":"Umatilla",
+         |"submission_date":"20190701","timestamp":1561939200000000000,
+         |"client_submission_date":"Mon, 1 Jul 2019 00:00:00 GMT","client_clock_skew":0
+         |}""".replaceAll("\\s+\\|", ""),
+      s"""{"document_id":"$docId3","submission_date":"20190701","timestamp":1561939200000000000}"""
+    )
+
+    result should contain theSameElementsAs expect
   }
 }

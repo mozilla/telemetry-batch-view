@@ -7,10 +7,11 @@ import java.time._
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
-import com.mozilla.telemetry.heka.Dataset
+import com.mozilla.telemetry.ndjson.Dataset
 import com.mozilla.telemetry.metrics._
 import com.mozilla.telemetry.utils._
-import org.apache.spark.sql.Row
+import org.apache.spark.SparkContext
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.types._
 import org.json4s.JsonAST._
 import org.json4s.{DefaultFormats, JValue}
@@ -41,7 +42,9 @@ object MainSummaryView extends BatchJobBase {
   // See the `_getPrefData()` function in TelemetryEnvironment.jsm
   // for reference: https://mzl.la/2zo7kyK
   val userPrefsList =
+    BooleanUserPref("browser.launcherProcess.enabled") ::
     BooleanUserPref("browser.search.widget.inNavBar") ::
+    StringUserPref("browser.search.region") ::
     BooleanUserPref("extensions.allow-non-mpc-extensions") ::
     BooleanUserPref("extensions.legacy.enabled") ::
     BooleanUserPref("gfx.webrender.all.qualified") ::
@@ -49,10 +52,14 @@ object MainSummaryView extends BatchJobBase {
     BooleanUserPref("privacy.fuzzyfox.enabled") ::
     IntegerUserPref("dom.ipc.plugins.sandbox-level.flash") ::
     IntegerUserPref("dom.ipc.processCount") ::
-    StringUserPref("general.config.filename") :: Nil
+    StringUserPref("general.config.filename") ::
+    BooleanUserPref("security.enterprise_roots.auto-enabled") ::
+    BooleanUserPref("security.enterprise_roots.enabled") ::
+    BooleanUserPref("security.pki.mitm_detected") ::
+    IntegerUserPref("network.trr.mode") :: Nil
 
 
-  val histogramsWhitelist =
+  val allowedHistograms =
     "A11Y_CONSUMERS" ::
     "A11Y_INSTANTIATED_FLAG" ::
     "CERT_VALIDATION_SUCCESS_BY_CA" ::
@@ -73,7 +80,6 @@ object MainSummaryView extends BatchJobBase {
     "DEVTOOLS_CANVASDEBUGGER_OPENED_COUNT" ::
     "DEVTOOLS_COMPUTEDVIEW_OPENED_COUNT" ::
     "DEVTOOLS_CUSTOM_OPENED_COUNT" ::
-    "DEVTOOLS_DEVELOPERTOOLBAR_OPENED_COUNT" ::
     "DEVTOOLS_DOM_OPENED_COUNT" ::
     "DEVTOOLS_ENTRY_POINT" ::
     "DEVTOOLS_EYEDROPPER_OPENED_COUNT" ::
@@ -103,6 +109,8 @@ object MainSummaryView extends BatchJobBase {
     "DEVTOOLS_WEBAUDIOEDITOR_OPENED_COUNT" ::
     "DEVTOOLS_WEBCONSOLE_OPENED_COUNT" ::
     "DEVTOOLS_WEBIDE_OPENED_COUNT" ::
+    "DNS_FAILED_LOOKUP_TIME" ::
+    "DNS_LOOKUP_TIME" ::
     "FX_NEW_WINDOW_MS" ::
     "FX_PAGE_LOAD_MS_2" ::
     "FX_SEARCHBAR_SELECTED_RESULT_METHOD" ::
@@ -156,7 +164,6 @@ object MainSummaryView extends BatchJobBase {
     "PWMGR_PROMPT_UPDATE_ACTION" ::
     "PWMGR_SAVING_ENABLED" ::
     "SANDBOX_REJECTED_SYSCALLS" ::
-    "SEARCH_RESET_RESULT" ::
     "SEARCH_SERVICE_INIT_MS" ::
     "SSL_HANDSHAKE_RESULT" ::
     "SSL_HANDSHAKE_VERSION" ::
@@ -178,6 +185,20 @@ object MainSummaryView extends BatchJobBase {
     "TIME_TO_RESPONSE_START_MS" ::
     "TOUCH_ENABLED_DEVICE" ::
     "TRACKING_PROTECTION_ENABLED" ::
+    // Bug 1552213; UPDATE histograms can likely be removed after FF 69 or 70.
+    "UPDATE_CAN_USE_BITS_NOTIFY" ::
+    "UPDATE_DOWNLOAD_CODE_PARTIAL" ::
+    "UPDATE_DOWNLOAD_CODE_COMPLETE" ::
+    "UPDATE_BITS_RESULT_PARTIAL" ::
+    "UPDATE_BITS_RESULT_COMPLETE" ::
+    "UPDATE_STATE_CODE_PARTIAL_STAGE" ::
+    "UPDATE_STATE_CODE_COMPLETE_STAGE" ::
+    "UPDATE_STATUS_ERROR_CODE_COMPLETE_STAGE" ::
+    "UPDATE_STATUS_ERROR_CODE_PARTIAL_STAGE" ::
+    "UPDATE_STATE_CODE_PARTIAL_STARTUP" ::
+    "UPDATE_STATE_CODE_COMPLETE_STARTUP" ::
+    "UPDATE_STATUS_ERROR_CODE_PARTIAL_STARTUP" ::
+    "UPDATE_STATUS_ERROR_CODE_COMPLETE_STARTUP" ::
     "UPTAKE_REMOTE_CONTENT_RESULT_1" ::
     "WEBEXT_BACKGROUND_PAGE_LOAD_MS" ::
     "WEBEXT_BROWSERACTION_POPUP_OPEN_MS" ::
@@ -211,7 +232,7 @@ object MainSummaryView extends BatchJobBase {
    * WARNING: Removing or adding to this list will change
    * the schema for that probe's columns, rendering all
    * previous data unreadable. The normal method is to
-   * include a probe name here when added to the whitelist,
+   * include a probe name here when added to the allowed list,
    * and never remove it.
    */
   val NaturalHistogramRepresentationList =
@@ -237,7 +258,8 @@ object MainSummaryView extends BatchJobBase {
 
   // Configuration for command line arguments
   private class Conf(args: Array[String]) extends BaseOpts(args) {
-    val limit = opt[Int]("limit", descr = "Maximum number of files to read from S3", required = false)
+    val limit = opt[Int]("limit", descr = "Per-date maximum number of: files to read for --input-source=heka or rows to read for --input-source=ndjson",
+      required = false)
     val channel = opt[String]("channel", descr = "Only process data from the given channel", required = false)
     val appVersion = opt[String]("version", descr = "Only process data from the given app version", required = false)
     val allHistograms = opt[Boolean]("all-histograms", descr = "Flag to use all histograms", required = false)
@@ -249,20 +271,33 @@ object MainSummaryView extends BatchJobBase {
       default=Some("fixed"))
     val inputPartitionMultiplier = opt[Int]("input-partition-multiplier", descr="Partition multiplier for aligned read-mode", default=Some(4))
     val schemaReportLocation = opt[String]("schema-report-location", descr="Write schema.treeString to this file")
+    val inputSource = choice(Seq("heka", "ndjson"), name="input-source",
+      descr="Read raw pings from heka protobuf in S3 (heka) or newline delimited json in Google Cloud Storage (ndjson)", default=Some("heka"))
+    val inputBucket = opt[String]("input-bucket", descr="Bucket override for --input-source=ndjson", default=Some(Dataset.BUCKET))
+    val disableStopContextAtEnd = opt[Boolean]("disable-stop-context-at-end", descr = "Flag to leave spark context running", required = false)
     verify()
   }
 
   def main(args: Array[String]) {
     val conf = new Conf(args) // parse command line arguments
 
+    // add s3 filesystem to outputBucket if none is specified for backward compatibility
+    val Pattern = "(.*://.*)".r
+    val outputBucket = conf.outputBucket() match {
+      case Pattern(bucket) => bucket
+      case bucket => s"s3://$bucket"
+    }
+
     try{
       // Set up Spark
       for (submissionDate <- datesBetween(conf.from(), conf.to.toOption)) {
-        val spark = getOrCreateSparkSession(jobName)
-        implicit val sc = spark.sparkContext
+        implicit val spark: SparkSession = getOrCreateSparkSession(jobName)
+        implicit val sc: SparkContext = spark.sparkContext
         val sqlContext = spark.sqlContext
         val hadoopConf = sc.hadoopConfiguration
         hadoopConf.set("fs.s3n.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
+        // prevent hadoop from trying to repair implicit directories on potentially read-only gs:// locations
+        spark.conf.set("fs.gs.implicit.dir.repair.enable", false)
 
         val filterChannel = conf.channel.get
         val filterVersion = conf.appVersion.get
@@ -280,7 +315,7 @@ object MainSummaryView extends BatchJobBase {
 
         val histogramDefinitions = filterHistogramDefinitions(
           Histograms.definitions(includeOptin = true, nameJoiner = Histograms.prefixProcessJoiner _, includeCategorical = true),
-          useWhitelist = !conf.allHistograms())
+          useAllowlist = !conf.allHistograms())
 
         val schema = buildSchema(userPrefsList, scalarDefinitions, histogramDefinitions)
         val ignoredCount = sc.accumulator(0, "Number of Records Ignored")
@@ -297,22 +332,25 @@ object MainSummaryView extends BatchJobBase {
           case _ => None
         }
 
-        val messages = Dataset(telemetrySource)
-          .where("sourceName") {
-            case "telemetry" => true
-          }.where("sourceVersion") {
-            case "4" => true
-          }.where("docType") {
-            case dt => dt == filterDocType
-          }.where("appName") {
-            case "Firefox" => true
-          }.where("submissionDate") {
-            case date if date == submissionDate => true
-          }.where("appUpdateChannel") {
-            case channel => filterChannel.isEmpty || channel == filterChannel.get
-          }.where("appVersion") {
-            case v => filterVersion.isEmpty || v == filterVersion.get
-          }.records(conf.limit.get, numPartitions)
+        val ds = Dataset(
+          telemetrySource,
+          Some(submissionDate),
+          conf.inputBucket(),
+          Map[String, PartialFunction[String, Boolean]](
+            "document_namespace" ->  { case "telemetry" => true},
+            "document_version" -> { case "4" => true },
+            "document_type" -> { case dt if dt == filterDocType => true },
+            "normalized_app_name" -> { case "Firefox" => true }
+          ) ++ filterChannel.map(
+            expect => ("normalized_channel", { case channel if channel == expect => true }: PartialFunction[String, Boolean])
+          ) ++ filterVersion.map(
+            expect => ("app_version", { case v if v == expect => true }: PartialFunction[String, Boolean])
+          )
+        )
+        val messages = conf.inputSource() match {
+          case "ndjson" => ds.records(conf.limit.toOption)
+          case "heka" => ds.asHeka.records(conf.limit.toOption, numPartitions).map(_.toJValue)
+        }
 
         // Note we cannot just use 'partitionBy' below to automatically populate
         // the submission_date partition, because none of the write modes do
@@ -324,13 +362,13 @@ object MainSummaryView extends BatchJobBase {
         //  - "error" (the default) causes the job to fail after any data is
         //    loaded, so we can't do single day incremental updates.
         //  - "ignore" causes new data not to be saved.
-        // So we manually add the "submission_date_s3" parameter to the s3path.
-        val s3prefix = s"${filterDocType}_summary/$schemaVersion/submission_date_s3=$submissionDate"
-        val s3path = s"s3://${conf.outputBucket()}/$s3prefix"
+        // So we manually add the "submission_date" parameter to the outputPath.
+        val keyPrefix = s"${filterDocType}_summary/$schemaVersion/submission_date_s3=$submissionDate"
+        val outputPath = s"$outputBucket/$keyPrefix"
 
         if(!messages.isEmpty()){
           val rowRDD = messages.flatMap(m => {
-            val row = m.toJValue.map(doc => messageToRow(doc, scalarDefinitions, histogramDefinitions))
+            val row = m.map(doc => messageToRow(doc, scalarDefinitions, histogramDefinitions))
             row match {
               case None =>
                 ignoredCount += 1
@@ -346,20 +384,16 @@ object MainSummaryView extends BatchJobBase {
           // Repartition the dataframe by sample_id before saving.
           val partitioned = records.repartition(100, records.col("sample_id"))
 
-          // limit the size of output files so they don't break during s3 upload
+          // limit the size of output files so they don't break during upload
           val maxRecordsPerFile = conf.maxRecordsPerFile()
 
-          // Then write to S3 using the given fields as path name partitions. Overwrites
-          // existing data.
-          partitioned.write.partitionBy("sample_id").mode("overwrite").option("maxRecordsPerFile", maxRecordsPerFile).parquet(s3path)
+          // Then write using the given fields as path name partitions. Overwrites existing data.
+          partitioned.write.partitionBy("sample_id").mode("overwrite").option("maxRecordsPerFile", maxRecordsPerFile).parquet(outputPath)
 
           conf.schemaReportLocation.get match {
             case Some(path) => writeTextFile(path, partitioned.schema.treeString)
             case None =>
           }
-
-          // Then remove the _SUCCESS file so we don't break Spark partition discovery.
-          S3Store.deleteKey(conf.outputBucket(), s"$s3prefix/_SUCCESS")
         }
 
         val recordsIgnored = ignoredCount.value
@@ -373,10 +407,10 @@ object MainSummaryView extends BatchJobBase {
         if ((1.0 * recordsIgnored) / recordsSeen > MaxFractionIgnoredPings) {
           throw TooManyRecordsIgnoredException(
             s"More records ignored than are allowed. Ignored $recordsIgnored out of $recordsSeen records.",
-            conf.outputBucket(), s3prefix)
+            conf.outputBucket(), keyPrefix)
         }
 
-        if (shouldStopContextAtEnd(spark)) { spark.stop() }
+        if (shouldStopContextAtEnd(spark) && !conf.disableStopContextAtEnd()) { spark.stop() }
       }
     } catch {
       // Delete incomplete data
@@ -646,6 +680,7 @@ object MainSummaryView extends BatchJobBase {
       val addonScalars = payload \ "processes" \ MainPing.DynamicProcess \ "scalars"
       val addonKeyedScalars = payload \ "processes" \ MainPing.DynamicProcess \ "keyedScalars"
 
+      val fxaConfigured = MainPing.booleanHistogramToBoolean(histograms("parent") \ "FXA_CONFIGURED")
       val weaveConfigured = MainPing.booleanHistogramToBoolean(histograms("parent") \ "WEAVE_CONFIGURED")
       val weaveDesktop = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_DESKTOP")
       val weaveMobile = MainPing.enumHistogramToCount(histograms("parent") \ "WEAVE_DEVICE_COUNT_MOBILE")
@@ -702,6 +737,9 @@ object MainSummaryView extends BatchJobBase {
         (system \ "gfx" \ "features" \ "advancedLayers" \ "status").extractOpt[String],
         (system \ "gfx" \ "features" \ "wrQualified" \ "status").extractOpt[String],
         (system \ "gfx" \ "features" \ "webrender" \ "status").extractOpt[String],
+        (system \ "hdd" \ "profile" \ "type").extractOpt[String],
+        (system \ "hdd" \ "binary" \ "type").extractOpt[String],
+        (system \ "hdd" \ "system" \ "type").extractOpt[String],
         (system \ "appleModelId").extractOpt[String],
         (system \ "sec" \ "antivirus").extract[Option[Seq[String]]],
         (system \ "sec" \ "antispyware").extract[Option[Seq[String]]],
@@ -722,6 +760,7 @@ object MainSummaryView extends BatchJobBase {
         (doc \ "creationDate").extractOpt[String],
         (partner \ "distributionId").extractOpt[String],
         submissionDate,
+        fxaConfigured,
         weaveConfigured,
         weaveDesktop,
         weaveMobile,
@@ -740,6 +779,8 @@ object MainSummaryView extends BatchJobBase {
         (settings \ "update" \ "enabled").extractOpt[Boolean],
         (settings \ "update" \ "autoDownload").extractOpt[Boolean],
         getAttribution(settings \ "attribution"),
+        (settings \ "attribution" \ "experiment").extractOpt[String],
+        (settings \ "attribution" \ "variation").extractOpt[String],
         (settings \ "sandbox" \ "effectiveContentProcessLevel").extractOpt[Int],
         (addons \ "activeExperiment" \ "id").extractOpt[String],
         (addons \ "activeExperiment" \ "branch").extractOpt[String],
@@ -788,6 +829,18 @@ object MainSummaryView extends BatchJobBase {
         (settings \ "blocklistEnabled").extractOpt[Boolean],
         (settings \ "addonCompatibilityCheckEnabled").extractOpt[Boolean],
         (settings \ "telemetryEnabled").extractOpt[Boolean],
+
+        // bug 1525702
+        (settings \ "intl" \ "acceptLanguages").extractOpt[List[String]],
+        (settings \ "intl" \ "appLocales").extractOpt[List[String]],
+        (settings \ "intl" \ "availableLocales").extractOpt[List[String]],
+        (settings \ "intl" \ "regionalPrefsLocales").extractOpt[List[String]],
+        (settings \ "intl" \ "requestedLocales").extractOpt[List[String]],
+        (settings \ "intl" \ "systemLocales").extractOpt[List[String]],
+
+        // bug 1536175
+        (system \ "gfx" \ "Headless").extractOpt[Boolean],
+
         getOldUserPrefs(settings \ "userPrefs"),
 
         Option(events.flatMap { case (p, e) => Events.getEvents(e, p) }).filter(!_.isEmpty),
@@ -817,8 +870,9 @@ object MainSummaryView extends BatchJobBase {
         (simpleMeasures \ "totalTime").extractOpt[Int],
         (simpleMeasures \ "blankWindowShown").extractOpt[Int],
 
-        // bug 1362520 - plugin notifications
-        hsum(histograms("parent") \ "PLUGINS_NOTIFICATION_SHOWN"),
+        // bug 1362520 and 1526278 - plugin notifications
+        (histograms("parent") \ "PLUGINS_NOTIFICATION_SHOWN" \ "values" \ "1").extractOpt[Int],
+        (histograms("parent") \ "PLUGINS_NOTIFICATION_SHOWN" \ "values" \ "0").extractOpt[Int],
         MainPing.enumHistogramToRow(histograms("parent") \ "PLUGINS_NOTIFICATION_USER_ACTION", pluginNotificationUserActionKeys),
         hsum(histograms("parent") \ "PLUGINS_INFOBAR_SHOWN"),
         hsum(histograms("parent") \ "PLUGINS_INFOBAR_BLOCK"),
@@ -995,9 +1049,9 @@ object MainSummaryView extends BatchJobBase {
     )
   }
 
-  def filterHistogramDefinitions(definitions: Map[String, HistogramDefinition], useWhitelist: Boolean = false): List[(String, HistogramDefinition)] = {
+  def filterHistogramDefinitions(definitions: Map[String, HistogramDefinition], useAllowlist: Boolean = false): List[(String, HistogramDefinition)] = {
     definitions.toList.filter(
-      entry => !useWhitelist || histogramsWhitelist.contains(entry._2.originalName)
+      entry => !useAllowlist || allowedHistograms.contains(entry._2.originalName)
     ).sortBy(_._1)
   }
 
@@ -1077,6 +1131,11 @@ object MainSummaryView extends BatchJobBase {
       StructField("gfx_features_wrqualified_status", StringType, nullable = true), // environment/system/gfx/features/wrQualified/status
       StructField("gfx_features_webrender_status", StringType, nullable = true), // environment/system/gfx/features/webrender/status
 
+      // Bug 1552940
+      StructField("hdd_profile_type", StringType, nullable = true), // environment/system/hdd/profile/type
+      StructField("hdd_binary_type", StringType, nullable = true), // environment/system/hdd/binary/type
+      StructField("hdd_system_type", StringType, nullable = true), // environment/system/hdd/system/type
+
       StructField("apple_model_id", StringType, nullable = true), // environment/system/appleModelId
 
       // Bug 1431198 - Windows 8 only
@@ -1101,6 +1160,8 @@ object MainSummaryView extends BatchJobBase {
       StructField("creation_date", StringType, nullable = true), // creationDate
       StructField("distribution_id", StringType, nullable = true), // environment/partner/distributionId
       StructField("submission_date", StringType, nullable = false), // YYYYMMDD version of 'timestamp'
+      // See bug 1550752
+      StructField("fxa_configured", BooleanType, nullable = true), // FXA_CONFIGURED
       // See bug 1232050
       StructField("sync_configured", BooleanType, nullable = true), // WEAVE_CONFIGURED
       StructField("sync_count_desktop", IntegerType, nullable = true), // WEAVE_DEVICE_COUNT_DESKTOP
@@ -1127,6 +1188,8 @@ object MainSummaryView extends BatchJobBase {
       StructField("update_enabled", BooleanType, nullable = true), // environment/settings/update/enabled
       StructField("update_auto_download", BooleanType, nullable = true), // environment/settings/update/autoDownload
       StructField("attribution", buildAttributionSchema, nullable = true), // environment/settings/attribution/
+      StructField("attribution_experiment", StringType, nullable = true), // environment/settings/attribution/experiment
+      StructField("attribution_variation", StringType, nullable = true), // environment/settings/attribution/variation
       StructField("sandbox_effective_content_process_level", IntegerType, nullable = true), // environment/settings/sandbox/effectiveContentProcessLevel
       StructField("active_experiment_id", StringType, nullable = true), // environment/addons/activeExperiment/id
       StructField("active_experiment_branch", StringType, nullable = true), // environment/addons/activeExperiment/branch
@@ -1201,6 +1264,15 @@ object MainSummaryView extends BatchJobBase {
       StructField("addon_compatibility_check_enabled", BooleanType, nullable = true), // environment.settings.addonCompatibilityCheckEnabled
       StructField("telemetry_enabled", BooleanType, nullable = true), // environment.settings.telemetryEnabled
 
+      StructField("environment_settings_intl_accept_languages", ArrayType(StringType, containsNull = false), nullable = true),
+      StructField("environment_settings_intl_app_locales", ArrayType(StringType, containsNull = false), nullable = true),
+      StructField("environment_settings_intl_available_locales", ArrayType(StringType, containsNull = false), nullable = true),
+      StructField("environment_settings_intl_regional_prefs_locales", ArrayType(StringType, containsNull = false), nullable = true),
+      StructField("environment_settings_intl_requested_locales", ArrayType(StringType, containsNull = false), nullable = true),
+      StructField("environment_settings_intl_system_locales", ArrayType(StringType, containsNull = false), nullable = true),
+
+      StructField("environment_system_gfx_headless", BooleanType, nullable = true),
+
       // TODO: Deprecate and eventually remove this field, preferring the top-level
       //       user_pref_* fields for easy schema evolution.
       StructField("user_prefs", buildOldUserPrefsSchema, nullable = true), // environment.settings.userPrefs
@@ -1220,8 +1292,9 @@ object MainSummaryView extends BatchJobBase {
       StructField("total_time", IntegerType, nullable = true),
       StructField("blank_window_shown", IntegerType, nullable = true),
 
-      // bug 1362520 - plugin notifications
+      // bug 1362520 and 1526278 - plugin notifications
       StructField("plugins_notification_shown", IntegerType, nullable = true),
+      StructField("plugins_notification_shown_false", IntegerType, nullable = true),
       StructField("plugins_notification_user_action", buildPluginNotificationUserActionSchema, nullable = true),
       StructField("plugins_infobar_shown", IntegerType, nullable = true),
       StructField("plugins_infobar_block", IntegerType, nullable = true),
