@@ -7,9 +7,8 @@ import java.time._
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
-import com.mozilla.telemetry.ndjson.Dataset
 import com.mozilla.telemetry.metrics._
-import com.mozilla.telemetry.utils._
+import com.mozilla.telemetry.utils.{DatasetShim, _}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.types._
@@ -271,9 +270,8 @@ object MainSummaryView extends BatchJobBase {
       default=Some("fixed"))
     val inputPartitionMultiplier = opt[Int]("input-partition-multiplier", descr="Partition multiplier for aligned read-mode", default=Some(4))
     val schemaReportLocation = opt[String]("schema-report-location", descr="Write schema.treeString to this file")
-    val inputSource = choice(Seq("heka", "ndjson"), name="input-source",
-      descr="Read raw pings from heka protobuf in S3 (heka) or newline delimited json in Google Cloud Storage (ndjson)", default=Some("heka"))
-    val inputBucket = opt[String]("input-bucket", descr="Bucket override for --input-source=ndjson", default=Some(Dataset.BUCKET))
+    val exportPath = opt[String]("export-path", descr="Path to payload_bytes_decoded export that should be read instead of heka protobuf")
+    val exportFormat = opt[String]("export-format", descr="Format of --export-path, defaults to avro", default=Some("com.databricks.spark.avro"))
     val disableStopContextAtEnd = opt[Boolean]("disable-stop-context-at-end", descr = "Flag to leave spark context running", required = false)
     verify()
   }
@@ -332,24 +330,23 @@ object MainSummaryView extends BatchJobBase {
           case _ => None
         }
 
-        val ds = Dataset(
+        val ds = DatasetShim(
           telemetrySource,
-          Some(submissionDate),
-          conf.inputBucket(),
-          Map[String, PartialFunction[String, Boolean]](
-            "document_namespace" ->  { case "telemetry" => true},
-            "document_version" -> { case "4" => true },
-            "document_type" -> { case dt if dt == filterDocType => true },
-            "normalized_app_name" -> { case "Firefox" => true }
+          Map(
+            "submission_date" -> submissionDate,
+            "document_namespace" ->  "telemetry",
+            "document_version" -> "4",
+            "document_type" -> filterDocType,
+            "normalized_app_name" -> "Firefox"
           ) ++ filterChannel.map(
-            expect => ("normalized_channel", { case channel if channel == expect => true }: PartialFunction[String, Boolean])
+            "normalized_channel" -> _
           ) ++ filterVersion.map(
-            expect => ("app_version", { case v if v == expect => true }: PartialFunction[String, Boolean])
+            "app_version" -> _
           )
         )
-        val messages = conf.inputSource() match {
-          case "ndjson" => ds.records(conf.limit.toOption)
-          case "heka" => ds.asHeka.records(conf.limit.toOption, numPartitions).map(_.toJValue)
+        val messages = conf.exportPath.toOption match {
+          case Some(path) => ds.fromExport(conf.exportFormat(), path, conf.limit.toOption)
+          case _ => ds.fromHeka(conf.limit.toOption, numPartitions)
         }
 
         // Note we cannot just use 'partitionBy' below to automatically populate
