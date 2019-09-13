@@ -35,6 +35,9 @@ lazy val root = (project in file(".")).
     libraryDependencies += "org.apache.spark" %% "spark-sql" % sparkVersion,
     libraryDependencies += "org.apache.spark" %% "spark-mllib" % sparkVersion,
     libraryDependencies += "org.apache.spark" %% "spark-hive" % sparkVersion,
+    // spark-avro isn't available from apache until spark 2.4.0, so use the databricks version
+    // libraryDependencies += "org.apache.spark" %% "spark-avro" % sparkVersion,
+    libraryDependencies += "com.databricks" %% "spark-avro" % "4.0.0",
 
     // Other dependencies
     libraryDependencies += "org.apache.avro" % "avro" % "1.7.7",
