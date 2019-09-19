@@ -48,10 +48,16 @@ object SyncPingConversion {
     StructField("os", StringType, nullable = false)
   ))
 
-  // Data about a single validation problem found
-  private val validationProblemType = StructType(List(
+  // A named count to report validation problems and item counts in steps.
+  private val namedCountType = StructType(List(
     StructField("name", StringType, nullable = false),
     StructField("count", LongType, nullable = false)
+  ))
+
+  private val stepType = StructType(List(
+    StructField("name", StringType, nullable = false),
+    StructField("took", LongType, nullable = false), // milliseconds
+    StructField("counts", ArrayType(namedCountType, containsNull = false), nullable = true)
   ))
 
   // Data about a validation run on an engine
@@ -60,7 +66,7 @@ object SyncPingConversion {
     StructField("version", LongType, nullable = false),
     StructField("checked", LongType, nullable = false), // # records checked
     StructField("took", LongType, nullable = false), // milliseconds
-    StructField("problems", ArrayType(validationProblemType, containsNull = false), nullable = true),
+    StructField("problems", ArrayType(namedCountType, containsNull = false), nullable = true),
     // present if the validator failed for some reason.
     StructField("failure_reason", failureType, nullable = true)
   ))
@@ -73,6 +79,7 @@ object SyncPingConversion {
     StructField("failure_reason", failureType, nullable = true),
     StructField("incoming", incomingType, nullable = true),
     StructField("outgoing", ArrayType(outgoingType, containsNull = false), nullable = true),
+    StructField("steps", ArrayType(stepType, containsNull = false), nullable = true),
     StructField("validation", validationType, nullable = true)
   ))
 
@@ -281,6 +288,32 @@ object SyncPingConversion {
       null
   }
 
+  private def stepToRow(step: JValue): Option[Row] = step match {
+    case JObject(_) =>
+      Some(Row(
+        step \ "name" match {
+          case JString(x) => x
+          case _ => return None
+        },
+        step \ "took" match {
+          case JInt(x) => x.toLong
+          case _ => 0L
+        },
+        step \ "counts" match {
+          case JArray(counts) => {
+            val countRows = counts.flatMap(namedCountToRow)
+            if (countRows.isEmpty) {
+              null
+            } else {
+              countRows
+            }
+          }
+          case _ => null
+        }
+      ))
+    case _ => None
+  }
+
   private def validationToRow(validation: JValue): Row = validation match {
     case JObject(_) =>
       Row(
@@ -298,7 +331,7 @@ object SyncPingConversion {
         },
         validation \ "problems" match {
           case JArray(problems) => {
-            val problemRows = problems.flatMap(validationProblemToRow)
+            val problemRows = problems.flatMap(namedCountToRow)
             if (problemRows.isEmpty) {
               null
             } else {
@@ -312,7 +345,7 @@ object SyncPingConversion {
     case _ => null
   }
 
-  private def validationProblemToRow(problem: JValue): Option[Row] = problem match {
+  private def namedCountToRow(problem: JValue): Option[Row] = problem match {
     case JObject(_) =>
       Some(Row(
         problem \ "name" match {
@@ -345,6 +378,17 @@ object SyncPingConversion {
       failureReasonToRow(engine \ "failureReason"),
       incomingToRow(engine \ "incoming"),
       outgoingToRow(engine \ "outgoing"),
+      engine \ "steps" match {
+        case JArray(steps) => {
+          val stepRows = steps.flatMap(stepToRow)
+          if (stepRows.isEmpty) {
+            null
+          } else {
+            stepRows
+          }
+        }
+        case _ => null
+      },
       validationToRow(engine \ "validation")
     )
   }

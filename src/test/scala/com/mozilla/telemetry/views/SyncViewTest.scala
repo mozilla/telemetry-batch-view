@@ -233,10 +233,38 @@ class SyncViewTest extends FlatSpec with Matchers with DataFrameSuiteBase with B
     validateEngines(engines, pingEngines)
 
     validateEngines(engines , pingEngines)
+
+    val bmarkJson = pingEngines.find(x => (x \ "name").extract[String] == "bookmarks").get
+    val bmarkRow = engines.find(x => x.getAs[String]("name") == "bookmarks").get
+
+    // Check the steps on the bookmark engine in the first sync.
+    val bmarkStepsJson = (bmarkJson \ "steps").extract[List[JValue]]
+    if (bmarkStepsJson.isEmpty) {
+      bmarkRow.getAs[GenericRowWithSchema]("steps") should be(null)
+    } else {
+      val bmarkSteps = bmarkRow.getAs[mutable.WrappedArray[GenericRowWithSchema]]("steps")
+      bmarkSteps.length should be(bmarkStepsJson.length)
+      for (i <- 0 until bmarkSteps.length) {
+        bmarkSteps(i).getAs[String]("name") should be((bmarkStepsJson(i) \ "name").extract[String])
+        bmarkSteps(i).getAs[Long]("took") should be((bmarkStepsJson(i) \ "took").extractOrElse[Long](0))
+
+        val bmarkStepCountsJson = (bmarkStepsJson(i) \ "counts").extract[List[JValue]]
+        if (bmarkStepCountsJson.isEmpty) {
+          bmarkSteps(i).getAs[GenericRowWithSchema]("counts") should be(null)
+        } else {
+          val bmarkStepCounts = bmarkSteps(i).getAs[mutable.WrappedArray[GenericRowWithSchema]]("counts")
+          bmarkStepCounts.length should be(bmarkStepCountsJson.length)
+          for (j <- 0 until bmarkStepCounts.length) {
+            bmarkStepCounts(j).getAs[String]("name") should be((bmarkStepCountsJson(j) \ "name").extract[String])
+            bmarkStepCounts(j).getAs[Long]("count") should be((bmarkStepCountsJson(j) \ "count").extract[Long])
+          }
+        }
+      }
+    }
+
     // Check the validation data on the bookmark engine in the first sync.
-    val bmarkValidationRow = engines.find(x => x.getAs[String]("name") == "bookmarks").get
-      .getAs[GenericRowWithSchema]("validation")
-    val bmarkValidationJson = pingEngines.find(x => (x \ "name").extract[String] == "bookmarks").get \ "validation"
+    val bmarkValidationRow = bmarkRow.getAs[GenericRowWithSchema]("validation")
+    val bmarkValidationJson = bmarkJson \ "validation"
 
     bmarkValidationRow.getAs[Long]("version") should be ((bmarkValidationJson \ "version").extract[Long])
     bmarkValidationRow.getAs[Long]("took") should be ((bmarkValidationJson \ "took").extract[Long])
