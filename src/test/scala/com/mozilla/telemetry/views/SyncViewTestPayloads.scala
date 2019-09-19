@@ -207,7 +207,7 @@ object SyncViewTestPayloads {
     |}
     """.stripMargin)
 
-  // Sync ping payload with devices and validation data.
+  // Sync ping payload with devices, steps, and validation data.
   def complexSyncPing: JValue = parse(
     """
       |{
@@ -273,6 +273,22 @@ object SyncViewTestPayloads {
       |          {
       |            "name": "bookmarks",
       |            "took": 1000,
+      |            "steps": [{
+      |              "name": "fetchLocalTree",
+      |              "took": 123,
+      |              "counts": [{
+      |                "name": "items",
+      |                "count": 456
+      |              }, {
+      |                "name": "deletions",
+      |                "count": 1
+      |              }]
+      |            }, {
+      |              "name": "fetchRemoteTree",
+      |              "took": 789
+      |            }, {
+      |              "name": "apply"
+      |            }],
       |            "validation": {
       |              "version": 1,
       |              "checked": 290,
