@@ -819,13 +819,16 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
         "environment.experiments" ->
           """{
           "experiment1": { "branch": "alpha" },
-          "experiment2": { "branch": "beta" }
+          "experiment2": { "branch": "beta", "type": "high-population", "enrollmentId": "test ID" }
         }"""),
       None)
 
     val expected = Map(
       "document_id" -> "foo",
-      "experiments" -> Map("experiment1" -> "alpha", "experiment2" -> "beta")
+      "experiments" -> Map("experiment1" -> "alpha", "experiment2" -> "beta"),
+      "experiments_details" -> Map(
+        "experiment1" -> Map("branch" -> "alpha", "type" -> null, "enrollment_id" -> null),
+        "experiment2" -> Map("branch" -> "beta", "type" -> "high-population", "enrollment_id" -> "test ID"))
     )
 
     compare(message, expected)

@@ -589,6 +589,24 @@ object MainSummaryView extends BatchJobBase {
     }
   }
 
+  def getExperimentsDetails(jExperiments: JValue): Option[Map[String, Map[String, String]]] = {
+    implicit val formats = DefaultFormats
+    Try(jExperiments.extract[Map[String, Experiment]]) match {
+      case Success(experiments) => {
+        if (experiments.nonEmpty) {
+          Some(experiments.map { case (id, data) => id -> Map(
+            "branch" -> data.branch.orNull,
+            "type" -> data.`type`.orNull,
+            "enrollment_id" -> data.enrollmentId.orNull
+          )})
+        } else {
+          None
+        }
+      }
+      case _ => None
+    }
+  }
+
   def diffDateAndTimestamp(dateString: String, dateFormat: DateTimeFormatter, timestamp: Long): Option[Long] = {
     val diff = for {
       client <- Try(ZonedDateTime.parse(dateString, dateFormat))
@@ -878,6 +896,9 @@ object MainSummaryView extends BatchJobBase {
 
         // bug 1366253 - active experiments
         getExperiments(experiments),
+        // Unfortunate schema evolution artifact since we can't change the structure of experiments but need to
+        // add enrollment ID
+        getExperimentsDetails(experiments),
 
         (settings \ "searchCohort").extractOpt[String],
 
@@ -1300,6 +1321,8 @@ object MainSummaryView extends BatchJobBase {
 
       // bug 1366253 - active experiments
       StructField("experiments", MapType(StringType, StringType), nullable = true), // experiment id->branchname
+      // Adding enrollmentId means we need a new field due to schema evolution :(
+      StructField("experiments_details", MapType(StringType, MapType(StringType, StringType)), nullable = true),
 
       StructField("search_cohort", StringType, nullable = true),
 

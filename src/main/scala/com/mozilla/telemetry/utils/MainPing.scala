@@ -34,7 +34,10 @@ case class Attribution(source: Option[String],
                        campaign: Option[String],
                        content: Option[String])
 
-case class Experiment(branch: Option[String])
+case class Experiment(branch: Option[String],
+                      `type`: Option[String],
+                      enrollmentId: Option[String]
+                     )
 
 abstract class UserPref {
   def name: String
