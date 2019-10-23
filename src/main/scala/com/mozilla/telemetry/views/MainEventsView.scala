@@ -49,7 +49,7 @@ object MainEventsView extends BatchJobBase {
       logger.info("=======================================================================================")
       logger.info(s"BEGINNING JOB $jobName $schemaVersion FOR $currentDateString")
 
-      val mainSummary = spark.read.parquet(s"s3://$inputBucket/main_summary/${MainSummaryView.schemaVersion}/submission_date_s3=$currentDateString")
+      val mainSummary = spark.read.parquet(s"s3://$inputBucket/main_summary/v4/submission_date_s3=$currentDateString")
       val events = eventsFromMain(mainSummary, conf.sampleId.get)
 
       val s3prefix = s"$jobName/$schemaVersion/submission_date_s3=$currentDateString/doc_type=main"
