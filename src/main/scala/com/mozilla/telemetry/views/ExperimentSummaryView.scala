@@ -86,7 +86,7 @@ object ExperimentSummaryView extends BatchJobBase {
       logger.info("=======================================================================================")
       logger.info(s"BEGINNING JOB $jobName $schemaVersion FOR $submissionDate")
 
-      val input = s"s3://$inputBucket/main_summary/${MainSummaryView.schemaVersion}/submission_date_s3=$submissionDate"
+      val input = s"s3://$inputBucket/main_summary/v4/submission_date_s3=$submissionDate"
       val s3prefix = s"$jobName/$schemaVersion"
       val output = s"s3://$outputBucket/$s3prefix/"
 
