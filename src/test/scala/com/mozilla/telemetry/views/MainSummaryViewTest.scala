@@ -2365,6 +2365,49 @@ class MainSummaryViewTest extends FlatSpec with Matchers with DataFrameSuiteBase
     compare(message, expected)
   }
 
+  "Default search engine settings" can "be properly parsed and flattened" in {
+    val message = RichMessage(
+      "1234",
+      Map(
+        "documentId" -> "foo",
+        "submissionDate" -> "1234",
+        "environment.settings" ->
+          """
+            |{
+            |  "defaultSearchEngine": "engine_1",
+            |  "defaultSearchEngineData": {
+            |    "name": "engine1",
+            |    "loadPath": "engine1.load_path",
+            |    "origin": "engine1.origin",
+            |    "submissionURL": "engine1.url"
+            |  },
+            |  "defaultPrivateSearchEngine": "engine_2",
+            |  "defaultPrivateSearchEngineData": {
+            |    "name": "engine2",
+            |    "loadPath": "engine2.load_path",
+            |    "origin": "engine2.origin",
+            |    "submissionURL": "engine2.url"
+            |  }
+            |}
+            |""".stripMargin),
+      None)
+
+    val expected = Map(
+      "default_search_engine" -> "engine_1",
+      "default_search_engine_data_name" -> "engine1",
+      "default_search_engine_data_load_path" -> "engine1.load_path",
+      "default_search_engine_data_origin" -> "engine1.origin",
+      "default_search_engine_data_submission_url" -> "engine1.url",
+      "default_private_search_engine" -> "engine_2",
+      "default_private_search_engine_data_name" -> "engine2",
+      "default_private_search_engine_data_load_path" -> "engine2.load_path",
+      "default_private_search_engine_data_origin" -> "engine2.origin",
+      "default_private_search_engine_data_submission_url" -> "engine2.url"
+    )
+
+    compare(message, expected)
+  }
+
   private val tempDir = createTempDir().toString
 
   def gzip(value: String): Array[Byte] = {
