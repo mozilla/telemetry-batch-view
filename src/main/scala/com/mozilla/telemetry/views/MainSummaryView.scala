@@ -1250,7 +1250,8 @@ object MainSummaryView extends BatchJobBase {
       StructField("default_private_search_engine_data_name", StringType, nullable = true), // environment/settings/defaultPrivateSearchEngineData/name
       StructField("default_private_search_engine_data_load_path", StringType, nullable = true), // environment/settings/defaultPrivateSearchEngineData/loadPath
       StructField("default_private_search_engine_data_origin", StringType, nullable = true), // environment/settings/defaultPrivateSearchEngineData/origin
-      StructField("default_private_search_engine_data_submission_url", StringType, nullable = true), // environment/settings/defaultPrivateSearchEngineData/submissionURL
+      // environment/settings/defaultPrivateSearchEngineData/submissionURL
+      StructField("default_private_search_engine_data_submission_url", StringType, nullable = true),
       StructField("default_private_search_engine", StringType, nullable = true), // environment/settings/defaultPrivateSearchEngine
 
       // DevTools usage per bug 1262478
