@@ -824,6 +824,11 @@ object MainSummaryView extends BatchJobBase {
         (settings \ "defaultSearchEngineData" \ "origin").extractOpt[String],
         (settings \ "defaultSearchEngineData" \ "submissionURL").extractOpt[String],
         (settings \ "defaultSearchEngine").extractOpt[String],
+        (settings \ "defaultPrivateSearchEngineData" \ "name").extractOpt[String],
+        (settings \ "defaultPrivateSearchEngineData" \ "loadPath").extractOpt[String],
+        (settings \ "defaultPrivateSearchEngineData" \ "origin").extractOpt[String],
+        (settings \ "defaultPrivateSearchEngineData" \ "submissionURL").extractOpt[String],
+        (settings \ "defaultPrivateSearchEngine").extractOpt[String],
         hsum(histograms("parent") \ "DEVTOOLS_TOOLBOX_OPENED_COUNT"),
         (meta \ "Date").extractOpt[String],
         getClockSkew((meta \ "Date").extractOpt[String], timestamp.get),
@@ -1242,6 +1247,11 @@ object MainSummaryView extends BatchJobBase {
       StructField("default_search_engine_data_origin", StringType, nullable = true), // environment/settings/defaultSearchEngineData/origin
       StructField("default_search_engine_data_submission_url", StringType, nullable = true), // environment/settings/defaultSearchEngineData/submissionURL
       StructField("default_search_engine", StringType, nullable = true), // environment/settings/defaultSearchEngine
+      StructField("default_private_search_engine_data_name", StringType, nullable = true), // environment/settings/defaultPrivateSearchEngineData/name
+      StructField("default_private_search_engine_data_load_path", StringType, nullable = true), // environment/settings/defaultPrivateSearchEngineData/loadPath
+      StructField("default_private_search_engine_data_origin", StringType, nullable = true), // environment/settings/defaultPrivateSearchEngineData/origin
+      StructField("default_private_search_engine_data_submission_url", StringType, nullable = true), // environment/settings/defaultPrivateSearchEngineData/submissionURL
+      StructField("default_private_search_engine", StringType, nullable = true), // environment/settings/defaultPrivateSearchEngine
 
       // DevTools usage per bug 1262478
       StructField("devtools_toolbox_opened_count", IntegerType, nullable = true), // DEVTOOLS_TOOLBOX_OPENED_COUNT
