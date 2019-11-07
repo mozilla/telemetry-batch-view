@@ -14,6 +14,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.io.compress.CompressionCodec
 
+import scala.io.Source.fromInputStream
+
 package object utils{
   import java.rmi.dgc.VMID
   import org.apache.hadoop.fs.Path
@@ -178,5 +180,19 @@ package object utils{
   def hadoopExists(pathString: String): Boolean = {
     val path = new Path(pathString)
     FileSystem.get(path.toUri, new Configuration()).exists(path)
+  }
+
+  /** Read a file using hadoop
+    *
+    * @param pathString path to file to detect using hadoop
+    */
+  def hadoopRead(pathString: String): String = {
+    val path = new Path(pathString)
+    val fp = FileSystem.get(path.toUri, new Configuration()).open(path)
+    try {
+      fromInputStream(fp).mkString
+    } finally {
+      fp.close()
+    }
   }
 }

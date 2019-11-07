@@ -4,13 +4,13 @@
 package com.mozilla.telemetry.ml
 
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Paths}
+import java.nio.file.Files
 import java.time.format.DateTimeFormatter
 import java.time.{Instant, LocalDate, ZoneOffset}
 
 import breeze.linalg.{DenseMatrix, DenseVector}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
-import com.mozilla.telemetry.utils.{S3Store, getOrCreateSparkSession}
+import com.mozilla.telemetry.utils.{getOrCreateSparkSession, hadoopRead, writeTextFile}
 import com.mozilla.telemetry.views.DatabricksSupport
 import org.apache.spark.ml.evaluation.NaNRegressionEvaluator
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
@@ -39,7 +39,6 @@ object AddonRecommender extends DatabricksSupport {
     }
 
     val train = new Subcommand("train") {
-      val output = opt[String]("output", descr = "Output path", required = true, default = Some("."))
       val runDate = opt[String]("runDate", descr = "The execution date", required = false)
       val privateBucket = opt[String]("privateBucket", descr = "Destination bucket for archiving the model data", required = true)
       val publicBucket = opt[String]("publicBucket", descr = "Destination bucket for the latest public model", required = true)
@@ -177,7 +176,7 @@ object AddonRecommender extends DatabricksSupport {
   }
 
   // scalastyle:off methodLength
-  private def train(localOutputDir: String, runDate: String, privateBucket: String, publicBucket: String,
+  private def train(runDate: String, privateBucket: String, publicBucket: String,
                     inputTable: String, dateFrom: String, sampling: Int) = {
     logger.info(s"Training - using clients_daily from $dateFrom")
     // The AMODatabase init needs to happen before we get the SparkContext,
@@ -191,8 +190,7 @@ object AddonRecommender extends DatabricksSupport {
 
     import spark.implicits._
     implicit val formats = DefaultFormats
-    val istream = S3Store.getKey("telemetry-parquet", "telemetry-ml/addon_recommender/only_guids_top_200.json")
-    val json_str = scala.io.Source.fromInputStream(istream).mkString
+    val json_str = hadoopRead(s"$privateBucket/telemetry-ml/addon_recommender/only_guids_top_200.json")
     val allowlist = parse(json_str).extract[List[String]]
     val clientAddons = getAddonData(spark, allowlist, amoDbMap, inputTable, dateFrom, sampling)
 
@@ -247,33 +245,27 @@ object AddonRecommender extends DatabricksSupport {
                               "isWebextension" -> JBool(AMODatabase.isWebextension(addonId, amoDbMap).getOrElse(false))).toMap)
     }))
 
-    val parentDir = Paths.get(localOutputDir)
-    if (!Files.exists(parentDir)) Files.createDirectories(parentDir)
-
-    val addonMappingPath = Paths.get(s"$localOutputDir/addon_mapping.json")
-    val privateS3prefix = s"telemetry-ml/addon_recommender/${runDate}"
-    val latestS3prefix = "telemetry-ml/addon_recommender"
-    Files.write(addonMappingPath, serializedMapping.getBytes(StandardCharsets.UTF_8))
-    // We upload the generated data in a private bucket to have an history of all the
-    // generated models. Also push the latest version on the public bucket, so that
-    // AMO can access it over HTTP.
-    S3Store.uploadFile(addonMappingPath.toFile, privateBucket, privateS3prefix, addonMappingPath.getFileName.toString)
-    S3Store.uploadFile(addonMappingPath.toFile, publicBucket, latestS3prefix, addonMappingPath.getFileName.toString)
+    val privatePath = s"$privateBucket/telemetry-ml/addon_recommender/$runDate"
+    val publicPath = s"$publicBucket/telemetry-ml/addon_recommender"
+    val mappingFileName = "addon_mapping.json"
+    writeTextFile(s"$privatePath/$mappingFileName", serializedMapping)
+    writeTextFile(s"$publicPath/$mappingFileName", serializedMapping)
 
     // Serialize item matrix
     val itemFactors = model.bestModel.asInstanceOf[ALSModel].itemFactors.as[ItemFactors].collect()
     val serializedItemFactors = write(itemFactors)
-    val itemMatrixPath = Paths.get(s"$localOutputDir/item_matrix.json")
-    Files.write(itemMatrixPath, serializedItemFactors.getBytes(StandardCharsets.UTF_8))
-    S3Store.uploadFile(itemMatrixPath.toFile, privateBucket, privateS3prefix, itemMatrixPath.getFileName.toString)
-    S3Store.uploadFile(itemMatrixPath.toFile, publicBucket, latestS3prefix, itemMatrixPath.getFileName.toString)
+    val itemFactorsFileName = "item_matrix.json"
+    writeTextFile(s"$privatePath/$itemFactorsFileName", serializedItemFactors)
+    writeTextFile(s"$publicPath/$itemFactorsFileName", serializedItemFactors)
 
     // Upload the generated AMO cache to a S3 bucket.
     val addonCachePath = AMODatabase.getLocalCachePath()
-    S3Store.uploadFile(addonCachePath.toFile, privateBucket, privateS3prefix, addonCachePath.getFileName.toString)
-    S3Store.uploadFile(addonCachePath.toFile, privateBucket, latestS3prefix, addonCachePath.getFileName.toString)
+    val serializedAddonCache = new String(Files.readAllBytes(addonCachePath), StandardCharsets.UTF_8)
+    val addonCacheFileName = addonCachePath.getFileName.toString
+    writeTextFile(s"$privatePath/$addonCacheFileName", serializedAddonCache)
+    writeTextFile(s"$publicPath/$addonCacheFileName", serializedAddonCache)
 
-    model.write.overwrite().save(s"s3://$privateBucket/$privateS3prefix/als.model")
+    model.write.overwrite().save(s"$privatePath/als.model")
 
     logger.info("Cross validation statistics:")
     model.getEstimatorParamMaps
@@ -297,18 +289,24 @@ object AddonRecommender extends DatabricksSupport {
         recommend(input, addons.toSet).take(top).foreach(logger.info)
 
       case Some(command) if command == conf.train =>
-        val output = conf.train.output()
-        val cwd = new java.io.File(".").getCanonicalPath
-        val outputDir = new java.io.File(cwd, output)
-
         val fmt = DateTimeFormatter.ofPattern("yyyyMMdd")
         val date = conf.train.runDate.toOption match {
           case Some(f) => f
           case _ => Instant.now().atOffset(ZoneOffset.UTC).format(fmt)
         }
 
-        train(outputDir.getCanonicalPath, date, conf.train.privateBucket(), conf.train.publicBucket(),
-          conf.train.inputTable(), conf.train.clientsSampleDateFrom(), conf.train.clientsSamplingFraction())
+        val uriPattern = "(.*://.*)".r
+        val privateBucket = conf.train.privateBucket() match {
+          case uriPattern(bucket) => bucket
+          case bucket => s"s3://$bucket"
+        }
+        val publicBucket = conf.train.publicBucket() match {
+          case uriPattern(bucket) => bucket
+          case bucket => s"s3://$bucket"
+        }
+
+        train(date, privateBucket, publicBucket, conf.train.inputTable(), conf.train.clientsSampleDateFrom(),
+          conf.train.clientsSamplingFraction())
 
       case None =>
         conf.printHelp()
