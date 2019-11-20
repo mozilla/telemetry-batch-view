@@ -30,6 +30,7 @@ import scala.language.reflectiveCalls
 object AddonRecommender extends DatabricksSupport {
   implicit val formats = Serialization.formats(NoTypeHints)
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
+  private val uriPattern = "(.*://.*)".r
 
   private class Conf(args: Array[String]) extends ScallopConf(args) {
     private def dateOffset(minusDays: Int) = {
@@ -106,7 +107,11 @@ object AddonRecommender extends DatabricksSupport {
   private[ml] def getAddonData(spark: SparkSession, allowedAddons: List[String], amoDB: Map[String, Any],
                                inputTable: String, dateFrom: String, sampling: Int): Dataset[(String, String, Int, Int)] = {
     import spark.implicits._
-    spark.sql(s"SELECT * FROM $inputTable")
+    val input = inputTable match {
+      case uriPattern(inputPath) => spark.read.parquet(inputPath)
+      case _ => spark.sql(s"SELECT * FROM $inputTable")
+    }
+    input
       .where("client_id IS NOT null")
       .where("active_addons IS NOT null")
       .where("channel = 'release'")
@@ -295,7 +300,6 @@ object AddonRecommender extends DatabricksSupport {
           case _ => Instant.now().atOffset(ZoneOffset.UTC).format(fmt)
         }
 
-        val uriPattern = "(.*://.*)".r
         val privateBucket = conf.train.privateBucket() match {
           case uriPattern(bucket) => bucket
           case bucket => s"s3://$bucket"
