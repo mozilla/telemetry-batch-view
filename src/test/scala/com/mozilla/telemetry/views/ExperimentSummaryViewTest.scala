@@ -37,17 +37,12 @@ class ExperimentSummaryViewTest extends FlatSpec with Matchers with DataFrameSui
 
     val pings: DataFrame = Seq(
       m,
-      m,
       m.copy(
         document_id = "22539231-c1c6-4b9a-bed6-2a8d2e4e5e8c",
         experiments = Some(Map())),
       m.copy(
         document_id = "547b5406-8717-4696-b12b-b6c796bdbf8b",
         experiments = None),
-      m.copy(
-        client_id = "baedfe78-676e-440e-98b4-a4066657ded1",
-        document_id = "72062950-3daf-450e-adfd-58eda3151a97",
-        experiments = Some(Map("experiment1" -> "branch2"))),
       m.copy(
         client_id = "baedfe78-676e-440e-98b4-a4066657ded1",
         document_id = "72062950-3daf-450e-adfd-58eda3151a97",
@@ -110,11 +105,6 @@ class ExperimentSummaryViewTest extends FlatSpec with Matchers with DataFrameSui
         document_id = "547b5406-8717-4696-b12b-b6c796bdbf8b",
         experiments = None),
       m.copy(
-        client_id = "baedfe78-676e-440e-98b4-a4066657ded1",
-        document_id = "72062950-3daf-450e-adfd-58eda3151a97",
-        experiments = Some(Map("experiment1" -> "branch2"))
-      ),
-      m.copy(
         client_id = "565a1d46-7320-43f9-93a8-1cc8586fad67",
         document_id = "72062950-3daf-450e-adfd-58eda3151a97",
         experiments = Some(Map("experiment1" -> "branch2")))
@@ -160,18 +150,12 @@ class ExperimentSummaryViewTest extends FlatSpec with Matchers with DataFrameSui
 
     val pings: DataFrame = Seq(
       m,
-      m,
       m.copy(
         document_id = "22539231-c1c6-4b9a-bed6-2a8d2e4e5e8c",
         experiments = Some(Map())),
       m.copy(
         document_id = "547b5406-8717-4696-b12b-b6c796bdbf8b",
         experiments = None),
-      m.copy(
-        client_id = "baedfe78-676e-440e-98b4-a4066657ded1",
-        document_id = "72062950-3daf-450e-adfd-58eda3151a97",
-        experiments = Some(Map("experiment1" -> "branch2"))
-      ),
       m.copy(
         client_id = "565a1d46-7320-43f9-93a8-1cc8586fad67",
         document_id = "72062950-3daf-450e-adfd-58eda3151a97",
