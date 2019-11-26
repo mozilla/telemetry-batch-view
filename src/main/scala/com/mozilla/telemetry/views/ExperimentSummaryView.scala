@@ -6,7 +6,7 @@ package com.mozilla.telemetry.views
 import java.time.{LocalDate, OffsetDateTime, ZoneOffset}
 import java.time.format.DateTimeFormatter
 
-import com.mozilla.telemetry.utils.{deletePrefix, getOrCreateSparkSession}
+import com.mozilla.telemetry.utils.{hadoopDelete, getOrCreateSparkSession}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
 import org.json4s._
@@ -72,8 +72,15 @@ object ExperimentSummaryView extends BatchJobBase {
     spark.conf.set("parquet.block.size", parquetSize)
     spark.conf.set("dfs.blocksize", parquetSize)
 
-    val outputBucket = conf.outputBucket()
-    val inputBucket = conf.inputBucket.getOrElse(outputBucket)
+    val uriPattern = "(.*://.*)".r
+    val outputBucket = conf.outputBucket() match {
+      case uriPattern(bucket) => bucket
+      case bucket => s"s3://$bucket"
+    }
+    val inputBucket = conf.inputBucket.getOrElse(outputBucket) match {
+      case uriPattern(bucket) => bucket
+      case bucket => s"s3://$bucket"
+    }
     val maxRecordsPerFile = conf.maxRecordsPerFile()
     val sampleId = conf.sampleId.toOption
 
@@ -86,13 +93,12 @@ object ExperimentSummaryView extends BatchJobBase {
       logger.info("=======================================================================================")
       logger.info(s"BEGINNING JOB $jobName $schemaVersion FOR $submissionDate")
 
-      val input = s"s3://$inputBucket/main_summary/v4/submission_date_s3=$submissionDate"
-      val s3prefix = s"$jobName/$schemaVersion"
-      val output = s"s3://$outputBucket/$s3prefix/"
+      val input = s"$inputBucket/main_summary/v4/submission_date_s3=$submissionDate"
+      val output = s"$outputBucket/$jobName/$schemaVersion"
 
       val experiments = getExperimentList(getExperimentRecipes(), currentDate, conf.experimentLimit.toOption)
 
-      experiments.foreach(e => deletePreviousOutput(outputBucket, s3prefix, submissionDate, e))
+      experiments.foreach(e => deletePreviousOutput(output, submissionDate, e))
       writeExperiments(input, output, submissionDate, experiments, spark, maxRecordsPerFile, sampleId)
 
       logger.info(s"JOB $jobName COMPLETED SUCCESSFULLY FOR $submissionDate")
@@ -102,9 +108,9 @@ object ExperimentSummaryView extends BatchJobBase {
     if (shouldStopContextAtEnd(spark)) { spark.stop() }
   }
 
-  def deletePreviousOutput(bucket: String, prefix: String, date: String, experiment: String): Unit = {
-    val completePrefix = s"$prefix/experiment_id=$experiment/submission_date_s3=$date"
-    deletePrefix(bucket, completePrefix)
+  def deletePreviousOutput(output: String, date: String, experiment: String): Unit = {
+    val completePath = s"$output/experiment_id=$experiment/submission_date_s3=$date"
+    hadoopDelete(completePath, recursive=true)
   }
 
   def writeExperiments(input: String, output: String, date: String, experiments: List[String], spark: SparkSession,
@@ -115,7 +121,6 @@ object ExperimentSummaryView extends BatchJobBase {
     val mainSummaryFiltered = mainSummary
       .where("experiments IS NOT NULL AND size(experiments) > 0")
       .where(sampleIdClause)
-      .dropDuplicates("document_id")
 
     val mainSummaryLimited = rowLimit.map(mainSummaryFiltered.limit(_)).getOrElse(mainSummaryFiltered)
 
