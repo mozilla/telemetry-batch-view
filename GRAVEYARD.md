@@ -58,3 +58,9 @@ This dataset was used for experiment analysis, before it was deprecated in [Bug 
 * [Removal PR](https://github.com/mozilla/telemetry-batch-view/pull/553)
 
 These jobs were reimplemented as BigQuery SQL in [bigquery-etl/sql/telemetry_derived/](https://github.com/mozilla/bigquery-etl/tree/master/sql/telemetry_derived/).
+
+## Experiments Summary
+
+* [Removal PR](https://github.com/mozilla/telemetry-batch-view/pull/558)
+
+This job was reimplemented as BigQuery SQL in [bigquery-etl/sql/telemetry_derived/experiments_v1/query.sql](https://github.com/mozilla/bigquery-etl/blob/master/sql/telemetry_derived/experiments_v1/query.sql).
