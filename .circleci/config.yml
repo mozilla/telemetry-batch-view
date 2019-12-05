@@ -105,7 +105,6 @@ jobs:
 
   test:
     executor: sbt_executor
-    parallelism: 8  # See https://circleci.com/docs/2.0/parallelism-faster-jobs/
     steps:
       - checkout
       - early_return_for_skip_tests
@@ -113,9 +112,7 @@ jobs:
       - run:
           name: Scalatest
           command: |
-            TEST_PATTERNS=$(bash .circleci/test-patterns.sh)
-            echo "Test patterns: $TEST_PATTERNS"
-            sbt coverage "testOnly $TEST_PATTERNS" coverageReport
+            sbt coverage test coverageReport
       - run:
           name: Submit code coverage data
           command: |
