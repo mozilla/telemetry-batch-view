@@ -204,6 +204,7 @@ object AddonRecommender extends DatabricksSupport {
       .repartition(sc.defaultParallelism)
       .toDF
       .cache
+      .localCheckpoint
 
     val als = new ALS()
       .setSeed(42)
