@@ -50,6 +50,7 @@ object AddonRecommender extends DatabricksSupport {
       val clientsSamplingFraction = opt[Int]("clientsSamplingFraction", default = Some(100),
         descr = "Fraction of `clients_daily` used for training - [1,100]", required = false,
         validate = f => f >= 1 && f <= 100)
+      val checkpointDir = opt[String]("checkpointDir", descr = "The directory to use for Spark checkpointing", required = false, default = Some(""))
     }
 
     val recommend = new Subcommand("recommend") {
@@ -182,7 +183,7 @@ object AddonRecommender extends DatabricksSupport {
 
   // scalastyle:off methodLength
   private def train(runDate: String, privateBucket: String, publicBucket: String,
-                    inputTable: String, dateFrom: String, sampling: Int) = {
+                    inputTable: String, dateFrom: String, sampling: Int, checkpointDir: String) = {
     logger.info(s"Training - using clients_daily from $dateFrom")
     // The AMODatabase init needs to happen before we get the SparkContext,
     // otherwise the job will fail due to all the workers being idle.
@@ -192,6 +193,12 @@ object AddonRecommender extends DatabricksSupport {
       "spark.driver.extraJavaOptions" -> "-Xss8m")
     val spark = getOrCreateSparkSession("AddonRecommenderTest", enableHiveSupport = true, extraConfigs = conf)
     val sc = spark.sparkContext
+
+    // to fix StackOverflow for ALS
+    // https://issues.apache.org/jira/browse/SPARK-1006
+    if (!checkpointDir.isEmpty()) {
+      logger.info(s"Setting checkpoint directory to $checkpointDir")
+      sc.setCheckpointDir(checkpointDir) }
 
     import spark.implicits._
     implicit val formats = DefaultFormats
@@ -311,7 +318,7 @@ object AddonRecommender extends DatabricksSupport {
         }
 
         train(date, privateBucket, publicBucket, conf.train.inputTable(), conf.train.clientsSampleDateFrom(),
-          conf.train.clientsSamplingFraction())
+          conf.train.clientsSamplingFraction(), conf.train.checkpointDir())
 
       case None =>
         conf.printHelp()
@@ -349,3 +356,4 @@ case class ActiveAddon(addon_id: Option[String],
                        update_day: Option[Long],
                        user_disabled: Option[Boolean],
                        version: Option[String])
+
