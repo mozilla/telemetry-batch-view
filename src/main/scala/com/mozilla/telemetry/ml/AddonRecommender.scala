@@ -322,7 +322,7 @@ object AddonRecommender extends DatabricksSupport {
         }
 
         train(date, privateBucket, publicBucket, conf.train.inputTable(), conf.train.clientsSampleDateFrom(),
-          conf.train.clientsSamplingFraction(), conf.train.checkpointDir.toOption
+          conf.train.clientsSamplingFraction(), conf.train.checkpointDir.toOption)
 
       case None =>
         conf.printHelp()
