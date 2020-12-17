@@ -50,7 +50,7 @@ object AddonRecommender extends DatabricksSupport {
       val clientsSamplingFraction = opt[Int]("clientsSamplingFraction", default = Some(100),
         descr = "Fraction of `clients_daily` used for training - [1,100]", required = false,
         validate = f => f >= 1 && f <= 100)
-      val checkpointDir = opt[String]("checkpointDir", descr = "The directory to use for Spark checkpointing", required = false, default = Some(""))
+      val checkpointDir = opt[String]("checkpointDir", descr = "The directory to use for Spark checkpointing", required = false)
     }
 
     val recommend = new Subcommand("recommend") {
@@ -183,7 +183,7 @@ object AddonRecommender extends DatabricksSupport {
 
   // scalastyle:off methodLength
   private def train(runDate: String, privateBucket: String, publicBucket: String,
-                    inputTable: String, dateFrom: String, sampling: Int, checkpointDir: String) = {
+                    inputTable: String, dateFrom: String, sampling: Int, checkpointDir: Option[String]) = {
     logger.info(s"Training - using clients_daily from $dateFrom")
     // The AMODatabase init needs to happen before we get the SparkContext,
     // otherwise the job will fail due to all the workers being idle.
@@ -196,9 +196,13 @@ object AddonRecommender extends DatabricksSupport {
 
     // to fix StackOverflow for ALS
     // https://issues.apache.org/jira/browse/SPARK-1006
-    if (!checkpointDir.isEmpty()) {
-      logger.info(s"Setting checkpoint directory to $checkpointDir")
-      sc.setCheckpointDir(checkpointDir) }
+    checkpointDir match {
+      case Some(dir) =>
+        logger.info(s"Setting checkpoint directory to $dir")
+        sc.setCheckpointDir(dir)
+      case None =>
+        logger.info(s"Checkpoint directory is not specified")
+    }
 
     import spark.implicits._
     implicit val formats = DefaultFormats
@@ -318,7 +322,7 @@ object AddonRecommender extends DatabricksSupport {
         }
 
         train(date, privateBucket, publicBucket, conf.train.inputTable(), conf.train.clientsSampleDateFrom(),
-          conf.train.clientsSamplingFraction(), conf.train.checkpointDir())
+          conf.train.clientsSamplingFraction(), conf.train.checkpointDir.toOption
 
       case None =>
         conf.printHelp()
