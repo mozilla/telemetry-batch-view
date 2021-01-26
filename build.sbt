@@ -19,7 +19,7 @@ val hadoopVersion = "2.6.5"
 lazy val root = (project in file(".")).
   settings(
     name := "telemetry-batch-view",
-    version := "1.1",
+    version := "1.2",
     scalaVersion := "2.11.8",
     // Hack to get releases to not fail to upload when the same jar name already exists. Later we will need auto versioning
     isSnapshot := true,

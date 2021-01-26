@@ -144,7 +144,7 @@ jobs:
       - persist_to_workspace:
           root: target
           paths:
-            - scala-2.11/telemetry-batch-view-1.1.jar
+            - scala-2.11/telemetry-batch-view-1.2.jar
 
   # Uses a "workspace" to get access to the assembled uberjar from the previous stage.
   deploy:
@@ -157,7 +157,7 @@ jobs:
       - run:
           name: Upload
           command: |
-            export JAR=target/scala-2.11/telemetry-batch-view-1.1.jar
+            export JAR=target/scala-2.11/telemetry-batch-view-1.2.jar
             bash .circleci/deploy.sh
 
 

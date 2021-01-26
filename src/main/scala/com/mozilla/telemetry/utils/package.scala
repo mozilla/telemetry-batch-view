@@ -195,11 +195,18 @@ package object utils{
     *
     * @param pathString path to file to detect using hadoop
     */
-  def hadoopRead(pathString: String): String = {
+  def hadoopRead(pathString: String, compression: Option[CompressionCodec] = None): String = {
     val path = new Path(pathString)
     val fp = FileSystem.get(path.toUri, new Configuration()).open(path)
     try {
-      fromInputStream(fp).mkString
+
+      compression match {
+        case Some(codec) =>
+          val stream = codec.createInputStream(fp.getWrappedStream)
+          fromInputStream(stream).mkString
+        case _ => fromInputStream(fp).mkString
+      }
+
     } finally {
       fp.close()
     }
