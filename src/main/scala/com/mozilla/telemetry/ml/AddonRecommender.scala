@@ -16,6 +16,7 @@ import org.apache.spark.ml.evaluation.NaNRegressionEvaluator
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.hadoop.io.compress.{BZip2Codec}
 import org.json4s.JsonDSL._
 import org.json4s._
 import org.json4s.jackson.JsonMethods.{parse, _}
@@ -42,7 +43,6 @@ object AddonRecommender extends DatabricksSupport {
     val train = new Subcommand("train") {
       val runDate = opt[String]("runDate", descr = "The execution date", required = false)
       val privateBucket = opt[String]("privateBucket", descr = "Destination bucket for archiving the model data", required = true)
-      val publicBucket = opt[String]("publicBucket", descr = "Destination bucket for the latest public model", required = true)
       val inputTable = opt[String]("inputTable", default = Some("clients_daily"),
         descr = "Input table, by default `clients_daily` is used", required = false)
       val clientsSampleDateFrom = opt[String]("clientsSampleDateFrom", default = Some(dateOffset(minusDays = 90)),
@@ -182,7 +182,7 @@ object AddonRecommender extends DatabricksSupport {
   }
 
   // scalastyle:off methodLength
-  private def train(runDate: String, privateBucket: String, publicBucket: String,
+  private def train(runDate: String, privateBucket: String,
                     inputTable: String, dateFrom: String, sampling: Int, checkpointDir: Option[String]) = {
     logger.info(s"Training - using clients_daily from $dateFrom")
     // The AMODatabase init needs to happen before we get the SparkContext,
@@ -206,7 +206,7 @@ object AddonRecommender extends DatabricksSupport {
 
     import spark.implicits._
     implicit val formats = DefaultFormats
-    val json_str = hadoopRead(s"$privateBucket/telemetry-ml/addon_recommender/only_guids_top_200.json")
+    val json_str = hadoopRead(s"$privateBucket/addon_recommender/only_guids_top_200.json.bz2")
     val allowlist = parse(json_str).extract[List[String]]
     val clientAddons = getAddonData(spark, allowlist, amoDbMap, inputTable, dateFrom, sampling)
 
@@ -262,25 +262,21 @@ object AddonRecommender extends DatabricksSupport {
                               "isWebextension" -> JBool(AMODatabase.isWebextension(addonId, amoDbMap).getOrElse(false))).toMap)
     }))
 
-    val privatePath = s"$privateBucket/telemetry-ml/addon_recommender/$runDate"
-    val publicPath = s"$publicBucket/telemetry-ml/addon_recommender"
-    val mappingFileName = "addon_mapping.json"
-    writeTextFile(s"$privatePath/$mappingFileName", serializedMapping)
-    writeTextFile(s"$publicPath/$mappingFileName", serializedMapping)
+    val privatePath = s"$privateBucket/addon_recommender/$runDate"
+    val mappingFileName = "addon_mapping.json.bz2"
+    writeTextFile(s"$privatePath/$mappingFileName", serializedMapping, Some(new BZip2Codec()))
 
     // Serialize item matrix
     val itemFactors = model.bestModel.asInstanceOf[ALSModel].itemFactors.as[ItemFactors].collect()
     val serializedItemFactors = write(itemFactors)
-    val itemFactorsFileName = "item_matrix.json"
-    writeTextFile(s"$privatePath/$itemFactorsFileName", serializedItemFactors)
-    writeTextFile(s"$publicPath/$itemFactorsFileName", serializedItemFactors)
+    val itemFactorsFileName = "item_matrix.json.bz2"
+    writeTextFile(s"$privatePath/$itemFactorsFileName", serializedItemFactors, Some(new BZip2Codec()))
 
-    // Upload the generated AMO cache to a S3 bucket.
+    // Upload the generated AMO cache to a bucket.
     val addonCachePath = AMODatabase.getLocalCachePath()
     val serializedAddonCache = new String(Files.readAllBytes(addonCachePath), StandardCharsets.UTF_8)
     val addonCacheFileName = addonCachePath.getFileName.toString
-    writeTextFile(s"$privatePath/$addonCacheFileName", serializedAddonCache)
-    writeTextFile(s"$publicPath/$addonCacheFileName", serializedAddonCache)
+    writeTextFile(s"$privatePath/$addonCacheFileName.bz2", serializedAddonCache, Some(new BZip2Codec()))
 
     model.write.overwrite().save(s"$privatePath/als.model")
 
@@ -314,14 +310,10 @@ object AddonRecommender extends DatabricksSupport {
 
         val privateBucket = conf.train.privateBucket() match {
           case uriPattern(bucket) => bucket
-          case bucket => s"s3://$bucket"
-        }
-        val publicBucket = conf.train.publicBucket() match {
-          case uriPattern(bucket) => bucket
-          case bucket => s"s3://$bucket"
+          case bucket => s"gs://$bucket"
         }
 
-        train(date, privateBucket, publicBucket, conf.train.inputTable(), conf.train.clientsSampleDateFrom(),
+        train(date, privateBucket, conf.train.inputTable(), conf.train.clientsSampleDateFrom(),
           conf.train.clientsSamplingFraction(), conf.train.checkpointDir.toOption)
 
       case None =>
