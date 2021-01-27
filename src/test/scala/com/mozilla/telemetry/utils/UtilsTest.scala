@@ -3,6 +3,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package com.mozilla.telemetry.utils
 
+import org.apache.hadoop.io.compress.{BZip2Codec}
+import org.apache.hadoop.conf.Configuration
 import java.time.{LocalDate, OffsetDateTime, ZoneOffset}
 import java.time.format.{DateTimeFormatter, DateTimeParseException}
 
@@ -84,4 +86,18 @@ class UtilsTest extends FlatSpec with Matchers {
     spark.conf.get("hello") should be ("world")
     spark.conf.get("firefox") should be ("rocks")
   }
+
+  "writeTextFile" should "be readable by hadoopRead with compression" in {
+    val testStr = "{\"test\": 123}"
+    val path = "./test.json.bz"
+    val compressionCodec = new BZip2Codec()
+    compressionCodec.setConf(new Configuration())
+
+    writeTextFile(path, testStr, Some(compressionCodec))
+    val result = hadoopRead(path, Some(compressionCodec))
+
+    result should be (testStr)
+  }
+
+
 }
