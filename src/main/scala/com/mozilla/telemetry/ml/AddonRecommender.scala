@@ -16,7 +16,8 @@ import org.apache.spark.ml.evaluation.NaNRegressionEvaluator
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.hadoop.io.compress.{BZip2Codec}
+import org.apache.hadoop.io.compress.BZip2Codec
+import org.apache.hadoop.conf.Configuration
 import org.json4s.JsonDSL._
 import org.json4s._
 import org.json4s.jackson.JsonMethods.{parse, _}
@@ -204,9 +205,12 @@ object AddonRecommender extends DatabricksSupport {
         logger.info(s"Checkpoint directory is not specified")
     }
 
+    val compressionCodec = new BZip2Codec()
+    compressionCodec.setConf(new Configuration())
+
     import spark.implicits._
     implicit val formats = DefaultFormats
-    val json_str = hadoopRead(s"$privateBucket/addon_recommender/only_guids_top_200.json.bz2")
+    val json_str = hadoopRead(s"$privateBucket/addon_recommender/only_guids_top_200.json.bz2", Some(compressionCodec))
     val allowlist = parse(json_str).extract[List[String]]
     val clientAddons = getAddonData(spark, allowlist, amoDbMap, inputTable, dateFrom, sampling)
 
@@ -264,19 +268,19 @@ object AddonRecommender extends DatabricksSupport {
 
     val privatePath = s"$privateBucket/addon_recommender/$runDate"
     val mappingFileName = "addon_mapping.json.bz2"
-    writeTextFile(s"$privatePath/$mappingFileName", serializedMapping, Some(new BZip2Codec()))
+    writeTextFile(s"$privatePath/$mappingFileName", serializedMapping, Some(compressionCodec))
 
     // Serialize item matrix
     val itemFactors = model.bestModel.asInstanceOf[ALSModel].itemFactors.as[ItemFactors].collect()
     val serializedItemFactors = write(itemFactors)
     val itemFactorsFileName = "item_matrix.json.bz2"
-    writeTextFile(s"$privatePath/$itemFactorsFileName", serializedItemFactors, Some(new BZip2Codec()))
+    writeTextFile(s"$privatePath/$itemFactorsFileName", serializedItemFactors, Some(compressionCodec))
 
     // Upload the generated AMO cache to a bucket.
     val addonCachePath = AMODatabase.getLocalCachePath()
     val serializedAddonCache = new String(Files.readAllBytes(addonCachePath), StandardCharsets.UTF_8)
     val addonCacheFileName = addonCachePath.getFileName.toString
-    writeTextFile(s"$privatePath/$addonCacheFileName.bz2", serializedAddonCache, Some(new BZip2Codec()))
+    writeTextFile(s"$privatePath/$addonCacheFileName.bz2", serializedAddonCache, Some(compressionCodec))
 
     model.write.overwrite().save(s"$privatePath/als.model")
 
