@@ -266,23 +266,28 @@ object AddonRecommender extends DatabricksSupport {
                               "isWebextension" -> JBool(AMODatabase.isWebextension(addonId, amoDbMap).getOrElse(false))).toMap)
     }))
 
-    val privatePath = s"$privateBucket/addon_recommender/$runDate"
+    val historicalDataPath = s"$privateBucket/addon_recommender/$runDate"
+    val updatePath = s"$privateBucket/addon_recommender"
+
     val mappingFileName = "addon_mapping.json.bz2"
-    writeTextFile(s"$privatePath/$mappingFileName", serializedMapping, Some(compressionCodec))
+    writeTextFile(s"$historicalDataPath/$mappingFileName", serializedMapping, Some(compressionCodec))
+    writeTextFile(s"$updatePath/$mappingFileName", serializedMapping, Some(compressionCodec))
 
     // Serialize item matrix
     val itemFactors = model.bestModel.asInstanceOf[ALSModel].itemFactors.as[ItemFactors].collect()
     val serializedItemFactors = write(itemFactors)
     val itemFactorsFileName = "item_matrix.json.bz2"
-    writeTextFile(s"$privatePath/$itemFactorsFileName", serializedItemFactors, Some(compressionCodec))
+    writeTextFile(s"$historicalDataPath/$itemFactorsFileName", serializedItemFactors, Some(compressionCodec))
+    writeTextFile(s"$updatePath/$itemFactorsFileName", serializedItemFactors, Some(compressionCodec))
 
     // Upload the generated AMO cache to a bucket.
     val addonCachePath = AMODatabase.getLocalCachePath()
     val serializedAddonCache = new String(Files.readAllBytes(addonCachePath), StandardCharsets.UTF_8)
     val addonCacheFileName = addonCachePath.getFileName.toString
-    writeTextFile(s"$privatePath/$addonCacheFileName.bz2", serializedAddonCache, Some(compressionCodec))
+    writeTextFile(s"$historicalDataPath/$addonCacheFileName.bz2", serializedAddonCache, Some(compressionCodec))
+    writeTextFile(s"$updatePath/$addonCacheFileName.bz2", serializedAddonCache, Some(compressionCodec))
 
-    model.write.overwrite().save(s"$privatePath/als.model")
+    model.write.overwrite().save(s"$historicalDataPath/als.model")
 
     logger.info("Cross validation statistics:")
     model.getEstimatorParamMaps
