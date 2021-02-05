@@ -2,8 +2,8 @@
 
 This is a Scala application to build derived datasets, also known as [batch views](http://robertovitillo.com/2016/01/06/batch-views/), of [Telemetry](https://wiki.mozilla.org/Telemetry) data.
 
-[![Build Status](https://travis-ci.org/mozilla/telemetry-batch-view.svg?branch=master)](https://travis-ci.org/mozilla/telemetry-batch-view)
-[![codecov.io](https://codecov.io/github/mozilla/telemetry-batch-view/coverage.svg?branch=master)](https://codecov.io/github/mozilla/telemetry-batch-view?branch=master)
+[![Build Status](https://travis-ci.org/mozilla/telemetry-batch-view.svg?branch=main)](https://travis-ci.org/mozilla/telemetry-batch-view)
+[![codecov.io](https://codecov.io/github/mozilla/telemetry-batch-view/coverage.svg?branch=main)](https://codecov.io/github/mozilla/telemetry-batch-view?branch=main)
 [![CircleCi Status](https://circleci.com/gh/mozilla/telemetry-batch-view.svg?style=shield&circle-token=ca31167ac42cc39f898e37facb93db70c0af8691)](https://circleci.com/gh/mozilla/telemetry-batch-view)
 
 Raw JSON [pings](https://ci.mozilla.org/job/mozilla-central-docs/Tree_Documentation/toolkit/components/telemetry/telemetry/pings.html) are stored on S3 within files containing [framed Heka records](https://hekad.readthedocs.org/en/latest/message/index.html#stream-framing). Reading the raw data in through e.g. Spark can be slow as for a given analysis only a few fields are typically used; not to mention the cost of parsing the JSON blobs. Furthermore, Heka files might contain only a handful of records under certain circumstances.
@@ -12,7 +12,7 @@ Defining a derived [Parquet](https://parquet.apache.org/) dataset, which uses a 
 
 ### Adding a new derived dataset
 
-See the [views](https://github.com/mozilla/telemetry-batch-view/tree/master/src/main/scala/com/mozilla/telemetry/views) folder for examples of jobs that create derived datasets.
+See the [views](https://github.com/mozilla/telemetry-batch-view/tree/main/src/main/scala/com/mozilla/telemetry/views) folder for examples of jobs that create derived datasets.
 
 See the [Firefox Data Documentation](https://mozilla.github.io/firefox-data-docs/datasets/reference.html) for more information about the individual derived datasets.
 For help finding the right dataset for your analysis, see
@@ -60,7 +60,7 @@ sbt scalastyle test:scalastyle
 
 ### Generating Datasets
 
-See the [documentation for specific views](https://github.com/mozilla/telemetry-batch-view/tree/master/docs) for details about running/generating them.
+See the [documentation for specific views](https://github.com/mozilla/telemetry-batch-view/tree/main/docs) for details about running/generating them.
 
 For example, to create a longitudinal view locally:
 ```bash
@@ -100,4 +100,4 @@ System.setProperty("spark.sql.warehouse.dir", "file:///C:/somereal-dir/spark-war
 
 See [SPARK-10528](https://issues.apache.org/jira/browse/SPARK-10528). Run "winutils chmod 777 /tmp/hive" from a privileged prompt to make it work.
 
-Any commits to master should also trigger a circleci build that will do the sbt publishing for you to our local maven repo in s3.
+Any commits to main should also trigger a circleci build that will do the sbt publishing for you to our local maven repo in s3.

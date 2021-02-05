@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# NOTE: The version of this file on the master branch may also be pulled in
+# NOTE: The version of this file on the main branch may also be pulled in
 # by other projects (telemetry-streaming in particular), so keep that in mind
 # when proposing changes.
 
