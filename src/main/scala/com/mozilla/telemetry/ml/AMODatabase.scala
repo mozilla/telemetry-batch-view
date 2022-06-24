@@ -48,7 +48,7 @@ final object AMODatabase {
   implicit val formats = Serialization.formats(NoTypeHints)
   private val logger = org.apache.log4j.Logger.getLogger(this.getClass.getName)
   // This API URI will fetch all the public addons for Firefox, sorting them by creation date.
-  private val defaultAMORequestURI = "https://addons.mozilla.org/api/v3/addons/search/"
+  private val defaultAMORequestURI = "https://addons.mozilla.org/api/v4/addons/search/"
   private val queryParams = "?app=firefox&sort=created&type=extension"
 
   /**
