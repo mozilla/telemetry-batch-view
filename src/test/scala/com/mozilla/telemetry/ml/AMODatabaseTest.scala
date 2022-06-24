@@ -29,7 +29,7 @@ class AMODatabaseTest extends FlatSpec with Matchers with BeforeAndAfterEach {
   }
 
   "AMODatabase" must "fail with incorrect data" in {
-    val path = "/api/v3/addons/search/"
+    val path = "/api/v4/addons/search/"
     // Stub the API and return the sample JSON response when its hit.
     stubFor(get(urlMatching(path + "\\?.*"))
       .withQueryParam("app", equalTo("firefox"))
@@ -51,7 +51,7 @@ class AMODatabaseTest extends FlatSpec with Matchers with BeforeAndAfterEach {
   }
 
   "AMODatabase" must "parse responses correctly" in {
-    val path = "/api/v3/addons/search/"
+    val path = "/api/v4/addons/search/"
     val sampleResponse =
       """
         |{
